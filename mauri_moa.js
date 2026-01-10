@@ -40,6 +40,10 @@ class Moa extends Boid {
     this.targetPlant = null;
     this.targetPlaceable = null;
     this.isForaging = false;
+
+    this.isFeeding = false;
+    this.feedingAt = null;  // Reference to placeable being fed at
+    this.lastFedTime = 0;
     
     this.baseSecurityTime = config.securityTimeToLay;
     this.securityTimeRequired = config.securityTimeToLay + Math.floor(random(0, config.securityTimeVariation));
@@ -52,7 +56,7 @@ class Moa extends Boid {
     this.eggSpeedBonus = 1;
     
     this.inShelter = false;
-    this.preferredElevation = { min: 0.25, max: 0.55 };
+    this.preferredElevation = { min: 0.25, max: 0.65 };
   }
   
   // New method to calculate current speed based on state
@@ -71,7 +75,6 @@ class Moa extends Boid {
     this.hungerRate = this.baseHungerRate * seasonManager.getHungerModifier();
     this.hunger = min(this.hunger + this.hungerRate, this.maxHunger);
     
-    // Update preferred elevation based on season
     this.preferredElevation = seasonManager.getPreferredElevation();
     
     if (this.eggCooldown > 0) {
@@ -79,7 +82,8 @@ class Moa extends Boid {
       this.canLayEgg = this.eggCooldown <= 0;
     }
     
-    this.checkPlaceableEffects(placeables);
+    // Check placeable effects (including passive feeding)
+    this.checkPlaceableEffects(placeables, simulation);
     
     // Check for threats
     let dominated = false;
@@ -111,8 +115,6 @@ class Moa extends Boid {
     
     // Determine state for speed calculation
     let isStarving = this.hunger > this.criticalHunger;
-    
-    // Calculate speed based on current state (not overwriting base values)
     this.maxSpeed = this.calculateSpeed(dominated, isStarving);
     
     if (dominated) {
@@ -124,11 +126,14 @@ class Moa extends Boid {
     } else {
       this.tryLayEgg(simulation, mauri, placeables);
       
-      let attracted = this.seekPlaceableAttractions(placeables);
+      // First priority: seek attractive placeables
+      let attracted = this.seekPlaceableAttractions(placeables, simulation);
       
+      // Second priority: forage if hungry and not being fed well enough
       if (!attracted && this.hunger > this.hungerThreshold) {
         this.forage(simulation, mauri);
-      } else if (!attracted) {
+      } else if (!attracted && !this.isFeeding) {
+        // Idle behavior
         this.isForaging = false;
         this.targetPlant = null;
         this.targetPlaceable = null;
@@ -140,7 +145,10 @@ class Moa extends Boid {
         this.applyForce(homeForce);
       }
       
-      this.migrateSeasonally();
+      // Seasonal migration
+      if (!this.isFeeding) {
+        this.migrateSeasonally();
+      }
       
       let sep = this.separate(moas).mult(0.8);
       this.applyForce(sep);
@@ -151,13 +159,11 @@ class Moa extends Boid {
     
     this.edges();
     
-    // Starvation death
     if (this.hunger >= this.maxHunger) {
       this.alive = false;
     }
   }
   
-  // ... rest of Moa methods remain the same
   
   migrateSeasonally() {
     let currentElev = this.terrain.getElevationAt(this.pos.x, this.pos.y);
@@ -191,44 +197,96 @@ class Moa extends Boid {
     return createVector(ex, ey).normalize().mult(this.maxForce);
   }
   
-  checkPlaceableEffects(placeables) {
+  checkPlaceableEffects(placeables, simulation) {
     this.inShelter = false;
     this.securityBonus = 1;
     this.eggSpeedBonus = 1;
-    let hungerMod = 1;
+    this.isFeeding = false;
+    this.feedingAt = null;
     
-    for (let p of placeables) {
-      if (!p.alive || !p.isInRange(this.pos)) continue;
-      
-      if (p.def.blocksEagleVision) this.inShelter = true;
-      if (p.def.securityBonus) this.securityBonus = max(this.securityBonus, p.def.securityBonus);
-      if (p.def.eggSpeedBonus) this.eggSpeedBonus = max(this.eggSpeedBonus, p.def.eggSpeedBonus);
-      if (p.def.hungerSlowdown) hungerMod = min(hungerMod, p.def.hungerSlowdown);
+    let hungerMod = 1;
+    let feedingRateTotal = 0;
+    
+    // Use spatial grid if available
+    let nearbyPlaceables;
+    if (simulation && simulation.placeableGrid) {
+      nearbyPlaceables = simulation.placeableGrid.getInRadius(this.pos.x, this.pos.y, 80);
+    } else {
+      nearbyPlaceables = placeables;
     }
     
+    for (let p of nearbyPlaceables) {
+      if (!p.alive || !p.isInRange(this.pos)) continue;
+      
+      // Shelter effects
+      if (p.def.blocksEagleVision) {
+        this.inShelter = true;
+      }
+      
+      // Security bonuses
+      if (p.def.securityBonus) {
+        this.securityBonus = max(this.securityBonus, p.def.securityBonus * p.seasonalMultiplier);
+      }
+      
+      // Egg speed bonus
+      if (p.def.eggSpeedBonus) {
+        this.eggSpeedBonus = max(this.eggSpeedBonus, p.def.eggSpeedBonus * p.seasonalMultiplier);
+      }
+      
+      // Hunger slowdown (waterhole effect)
+      if (p.def.hungerSlowdown) {
+        hungerMod = min(hungerMod, p.def.hungerSlowdown);
+      }
+      
+      // Passive feeding from placeables
+      if (p.def.feedingRate) {
+        let rate = p.feedMoa(this);  // This returns the seasonal-adjusted rate
+        feedingRateTotal += rate;
+        this.isFeeding = true;
+        this.feedingAt = p;
+      }
+    }
+    
+    // Apply hunger modifications
     this.hungerRate = this.baseHungerRate * hungerMod;
+    
+    // Apply passive feeding (reduce hunger)
+    if (feedingRateTotal > 0) {
+      this.hunger = max(0, this.hunger - feedingRateTotal);
+      this.lastFedTime = frameCount;
+    }
   }
   
-  seekPlaceableAttractions(placeables) {
+  seekPlaceableAttractions(placeables, simulation) {
     let bestTarget = null;
     let bestScore = -Infinity;
     
-    for (let p of placeables) {
+    // Use spatial grid if available
+    let nearbyPlaceables;
+    if (simulation && simulation.placeableGrid) {
+      nearbyPlaceables = simulation.placeableGrid.getInRadius(this.pos.x, this.pos.y, 120);
+    } else {
+      nearbyPlaceables = placeables.filter(p => p5.Vector.dist(this.pos, p.pos) < 120);
+    }
+    
+    for (let p of nearbyPlaceables) {
       if (!p.alive) continue;
+      
       let d = p5.Vector.dist(this.pos, p.pos);
-      if (d > 100) continue;
+      let attractionStrength = p.getAttractionStrength(this);
       
-      let score = 0;
+      if (attractionStrength <= 0) continue;
       
-      if (p.def.attractsHungryMoa && this.hunger > 25 && p.foodRemaining > 0) {
-        score = (this.hunger / 100) * 50 - d * 0.3;
+      // Score based on attraction strength and distance
+      let score = attractionStrength * 50 - d * 0.3;
+      
+      // Bonus if we're hungry and this is a feeding placeable
+      if (this.hunger > 30 && p.def.feedingRate) {
+        score += (this.hunger / 100) * 30 * p.seasonalMultiplier;
       }
-      if (p.def.attractsReadyMoa && this.canLayEgg && this.hunger < this.config.layingHungerThreshold) {
-        score = 80 - d * 0.2;
-      }
-      if (p.def.attractsMoa) {
-        score = max(score, 30 - d * 0.3);
-      }
+      
+      // Bonus for seasonal effectiveness
+      score *= p.seasonalMultiplier;
       
       if (score > bestScore) {
         bestScore = score;
@@ -237,13 +295,69 @@ class Moa extends Boid {
     }
     
     if (bestTarget && bestScore > 10) {
-      let seekForce = this.seek(bestTarget.pos, 0.7);
+      // Move toward the placeable
+      let seekForce = this.seek(bestTarget.pos, 0.8);
       this.applyForce(seekForce);
       this.targetPlaceable = bestTarget;
+      
+      // If inside, slow down to feed
+      if (bestTarget.isInRange(this.pos)) {
+        this.vel.mult(0.7);  // Slow down while feeding
+      }
+      
       return true;
     }
     
     return false;
+  }
+  
+  forage(simulation, mauri) {
+    this.isForaging = true;
+    
+    // If we're being passively fed by a placeable, don't actively seek plants
+    // unless we're very hungry
+    if (this.isFeeding && this.hunger < 60) {
+      // Just stay in the feeding zone
+      if (this.feedingAt) {
+        let d = p5.Vector.dist(this.pos, this.feedingAt.pos);
+        if (d > this.feedingAt.radius * 0.5) {
+          // Move back toward center of feeding zone
+          let seekForce = this.seek(this.feedingAt.pos, 0.3);
+          this.applyForce(seekForce);
+        } else {
+          // Gentle wander within zone
+          let wander = this.wander().mult(0.2);
+          this.applyForce(wander);
+        }
+      }
+      return;
+    }
+    
+    // Otherwise, seek plants normally
+    if (!this.targetPlant || !this.targetPlant.alive) {
+      this.targetPlant = this.findNearestPlant(simulation);
+    }
+    
+    if (this.targetPlant) {
+      let d = p5.Vector.dist(this.pos, this.targetPlant.pos);
+      
+      if (d < this.eatRadius) {
+        let nutrition = this.targetPlant.consume();
+        this.hunger = max(0, this.hunger - nutrition);
+        mauri.earnFromEating(mauri.onMoaEat, this.pos.x, this.pos.y);
+        this.targetPlant = null;
+        this.vel.mult(0.3);
+        this.lastFedTime = frameCount;
+      } else {
+        let urgency = map(this.hunger, this.hungerThreshold, this.maxHunger, 0.5, 0.9);
+        let seekForce = this.seek(this.targetPlant.pos, urgency);
+        this.applyForce(seekForce);
+      }
+    } else {
+      // No plants found - wander to search
+      let wander = this.wander().mult(0.6);
+      this.applyForce(wander);
+    }
   }
   
   stayInHomeRange() {
@@ -329,32 +443,51 @@ class Moa extends Boid {
   }
 }
 
-findNearestPlant(simulation) {
-  // Use spatial grid for efficient lookup
-  const nearbyPlants = simulation.plantGrid.getInRadius(
-    this.pos.x, this.pos.y, 100
-  );
-  
-  let nearest = null;
-  let nearestScore = Infinity;
-  
-  for (let plant of nearbyPlants) {
-    if (!plant.alive || plant.growth < 0.5) continue;
-    if (plant.seasonalModifier < 0.4) continue;
-    
-    let d = p5.Vector.dist(this.pos, plant.pos);
-    let homeD = p5.Vector.dist(this.homeRange, plant.pos);
-    let score = d / plant.seasonalModifier;
-    if (homeD < this.homeRangeRadius) score *= 0.7;
-    
-    if (score < nearestScore) {
-      nearestScore = score;
-      nearest = plant;
+  findNearestPlant(simulation) {
+    // Use spatial grid
+    let nearbyPlants;
+    if (simulation && simulation.plantGrid) {
+      nearbyPlants = simulation.plantGrid.getInRadius(this.pos.x, this.pos.y, 100);
+    } else {
+      return null;
     }
+    
+    let nearest = null;
+    let nearestScore = Infinity;
+    
+    for (let plant of nearbyPlants) {
+      if (!plant.alive || plant.growth < 0.5) continue;
+      
+      // Skip plants with very low seasonal value unless desperate
+      if (plant.seasonalModifier < 0.3 && this.hunger < 70) continue;
+      
+      let d = p5.Vector.dist(this.pos, plant.pos);
+      
+      // Score: lower is better
+      // Prioritize: close, high nutrition, good seasonal value
+      let score = d;
+      score /= plant.seasonalModifier;  // Prefer seasonally abundant plants
+      score /= (plant.nutrition / 30);  // Prefer nutritious plants
+      
+      // Prefer plants in home range
+      let homeD = p5.Vector.dist(this.homeRange, plant.pos);
+      if (homeD < this.homeRangeRadius) {
+        score *= 0.7;
+      }
+      
+      // Prefer plants spawned by placeables (they're reliable food)
+      if (plant.isSpawned) {
+        score *= 0.6;
+      }
+      
+      if (score < nearestScore) {
+        nearestScore = score;
+        nearest = plant;
+      }
+    }
+    
+    return nearest;
   }
-  
-  return nearest;
-}
   
   render() {
     if (!this.alive) return;
@@ -373,8 +506,12 @@ findNearestPlant(simulation) {
       bodyCol = lerpColor(this.bodyColor, color(150, 80, 60), this.panicLevel * 0.5);
     } else if (this.hunger > this.criticalHunger) {
       bodyCol = lerpColor(this.bodyColor, color(70, 50, 35), 0.4);
+    } else if (this.isFeeding) {
+      // Slight green tint when feeding
+      bodyCol = lerpColor(this.bodyColor, color(80, 100, 60), 0.2);
     }
     
+    // Shelter indicator
     if (this.inShelter) {
       noFill();
       stroke(100, 200, 100, 100);
@@ -382,25 +519,45 @@ findNearestPlant(simulation) {
       ellipse(0, 0, this.size * 2, this.size * 2);
     }
     
+    // Feeding indicator
+    if (this.isFeeding) {
+      noFill();
+      stroke(150, 255, 150, 80);
+      strokeWeight(1);
+      let feedPulse = sin(frameCount * 0.15) * 2;
+      ellipse(0, 0, this.size * 1.5 + feedPulse, this.size * 1.5 + feedPulse);
+    }
+    
+    // Shadow
     noStroke();
     fill(0, 0, 0, 30);
     ellipse(2, 2, this.size * 1.3, this.size * 0.7);
     
+    // Legs
     stroke(55, 38, 20);
     strokeWeight(1.5);
     line(-2.5, 0, -2.5 + legOffset, this.size * 0.7);
     line(2.5, 0, 2.5 - legOffset, this.size * 0.7);
     
+    // Body
     noStroke();
     fill(bodyCol);
     ellipse(0, 0, this.size * 0.8, this.size * 1.1);
     ellipse(0, -this.size * 0.55, this.size * 0.45, this.size * 0.65);
     
+    // Eye
     fill(30);
     ellipse(1.5, -this.size * 0.6, 1.5, 1.5);
     
+    // Beak
     fill(85, 70, 40);
     triangle(0, -this.size * 0.9, -2, -this.size * 0.65, 2, -this.size * 0.65);
+    
+    // Pecking animation when feeding
+    if (this.isFeeding) {
+      let peck = sin(frameCount * 0.3) * 0.15;
+      rotate(peck);
+    }
     
     pop();
     

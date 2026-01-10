@@ -2,8 +2,8 @@
 // CONFIGURATION
 // ============================================
 const CONFIG = {
-  width: 1200,
-  height: 800,
+  width: 1920,
+  height: 1080,
   pixelScale: 2,
   zoom: 2,
   
@@ -45,7 +45,7 @@ const CONFIG = {
   layingHungerThreshold: 28,
   
   // Seasons
-  seasonDuration: 1800, 
+  seasonDuration: 1500, 
   
   // Eagle spawning
   eagleSpawnMilestones: [15, 25, 40] // Spawn eagle at these moa populations
@@ -70,16 +70,32 @@ const GAME_STATE = {
 const PLACEABLES = {
   kawakawa: {
     name: "Kawakawa Grove",
-    description: "Nutritious food source",
+    description: "Rich feeding ground",
     cost: 25,
     icon: '🌿',
     color: '#2d8a4e',
-    effect: 'food',
-    nutrition: 45,
-    radius: 35,
-    duration: 1800,
-    attractsHungryMoa: true
+    effect: 'feeding',
+    radius: 40,
+    duration: 1800, 
+    
+    // Feeding zone properties
+    feedingRate: 0.2,           // Hunger reduced per frame while inside
+    baseFeedingRate: 0.2,
+    plantSpawnCount: 5,         // Spawns temporary plants
+    plantType: 'kawakawa',      // Custom plant type
+    
+    // Seasonal effectiveness (multiplier when this biome's natural food is scarce)
+    seasonalBonus: {
+      summer: 1.5,   // Good in summer when lowlands are dry
+      autumn: 1.0,
+      winter: 0.8,   // Less effective in winter
+      spring: 1.2
+    },
+    
+    attractsHungryMoa: true,
+    attractionStrength: 1.3
   },
+  
   shelter: {
     name: "Fern Shelter",
     description: "Eagles can't see moa here",
@@ -87,59 +103,114 @@ const PLACEABLES = {
     icon: '🌴',
     color: '#1a5c32',
     effect: 'shelter',
-    radius: 30,
-    securityBonus: 3.0,
-    duration: 2400,
-    blocksEagleVision: true
+    radius: 50,
+    duration: 3200,
+    securityBonus: 4.0,
+    blocksEagleVision: true,
+    
+    // Small feeding benefit too
+    feedingRate: 0.05,
+    baseFeedingRate: 0.05,
+    
+    seasonalBonus: {
+      summer: 1.0,
+      autumn: 1.0,
+      winter: 1.3,  // Better shelter in winter
+      spring: 1.0
+    }
   },
+  
   nest: {
     name: "Nesting Site",
     description: "Safe place to lay eggs",
-    cost: 60,
+    cost: 50,
     icon: '🪺',
     color: '#8b7355',
     effect: 'nesting',
-    radius: 25,
-    securityBonus: 2.0,
-    eggSpeedBonus: 2.0,
+    radius: 32,
     duration: 3600,
-    attractsReadyMoa: true
+    securityBonus: 2.5,
+    eggSpeedBonus: 2.0,
+    attractsReadyMoa: true,
+    attractionStrength: 2.0,
+    
+    seasonalBonus: {
+      summer: 0.8,
+      autumn: 1.0,
+      winter: 0.6,   // Hard to nest in winter
+      spring: 1.5    // Best nesting in spring
+    }
   },
+  
   decoy: {
     name: "Decoy",
     description: "Distracts hunting eagles",
     cost: 35,
-    icon: '🎯',
+    icon: '🌩️',
     color: '#c4a35a',
     effect: 'decoy',
-    radius: 60,
+    radius: 70,
     duration: 600,
-    distractsEagles: true
+    distractsEagles: true,
+    distractionStrength: 1.0,
+    
+    seasonalBonus: {
+      summer: 1.0,
+      autumn: 1.0,
+      winter: 1.2,   // Eagles hungrier in winter, more distractible
+      spring: 1.0
+    }
   },
+  
   waterhole: {
     name: "Waterhole",
-    description: "Moa gather and rest here",
+    description: "Rest and slow hunger",
     cost: 45,
     icon: '💧',
     color: '#4a90a4',
     effect: 'water',
-    radius: 30,
-    hungerSlowdown: 0.5,
-    duration: 2100,
-    attractsMoa: true
+    radius: 35,
+    duration: 2400,
+    hungerSlowdown: 0.4,        // 40% hunger rate while inside
+    feedingRate: 0.1,           // Small passive feeding
+    baseFeedingRate: 0.1,
+    attractsMoa: true,
+    attractionStrength: 1.2,
+    
+    seasonalBonus: {
+      summer: 2.0,   // Critical in summer
+      autumn: 1.0,
+      winter: 0.5,   // Frozen in winter
+      spring: 1.2
+    }
   },
+  
   harakeke: {
     name: "Harakeke Flax",
-    description: "Food + slight cover",
+    description: "Food and light cover",
     cost: 30,
     icon: '🌾',
     color: '#5a8a3a',
-    effect: 'flax',
-    nutrition: 35,
-    radius: 28,
-    securityBonus: 1.3,
-    duration: 1500,
-    attractsHungryMoa: true
+    effect: 'feeding',
+    radius: 36,
+    duration: 1800,
+    
+    feedingRate: 0.15,
+    baseFeedingRate: 0.15,
+    plantSpawnCount: 3,
+    plantType: 'flax',
+    
+    securityBonus: 1.4,
+    
+    seasonalBonus: {
+      summer: 1.3,
+      autumn: 1.5,   // Flax fruits in autumn
+      winter: 0.7,
+      spring: 1.0
+    },
+    
+    attractsHungryMoa: true,
+    attractionStrength: 1.2
   }
 };
 
@@ -162,7 +233,7 @@ const BIOMES = {
     key: 'coastal',
     name: "Coastal/Beach",
     minElevation: 0.12,
-    maxElevation: 0.20,
+    maxElevation: 0.15,
     colors: ['#c2b280', '#d4c794', '#e6dca8'],
     contourColor: '#8a7d5a',
     walkable: true,
@@ -172,8 +243,8 @@ const BIOMES = {
   grassland: {
     key: 'grassland',
     name: "Lowland Grassland",
-    minElevation: 0.20,
-    maxElevation: 0.34,
+    minElevation: 0.15,
+    maxElevation: 0.3,
     colors: ['#7fb069', '#8fbc79', '#9fc889'],
     contourColor: '#5a7d4a',
     walkable: true,
@@ -184,8 +255,8 @@ const BIOMES = {
   podocarp: {
     key: 'podocarp',
     name: "Podocarp Forest",
-    minElevation: 0.34,
-    maxElevation: 0.48,
+    minElevation: 0.3,
+    maxElevation: 0.45,
     colors: ['#2d5a3d', '#346644', '#3b724b'],
     contourColor: '#1e3d29',
     walkable: true,
@@ -196,7 +267,7 @@ const BIOMES = {
   montane: {
     key: 'montane',
     name: "Montane Forest",
-    minElevation: 0.48,
+    minElevation: 0.45,
     maxElevation: 0.56,
     colors: ['#4a7c59', '#528764', '#5a926f'],
     contourColor: '#335740',
@@ -245,11 +316,12 @@ const BIOMES = {
 // PLANT DEFINITIONS
 // ============================================
 const PLANT_TYPES = {
-  tussock: { name: "Tussock", nutrition: 25, color: '#8B9A46', size: 4, growthTime: 200 },
-  flax: { name: "Flax", nutrition: 35, color: '#4A7023', size: 6, growthTime: 280 },
-  fern: { name: "Fern", nutrition: 30, color: '#228B22', size: 5, growthTime: 240 },
-  rimu: { name: "Rimu Fruit", nutrition: 50, color: '#8B0000', size: 3, growthTime: 400 },
-  beech: { name: "Beech Mast", nutrition: 40, color: '#8B4513', size: 3, growthTime: 350 }
+  tussock: { name: "Tussock", nutrition: 25, color: '#8ea040', size: 12, growthTime: 200 },
+  flax: { name: "Flax", nutrition: 35, color: '#487020', size: 20, growthTime: 280 },
+  fern: { name: "Fern", nutrition: 30, color: '#228B22', size: 18, growthTime: 240 },
+  rimu: { name: "Rimu Fruit", nutrition: 50, color: '#8B0000', size: 14, growthTime: 400 },
+  beech: { name: "Beech Mast", nutrition: 40, color: '#8b430f', size: 16, growthTime: 350 },
+  kawakawa: { name: "Kawakawa", nutrition: 40, color: '#3d9a5e', size: 11, growthTime: 150 }
 };
 
 // ============================================
@@ -381,11 +453,11 @@ class Game {
     
     this.goals = [
       { name: "Survive 60 seconds", condition: () => this.playTime >= 3600, reward: 50, achieved: false },
-      { name: "Reach 15 moa", condition: () => this.simulation?.getMoaPopulation() >= 15, reward: 75, achieved: false },
+      { name: "Reach 10 moa", condition: () => this.simulation?.getMoaPopulation() >= 10, reward: 50, achieved: false },
       { name: "Hatch 10 eggs", condition: () => this.simulation?.stats.births >= 10, reward: 100, achieved: false },
-      { name: "Reach 25 moa", condition: () => this.simulation?.getMoaPopulation() >= 25, reward: 125, achieved: false },
-      { name: "Survive 3 minutes", condition: () => this.playTime >= 10800, reward: 150, achieved: false },
-      { name: "Reach 40 moa", condition: () => this.simulation?.getMoaPopulation() >= 40, reward: 200, achieved: false }
+      { name: "Reach 20 moa", condition: () => this.simulation?.getMoaPopulation() >= 20, reward: 50, achieved: false },
+      { name: "Survive 3 minutes", condition: () => this.playTime >= 10800, reward: 100, achieved: false },
+      { name: "Reach 30 moa", condition: () => this.simulation?.getMoaPopulation() >= 30, reward: 100, achieved: false }
     ];
     
     this.notifications = [];
@@ -910,11 +982,20 @@ class Simulation {
   }
   
   addPlaceable(x, y, type) {
-    this.placeables.push(new PlaceableObject(x, y, type, this.terrain));
+    const placeable = new PlaceableObject(
+      x, y, type, 
+      this.terrain, 
+      this,  // Pass simulation reference
+      this.seasonManager
+    );
+    this.placeables.push(placeable);
+    return placeable;
   }
   
   getMoaPopulation() {
-    return this.moas.filter(m => m.alive).length + this.eggs.filter(e => e.alive && !e.hatched).length;
+    // add eggs to moa pop
+    // + this.eggs.filter(e => e.alive && !e.hatched).length
+    return this.moas.filter(m => m.alive).length;
   }
 
   updateSpatialGrids() {

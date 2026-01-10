@@ -20,7 +20,7 @@ class HaastsEagle extends Boid {
     this.hunger = random(20, 45);
     this.maxHunger = 100;
     this.hungerRate = 0.022;
-    this.huntThreshold = 35;
+    this.huntThreshold = 40;
     this.kills = 0;
     
     this.patrolCenter = createVector(x, y);

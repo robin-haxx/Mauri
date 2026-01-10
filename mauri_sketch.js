@@ -6,6 +6,7 @@ const CONFIG = {
   height: 1080,
   pixelScale: 2,
   zoom: 2,
+  debugMode: false,
   
   // Noise settings
   noiseScale: 0.006,
@@ -31,7 +32,7 @@ const CONFIG = {
   eagleCount: 2,
   
   // Plants
-  plantDensity: 0.004,
+  plantDensity: 0.002,
   
   // Game settings
   startingMauri: 0,
@@ -48,7 +49,7 @@ const CONFIG = {
   seasonDuration: 1500, 
   
   // Eagle spawning
-  eagleSpawnMilestones: [15, 25, 40] // Spawn eagle at these moa populations
+  eagleSpawnMilestones: [10, 15, 20, 25, 35, 45, 55] // Spawn eagle at these moa populations
 };
 
 
@@ -655,9 +656,9 @@ class Game {
     noStroke();
     fill(101, 67, 33);
     ellipse(0, 0, 8, 11);
-    ellipse(0, -6, 5, 7);
-    fill(85, 70, 40);
-    triangle(0, -11, -2, -8, 2, -8);
+    ellipse(3, -3, 7, 5);
+    fill(185, 170, 140);
+    triangle(5, -5, 10, -2, 6, -2);
     stroke(55, 38, 20);
     strokeWeight(1.5);
     line(-3, 5, -4, 12);
@@ -858,6 +859,15 @@ class Game {
       this.init();
       return;
     }
+
+    if (key === 'd' || key === 'D') {
+      if (!CONFIG.debugMode){
+        CONFIG.debugMode = true;
+      } else {
+        CONFIG.debugMode = false;
+      }
+      return;
+    }
     
     if (this.state === GAME_STATE.PLAYING) {
       if (key === 'p' || key === 'P') {
@@ -1021,10 +1031,15 @@ class Simulation {
   update(mauri) {
 
     this.updateSpatialGrids();
-
+  
     // Update plants with seasonal effects
     for (let plant of this.plants) {
       plant.update(this.seasonManager);
+    }
+    
+    // Handle season change effects
+    if (this.seasonManager.justChanged) {
+      this.onSeasonChange();
     }
     
     for (let p of this.placeables) {
@@ -1082,6 +1097,37 @@ class Simulation {
     }
   }
   
+  onSeasonChange() {
+    // Force dormancy check on all plants
+    let dormantCount = 0;
+    let wokeCount = 0;
+    
+    for (let plant of this.plants) {
+      if (plant.isSpawned) continue;  // Skip placeable-spawned plants
+      
+      let shouldBeDormant = this.seasonManager.shouldPlantBeDormant(
+        plant.elevation, 
+        plant.biomeKey
+      );
+      
+      if (shouldBeDormant && !plant.dormant && plant.alive) {
+        if (random() < this.seasonManager.getDormancyChance()) {
+          plant.goDormant();
+          dormantCount++;
+        }
+      } else if (!shouldBeDormant && plant.dormant) {
+        // Wake up plants
+        if (random() < 0.5) {
+          plant.dormant = false;
+          plant.growth = 0.3;
+          wokeCount++;
+        }
+      }
+    }
+    
+    console.log(`Season change: ${dormantCount} plants went dormant, ${wokeCount} plants woke up`);
+}
+
   render() {
     for (let plant of this.plants) {
       plant.render();
@@ -1123,6 +1169,7 @@ function setup() {
 function draw() {
   game.update();
   game.render();
+  filter(POSTERIZE, 16);
 }
 
 function mousePressed() {

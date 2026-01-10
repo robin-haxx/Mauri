@@ -47,7 +47,7 @@ class GameUI {
   }
   
   renderMauriBar() {
-    let x = 20, y = 15;
+    let x = 25, y = 25;
     
     fill(40, 50, 45, 230);
     stroke(80, 100, 85);
@@ -58,7 +58,7 @@ class GameUI {
     translate(x + 15, y + 12);
     noFill();
     stroke(120, 200, 140);
-    strokeWeight(2);
+    strokeWeight(4);
     arc(0, 0, 16, 16, PI, TWO_PI);
     arc(4, 2, 10, 10, 0, PI);
     pop();
@@ -75,7 +75,7 @@ class GameUI {
   }
   
   renderSeasonIndicator() {
-    let x = 220, y = 15;
+    let x = 220, y = 25;
     let season = this.seasonManager.current;
     let progress = this.seasonManager.progress;
     
@@ -115,7 +115,7 @@ class GameUI {
   }
   
   renderToolbar() {
-    let btnX = 20;
+    let btnX = 25;
     let btnY = this.toolbarY;
     let btnSize = 50;
     let spacing = 60;
@@ -223,20 +223,28 @@ class GameUI {
   }
   
   renderStats() {
-    let x = this.config.width - 140;
-    let y = 15;
+    let x = this.config.width - 155;
+    let y = 25;
+    
+    let aliveMoas = this.simulation.moas.filter(m => m.alive);
+    let migratingCount = aliveMoas.filter(m => m.isMigrating).length;
+    let dormantPlants = this.simulation.plants.filter(p => p.dormant).length;
+    let totalPlants = this.simulation.plants.length;
     
     let stats = {
-      moas: this.simulation.moas.filter(m => m.alive).length,
+      moas: aliveMoas.length,
+      migrating: migratingCount,
       eggs: this.simulation.eggs.filter(e => e.alive).length,
       births: this.simulation.stats.births,
-      eagles: this.simulation.eagles.length
+      eagles: this.simulation.eagles.length,
+      dormantPlants: dormantPlants,
+      activePlants: this.simulation.plants.filter(p => p.alive && !p.dormant).length
     };
     
     fill(40, 50, 45, 230);
     stroke(80, 100, 85);
     strokeWeight(1);
-    rect(x - 10, y - 10, 130, 95, 8);
+    rect(x - 10, y - 10, 145, 120, 8);
     
     fill(180, 210, 190);
     noStroke();
@@ -246,29 +254,59 @@ class GameUI {
     
     textSize(10);
     
+    // Moa count
     fill(150, 120, 90);
     ellipse(x + 8, y + 23, 8, 10);
     fill(160, 190, 170);
     text(`Moa: ${stats.moas} / ${this.config.maxMoaPopulation}`, x + 18, y + 18);
     
+    // Migrating count
+    if (stats.migrating > 0) {
+      fill(100, 150, 255);
+      text(`  (${stats.migrating} migrating)`, x + 80, y + 18);
+    }
+    
+    // Eggs
     fill(245, 240, 220);
     ellipse(x + 8, y + 40, 6, 8);
     fill(160, 190, 170);
     text(`Eggs: ${stats.eggs}`, x + 18, y + 35);
+    text(`Hatched: ${stats.births}`, x + 70, y + 35);
     
-    fill(160, 190, 170);
-    text(`Hatched: ${stats.births}`, x + 5, y + 52);
-    
-    // Eagle count
+    // Eagles
     fill(60, 45, 30);
-    ellipse(x + 8, y + 72, 10, 5);
+    ellipse(x + 8, y + 57, 10, 5);
     fill(180, 150, 150);
-    text(`Eagles: ${stats.eagles}`, x + 18, y + 67);
+    text(`Eagles: ${stats.eagles}`, x + 18, y + 52);
+    
+    // Plants
+    fill(100, 160, 100);
+    ellipse(x + 8, y + 74, 6, 6);
+    fill(160, 190, 170);
+    text(`Plants: ${stats.activePlants}`, x + 18, y + 69);
+    
+    // Dormant plants
+    if (stats.dormantPlants > 0) {
+      fill(140, 130, 110);
+      text(`(${stats.dormantPlants} dormant)`, x + 70, y + 69);
+    }
+    
+    // Preferred elevation indicator
+    let pref = this.seasonManager.getPreferredElevation();
+    fill(140, 160, 150);
+    textSize(9);
+    text(`Preferred elev: ${(pref.min * 100).toFixed(0)}-${(pref.max * 100).toFixed(0)}%`, x, y + 90);
+    
+    // Migration strength
+    let migStr = this.seasonManager.getMigrationStrength();
+    let migColor = migStr > 0.7 ? color(255, 200, 100) : color(160, 190, 170);
+    fill(migColor);
+    text(`Migration drive: ${(migStr * 100).toFixed(0)}%`, x, y + 102);
   }
   
   renderGoals() {
     let x = this.config.width - 200;
-    let y = 125;
+    let y = 160;
     
     fill(40, 50, 45, 220);
     stroke(80, 100, 85);
@@ -321,13 +359,13 @@ class GameUI {
     fill(40, 50, 45, 200);
     stroke(80, 100, 85);
     strokeWeight(1);
-    rect(this.config.width / 2 - 35, 10, 70, 28, 6);
+    rect(this.config.width / 2 - 35, 25, 70, 28, 6);
     
     fill(180, 220, 190);
     noStroke();
     textSize(16);
     textAlign(CENTER, CENTER);
-    text(timeStr, this.config.width / 2, 24);
+    text(timeStr, this.config.width / 2, 40);
   }
   
   renderSelectedInfo() {

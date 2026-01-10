@@ -2,7 +2,7 @@
 // CONFIGURATION
 // ============================================
 const CONFIG = {
-  width: 1920,
+  width: 1080,
   height: 1080,
   pixelScale: 2,
   zoom: 2,
@@ -32,7 +32,7 @@ const CONFIG = {
   eagleCount: 2,
   
   // Plants
-  plantDensity: 0.002,
+  plantDensity: 0.003,
   
   // Game settings
   startingMauri: 0,

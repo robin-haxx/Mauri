@@ -685,7 +685,7 @@ class Game {
     text("Seasons: ☀️ Summer (upland) → 🍂 Autumn → ❄️ Winter (lowland) → 🌸 Spring", CONFIG.width / 2, 480);
     
     let btnX = CONFIG.width / 2 - 80;
-    let btnY = 480;
+    let btnY = 520;
     let btnW = 160;
     let btnH = 50;
     

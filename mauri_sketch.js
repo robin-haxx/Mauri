@@ -3,7 +3,7 @@
 // ============================================
 const CONFIG = {
   width: 1080,
-  height: 1080,
+  height: 600,
   pixelScale: 2,
   zoom: 2,
   debugMode: false,
@@ -15,7 +15,7 @@ const CONFIG = {
   lacunarity: 2.0,
   
   // Terrain shaping
-  ridgeInfluence: 0.35,
+  ridgeInfluence: 1.35,
   elevationPower: 1.2,
   islandFalloff: 0.6, 
   

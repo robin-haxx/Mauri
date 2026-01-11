@@ -3,7 +3,7 @@
 // ============================================
 const CONFIG = {
   width: 1080,
-  height: 600,
+  height: 720,
   pixelScale: 2,
   zoom: 2,
   debugMode: false,

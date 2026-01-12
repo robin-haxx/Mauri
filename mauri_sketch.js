@@ -35,7 +35,7 @@ const CONFIG = {
   plantDensity: 0.003,
   
   // Game settings
-  startingMauri: 0,
+  startingMauri: 30,
   targetPopulation: 30,
   survivalTimeGoal: 3600,
   

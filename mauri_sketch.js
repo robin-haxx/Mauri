@@ -770,7 +770,7 @@ class Game {
   
   renderPauseOverlay() {
     //fill(0, 0, 0, 150);
-    rect(0, 0, CONFIG.width, CONFIG.height);
+    //rect(0, 0, CONFIG.width, CONFIG.height);
     
     fill(255);
     textAlign(CENTER, CENTER);
@@ -890,7 +890,7 @@ class Game {
         CONFIG.showHungerBars = !CONFIG.showHungerBars;
       }
     } else if (this.state === GAME_STATE.PAUSED) {
-      if (key === 'p' || key === 'P') {
+      if (key === 'p' || key === 'P' || key === ' ') {
         this.state = GAME_STATE.PLAYING;
       }
     }

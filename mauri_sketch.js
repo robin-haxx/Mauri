@@ -769,7 +769,7 @@ class Game {
   }
   
   renderPauseOverlay() {
-    fill(0, 0, 0, 150);
+    //fill(0, 0, 0, 150);
     rect(0, 0, CONFIG.width, CONFIG.height);
     
     fill(255);
@@ -870,7 +870,7 @@ class Game {
     }
     
     if (this.state === GAME_STATE.PLAYING) {
-      if (key === 'p' || key === 'P') {
+      if (key === 'p' || key === 'P' || key === ' ') {
         this.state = GAME_STATE.PAUSED;
       } else if (key === 'Escape') {
         this.cancelPlacement();

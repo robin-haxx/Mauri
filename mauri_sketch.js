@@ -77,7 +77,7 @@ const PLACEABLES = {
     color: '#2d8a4e',
     effect: 'feeding',
     radius: 40,
-    duration: 1800, 
+    duration: 1200, 
     
     // Feeding zone properties
     feedingRate: 0.2,           // Hunger reduced per frame while inside

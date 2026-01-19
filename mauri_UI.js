@@ -36,6 +36,7 @@ class GameUI {
   render() {
     this.renderMauriBar();
     this.renderSeasonIndicator();
+    this.renderMigrationStatus();
     this.renderToolbar();
     this.renderStats();
     this.renderGoals();
@@ -49,10 +50,10 @@ class GameUI {
   renderMauriBar() {
     let x = 25, y = 25;
     
-    fill(40, 50, 45, 230);
+    fill(CONFIG.col_UI);
     stroke(80, 100, 85);
     strokeWeight(1);
-    rect(x - 10, y - 10, 180, 45, 8);
+    rect(x - 10, y - 10, 120, 50, 8);
     
     push();
     translate(x + 15, y + 12);
@@ -69,9 +70,13 @@ class GameUI {
     textAlign(LEFT, TOP);
     text("Mauri", x + 35, y - 2);
     
+    // mauri count
     fill(140, 255, 160);
-    textSize(22);
+    textSize(26);
+    push();
+    textFont(GroceryRounded);
     text(Math.floor(this.mauri.mauri), x + 35, y + 12);
+    pop();
   }
   
   renderSeasonIndicator() {
@@ -79,7 +84,7 @@ class GameUI {
     let season = this.seasonManager.current;
     let progress = this.seasonManager.progress;
     
-    fill(40, 50, 45, 230);
+    fill(CONFIG.col_UI);
     stroke(80, 100, 85);
     strokeWeight(1);
     rect(x - 10, y - 10, 180, 45, 8);
@@ -120,7 +125,7 @@ class GameUI {
     let btnSize = 50;
     let spacing = 60;
     
-    fill(35, 45, 40, 240);
+    fill(CONFIG.col_UI);
     stroke(70, 90, 75);
     strokeWeight(1);
     rect(btnX - 15, btnY - 15, Object.keys(PLACEABLES).length * spacing + 20, btnSize + 35, 10);
@@ -129,7 +134,7 @@ class GameUI {
     noStroke();
     textSize(10);
     textAlign(LEFT, TOP);
-    text("TOOLS (1-6) • Shift+Click to place multiple • ESC to cancel", btnX, btnY - 12);
+    text("TOOLS (1-6) • Hold \"shift\" to place more • ESC to cancel", btnX, btnY - 12);
     
     let i = 0;
     for (let type in PLACEABLES) {
@@ -202,7 +207,7 @@ class GameUI {
     x = constrain(x - tw/2, 10, this.config.width - tw - 10);
     y = y - th - 5;
     
-    fill(30, 40, 35, 245);
+    fill(CONFIG.col_UI);
     stroke(90, 120, 100);
     strokeWeight(1);
     rect(x, y, tw, th, 6);
@@ -224,7 +229,7 @@ class GameUI {
   
   renderStats() {
     let x = this.config.width - 155;
-    let y = 25;
+    let y = 30;
     
     let aliveMoas = this.simulation.moas.filter(m => m.alive);
     let migratingCount = aliveMoas.filter(m => m.isMigrating).length;
@@ -241,7 +246,7 @@ class GameUI {
       activePlants: this.simulation.plants.filter(p => p.alive && !p.dormant).length
     };
     
-    fill(40, 50, 45, 230);
+    fill(CONFIG.col_UI);
     stroke(80, 100, 85);
     strokeWeight(1);
     rect(x - 10, y - 10, 145, 120, 8);
@@ -306,9 +311,9 @@ class GameUI {
   
   renderGoals() {
     let x = this.config.width - 200;
-    let y = 160;
+    let y = 180;
     
-    fill(40, 50, 45, 220);
+    fill(CONFIG.col_UI);
     stroke(80, 100, 85);
     strokeWeight(1);
     rect(x - 10, y - 10, 190, 25 + this.game.goals.length * 18, 8);
@@ -356,7 +361,7 @@ class GameUI {
     
     let timeStr = `${minutes}:${seconds.toString().padStart(2, '0')}`;
     
-    fill(40, 50, 45, 200);
+    fill(CONFIG.col_UI);
     stroke(80, 100, 85);
     strokeWeight(1);
     rect(this.config.width / 2 - 35, 25, 70, 28, 6);
@@ -366,6 +371,48 @@ class GameUI {
     textSize(16);
     textAlign(CENTER, CENTER);
     text(timeStr, this.config.width / 2, 40);
+  }
+
+  renderMigrationStatus() {
+    const aliveMoas = this.simulation.moas.filter(m => m.alive);
+    const hint = this.seasonManager.getMigrationHint(aliveMoas);
+    
+    if (!hint) return;
+    
+    let x = 220;
+    let y = 80;  // Below the season panel
+    
+    // Background
+    fill(CONFIG.col_UI);
+    stroke(80, 100, 85);
+    strokeWeight(1);
+    rect(x - 10, y - 10, 180, 45, 8);
+    
+    // Direction arrow
+    fill(this.seasonManager.current.color);
+    noStroke();
+    textSize(18);
+    textAlign(LEFT, CENTER);
+    text(hint.direction, x, y + 8);
+    
+    // Status text
+    fill(180, 210, 190);
+    textSize(11);
+    text(hint.text, x + 22, y + 5);
+    
+    // Detail text
+    fill(140, 160, 150);
+    textSize(9);
+    text(hint.detail, x, y + 22);
+    
+    // Migrating count
+    const migratingCount = aliveMoas.filter(m => m.isMigrating).length;
+    if (migratingCount > 0) {
+      fill(100, 150, 255);
+      textSize(9);
+      textAlign(RIGHT, CENTER);
+      text(`${migratingCount} migrating`, x + 130, y + 5);
+    }
   }
   
   renderSelectedInfo() {

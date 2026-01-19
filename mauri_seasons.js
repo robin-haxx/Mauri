@@ -176,6 +176,131 @@ class SeasonManager {
     
     return { ...current };
   }
+
+    /**
+   * Get migration messages for species present in the simulation
+   * @param {Array} moas - Array of moa in simulation
+   * @returns {Object} - Messages about current and upcoming migration
+   */
+  getMigrationMessages(moas) {
+    const messages = {
+      current: null,
+      upcoming: null
+    };
+    
+    // Get unique species present
+    const speciesPresent = new Set();
+    for (let moa of moas) {
+      if (moa.alive && moa.speciesKey) {
+        speciesPresent.add(moa.speciesKey);
+      }
+    }
+    
+    // Check each species for migration messaging
+    for (let speciesKey of speciesPresent) {
+      const speciesMessages = this.getSpeciesMigrationMessage(speciesKey);
+      if (speciesMessages.current) {
+        messages.current = speciesMessages.current;
+      }
+      if (speciesMessages.upcoming) {
+        messages.upcoming = speciesMessages.upcoming;
+      }
+    }
+    
+    return messages;
+  }
+
+  /**
+   * Get migration message for a specific species based on current season
+   */
+  getSpeciesMigrationMessage(speciesKey) {
+    const messages = {
+      current: null,
+      upcoming: null
+    };
+    
+    // Species-specific migration patterns
+    const migrationPatterns = {
+      upland_moa: {
+        // What terrain they migrate between
+        summerHabitat: 'subalpine tussock',
+        winterHabitat: 'podocarp forest',
+        
+        // Messages by season
+        summer: {
+          current: "Upland Moa are grazing in the high subalpine meadows.",
+          upcoming: "As autumn approaches, Upland Moa will begin moving downhill."
+        },
+        autumn: {
+          current: "Upland Moa are migrating down to the forests for winter.",
+          upcoming: "Upland Moa will shelter in the podocarp forest through winter."
+        },
+        winter: {
+          current: "Upland Moa are sheltering in the podocarp forest.",
+          upcoming: "When spring arrives, Upland Moa will start moving uphill."
+        },
+        spring: {
+          current: "Upland Moa are migrating up to the subalpine zone.",
+          upcoming: "Upland Moa will spend summer in the high meadows."
+        }
+      }
+      // Add other migratory species here as needed
+    };
+    
+    const pattern = migrationPatterns[speciesKey];
+    if (!pattern) return messages;
+    
+    const seasonData = pattern[this.currentKey];
+    if (seasonData) {
+      messages.current = seasonData.current;
+      messages.upcoming = seasonData.upcoming;
+    }
+    
+    return messages;
+  }
+
+  /**
+   * Get a brief migration hint for UI display
+   */
+  getMigrationHint(moas) {
+    // Get unique species
+    const speciesPresent = new Set();
+    for (let moa of moas) {
+      if (moa.alive && moa.speciesKey) {
+        speciesPresent.add(moa.speciesKey);
+      }
+    }
+    
+    // For now, focus on upland moa
+    if (speciesPresent.has('upland_moa')) {
+      const hints = {
+        summer: { 
+          direction: '↑', 
+          text: 'High meadows',
+          detail: 'Upland Moa thrive in subalpine terrain'
+        },
+        autumn: { 
+          direction: '↓', 
+          text: 'Moving downhill',
+          detail: 'Migrating to forest for winter'
+        },
+        winter: { 
+          direction: '↓', 
+          text: 'Forest shelter',
+          detail: 'Sheltering in podocarp forest'
+        },
+        spring: { 
+          direction: '↑', 
+          text: 'Moving uphill',
+          detail: 'Returning to subalpine meadows'
+        }
+      };
+      
+      return hints[this.currentKey] || null;
+    }
+    
+    return null;
+  }
   
   // Check if a plant at given elevation should be dormant
   shouldPlantBeDormant(elevation, biomeKey) {

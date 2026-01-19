@@ -1,12 +1,23 @@
+function preload(){
+  openDyslexic = loadFont('/typefaces/OpenDyslexic-Regular.otf');
+  openDyslexic_B = loadFont('/typefaces/OpenDyslexic-Bold.otf');
+  openDyslexic_I = loadFont('/typefaces/OpenDyslexic-Italic.otf');
+  openDyslexic_B_I = loadFont('/typefaces/OpenDyslexic-BoldItalic.otf')
+  GroceryRounded = loadFont('/typefaces/GroceryRounded.ttf')
+}
+
+
+
 // ============================================
 // CONFIGURATION
 // ============================================
 const CONFIG = {
-  width: 1080,
+  width: 1280,
   height: 720,
   pixelScale: 2,
   zoom: 2,
   debugMode: false,
+  col_UI: [40,70,30,180],
   
   // Noise settings
   noiseScale: 0.006,
@@ -30,6 +41,7 @@ const CONFIG = {
   initialMoaCount: 6,
   maxMoaPopulation: 60,
   eagleCount: 2,
+  startingSpecies: 'upland_moa',
   
   // Plants
   plantDensity: 0.003,
@@ -78,6 +90,8 @@ const PLACEABLES = {
     effect: 'feeding',
     radius: 40,
     duration: 1200, 
+    minSpacing: 30,        // Minimum distance from other placeables
+    ignoresSpacing: false,
     
     // Feeding zone properties
     feedingRate: 0.2,           // Hunger reduced per frame while inside
@@ -108,6 +122,8 @@ const PLACEABLES = {
     duration: 3200,
     securityBonus: 4.0,
     blocksEagleVision: true,
+    minSpacing: 30,        
+    ignoresSpacing: false,
     
     // Small feeding benefit too
     feedingRate: 0.05,
@@ -134,6 +150,8 @@ const PLACEABLES = {
     eggSpeedBonus: 2.0,
     attractsReadyMoa: true,
     attractionStrength: 2.0,
+    minSpacing: 20,        
+    ignoresSpacing: false,
     
     seasonalBonus: {
       summer: 0.8,
@@ -154,6 +172,8 @@ const PLACEABLES = {
     duration: 600,
     distractsEagles: true,
     distractionStrength: 1.0,
+    minSpacing: 0,        
+    ignoresSpacing: true,
     
     seasonalBonus: {
       summer: 1.0,
@@ -177,6 +197,8 @@ const PLACEABLES = {
     baseFeedingRate: 0.1,
     attractsMoa: true,
     attractionStrength: 1.2,
+    minSpacing: 30,        
+    ignoresSpacing: false,
     
     seasonalBonus: {
       summer: 2.0,   // Critical in summer
@@ -195,6 +217,8 @@ const PLACEABLES = {
     effect: 'feeding',
     radius: 36,
     duration: 1800,
+    minSpacing: 30,        
+    ignoresSpacing: false,
     
     feedingRate: 0.15,
     baseFeedingRate: 0.15,
@@ -494,8 +518,7 @@ class Game {
     // Update season
     let seasonChanged = this.seasonManager.update();
     if (seasonChanged) {
-      this.addNotification(`Season changed to ${this.seasonManager.current.name} ${this.seasonManager.current.icon}`, 'info');
-      this.addNotification(this.seasonManager.current.description, 'info');
+      this.onSeasonChange();
     }
     
     this.simulation.update(this.mauri);
@@ -565,6 +588,32 @@ class Game {
       }
     }
   }
+
+  onSeasonChange() {
+    const season = this.seasonManager.current;
+    
+    // Basic season change notification
+    this.addNotification(`Season changed to ${season.name} ${season.icon}`, 'info');
+    
+    // Get migration messages for species in simulation
+    const aliveMoas = this.simulation.moas.filter(m => m.alive);
+    const migrationMessages = this.seasonManager.getMigrationMessages(aliveMoas);
+    
+    // Show current migration status
+    if (migrationMessages.current) {
+      // Slight delay so messages don't all appear at once
+      setTimeout(() => {
+        this.addNotification(migrationMessages.current, 'info');
+      }, 500);
+    }
+    
+    // Show upcoming migration hint
+    if (migrationMessages.upcoming) {
+      setTimeout(() => {
+        this.addNotification(migrationMessages.upcoming, 'info');
+      }, 2000);
+    }
+  }
   
   selectPlaceable(type) {
     if (PLACEABLES[type] && this.mauri.canAfford(PLACEABLES[type].cost)) {
@@ -578,30 +627,141 @@ class Game {
     this.selectedPlaceable = null;
   }
   
-  tryPlace(x, y) {
-    if (!this.selectedPlaceable) return false;
-    
-    let def = PLACEABLES[this.selectedPlaceable];
-    
-    if (!this.terrain.canPlace(x, y)) {
-      this.addNotification("Cannot place here!", 'error');
-      return false;
+  canPlaceWithSpacing(x, y, type) {
+      let def = PLACEABLES[type];
+      
+      // Items that ignore spacing can always be placed (terrain permitting)
+      if (def.ignoresSpacing) {
+        return { allowed: true };
+      }
+      
+      let mySpacing = def.minSpacing || 40;
+      
+      // Check against all existing placeables
+      for (let p of this.simulation.placeables) {
+        if (!p.alive) continue;
+        
+        let otherDef = PLACEABLES[p.type];
+        
+        // Skip if the other placeable ignores spacing
+        if (otherDef.ignoresSpacing) continue;
+        
+        let otherSpacing = otherDef.minSpacing || 40;
+        
+        // Required distance is the average of both spacing requirements
+        let requiredDist = (mySpacing + otherSpacing) / 2;
+        
+        let dist = p5.Vector.dist(createVector(x, y), p.pos);
+        
+        if (dist < requiredDist) {
+          return { 
+            allowed: false, 
+            reason: `Too close to ${otherDef.name}`,
+            blocker: p,
+            requiredDist: requiredDist,
+            actualDist: dist
+          };
+        }
+      }
+      
+      return { allowed: true };
     }
     
-    if (!this.mauri.spend(def.cost)) {
-      this.addNotification("Not enough mauri!", 'error');
-      return false;
+    tryPlace(x, y) {
+      if (!this.selectedPlaceable) return false;
+      
+      let def = PLACEABLES[this.selectedPlaceable];
+      
+      // Check terrain placement
+      if (!this.terrain.canPlace(x, y)) {
+        this.addNotification("Cannot place here!", 'error');
+        return false;
+      }
+      
+      // Check spacing with other placeables
+      let spacingCheck = this.canPlaceWithSpacing(x, y, this.selectedPlaceable);
+      if (!spacingCheck.allowed) {
+        this.addNotification(spacingCheck.reason, 'error');
+        return false;
+      }
+      
+      // Check cost
+      if (!this.mauri.spend(def.cost)) {
+        this.addNotification("Not enough mauri!", 'error');
+        return false;
+      }
+      
+      this.simulation.addPlaceable(x, y, this.selectedPlaceable);
+      this.addNotification(`Placed ${def.name}`, 'info');
+      
+      if (!keyIsDown(SHIFT)) {
+        this.selectedPlaceable = null;
+      }
+      
+      return true;
     }
     
-    this.simulation.addPlaceable(x, y, this.selectedPlaceable);
-    this.addNotification(`Placed ${def.name}`, 'info');
-    
-    if (!keyIsDown(SHIFT)) {
-      this.selectedPlaceable = null;
+    renderPlacementPreview() {
+      let tx = mouseX / CONFIG.zoom;
+      let ty = mouseY / CONFIG.zoom;
+      
+      if (tx < 0 || tx > this.terrain.mapWidth || ty < 0 || ty > this.terrain.mapHeight) return;
+      
+      let def = PLACEABLES[this.selectedPlaceable];
+      let canPlaceTerrain = this.terrain.canPlace(tx, ty);
+      let spacingCheck = this.canPlaceWithSpacing(tx, ty, this.selectedPlaceable);
+      let canPlace = canPlaceTerrain && spacingCheck.allowed;
+      
+      push();
+      translate(tx, ty);
+      
+      // Main radius indicator
+      noFill();
+      stroke(canPlace ? color(100, 255, 100, 100) : color(255, 100, 100, 100));
+      strokeWeight(1);
+      ellipse(0, 0, def.radius * 2, def.radius * 2);
+      
+      // Show spacing radius if item requires spacing
+      if (!def.ignoresSpacing) {
+        let spacingRadius = def.minSpacing || 40;
+        stroke(canPlace ? color(100, 200, 255, 60) : color(255, 150, 100, 80));
+        strokeWeight(1);
+        drawingContext.setLineDash([4, 4]);
+        ellipse(0, 0, spacingRadius * 2, spacingRadius * 2);
+        drawingContext.setLineDash([]);
+      }
+      
+      // Main placement indicator
+      let col = color(def.color);
+      fill(red(col), green(col), blue(col), canPlace ? 150 : 80);
+      stroke(canPlace ? color(100, 255, 100, 200) : color(255, 100, 100, 200));
+      strokeWeight(2);
+      ellipse(0, 0, 18, 18);
+      
+      // Show blocking indicator
+      if (!spacingCheck.allowed && spacingCheck.blocker) {
+        pop();
+        
+        // Draw line to blocking placeable
+        push();
+        stroke(255, 100, 100, 150);
+        strokeWeight(1);
+        drawingContext.setLineDash([3, 3]);
+        line(tx, ty, spacingCheck.blocker.pos.x, spacingCheck.blocker.pos.y);
+        drawingContext.setLineDash([]);
+        
+        // Highlight the blocker
+        noFill();
+        stroke(255, 100, 100, 200);
+        strokeWeight(2);
+        let blockerRadius = spacingCheck.blocker.radius;
+        ellipse(spacingCheck.blocker.pos.x, spacingCheck.blocker.pos.y, blockerRadius * 2 + 10, blockerRadius * 2 + 10);
+        pop();
+      } else {
+        pop();
+      }
     }
-    
-    return true;
-  }
+
   
   render() {
     background(30);
@@ -643,7 +803,10 @@ class Game {
     textAlign(CENTER, CENTER);
     fill(180, 220, 180);
     textSize(48);
+    push();
+    textFont(GroceryRounded);
     text("MAURI", CONFIG.width / 2, 100);
+    pop();
     
     fill(140, 180, 140);
     textSize(16);
@@ -698,8 +861,11 @@ class Game {
     
     fill(255);
     noStroke();
-    textSize(20);
-    text("Start Game", CONFIG.width / 2, btnY + btnH / 2);
+    textSize(24);
+    push();
+    textFont(GroceryRounded);
+    text("Start Level", CONFIG.width / 2, btnY + btnH / 2);
+    pop();
     
     fill(100, 120, 100);
     textSize(10);
@@ -897,260 +1063,6 @@ class Game {
   }
 }
 
-// ============================================
-// SIMULATION CLASS
-// ============================================
-class Simulation {
-  constructor(terrain, config, game, seasonManager) {
-    this.terrain = terrain;
-    this.config = config;
-    this.game = game;
-    this.seasonManager = seasonManager;
-    this.moas = [];
-    this.eagles = [];
-    this.plants = [];
-    this.eggs = [];
-    this.placeables = [];
-    
-    this.stats = {
-      births: 0,
-      deaths: 0,
-      starvations: 0
-    };
-
-    this.moaGrid = new SpatialGrid(terrain.mapWidth, terrain.mapHeight, 50);
-    this.eagleGrid = new SpatialGrid(terrain.mapWidth, terrain.mapHeight, 80);
-    this.plantGrid = new SpatialGrid(terrain.mapWidth, terrain.mapHeight, 40);
-    this.placeableGrid = new SpatialGrid(terrain.mapWidth, terrain.mapHeight, 60);
-
-  }
-  
-  init() {
-    this.spawnPlants();
-    this.spawnMoas(this.config.initialMoaCount);
-    this.spawnEagles(this.config.eagleCount);
-  }
-  
-  spawnPlants() {
-    const scale = this.config.pixelScale;
-    for (let row = 0; row < this.terrain.biomeMap.length; row++) {
-      for (let col = 0; col < this.terrain.biomeMap[row].length; col++) {
-        const biome = this.terrain.biomeMap[row][col];
-        if (biome.canHavePlants && random() < this.config.plantDensity) {
-          const x = col * scale + random(-scale/2, scale/2);
-          const y = row * scale + random(-scale/2, scale/2);
-          this.plants.push(new Plant(x, y, random(biome.plantTypes), this.terrain, biome.key));
-        }
-      }
-    }
-  }
-  
-  spawnMoas(count) {
-    let pref = this.seasonManager.getPreferredElevation();
-    for (let i = 0; i < count; i++) {
-      let pos = this.findWalkablePosition(pref.min, pref.max);
-      this.moas.push(new Moa(pos.x, pos.y, this.terrain, this.config));
-    }
-  }
-  
-  spawnEagles(count) {
-    for (let i = 0; i < count; i++) {
-      this.spawnEagle();
-    }
-  }
-  
-  spawnEagle() {
-    let pos = this.findWalkablePosition(0.25, 0.7);
-    let attempts = 0;
-    while (attempts < 20) {
-      let tooClose = this.eagles.some(e => p5.Vector.dist(pos, e.pos) < 80);
-      if (!tooClose) break;
-      pos = this.findWalkablePosition(0.25, 0.7);
-      attempts++;
-    }
-    this.eagles.push(new HaastsEagle(pos.x, pos.y, this.terrain));
-  }
-  
-  findWalkablePosition(minElev = 0.15, maxElev = 0.8) {
-    let attempts = 0;
-    while (attempts < 100) {
-      let x = random(30, this.terrain.mapWidth - 30);
-      let y = random(30, this.terrain.mapHeight - 30);
-      let elev = this.terrain.getElevationAt(x, y);
-      if (elev > minElev && elev < maxElev && this.terrain.isWalkable(x, y)) {
-        return createVector(x, y);
-      }
-      attempts++;
-    }
-    return createVector(this.terrain.mapWidth / 2, this.terrain.mapHeight / 2);
-  }
-  
-  addEgg(x, y) {
-    let egg = new Egg(x, y, this.terrain, this.config);
-    this.eggs.push(egg);
-    return egg;
-  }
-  
-  addPlaceable(x, y, type) {
-    const placeable = new PlaceableObject(
-      x, y, type, 
-      this.terrain, 
-      this,  // Pass simulation reference
-      this.seasonManager
-    );
-    this.placeables.push(placeable);
-    return placeable;
-  }
-  
-  getMoaPopulation() {
-    // add eggs to moa pop
-    // + this.eggs.filter(e => e.alive && !e.hatched).length
-    return this.moas.filter(m => m.alive).length;
-  }
-
-  updateSpatialGrids() {
-    this.moaGrid.clear();
-    this.eagleGrid.clear();
-    this.plantGrid.clear();
-    this.placeableGrid.clear();
-    
-    for (let moa of this.moas) {
-      if (moa.alive) this.moaGrid.insert(moa);
-    }
-    for (let eagle of this.eagles) {
-      this.eagleGrid.insert(eagle);
-    }
-    for (let plant of this.plants) {
-      if (plant.alive) this.plantGrid.insert(plant);
-    }
-    for (let p of this.placeables) {
-      if (p.alive) this.placeableGrid.insert(p);
-    }
-  }  
-  
-  update(mauri) {
-
-    this.updateSpatialGrids();
-  
-    // Update plants with seasonal effects
-    for (let plant of this.plants) {
-      plant.update(this.seasonManager);
-    }
-    
-    // Handle season change effects
-    if (this.seasonManager.justChanged) {
-      this.onSeasonChange();
-    }
-    
-    for (let p of this.placeables) {
-      p.update();
-    }
-    this.placeables = this.placeables.filter(p => p.alive);
-    
-    for (let egg of this.eggs) {
-      for (let p of this.placeables) {
-        if (p.alive && p.type === 'nest' && p.isInRange(egg.pos)) {
-          egg.speedBonus = max(egg.speedBonus, p.def.eggSpeedBonus);
-        }
-      }
-      
-      egg.update();
-      
-      if (egg.hatched && egg.alive) {
-        if (this.getMoaPopulation() < this.config.maxMoaPopulation) {
-          let newMoa = new Moa(egg.pos.x, egg.pos.y, this.terrain, this.config);
-          newMoa.hunger = 35;
-          newMoa.size = 6;
-          newMoa.homeRange = egg.pos.copy();
-          this.moas.push(newMoa);
-          this.stats.births++;
-          mauri.earn(mauri.onEggHatch, egg.pos.x, egg.pos.y, 'hatch');
-          this.game.addNotification("A moa has hatched!", 'success');
-        }
-        egg.alive = false;
-      }
-    }
-    this.eggs = this.eggs.filter(e => e.alive);
-    
-    let aliveBeforeUpdate = this.moas.filter(m => m.alive).length;
-    
-    for (let moa of this.moas) {
-      if (moa.alive) {
-        moa.behave(this.moas, this.eagles, this.plants, this.placeables, this, mauri, this.seasonManager);
-        moa.update();
-      }
-    }
-    
-    let aliveAfterUpdate = this.moas.filter(m => m.alive).length;
-    let newDeaths = aliveBeforeUpdate - aliveAfterUpdate;
-    if (newDeaths > 0) {
-      this.stats.starvations += newDeaths;
-    }
-    
-    for (let eagle of this.eagles) {
-      eagle.behave(this.moas, this.eagles, this.placeables);
-      eagle.update();
-    }
-    
-    if (frameCount % 600 === 0) {
-      this.moas = this.moas.filter(m => m.alive);
-    }
-  }
-  
-  onSeasonChange() {
-    // Force dormancy check on all plants
-    let dormantCount = 0;
-    let wokeCount = 0;
-    
-    for (let plant of this.plants) {
-      if (plant.isSpawned) continue;  // Skip placeable-spawned plants
-      
-      let shouldBeDormant = this.seasonManager.shouldPlantBeDormant(
-        plant.elevation, 
-        plant.biomeKey
-      );
-      
-      if (shouldBeDormant && !plant.dormant && plant.alive) {
-        if (random() < this.seasonManager.getDormancyChance()) {
-          plant.goDormant();
-          dormantCount++;
-        }
-      } else if (!shouldBeDormant && plant.dormant) {
-        // Wake up plants
-        if (random() < 0.5) {
-          plant.dormant = false;
-          plant.growth = 0.3;
-          wokeCount++;
-        }
-      }
-    }
-    
-    console.log(`Season change: ${dormantCount} plants went dormant, ${wokeCount} plants woke up`);
-}
-
-  render() {
-    for (let plant of this.plants) {
-      plant.render();
-    }
-    
-    for (let p of this.placeables) {
-      p.render();
-    }
-    
-    for (let egg of this.eggs) {
-      egg.render();
-    }
-    
-    for (let moa of this.moas) {
-      moa.render();
-    }
-    
-    for (let eagle of this.eagles) {
-      eagle.render();
-    }
-  }
-}
-
 
 
 // ============================================
@@ -1161,9 +1073,51 @@ let game;
 function setup() {
   createCanvas(CONFIG.width, CONFIG.height);
   pixelDensity(1);
-  textFont('Arial');
+  // global typeface font
+  textFont('OpenDyslexic');
+  
+  initializeRegistry();
   
   game = new Game();
+}
+
+function initializeRegistry() {
+  // Register base animal types
+  REGISTRY.registerAnimalType('moa', {}, Moa);
+  REGISTRY.registerAnimalType('eagle', {}, HaastsEagle);
+  
+  // Register all moa species
+  for (const [key, config] of Object.entries(MOA_SPECIES)) {
+    REGISTRY.registerSpecies(key, 'moa', config);
+  }
+  
+  // Register all eagle species
+  for (const [key, config] of Object.entries(EAGLE_SPECIES)) {
+    REGISTRY.registerSpecies(key, 'eagle', config);
+  }
+  
+  // Register plants
+  for (const [key, config] of Object.entries(PLANT_TYPES)) {
+    REGISTRY.registerPlant(key, config);
+  }
+  
+  // Register placeables
+  for (const [key, config] of Object.entries(PLACEABLES)) {
+    REGISTRY.registerPlaceable(key, config);
+  }
+  
+  // Register biomes
+  for (const [key, config] of Object.entries(BIOMES)) {
+    REGISTRY.registerBiome(key, config);
+  }
+  
+  // Validate everything is properly linked
+  const issues = REGISTRY.validate();
+  if (issues.length > 0) {
+    console.warn('Registry validation found issues:', issues);
+  }
+  
+  console.log('Registry initialized:', REGISTRY.getSummary());
 }
 
 function draw() {

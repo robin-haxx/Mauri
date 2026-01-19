@@ -1123,7 +1123,7 @@ function initializeRegistry() {
 function draw() {
   game.update();
   game.render();
-  filter(POSTERIZE, 16);
+  //filter(POSTERIZE, 16);
 }
 
 function mousePressed() {

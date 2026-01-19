@@ -1,9 +1,9 @@
 function preload(){
-  openDyslexic = loadFont('/typefaces/OpenDyslexic-Regular.otf');
-  openDyslexic_B = loadFont('/typefaces/OpenDyslexic-Bold.otf');
-  openDyslexic_I = loadFont('/typefaces/OpenDyslexic-Italic.otf');
-  openDyslexic_B_I = loadFont('/typefaces/OpenDyslexic-BoldItalic.otf')
-  GroceryRounded = loadFont('/typefaces/GroceryRounded.ttf')
+  openDyslexic = loadFont('typefaces/OpenDyslexic-Regular.otf');
+  openDyslexic_B = loadFont('typefaces/OpenDyslexic-Bold.otf');
+  openDyslexic_I = loadFont('typefaces/OpenDyslexic-Italic.otf');
+  openDyslexic_B_I = loadFont('typefaces/OpenDyslexic-BoldItalic.otf')
+  GroceryRounded = loadFont('typefaces/GroceryRounded.ttf')
 }
 
 

@@ -1,9 +1,12 @@
 // ============================================
-// HAAST'S EAGLE CLASS
+// HAAST'S EAGLE CLASS - Uses Spatial Grid for hunting
 // ============================================
 class HaastsEagle extends Boid {
-  constructor(x, y, terrain) {
+  constructor(x, y, terrain, config = null, speciesData = null) {
     super(x, y, terrain);
+    
+    this.config = config;
+    this.species = speciesData;
     
     this.baseSpeed = 0.6;
     this.huntSpeed = 1.4;
@@ -36,14 +39,59 @@ class HaastsEagle extends Boid {
     
     this.wingspan = random(20, 26);
     this.wingPhase = random(TWO_PI);
+    
+    // Reusable vectors
+    this._separateForce = createVector();
+    this._seekForce = createVector();
   }
   
-  isHunting() { return this.hunting && this.target !== null; }
+  isHunting() { 
+    return this.hunting && this.target !== null; 
+  }
   
-  behave(moas, eagles, placeables) {
+  /**
+   * Optimized separation using pre-filtered nearby eagles
+   */
+  separateOptimized(nearbyEagles) {
+    this._separateForce.set(0, 0);
+    let count = 0;
+    
+    for (let i = 0; i < nearbyEagles.length; i++) {
+      const other = nearbyEagles[i];
+      if (other === this) continue;
+      
+      const dx = this.pos.x - other.pos.x;
+      const dy = this.pos.y - other.pos.y;
+      const distSq = dx * dx + dy * dy;
+      const sepDistSq = this.separationDist * this.separationDist;
+      
+      if (distSq < sepDistSq && distSq > 0) {
+        const invDistSq = 1 / distSq;
+        this._separateForce.x += dx * invDistSq;
+        this._separateForce.y += dy * invDistSq;
+        count++;
+      }
+    }
+    
+    if (count > 0) {
+      this._separateForce.div(count);
+      this._separateForce.setMag(this.maxSpeed);
+      this._separateForce.sub(this.vel);
+      this._separateForce.limit(this.maxForce);
+    }
+    
+    return this._separateForce;
+  }
+  
+  /**
+   * Main behavior - uses simulation for spatial queries
+   */
+  behave(simulation) {
     this.hunger = min(this.hunger + this.hungerRate, this.maxHunger);
     
-    this.checkDecoys(placeables);
+    // Check for decoys using spatial grid
+    const nearbyPlaceables = simulation.getNearbyPlaceables(this.pos.x, this.pos.y, 100);
+    this.checkDecoys(nearbyPlaceables);
     
     if (this.distractedTimer > 0) {
       this.distractedTimer--;
@@ -57,11 +105,14 @@ class HaastsEagle extends Boid {
       return;
     }
     
-    let sep = this.separate(eagles).mult(2);
+    // Separation from other eagles using spatial grid
+    const nearbyEagles = simulation.getNearbyEagles(this.pos.x, this.pos.y, this.separationDist * 1.5);
+    let sep = this.separateOptimized(nearbyEagles);
+    sep.mult(2);
     this.applyForce(sep);
     
     if (this.hunger > this.huntThreshold) {
-      this.hunt(moas);
+      this.hunt(simulation);
     } else {
       this.hunting = false;
       this.target = null;
@@ -71,12 +122,17 @@ class HaastsEagle extends Boid {
     this.edges();
   }
   
-  checkDecoys(placeables) {
+  checkDecoys(nearbyPlaceables) {
     if (this.distractedTimer > 0) return;
     
-    for (let p of placeables) {
+    for (let i = 0; i < nearbyPlaceables.length; i++) {
+      const p = nearbyPlaceables[i];
       if (!p.alive || !p.def.distractsEagles) continue;
-      let d = p5.Vector.dist(this.pos, p.pos);
+      
+      const dx = p.pos.x - this.pos.x;
+      const dy = p.pos.y - this.pos.y;
+      const d = Math.sqrt(dx * dx + dy * dy);
+      
       if (d < p.radius && this.hunting) {
         this.distractedBy = p;
         this.distractedTimer = 180;
@@ -139,18 +195,31 @@ class HaastsEagle extends Boid {
     this.edges();
   }
   
-  hunt(moas) {
+  /**
+   * Hunt for moas using spatial grid
+   */
+  hunt(simulation) {
     this.maxSpeed = this.huntSpeed;
+    
+    // Get nearby moas using spatial grid
+    const nearbyMoas = simulation.getNearbyMoas(this.pos.x, this.pos.y, this.huntRadius);
     
     let nearestDist = Infinity;
     let nearestMoa = null;
     
-    for (let moa of moas) {
+    for (let i = 0; i < nearbyMoas.length; i++) {
+      const moa = nearbyMoas[i];
       if (!moa.alive) continue;
       if (moa.inShelter && this.target !== moa) continue;
       
-      let d = p5.Vector.dist(this.pos, moa.pos);
-      if (d < this.huntRadius && d < nearestDist) {
+      // Check if moa resists (for larger species)
+      if (moa.resistEagleAttack && moa.resistEagleAttack()) continue;
+      
+      const dx = moa.pos.x - this.pos.x;
+      const dy = moa.pos.y - this.pos.y;
+      const d = Math.sqrt(dx * dx + dy * dy);
+      
+      if (d < nearestDist) {
         nearestDist = d;
         nearestMoa = moa;
       }
@@ -160,6 +229,7 @@ class HaastsEagle extends Boid {
       this.hunting = true;
       this.target = nearestMoa;
       
+      // Predict where moa will be
       let prediction = p5.Vector.add(nearestMoa.pos, p5.Vector.mult(nearestMoa.vel, 12));
       let pursue = this.seek(prediction, 1.4);
       this.applyForce(pursue);
@@ -295,7 +365,7 @@ class HaastsEagle extends Boid {
     }
   }
   
-  renderHungerBar() {
+    renderHungerBar() {
     const barWidth = 18, barHeight = 2, yOffset = -16;
     
     fill(50, 50, 50, 150);
@@ -316,6 +386,33 @@ class HaastsEagle extends Boid {
     if (this.hunting) {
       fill(255, 100, 100);
       ellipse(this.pos.x + barWidth/2 + 4, this.pos.y + yOffset + 1, 4, 4);
+    }
+    
+    // Debug info
+    if (CONFIG.debugMode) {
+      fill(200, 200, 200, 150);
+      noStroke();
+      textSize(5);
+      textAlign(CENTER, TOP);
+      
+      let stateText = '';
+      if (this.distractedTimer > 0) {
+        stateText = 'DISTRACTED';
+      } else if (this.restTimer > 0) {
+        stateText = 'RESTING';
+      } else if (this.hunting) {
+        stateText = 'HUNTING';
+      } else {
+        stateText = 'PATROL';
+      }
+      
+      text(stateText, this.pos.x, this.pos.y + yOffset + 4);
+      
+      // Show hunt radius
+      noFill();
+      stroke(255, 100, 100, 30);
+      strokeWeight(1);
+      ellipse(this.pos.x, this.pos.y, this.huntRadius * 2, this.huntRadius * 2);
     }
   }
 }

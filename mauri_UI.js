@@ -411,7 +411,7 @@ class GameUI {
       fill(100, 150, 255);
       textSize(9);
       textAlign(RIGHT, CENTER);
-      text(`${migratingCount} migrating`, x + 130, y + 5);
+      //text(`${migratingCount} migrating`, x + 130, y + 5);
     }
   }
   

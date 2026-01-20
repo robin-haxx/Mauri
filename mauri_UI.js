@@ -364,13 +364,13 @@ class GameUI {
     fill(CONFIG.col_UI);
     stroke(80, 100, 85);
     strokeWeight(1);
-    rect(this.config.width / 2 - 35, 25, 70, 28, 6);
+    rect(this.config.width / 2 - 35, 15, 70, 28, 6);
     
     fill(180, 220, 190);
     noStroke();
     textSize(16);
     textAlign(CENTER, CENTER);
-    text(timeStr, this.config.width / 2, 40);
+    text(timeStr, this.config.width / 2, 30);
   }
 
   renderMigrationStatus() {

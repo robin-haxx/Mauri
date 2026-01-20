@@ -21,9 +21,9 @@ function preload(){
 // CONFIGURATION
 // ============================================
 const CONFIG = {
-  width: 1080,
-  height: 720,
-  pixelScale: 1,
+  width: 720,
+  height: 600,
+  pixelScale: 2,
   zoom: 2,
   debugMode: false,
   col_UI: [40,70,30,180],

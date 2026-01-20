@@ -34,7 +34,7 @@ const CONFIG = {
   lacunarity: 2.0,
   
   ridgeInfluence: 2.25,
-  elevationPower: 1.8,
+  elevationPower: 2.2,
   islandFalloff: 0.3, 
   
   showContours: true,
@@ -249,22 +249,22 @@ const BIOMES = {
     walkable: true, canHavePlants: false, canPlace: true
   },
   grassland: {
-    key: 'grassland', name: "Lowland Grassland", minElevation: 0.15, maxElevation: 0.3,
+    key: 'grassland', name: "Lowland Grassland", minElevation: 0.15, maxElevation: 0.25,
     colors: ['#7fb069', '#8fbc79', '#9fc889'], contourColor: '#5a7d4a',
     walkable: true, canHavePlants: true, plantTypes: ['tussock', 'flax'], canPlace: true
   },
   podocarp: {
-    key: 'podocarp', name: "Podocarp Forest", minElevation: 0.3, maxElevation: 0.45,
+    key: 'podocarp', name: "Podocarp Forest", minElevation: 0.25, maxElevation: 0.45,
     colors: ['#2d5a3d', '#346644', '#3b724b'], contourColor: '#1e3d29',
     walkable: true, canHavePlants: true, plantTypes: ['fern', 'rimu'], canPlace: true
   },
   montane: {
-    key: 'montane', name: "Montane Forest", minElevation: 0.45, maxElevation: 0.56,
+    key: 'montane', name: "Montane Forest", minElevation: 0.45, maxElevation: 0.53,
     colors: ['#4a7c59', '#528764', '#5a926f'], contourColor: '#335740',
     walkable: true, canHavePlants: true, plantTypes: ['beech', 'fern'], canPlace: true
   },
   subalpine: {
-    key: 'subalpine', name: "Subalpine Tussock", minElevation: 0.56, maxElevation: 0.70,
+    key: 'subalpine', name: "Subalpine Tussock", minElevation: 0.53, maxElevation: 0.70,
     colors: ['#a8a060', '#b5ad6d', '#c2ba7a'], contourColor: '#7a7445',
     walkable: true, canHavePlants: true, plantTypes: ['tussock'], canPlace: true
   },

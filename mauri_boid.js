@@ -1,215 +1,247 @@
 // ============================================
-// BASE BOID CLASS - Optimized for performance
+// BASE BOID CLASS - Fully optimized
 // ============================================
 class Boid {
   constructor(x, y, terrain) {
     this.pos = createVector(x, y);
-    this.vel = p5.Vector.random2D().mult(random(0.2, 0.5));
+    this.vel = createVector(random(-1, 1), random(-1, 1));
+    this.vel.setMag(random(0.2, 0.5));
     this.acc = createVector(0, 0);
     this.terrain = terrain;
     
     this.maxSpeed = 1;
     this.maxForce = 0.05;
     this.perceptionRadius = 50;
+    this.perceptionRadiusSq = 2500;
     this.separationDist = 25;
+    this.separationDistSq = 625;
     
     this.personality = {
-      wanderStrength: random(0.8, 1.2),
-      speedVariation: random(0.9, 1.1),
-      turniness: random(0.8, 1.2)
+      wanderStrength: 0.8 + random() * 0.4,
+      speedVariation: 0.9 + random() * 0.2,
+      turniness: 0.8 + random() * 0.4
     };
-    this.noiseOffset = random(1000);
+    this.noiseOffset = random() * 1000;
     
-    // Reusable vectors to minimize garbage collection
+    // Reusable vectors
     this._steeringVec = createVector();
     this._tempVec1 = createVector();
     this._tempVec2 = createVector();
     this._tempVec3 = createVector();
+    
+    // Cache for terrain avoidance
+    this._avoidAngles = [];
+    for (let a = 0; a < 12; a++) {
+      this._avoidAngles.push(a * (Math.PI / 6));
+    }
   }
   
-  // Optimized separation using spatial grid results
-  // Pass in pre-filtered nearby boids from spatial grid
+  // Optimized separation
   separate(nearbyBoids) {
-    this._steeringVec.set(0, 0);
-    let count = 0;
+    const force = this._steeringVec;
+    force.set(0, 0);
     
-    for (let i = 0; i < nearbyBoids.length; i++) {
+    let count = 0;
+    const sepDistSq = this.separationDistSq;
+    const px = this.pos.x;
+    const py = this.pos.y;
+    
+    for (let i = 0, len = nearbyBoids.length; i < len; i++) {
       const other = nearbyBoids[i];
       if (!other.alive || other === this) continue;
       
-      // Calculate distance without creating vectors
-      const dx = this.pos.x - other.pos.x;
-      const dy = this.pos.y - other.pos.y;
+      const dx = px - other.pos.x;
+      const dy = py - other.pos.y;
       const distSq = dx * dx + dy * dy;
-      const sepDistSq = this.separationDist * this.separationDist;
       
-      if (distSq < sepDistSq && distSq > 0) {
-        // Weight by inverse distance squared
+      if (distSq < sepDistSq && distSq > 0.0001) {
         const invDistSq = 1 / distSq;
-        this._steeringVec.x += dx * invDistSq;
-        this._steeringVec.y += dy * invDistSq;
+        force.x += dx * invDistSq;
+        force.y += dy * invDistSq;
         count++;
       }
     }
     
     if (count > 0) {
-      this._steeringVec.div(count);
-      this._steeringVec.setMag(this.maxSpeed);
-      this._steeringVec.sub(this.vel);
-      this._steeringVec.limit(this.maxForce);
+      const invCount = 1 / count;
+      force.x *= invCount;
+      force.y *= invCount;
+      force.setMag(this.maxSpeed);
+      force.sub(this.vel);
+      force.limit(this.maxForce);
     }
     
-    return this._steeringVec;
+    return force;
   }
   
-  // Optimized alignment - steer towards average heading of neighbors
+  // Optimized alignment
   align(nearbyBoids) {
-    this._tempVec1.set(0, 0);
-    let count = 0;
+    const result = this._tempVec1;
+    result.set(0, 0);
     
-    for (let i = 0; i < nearbyBoids.length; i++) {
+    let count = 0;
+    const perceptionSq = this.perceptionRadiusSq;
+    const px = this.pos.x;
+    const py = this.pos.y;
+    
+    for (let i = 0, len = nearbyBoids.length; i < len; i++) {
       const other = nearbyBoids[i];
       if (!other.alive || other === this) continue;
       
-      const dx = other.pos.x - this.pos.x;
-      const dy = other.pos.y - this.pos.y;
+      const dx = other.pos.x - px;
+      const dy = other.pos.y - py;
       const distSq = dx * dx + dy * dy;
-      const perceptionSq = this.perceptionRadius * this.perceptionRadius;
       
       if (distSq < perceptionSq) {
-        this._tempVec1.x += other.vel.x;
-        this._tempVec1.y += other.vel.y;
+        result.x += other.vel.x;
+        result.y += other.vel.y;
         count++;
       }
     }
     
     if (count > 0) {
-      this._tempVec1.div(count);
-      this._tempVec1.setMag(this.maxSpeed);
-      this._tempVec1.sub(this.vel);
-      this._tempVec1.limit(this.maxForce);
+      const invCount = 1 / count;
+      result.x *= invCount;
+      result.y *= invCount;
+      result.setMag(this.maxSpeed);
+      result.sub(this.vel);
+      result.limit(this.maxForce);
     }
     
-    return this._tempVec1;
+    return result;
   }
   
-  // Optimized cohesion - steer towards center of neighbors
+  // Optimized cohesion
   cohesion(nearbyBoids) {
-    this._tempVec2.set(0, 0);
-    let count = 0;
+    const result = this._tempVec2;
+    result.set(0, 0);
     
-    for (let i = 0; i < nearbyBoids.length; i++) {
+    let count = 0;
+    const perceptionSq = this.perceptionRadiusSq;
+    const px = this.pos.x;
+    const py = this.pos.y;
+    
+    for (let i = 0, len = nearbyBoids.length; i < len; i++) {
       const other = nearbyBoids[i];
       if (!other.alive || other === this) continue;
       
-      const dx = other.pos.x - this.pos.x;
-      const dy = other.pos.y - this.pos.y;
+      const dx = other.pos.x - px;
+      const dy = other.pos.y - py;
       const distSq = dx * dx + dy * dy;
-      const perceptionSq = this.perceptionRadius * this.perceptionRadius;
       
       if (distSq < perceptionSq) {
-        this._tempVec2.x += other.pos.x;
-        this._tempVec2.y += other.pos.y;
+        result.x += other.pos.x;
+        result.y += other.pos.y;
         count++;
       }
     }
     
     if (count > 0) {
-      this._tempVec2.div(count);
-      // Seek the center
-      return this.seekPoint(this._tempVec2.x, this._tempVec2.y, 1);
+      const invCount = 1 / count;
+      result.x *= invCount;
+      result.y *= invCount;
+      return this.seekPoint(result.x, result.y, 1);
     }
     
-    this._tempVec2.set(0, 0);
-    return this._tempVec2;
+    result.set(0, 0);
+    return result;
   }
   
-  // Optimized seek using coordinates instead of vector
+  // Optimized seek using coordinates
   seekPoint(tx, ty, urgency = 1) {
+    const result = this._tempVec3;
     const dx = tx - this.pos.x;
     const dy = ty - this.pos.y;
     
-    this._tempVec3.set(dx, dy);
-    this._tempVec3.setMag(this.maxSpeed * urgency);
-    this._tempVec3.sub(this.vel);
-    this._tempVec3.limit(this.maxForce * urgency);
+    result.set(dx, dy);
+    result.setMag(this.maxSpeed * urgency);
+    result.sub(this.vel);
+    result.limit(this.maxForce * urgency);
     
-    return this._tempVec3;
+    return result;
   }
   
-  // Original seek for compatibility (accepts vector)
+  // Vector-accepting seek (for compatibility)
   seek(target, urgency = 1) {
     return this.seekPoint(target.x, target.y, urgency);
   }
   
-  // Optimized flee using coordinates
+  // Optimized flee
   fleePoint(tx, ty, radius = 100) {
+    const result = this._tempVec1;
     const dx = this.pos.x - tx;
     const dy = this.pos.y - ty;
     const distSq = dx * dx + dy * dy;
     const radiusSq = radius * radius;
     
-    if (distSq < radiusSq && distSq > 0) {
+    if (distSq < radiusSq && distSq > 0.0001) {
       const d = Math.sqrt(distSq);
       const urgency = 1 - (d / radius);
       const speed = this.maxSpeed * (1 + urgency);
       
-      this._tempVec1.set(dx, dy);
-      this._tempVec1.setMag(speed);
-      this._tempVec1.sub(this.vel);
-      this._tempVec1.limit(this.maxForce * 2);
+      result.set(dx, dy);
+      result.setMag(speed);
+      result.sub(this.vel);
+      result.limit(this.maxForce * 2);
       
-      return this._tempVec1;
+      return result;
     }
     
-    this._tempVec1.set(0, 0);
-    return this._tempVec1;
+    result.set(0, 0);
+    return result;
   }
   
-  // Original flee for compatibility
   flee(target, radius = 100) {
     return this.fleePoint(target.x, target.y, radius);
   }
   
-  // Optimized wander using noise
+  // Optimized wander
   wander() {
+    const result = this._tempVec1;
     const noiseVal = noise(
       this.pos.x * 0.005 + this.noiseOffset,
       this.pos.y * 0.005 + this.noiseOffset,
       frameCount * 0.008
     );
-    const angle = noiseVal * TWO_PI * 4 - TWO_PI * 2;
+    const angle = noiseVal * 12.566370614359172 - 6.283185307179586; // TWO_PI * 2 - TWO_PI
     const mag = 0.3 * this.personality.wanderStrength;
     
-    this._tempVec1.set(Math.cos(angle) * mag, Math.sin(angle) * mag);
-    return this._tempVec1;
+    result.set(Math.cos(angle) * mag, Math.sin(angle) * mag);
+    return result;
   }
   
   // Optimized terrain avoidance
   avoidUnwalkable() {
-    this._steeringVec.set(0, 0);
+    const result = this._steeringVec;
+    result.set(0, 0);
+    
     const lookAhead = 12;
+    const velX = this.vel.x;
+    const velY = this.vel.y;
+    const velMagSq = velX * velX + velY * velY;
     
-    // Calculate future position
-    const velMag = this.vel.mag();
-    if (velMag < 0.01) return this._steeringVec;
+    if (velMagSq < 0.0001) return result;
     
-    const futureX = this.pos.x + (this.vel.x / velMag) * lookAhead;
-    const futureY = this.pos.y + (this.vel.y / velMag) * lookAhead;
+    const velMag = Math.sqrt(velMagSq);
+    const invVelMag = 1 / velMag;
+    const futureX = this.pos.x + velX * invVelMag * lookAhead;
+    const futureY = this.pos.y + velY * invVelMag * lookAhead;
     
     if (!this.terrain.isWalkable(futureX, futureY)) {
-      let bestDot = -Infinity;
+      let bestDot = -2;
       let bestAngle = 0;
-      const currentHeading = this.vel.heading();
+      const currentHeading = Math.atan2(velY, velX);
+      const px = this.pos.x;
+      const py = this.pos.y;
       
-      // Check angles to find walkable direction
-      for (let a = 0; a < TWO_PI; a += PI / 6) {
+      const angles = this._avoidAngles;
+      for (let i = 0; i < 12; i++) {
+        const a = angles[i];
         const testAngle = currentHeading + a;
-        const testX = this.pos.x + Math.cos(testAngle) * lookAhead;
-        const testY = this.pos.y + Math.sin(testAngle) * lookAhead;
+        const testX = px + Math.cos(testAngle) * lookAhead;
+        const testY = py + Math.sin(testAngle) * lookAhead;
         
         if (this.terrain.isWalkable(testX, testY)) {
-          // Prefer directions closer to current heading
           const dot = Math.cos(a);
           if (dot > bestDot) {
             bestDot = dot;
@@ -218,21 +250,20 @@ class Boid {
         }
       }
       
-      if (bestDot > -Infinity) {
-        this._steeringVec.set(
+      if (bestDot > -2) {
+        result.set(
           Math.cos(bestAngle) * this.maxForce * 2,
           Math.sin(bestAngle) * this.maxForce * 2
         );
       } else {
-        // No walkable direction found, reverse
-        this._steeringVec.set(
-          -this.vel.x * this.maxForce * 3 / velMag,
-          -this.vel.y * this.maxForce * 3 / velMag
+        result.set(
+          -velX * invVelMag * this.maxForce * 3,
+          -velY * invVelMag * this.maxForce * 3
         );
       }
     }
     
-    return this._steeringVec;
+    return result;
   }
   
   // Edge avoidance
@@ -241,11 +272,14 @@ class Boid {
     const turnForce = 0.3 * this.personality.turniness;
     const w = this.terrain.mapWidth;
     const h = this.terrain.mapHeight;
+    const px = this.pos.x;
+    const py = this.pos.y;
     
-    if (this.pos.x < margin) this.acc.x += turnForce;
-    if (this.pos.x > w - margin) this.acc.x -= turnForce;
-    if (this.pos.y < margin) this.acc.y += turnForce;
-    if (this.pos.y > h - margin) this.acc.y -= turnForce;
+    if (px < margin) this.acc.x += turnForce;
+    else if (px > w - margin) this.acc.x -= turnForce;
+    
+    if (py < margin) this.acc.y += turnForce;
+    else if (py > h - margin) this.acc.y -= turnForce;
   }
   
   applyForce(force) {
@@ -254,20 +288,22 @@ class Boid {
   }
   
   update() {
-    // Apply acceleration to velocity
+    // Apply acceleration
     this.vel.x += this.acc.x;
     this.vel.y += this.acc.y;
     
-    // Limit speed
+    // Limit speed (inline for performance)
     const maxSpd = this.maxSpeed * this.personality.speedVariation;
+    const maxSpdSq = maxSpd * maxSpd;
     const spdSq = this.vel.x * this.vel.x + this.vel.y * this.vel.y;
-    if (spdSq > maxSpd * maxSpd) {
-      const spd = Math.sqrt(spdSq);
-      this.vel.x = (this.vel.x / spd) * maxSpd;
-      this.vel.y = (this.vel.y / spd) * maxSpd;
+    
+    if (spdSq > maxSpdSq) {
+      const invSpd = maxSpd / Math.sqrt(spdSq);
+      this.vel.x *= invSpd;
+      this.vel.y *= invSpd;
     }
     
-    // Apply velocity to position
+    // Apply velocity
     this.pos.x += this.vel.x;
     this.pos.y += this.vel.y;
     
@@ -275,10 +311,14 @@ class Boid {
     this.acc.x = 0;
     this.acc.y = 0;
     
-    // Constrain to map
-    const w = this.terrain.mapWidth;
-    const h = this.terrain.mapHeight;
-    this.pos.x = constrain(this.pos.x, 5, w - 5);
-    this.pos.y = constrain(this.pos.y, 5, h - 5);
+    // Constrain to map (inline)
+    const w = this.terrain.mapWidth - 5;
+    const h = this.terrain.mapHeight - 5;
+    
+    if (this.pos.x < 5) this.pos.x = 5;
+    else if (this.pos.x > w) this.pos.x = w;
+    
+    if (this.pos.y < 5) this.pos.y = 5;
+    else if (this.pos.y > h) this.pos.y = h;
   }
 }

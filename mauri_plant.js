@@ -1,64 +1,119 @@
-// mauri_plant.js
+// ============================================
+// PLANT CLASS - Sprite-based rendering with procedural fallback
+// ============================================
+
+// Plant type constants (avoid string comparisons)
+const PLANT_TYPE_ID = {
+  tussock: 0,
+  flax: 1,
+  fern: 2,
+  kawakawa: 3,
+  rimu: 4,
+  beech: 5
+};
+
+// Plants that use sprite rendering
+const SPRITE_PLANTS = new Set(['tussock', 'flax', 'fern', 'rimu', 'beech']);
+
+// Sprite reference - initialized from mauri_sketch.js
+let PLANT_SPRITES = null;
+
+function initPlantSprites(sprites) {
+  PLANT_SPRITES = sprites;
+}
+
+// Pre-computed values shared across all plants (kept for kawakawa procedural rendering)
+const PlantStatics = {
+  kawakawaAngles: null,
+  initialized: false,
+  
+  init() {
+    if (this.initialized) return;
+    
+    // Pre-compute kawakawa angles (only plant still using procedural)
+    this.kawakawaAngles = [];
+    const kawaStep = TWO_PI / 5;
+    for (let i = 0; i < 5; i++) {
+      this.kawakawaAngles.push(i * kawaStep + 0.2);
+    }
+    
+    this.initialized = true;
+  }
+};
+
 class Plant {
   constructor(x, y, type, terrain, biomeKey) {
+    // Initialize statics if needed
+    PlantStatics.init();
+    
     this.pos = createVector(x, y);
     this.type = type;
+    this.typeId = PLANT_TYPE_ID[type] ?? 4;
     this.terrain = terrain;
     this.biomeKey = biomeKey;
     this.elevation = terrain.getElevationAt(x, y);
+    
+    // Check if this plant uses sprites
+    this.usesSprites = SPRITE_PLANTS.has(type);
     
     const plantDef = PLANT_TYPES[type];
     this.baseNutrition = plantDef.nutrition;
     this.nutrition = plantDef.nutrition;
     this.maxNutrition = plantDef.nutrition;
-    this.baseColor = color(plantDef.color);
-    this.color = color(plantDef.color);
     this.size = plantDef.size;
     this.baseGrowthTime = plantDef.growthTime;
     this.growthTime = plantDef.growthTime;
     
+    // Parse color once and cache RGB values
+    const c = color(plantDef.color);
+    this.baseR = red(c);
+    this.baseG = green(c);
+    this.baseB = blue(c);
+    
+    // Current color values (modified by state)
+    this.colorR = this.baseR;
+    this.colorG = this.baseG;
+    this.colorB = this.baseB;
+    
     this.alive = true;
-    this.dormant = false;  // New: seasonal dormancy
+    this.dormant = false;
     this.dormantTimer = 0;
     this.regrowthTimer = 0;
     this.growth = 1.0;
     this.seasonalModifier = 1.0;
     
-    // Spawned plants (from placeables) don't go dormant
     this.isSpawned = false;
     this.parentPlaceable = null;
     
-    // Visual variation
+    // Pre-calculate visual variation
     this.visualOffset = random(-1, 1);
     this.swayPhase = random(TWO_PI);
-
-    if (this.type === 'flax') {
-      this.leafHeights = [];
-      this.leafBends = [];
-      for (let i = 0; i < 7; i++) {
-        this.leafHeights.push(0.8 + random(0.2));
-        this.leafBends.push(0.15 + random(0.2));
-      }
-    }
+    
+    // Track sprite state to avoid recalculating
+    this._lastSpriteState = 'mature';
+    
+    // Track color state to avoid recalculating
+    this._lastColorState = 'normal';
+    this._colorDirty = true;
   }
   
   update(seasonManager) {
-    // Spawned plants follow their parent
     if (this.isSpawned && this.parentPlaceable) {
       if (!this.parentPlaceable.alive) {
         this.alive = false;
         return;
       }
-      // Spawned plants don't go dormant and have boosted growth
       this.seasonalModifier = 1.2;
       this.handleGrowth();
       return;
     }
     
-    // Get seasonal modifier for this biome
-    this.seasonalModifier = seasonManager.getPlantModifier(this.biomeKey);
+    const newModifier = seasonManager.getPlantModifier(this.biomeKey);
+    if (Math.abs(newModifier - this.seasonalModifier) > 0.01) {
+      this.seasonalModifier = newModifier;
+      this._colorDirty = true;
+    }
     
-    // Check for dormancy
     this.checkDormancy(seasonManager);
     
     if (this.dormant) {
@@ -66,31 +121,24 @@ class Plant {
       return;
     }
     
-    // Normal growth
     this.handleGrowth();
     
-    // Update color based on health
-    this.updateColor();
+    // Only update color when dirty
+    if (this._colorDirty) {
+      this.updateColor();
+      this._colorDirty = false;
+    }
   }
   
   checkDormancy(seasonManager) {
-    // Already dormant - handled elsewhere
-    if (this.dormant) return;
+    if (this.dormant || !this.alive) return;
     
-    // Already dead (eaten) - handled elsewhere
-    if (!this.alive) return;
-    
-    // Check if this plant should go dormant
     if (seasonManager.shouldPlantBeDormant(this.elevation, this.biomeKey)) {
-      let dormancyChance = seasonManager.getDormancyChance();
+      const dormancyChance = seasonManager.getDormancyChance();
       
-      // Random check (once per season change)
       if (seasonManager.justChanged && random() < dormancyChance) {
         this.goDormant();
-      }
-      
-      // Also go dormant if modifier is very low
-      if (this.seasonalModifier < 0.25 && this.growth > 0.5 && random() < 0.01) {
+      } else if (this.seasonalModifier < 0.25 && this.growth > 0.5 && random() < 0.01) {
         this.goDormant();
       }
     }
@@ -99,47 +147,47 @@ class Plant {
   goDormant() {
     this.dormant = true;
     this.dormantTimer = 0;
-    this.growth = max(0.1, this.growth * 0.3);  // Shrink but don't disappear
+    this.growth = this.growth * 0.3;
+    if (this.growth < 0.1) this.growth = 0.1;
+    this._colorDirty = true;
   }
   
   handleDormancy(seasonManager) {
     this.dormantTimer++;
     
-    // Check if we should wake up
-    let shouldBeDormant = seasonManager.shouldPlantBeDormant(this.elevation, this.biomeKey);
+    const shouldBeDormant = seasonManager.shouldPlantBeDormant(this.elevation, this.biomeKey);
     
-    // Wake up if conditions improve
     if (!shouldBeDormant && this.seasonalModifier > 0.5) {
-      // Gradual wake up
       if (random() < 0.02) {
         this.dormant = false;
-        this.growth = 0.2;  // Start regrowing
+        this.growth = 0.2;
+        this._colorDirty = true;
       }
     }
     
-    // Dormant plants still sway slightly
-    this.nutrition = 0;  // Can't eat dormant plants
+    this.nutrition = 0;
   }
   
   handleGrowth() {
     if (!this.alive) {
-      // Regrowth after being eaten
-      let regrowthRate = this.seasonalModifier;
+      const regrowthRate = this.seasonalModifier;
       this.regrowthTimer += regrowthRate;
-      this.growthTime = this.baseGrowthTime / max(0.3, this.seasonalModifier);
+      
+      const divisor = this.seasonalModifier > 0.3 ? this.seasonalModifier : 0.3;
+      this.growthTime = this.baseGrowthTime / divisor;
       
       if (this.regrowthTimer >= this.growthTime) {
         this.alive = true;
         this.growth = 0.3;
         this.regrowthTimer = 0;
+        this._colorDirty = true;
       }
     } else if (this.growth < 1.0) {
-      // Growing
-      let growthRate = 0.002 * this.seasonalModifier;
-      this.growth = min(1.0, this.growth + growthRate);
+      const growthRate = 0.002 * this.seasonalModifier;
+      this.growth += growthRate;
+      if (this.growth > 1.0) this.growth = 1.0;
       this.nutrition = this.maxNutrition * this.growth * this.seasonalModifier;
     } else {
-      // Fully grown
       this.nutrition = this.maxNutrition * this.seasonalModifier;
     }
     
@@ -147,24 +195,47 @@ class Plant {
   }
   
   updateColor() {
+    let newState;
+    
     if (this.dormant) {
-      // Brown/grey dormant color
-      this.color = lerpColor(this.baseColor, color(120, 100, 70), 0.7);
+      newState = 'dormant';
     } else if (this.seasonalModifier < 0.5) {
-      // Wilted - brownish
-      let wiltAmount = 1 - (this.seasonalModifier * 2);
-      this.color = lerpColor(this.baseColor, color(139, 119, 90), wiltAmount * 0.6);
+      newState = 'wilt';
     } else if (this.seasonalModifier > 1.1) {
-      // Thriving - more vibrant green
-      let thriveAmount = (this.seasonalModifier - 1.0) * 2;
-      this.color = lerpColor(this.baseColor, color(60, 180, 60), min(0.4, thriveAmount));
+      newState = 'thrive';
     } else {
-      this.color = this.baseColor;
+      newState = 'normal';
+    }
+    
+    if (newState === this._lastColorState && !this._colorDirty) return;
+    this._lastColorState = newState;
+    
+    if (newState === 'dormant') {
+      this.colorR = this.baseR * 0.3 + 120 * 0.7;
+      this.colorG = this.baseG * 0.3 + 100 * 0.7;
+      this.colorB = this.baseB * 0.3 + 70 * 0.7;
+    } else if (newState === 'wilt') {
+      const wiltAmount = (1 - this.seasonalModifier * 2) * 0.6;
+      const keepAmount = 1 - wiltAmount;
+      this.colorR = this.baseR * keepAmount + 139 * wiltAmount;
+      this.colorG = this.baseG * keepAmount + 119 * wiltAmount;
+      this.colorB = this.baseB * keepAmount + 90 * wiltAmount;
+    } else if (newState === 'thrive') {
+      let thriveAmount = (this.seasonalModifier - 1.0) * 2;
+      if (thriveAmount > 0.4) thriveAmount = 0.4;
+      const keepAmount = 1 - thriveAmount;
+      this.colorR = this.baseR * keepAmount + 60 * thriveAmount;
+      this.colorG = this.baseG * keepAmount + 180 * thriveAmount;
+      this.colorB = this.baseB * keepAmount + 60 * thriveAmount;
+    } else {
+      this.colorR = this.baseR;
+      this.colorG = this.baseG;
+      this.colorB = this.baseB;
     }
   }
   
   consume() {
-    if (this.dormant) return 0;  // Can't eat dormant plants
+    if (this.dormant) return 0;
     
     const nutritionGained = this.nutrition;
     this.alive = false;
@@ -174,291 +245,227 @@ class Plant {
     return nutritionGained;
   }
   
+  // ============================================
+  // SPRITE STATE DETERMINATION
+  // ============================================
+  
+  _getSpriteState() {
+    if (this.dormant) {
+      return 'dormant';
+    }
+    
+    if (this.seasonalModifier < 0.5) {
+      return 'wilting';
+    }
+    
+    if (this.seasonalModifier > 1.1 && this.growth > 0.7) {
+      return 'thriving';
+    }
+    
+    return 'mature';
+  }
+  
+  // ============================================
+  // MAIN RENDER METHOD
+  // ============================================
+  
   render() {
-    // Don't render if dead (eaten)
     if (!this.alive && !this.dormant) return;
     
-    push();
-    translate(this.pos.x, this.pos.y);
+    const px = this.pos.x;
+    const py = this.pos.y;
+    const dormant = this.dormant;
+    const dormantMult = dormant ? 0.5 : 1;
+    const displaySize = this.size * this.growth * dormantMult;
     
-    // Wind sway
-    let sway = 0;
-    if (!this.dormant) {
-      sway = sin(frameCount * 0.02 + this.swayPhase) * 0.05 * this.seasonalModifier;
+    if (displaySize < 2) return;
+    
+    // Route to sprite or procedural rendering
+    if (this.usesSprites && PLANT_SPRITES && PLANT_SPRITES[this.type]) {
+      this._renderSprite(px, py, displaySize, dormant);
+    } else {
+      this._renderProcedural(px, py, displaySize, dormant);
     }
-    rotate(sway);
+  }
+  
+  // ============================================
+  // SPRITE RENDERING
+  // ============================================
+  
+  _renderSprite(px, py, displaySize, dormant) {
+    const spriteState = this._getSpriteState();
+    const sprite = PLANT_SPRITES[this.type][spriteState];
     
-    let displaySize = this.size * this.growth;
+    if (!sprite) {
+      // Fallback to procedural if sprite missing
+      this._renderProcedural(px, py, displaySize, dormant);
+      return;
+    }
     
-    // Smaller when dormant
-    if (this.dormant) {
-      displaySize *= 0.5;
+    push();
+    translate(px, py);
+    
+    // Sway for non-dormant plants
+    if (!dormant) {
+      const sway = sin(frameCount * 0.02 + this.swayPhase) * 0.05 * this.seasonalModifier;
+      rotate(sway);
     }
     
     // Shadow
     noStroke();
-    fill(0, 0, 0, this.dormant ? 10 : 20);
+    fill(0, 0, 0, dormant ? 10 : 20);
     ellipse(1, 1, displaySize * 1.2, displaySize * 0.6);
     
-    // Plant body
-    fill(this.color);
+    // Calculate sprite size
+    // For small/growing plants, scale down the sprite
+    let spriteSize = displaySize;
+    if (this.growth < 0.5 && spriteState === 'mature') {
+      // Use mature sprite but scaled smaller for growing plants
+      spriteSize = displaySize * (0.5 + this.growth);
+    }
     
-    // Alpha based on state
-    let alpha = this.dormant ? 150 : 255;
-    fill(red(this.color), green(this.color), blue(this.color), alpha);
+    // Apply subtle tint based on color state for variation
+    if (dormant) {
+      tint(255, 255, 255, 150);
+    } else {
+      // Subtle color influence from seasonal modifier
+      const tintStrength = 0.15;
+      const tintR = lerp(255, this.colorR, tintStrength);
+      const tintG = lerp(255, this.colorG, tintStrength);
+      const tintB = lerp(255, this.colorB, tintStrength);
+      tint(tintR, tintG, tintB, 255);
+    }
     
-    if (this.type === 'tussock') {
-      // Tussock grass - arching blades from central clump
-      let numBlades = 12;
-      
-      // Base clump
-      fill(120, 100, 60);
-      noStroke();
-      ellipse(0, displaySize * 0.05, displaySize * 0.2, displaySize * 0.1);
-      
-      // Grass blades
-      stroke(this.color);
-      strokeWeight(displaySize * 0.04);
-      noFill();
-      
-      for (let i = 0; i < numBlades; i++) {
-        let angle = map(i, 0, numBlades, -PI * 0.4, PI * 0.4);
-        
-        // Use sin to vary height deterministically instead of random()
-        let h = displaySize * (0.35 + sin(i * 1.7) * 0.1);
-        if (this.dormant) h *= 0.6;
-        
-        let curve = angle * 0.8;
-        let tipX = sin(angle) * displaySize * 0.35 + sin(curve) * h * 0.6;
-        let tipY = -h;
-        
-        beginShape();
-        vertex(sin(angle) * displaySize * 0.1, 0);
-        quadraticVertex(
-          sin(angle) * displaySize * 0.25, -h * 0.1,
-          tipX, tipY
-        );
-        endShape();
-      }
-    } else if (this.type === 'flax') {
-      // Harakeke (NZ Flax) - arching sword-like leaves
-      let numLeaves = 7;
-      
-      for (let i = 0; i < numLeaves; i++) {
-        let spreadAngle = map(i, 0, numLeaves - 1, -0.5, 0.5);
-        
-        let h = displaySize * this.leafHeights[i];
-        let w = displaySize * 0.07;
-        
-        if (this.dormant) {
-          h *= 0.45;
-        }
-        
-        // Outer leaves arch over more
-        let archAmount = abs(spreadAngle) * 1.5 + this.leafBends[i];
-        
-        push();
-        rotate(spreadAngle * 0.7);
-        
-        // Calculate bend - leaf goes up then arches over
-        let bendY = -h * 0.6;
-        let bendX = sin(spreadAngle) * h * 0.15;
-        let tipX = bendX + sin(archAmount) * h * 0.45;
-        let tipY = bendY - cos(archAmount) * h * 0.35;
-        
-        // Leaf blade
-        fill(this.color);
-        stroke(red(this.color) - 25, green(this.color) - 20, blue(this.color) - 15);
-        strokeWeight(0.5);
-        
-        beginShape();
-        vertex(-w, 0);
-        quadraticVertex(-w * 0.8, bendY * 0.5, bendX - w * 0.5, bendY);
-        quadraticVertex(bendX - w * 0.2, (bendY + tipY) / 2, tipX, tipY);
-        quadraticVertex(bendX + w * 0.2, (bendY + tipY) / 2, bendX + w * 0.5, bendY);
-        quadraticVertex(w * 0.8, bendY * 0.5, w, 0);
-        endShape(CLOSE);
-        
-        // Central fold/crease
-        stroke(red(this.color) + 25, green(this.color) + 25, blue(this.color) + 15);
-        strokeWeight(displaySize * 0.012);
-        noFill();
-        beginShape();
-        vertex(0, -h * 0.05);
-        quadraticVertex(bendX * 0.5, bendY * 0.6, bendX, bendY);
-        quadraticVertex((bendX + tipX) / 2, (bendY + tipY) / 2 + h * 0.05, tipX, tipY + h * 0.03);
-        endShape();
-        
-        pop();
-      }
-      
-      // Kōrari (flower stalk) - only when not dormant
-      if (!this.dormant) {
-        let stalkH = displaySize * 1.4;
-        
-        // Main stalk
-        stroke(100, 75, 50);
-        strokeWeight(displaySize * 0.04);
-        noFill();
-        beginShape();
-        vertex(0, -displaySize * 0.1);
-        quadraticVertex(displaySize * 0.05, -stalkH * 0.5, 0, -stalkH);
-        endShape();
-        
-        // Flower branches with seed pods
-        for (let b = 0; b < 5; b++) {
-          let by = -stalkH * (0.5 + b * 0.1);
-          let side = (b % 2 === 0) ? -1 : 1;
-          let bLen = displaySize * (0.25 - b * 0.03);
-          
-          // Branch
-          stroke(100, 75, 50);
-          strokeWeight(displaySize * 0.02);
-          let branchEndX = side * bLen;
-          let branchEndY = by - bLen * 0.3;
-          line(0, by, branchEndX, branchEndY);
-          
-          // Seed pods (dark reddish-brown)
-          fill(65, 30, 25);
-          noStroke();
-          push();
-          translate(branchEndX, branchEndY);
-          rotate(side * 0.3);
-          ellipse(0, 0, displaySize * 0.06, displaySize * 0.12);
-          pop();
-        }
-        
-        // Top flower cluster
-        fill(75, 35, 30);
-        noStroke();
-        ellipse(0, -stalkH, displaySize * 0.08, displaySize * 0.14);
-        ellipse(displaySize * 0.03, -stalkH + displaySize * 0.05, displaySize * 0.06, displaySize * 0.1);
-      }
-      
-      // Base clump
-      fill(65, 75, 40);
-      noStroke();
-      ellipse(0, displaySize * 0.03, displaySize * 0.22, displaySize * 0.1);
-    } else if (this.type === 'fern') {
-      // Silver fern / Ponga - fronds with pinnae
-      let numFronds = this.dormant ? 3 : 5;
-      
-      for (let f = 0; f < numFronds; f++) {
-        let angle = map(f, 0, numFronds, -PI * 0.4, PI * 0.4);
-        let frondLen = displaySize * (0.8 + f % 2 * 0.2);
-        
-        push();
-        rotate(angle);
-        
-        // Rachis (central stem)
-        stroke(red(this.color) - 30, green(this.color) - 20, blue(this.color) - 20);
-        strokeWeight(displaySize * 0.03);
-        noFill();
-        
-        beginShape();
-        vertex(0, 0);
-        quadraticVertex(0, -frondLen * 0.5, sin(angle) * displaySize * 0.1, -frondLen);
-        endShape();
-        
-        // Pinnae (leaflets)
-        fill(this.color);
-        noStroke();
-        let numPinnae = 8;
-        
-        for (let p = 1; p <= numPinnae; p++) {
-          let py = -frondLen * (p / numPinnae) * 0.9;
-          let px = sin(angle) * displaySize * 0.1 * (p / numPinnae);
-          let pSize = displaySize * 0.15 * (1 - p / numPinnae * 0.5);
-          
-          // Left and right pinnae
-          push();
-          translate(px, py);
-          
-          // Left pinna
-          push();
-          rotate(-0.3);
-          ellipse(-pSize * 0.6, 0, pSize, pSize * 0.3);
-          pop();
-          
-          // Right pinna
-          push();
-          rotate(0.3);
-          ellipse(pSize * 0.6, 0, pSize, pSize * 0.3);
-          pop();
-          
-          pop();
-        }
-        
-        pop();
-      }
-      
-      // Koru (unfurling frond) - iconic NZ symbol
-      if (!this.dormant) {
-        stroke(red(this.color) - 20, green(this.color) + 15, blue(this.color) - 10);
-        strokeWeight(displaySize * 0.05);
-        noFill();
-        
-        push();
-        rotate(-0.2);
-        arc(displaySize * 0.08, -displaySize * 0.25, displaySize * 0.2, displaySize * 0.2, PI * 0.5, PI * 2);
-        pop();
-      }
-      
-      // Base/trunk suggestion
-      fill(90, 70, 50);
-      noStroke();
-      ellipse(0, displaySize * 0.1, displaySize * 0.2, displaySize * 0.15);
-    } else if (this.type === 'kawakawa') {
-    // Kawakawa (Piper excelsum) - heart-shaped leaves with characteristic holes
+    // Draw sprite centered
+    imageMode(CENTER);
+    image(sprite, 0, 0, spriteSize, spriteSize);
     
-    let numLeaves = 5;
+    // Reset tint
+    noTint();
     
-    for (let i = 0; i < numLeaves; i++) {
-      let angle = (i / numLeaves) * TWO_PI + 0.2;
-      let stemLen = displaySize * 0.3;
-      
+    // Dormant indicator
+    if (dormant) {
+      fill(200, 200, 200, 180);
+      textSize(6);
+      textAlign(CENTER, CENTER);
+      text("❄", 0, -displaySize * 0.5);
+    }
+    
+    pop();
+  }
+  
+  // ============================================
+  // PROCEDURAL RENDERING (for Kawakawa and fallback)
+  // ============================================
+  
+  _renderProcedural(px, py, displaySize, dormant) {
+    const alpha = dormant ? 150 : 255;
+    const r = this.colorR;
+    const g = this.colorG;
+    const b = this.colorB;
+    
+    push();
+    translate(px, py);
+    
+    // Sway for non-dormant plants
+    if (!dormant) {
+      const sway = sin(frameCount * 0.02 + this.swayPhase) * 0.05 * this.seasonalModifier;
+      rotate(sway);
+    }
+    
+    // Shadow
+    noStroke();
+    fill(0, 0, 0, dormant ? 10 : 20);
+    ellipse(1, 1, displaySize * 1.2, displaySize * 0.6);
+    
+    const typeId = this.typeId;
+    
+    if (typeId === PLANT_TYPE_ID.kawakawa) {
+      this._renderKawakawa(displaySize, r, g, b, alpha);
+    } else {
+      // Generic fallback for any missing sprites
+      this._renderGenericPlant(displaySize, r, g, b, alpha);
+    }
+    
+    // Dormant indicator
+    if (dormant) {
+      fill(200, 200, 200, 180);
+      textSize(6);
+      textAlign(CENTER, CENTER);
+      text("❄", 0, -displaySize);
+    }
+    
+    pop();
+  }
+  
+  // ============================================
+  // KAWAKAWA (procedural - no sprite)
+  // ============================================
+  
+  _renderKawakawa(displaySize, r, g, b, alpha) {
+    const angles = PlantStatics.kawakawaAngles;
+    const stemLen = displaySize * 0.3;
+    const leafPosOffset = stemLen + displaySize * 0.15;
+    
+    for (let i = 0; i < 5; i++) {
       push();
-      rotate(angle);
+      rotate(angles[i]);
       
-      // Draw stem
+      // Stem
       stroke(75, 110, 50);
       strokeWeight(displaySize * 0.03);
       line(0, 0, stemLen, 0);
       
-      translate(stemLen + displaySize * 0.15, 0);
-      rotate(HALF_PI); // Leaf angle
+      translate(leafPosOffset, 0);
+      rotate(HALF_PI);
       
-      let lw = displaySize * 0.32; // leaf width
-      let lh = displaySize * 0.38; // leaf height
+      const lw = displaySize * 0.32;
+      const lh = displaySize * 0.38;
+      const lw2 = lw * 0.2;
+      const lw45 = lw * 0.45;
+      const lw5 = lw * 0.5;
+      const lw55 = lw * 0.55;
+      const lw15 = lw * 0.15;
+      const lh5 = lh * 0.5;
+      const lh35 = lh * 0.35;
+      const lh2 = lh * 0.2;
+      const lh4 = lh * 0.4;
+      const lh05 = lh * 0.05;
       
-      // Heart-shaped leaf (notch at top/base, point at bottom/tip)
+      // Heart-shaped leaf
       fill(85, 155, 55);
       stroke(60, 120, 45);
       strokeWeight(1);
       
       beginShape();
-      vertex(0, -lh * 0.5); // Top notch (base, where stem attaches)
-      bezierVertex(-lw * 0.2, -lh * 0.5, -lw * 0.45, -lh * 0.35, -lw * 0.5, -lh * 0.05); // Left lobe
-      bezierVertex(-lw * 0.55, lh * 0.2, -lw * 0.15, lh * 0.4, 0, lh * 0.5); // Down to tip
-      bezierVertex(lw * 0.15, lh * 0.4, lw * 0.55, lh * 0.2, lw * 0.5, -lh * 0.05); // Right side up
-      bezierVertex(lw * 0.45, -lh * 0.35, lw * 0.2, -lh * 0.5, 0, -lh * 0.5); // Right lobe back to notch
+      vertex(0, -lh5);
+      bezierVertex(-lw2, -lh5, -lw45, -lh35, -lw5, -lh05);
+      bezierVertex(-lw55, lh2, -lw15, lh4, 0, lh5);
+      bezierVertex(lw15, lh4, lw55, lh2, lw5, -lh05);
+      bezierVertex(lw45, -lh35, lw2, -lh5, 0, -lh5);
       endShape(CLOSE);
       
-      // Central vein
+      // Veins
       stroke(55, 110, 40);
       strokeWeight(displaySize * 0.015);
       line(0, -lh * 0.4, 0, lh * 0.45);
       
-      // Side veins (curving toward tip)
       strokeWeight(displaySize * 0.008);
-      for (let v = 0; v < 3; v++) {
-        let vy = -lh * 0.2 + v * lh * 0.22;
-        let vx = lw * (0.3 - v * 0.05);
-        line(0, vy, -vx, vy + lh * 0.1);
-        line(0, vy, vx, vy + lh * 0.1);
-      }
+      const veinX0 = lw * 0.3;
+      const veinX1 = lw * 0.25;
+      const veinX2 = lw * 0.2;
+      const veinYStart = -lh * 0.2;
+      const veinYStep = lh * 0.22;
+      const veinYOffset = lh * 0.1;
       
-      // Characteristic holes (kawakawa looper caterpillar damage)
+      line(0, veinYStart, -veinX0, veinYStart + veinYOffset);
+      line(0, veinYStart, veinX0, veinYStart + veinYOffset);
+      line(0, veinYStart + veinYStep, -veinX1, veinYStart + veinYStep + veinYOffset);
+      line(0, veinYStart + veinYStep, veinX1, veinYStart + veinYStep + veinYOffset);
+      line(0, veinYStart + veinYStep * 2, -veinX2, veinYStart + veinYStep * 2 + veinYOffset);
+      line(0, veinYStart + veinYStep * 2, veinX2, veinYStart + veinYStep * 2 + veinYOffset);
+      
+      // Holes (characteristic of kawakawa)
       fill(35, 80, 30, 180);
       noStroke();
       ellipse(-lw * 0.2, lh * 0.1, lw * 0.15, lw * 0.12);
@@ -471,27 +478,26 @@ class Plant {
     fill(90, 75, 55);
     noStroke();
     ellipse(0, 0, displaySize * 0.12, displaySize * 0.12);
-  } else {
-      // Berries/nuts
-      for (let i = 0; i < 4; i++) {
-        let angle = i * HALF_PI;
-        ellipse(
-          cos(angle) * displaySize * 0.3, 
-          sin(angle) * displaySize * 0.3, 
-          displaySize * 0.5, 
-          displaySize * 0.5
-        );
-      }
-    }
+  }
+  
+  // ============================================
+  // GENERIC FALLBACK (simple circle plant)
+  // ============================================
+  
+  _renderGenericPlant(displaySize, r, g, b, alpha) {
+    // Simple circular plant as fallback
+    noStroke();
     
-    // Dormant indicator (small snowflake or sun icon)
-    if (this.dormant) {
-      fill(200, 200, 200, 180);
-      textSize(6);
-      textAlign(CENTER, CENTER);
-      text(" ᭄᭡", 0, -displaySize);
-    }
+    // Main body
+    fill(r, g, b, alpha);
+    ellipse(0, 0, displaySize, displaySize * 0.9);
     
-    pop();
+    // Highlight
+    fill(r + 30, g + 30, b + 20, alpha * 0.5);
+    ellipse(-displaySize * 0.15, -displaySize * 0.15, displaySize * 0.4, displaySize * 0.35);
+    
+    // Center/shadow
+    fill(r - 30, g - 25, b - 20, alpha * 0.6);
+    ellipse(displaySize * 0.05, displaySize * 0.05, displaySize * 0.5, displaySize * 0.45);
   }
 }

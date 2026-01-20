@@ -1,173 +1,203 @@
 // ============================================
-// SPATIAL GRID - Optimized for flocking queries
+// SPATIAL GRID - Heavily optimized for performance
+// Uses numeric keys and pre-allocated arrays
 // ============================================
 class SpatialGrid {
   constructor(width, height, cellSize) {
     this.cellSize = cellSize;
-    this.cols = Math.ceil(width / cellSize);
-    this.rows = Math.ceil(height / cellSize);
-    this.cells = new Map();
-    this.entityCells = new WeakMap();
+    this.invCellSize = 1 / cellSize; // Pre-compute for faster division
+    this.cols = Math.ceil(width * this.invCellSize);
+    this.rows = Math.ceil(height * this.invCellSize);
+    
+    // Use a flat array instead of Map for O(1) access without hashing
+    this.totalCells = this.cols * this.rows;
+    this.cells = new Array(this.totalCells);
+    
+    // Pre-allocate cell arrays (object pool)
+    for (let i = 0; i < this.totalCells; i++) {
+      this.cells[i] = [];
+    }
+    
+    // Track which cells have entities for faster clearing
+    this.activeCells = [];
+    
+    // Reusable result array to reduce allocations
+    this._resultBuffer = [];
+    this._resultBuffer2 = [];
   }
   
   clear() {
-    this.cells.clear();
+    // Only clear cells that had entities
+    const active = this.activeCells;
+    for (let i = 0, len = active.length; i < len; i++) {
+      this.cells[active[i]].length = 0;
+    }
+    this.activeCells.length = 0;
   }
   
-  getKey(x, y) {
-    const col = Math.floor(x / this.cellSize);
-    const row = Math.floor(y / this.cellSize);
-    return `${col},${row}`;
-  }
-  
-  getCellCoords(x, y) {
-    return {
-      col: Math.floor(x / this.cellSize),
-      row: Math.floor(y / this.cellSize)
-    };
+  // Get cell index directly (no string keys!)
+  getCellIndex(x, y) {
+    const col = (x * this.invCellSize) | 0; // Bitwise floor
+    const row = (y * this.invCellSize) | 0;
+    
+    // Bounds check
+    if (col < 0 || col >= this.cols || row < 0 || row >= this.rows) {
+      return -1;
+    }
+    
+    return row * this.cols + col;
   }
   
   insert(entity) {
-    const key = this.getKey(entity.pos.x, entity.pos.y);
-    if (!this.cells.has(key)) {
-      this.cells.set(key, []);
-    }
-    this.cells.get(key).push(entity);
-    this.entityCells.set(entity, key);
-  }
-  
-  remove(entity) {
-    const key = this.entityCells.get(entity);
-    if (key && this.cells.has(key)) {
-      const cell = this.cells.get(key);
-      const idx = cell.indexOf(entity);
-      if (idx !== -1) {
-        cell.splice(idx, 1);
-      }
-    }
-    this.entityCells.delete(entity);
-  }
-  
-  updateEntity(entity) {
-    const oldKey = this.entityCells.get(entity);
-    const newKey = this.getKey(entity.pos.x, entity.pos.y);
+    const idx = this.getCellIndex(entity.pos.x, entity.pos.y);
+    if (idx === -1) return;
     
-    if (oldKey === newKey) return;
-    
-    if (oldKey && this.cells.has(oldKey)) {
-      const cell = this.cells.get(oldKey);
-      const idx = cell.indexOf(entity);
-      if (idx !== -1) {
-        cell.splice(idx, 1);
-      }
+    const cell = this.cells[idx];
+    if (cell.length === 0) {
+      this.activeCells.push(idx);
     }
-    
-    if (!this.cells.has(newKey)) {
-      this.cells.set(newKey, []);
-    }
-    this.cells.get(newKey).push(entity);
-    this.entityCells.set(entity, newKey);
+    cell.push(entity);
   }
   
   // Get all entities in nearby cells (fast, no distance check)
   getNearby(x, y, radius) {
-    const nearby = [];
-    const cellRadius = Math.ceil(radius / this.cellSize);
-    const centerCol = Math.floor(x / this.cellSize);
-    const centerRow = Math.floor(y / this.cellSize);
+    const result = this._resultBuffer;
+    result.length = 0;
     
-    for (let col = centerCol - cellRadius; col <= centerCol + cellRadius; col++) {
-      for (let row = centerRow - cellRadius; row <= centerRow + cellRadius; row++) {
-        const key = `${col},${row}`;
-        const cell = this.cells.get(key);
-        if (cell) {
-          for (let i = 0; i < cell.length; i++) {
-            nearby.push(cell[i]);
-          }
+    const invCellSize = this.invCellSize;
+    const cellRadius = Math.ceil(radius * invCellSize);
+    const centerCol = (x * invCellSize) | 0;
+    const centerRow = (y * invCellSize) | 0;
+    
+    const minCol = Math.max(0, centerCol - cellRadius);
+    const maxCol = Math.min(this.cols - 1, centerCol + cellRadius);
+    const minRow = Math.max(0, centerRow - cellRadius);
+    const maxRow = Math.min(this.rows - 1, centerRow + cellRadius);
+    
+    const cols = this.cols;
+    const cells = this.cells;
+    
+    for (let row = minRow; row <= maxRow; row++) {
+      const rowOffset = row * cols;
+      for (let col = minCol; col <= maxCol; col++) {
+        const cell = cells[rowOffset + col];
+        const len = cell.length;
+        for (let i = 0; i < len; i++) {
+          result.push(cell[i]);
         }
       }
     }
     
-    return nearby;
+    return result;
   }
   
   // Get nearby entities with actual distance check (more precise)
   getInRadius(x, y, radius) {
-    const nearby = [];
-    const cellRadius = Math.ceil(radius / this.cellSize);
-    const centerCol = Math.floor(x / this.cellSize);
-    const centerRow = Math.floor(y / this.cellSize);
+    const result = this._resultBuffer;
+    result.length = 0;
+    
+    const invCellSize = this.invCellSize;
+    const cellRadius = Math.ceil(radius * invCellSize);
+    const centerCol = (x * invCellSize) | 0;
+    const centerRow = (y * invCellSize) | 0;
     const radiusSq = radius * radius;
     
-    for (let col = centerCol - cellRadius; col <= centerCol + cellRadius; col++) {
-      for (let row = centerRow - cellRadius; row <= centerRow + cellRadius; row++) {
-        const key = `${col},${row}`;
-        const cell = this.cells.get(key);
-        if (!cell) continue;
+    const minCol = Math.max(0, centerCol - cellRadius);
+    const maxCol = Math.min(this.cols - 1, centerCol + cellRadius);
+    const minRow = Math.max(0, centerRow - cellRadius);
+    const maxRow = Math.min(this.rows - 1, centerRow + cellRadius);
+    
+    const cols = this.cols;
+    const cells = this.cells;
+    
+    for (let row = minRow; row <= maxRow; row++) {
+      const rowOffset = row * cols;
+      for (let col = minCol; col <= maxCol; col++) {
+        const cell = cells[rowOffset + col];
+        const len = cell.length;
         
-        for (let i = 0; i < cell.length; i++) {
+        for (let i = 0; i < len; i++) {
           const entity = cell[i];
           const dx = entity.pos.x - x;
           const dy = entity.pos.y - y;
           if (dx * dx + dy * dy <= radiusSq) {
-            nearby.push(entity);
+            result.push(entity);
           }
         }
       }
     }
     
-    return nearby;
+    return result;
   }
   
   // Get entities in radius excluding a specific entity
   getInRadiusExcluding(x, y, radius, excludeEntity) {
-    const nearby = [];
-    const cellRadius = Math.ceil(radius / this.cellSize);
-    const centerCol = Math.floor(x / this.cellSize);
-    const centerRow = Math.floor(y / this.cellSize);
+    const result = this._resultBuffer2; // Use second buffer
+    result.length = 0;
+    
+    const invCellSize = this.invCellSize;
+    const cellRadius = Math.ceil(radius * invCellSize);
+    const centerCol = (x * invCellSize) | 0;
+    const centerRow = (y * invCellSize) | 0;
     const radiusSq = radius * radius;
     
-    for (let col = centerCol - cellRadius; col <= centerCol + cellRadius; col++) {
-      for (let row = centerRow - cellRadius; row <= centerRow + cellRadius; row++) {
-        const key = `${col},${row}`;
-        const cell = this.cells.get(key);
-        if (!cell) continue;
+    const minCol = Math.max(0, centerCol - cellRadius);
+    const maxCol = Math.min(this.cols - 1, centerCol + cellRadius);
+    const minRow = Math.max(0, centerRow - cellRadius);
+    const maxRow = Math.min(this.rows - 1, centerRow + cellRadius);
+    
+    const cols = this.cols;
+    const cells = this.cells;
+    
+    for (let row = minRow; row <= maxRow; row++) {
+      const rowOffset = row * cols;
+      for (let col = minCol; col <= maxCol; col++) {
+        const cell = cells[rowOffset + col];
+        const len = cell.length;
         
-        for (let i = 0; i < cell.length; i++) {
+        for (let i = 0; i < len; i++) {
           const entity = cell[i];
           if (entity === excludeEntity) continue;
           
           const dx = entity.pos.x - x;
           const dy = entity.pos.y - y;
           if (dx * dx + dy * dy <= radiusSq) {
-            nearby.push(entity);
+            result.push(entity);
           }
         }
       }
     }
     
-    return nearby;
+    return result;
   }
   
   // Find the closest entity within radius
   getClosest(x, y, radius, filter = null) {
-    const cellRadius = Math.ceil(radius / this.cellSize);
-    const centerCol = Math.floor(x / this.cellSize);
-    const centerRow = Math.floor(y / this.cellSize);
-    const radiusSq = radius * radius;
+    const invCellSize = this.invCellSize;
+    const cellRadius = Math.ceil(radius * invCellSize);
+    const centerCol = (x * invCellSize) | 0;
+    const centerRow = (y * invCellSize) | 0;
+    
+    const minCol = Math.max(0, centerCol - cellRadius);
+    const maxCol = Math.min(this.cols - 1, centerCol + cellRadius);
+    const minRow = Math.max(0, centerRow - cellRadius);
+    const maxRow = Math.min(this.rows - 1, centerRow + cellRadius);
+    
+    const cols = this.cols;
+    const cells = this.cells;
     
     let closest = null;
-    let closestDistSq = radiusSq;
+    let closestDistSq = radius * radius;
     
-    for (let col = centerCol - cellRadius; col <= centerCol + cellRadius; col++) {
-      for (let row = centerRow - cellRadius; row <= centerRow + cellRadius; row++) {
-        const key = `${col},${row}`;
-        const cell = this.cells.get(key);
-        if (!cell) continue;
+    for (let row = minRow; row <= maxRow; row++) {
+      const rowOffset = row * cols;
+      for (let col = minCol; col <= maxCol; col++) {
+        const cell = cells[rowOffset + col];
+        const len = cell.length;
         
-        for (let i = 0; i < cell.length; i++) {
+        for (let i = 0; i < len; i++) {
           const entity = cell[i];
-          if (filter && !filter(entity)) continue;
+          if (filter !== null && !filter(entity)) continue;
           
           const dx = entity.pos.x - x;
           const dy = entity.pos.y - y;
@@ -188,11 +218,21 @@ class SpatialGrid {
   getClosestN(x, y, radius, n, filter = null) {
     const candidates = this.getInRadius(x, y, radius);
     
-    // Calculate distances
+    if (candidates.length <= n) {
+      // If we have fewer than n, just filter and return
+      if (filter === null) return candidates.slice();
+      const filtered = [];
+      for (let i = 0; i < candidates.length; i++) {
+        if (filter(candidates[i])) filtered.push(candidates[i]);
+      }
+      return filtered;
+    }
+    
+    // Calculate distances and use partial sort
     const withDist = [];
     for (let i = 0; i < candidates.length; i++) {
       const entity = candidates[i];
-      if (filter && !filter(entity)) continue;
+      if (filter !== null && !filter(entity)) continue;
       
       const dx = entity.pos.x - x;
       const dy = entity.pos.y - y;
@@ -202,11 +242,20 @@ class SpatialGrid {
       });
     }
     
-    // Sort by distance and return top N
+    // Partial sort - only find top N
+    if (withDist.length <= n) {
+      const result = [];
+      for (let i = 0; i < withDist.length; i++) {
+        result.push(withDist[i].entity);
+      }
+      return result;
+    }
+    
+    // Quick select for top N
     withDist.sort((a, b) => a.distSq - b.distSq);
     
     const result = [];
-    for (let i = 0; i < Math.min(n, withDist.length); i++) {
+    for (let i = 0; i < n; i++) {
       result.push(withDist[i].entity);
     }
     
@@ -215,21 +264,30 @@ class SpatialGrid {
   
   // Count entities in radius (without building array)
   countInRadius(x, y, radius, filter = null) {
-    const cellRadius = Math.ceil(radius / this.cellSize);
-    const centerCol = Math.floor(x / this.cellSize);
-    const centerRow = Math.floor(y / this.cellSize);
+    const invCellSize = this.invCellSize;
+    const cellRadius = Math.ceil(radius * invCellSize);
+    const centerCol = (x * invCellSize) | 0;
+    const centerRow = (y * invCellSize) | 0;
     const radiusSq = radius * radius;
+    
+    const minCol = Math.max(0, centerCol - cellRadius);
+    const maxCol = Math.min(this.cols - 1, centerCol + cellRadius);
+    const minRow = Math.max(0, centerRow - cellRadius);
+    const maxRow = Math.min(this.rows - 1, centerRow + cellRadius);
+    
+    const cols = this.cols;
+    const cells = this.cells;
     let count = 0;
     
-    for (let col = centerCol - cellRadius; col <= centerCol + cellRadius; col++) {
-      for (let row = centerRow - cellRadius; row <= centerRow + cellRadius; row++) {
-        const key = `${col},${row}`;
-        const cell = this.cells.get(key);
-        if (!cell) continue;
+    for (let row = minRow; row <= maxRow; row++) {
+      const rowOffset = row * cols;
+      for (let col = minCol; col <= maxCol; col++) {
+        const cell = cells[rowOffset + col];
+        const len = cell.length;
         
-        for (let i = 0; i < cell.length; i++) {
+        for (let i = 0; i < len; i++) {
           const entity = cell[i];
-          if (filter && !filter(entity)) continue;
+          if (filter !== null && !filter(entity)) continue;
           
           const dx = entity.pos.x - x;
           const dy = entity.pos.y - y;
@@ -245,20 +303,29 @@ class SpatialGrid {
   
   // Check if any entity exists within radius
   hasAnyInRadius(x, y, radius, filter = null) {
-    const cellRadius = Math.ceil(radius / this.cellSize);
-    const centerCol = Math.floor(x / this.cellSize);
-    const centerRow = Math.floor(y / this.cellSize);
+    const invCellSize = this.invCellSize;
+    const cellRadius = Math.ceil(radius * invCellSize);
+    const centerCol = (x * invCellSize) | 0;
+    const centerRow = (y * invCellSize) | 0;
     const radiusSq = radius * radius;
     
-    for (let col = centerCol - cellRadius; col <= centerCol + cellRadius; col++) {
-      for (let row = centerRow - cellRadius; row <= centerRow + cellRadius; row++) {
-        const key = `${col},${row}`;
-        const cell = this.cells.get(key);
-        if (!cell) continue;
+    const minCol = Math.max(0, centerCol - cellRadius);
+    const maxCol = Math.min(this.cols - 1, centerCol + cellRadius);
+    const minRow = Math.max(0, centerRow - cellRadius);
+    const maxRow = Math.min(this.rows - 1, centerRow + cellRadius);
+    
+    const cols = this.cols;
+    const cells = this.cells;
+    
+    for (let row = minRow; row <= maxRow; row++) {
+      const rowOffset = row * cols;
+      for (let col = minCol; col <= maxCol; col++) {
+        const cell = cells[rowOffset + col];
+        const len = cell.length;
         
-        for (let i = 0; i < cell.length; i++) {
+        for (let i = 0; i < len; i++) {
           const entity = cell[i];
-          if (filter && !filter(entity)) continue;
+          if (filter !== null && !filter(entity)) continue;
           
           const dx = entity.pos.x - x;
           const dy = entity.pos.y - y;
@@ -276,14 +343,12 @@ class SpatialGrid {
   getStats() {
     let totalEntities = 0;
     let maxInCell = 0;
-    let nonEmptyCells = 0;
+    const nonEmptyCells = this.activeCells.length;
     
-    for (let [key, cell] of this.cells) {
-      if (cell.length > 0) {
-        nonEmptyCells++;
-        totalEntities += cell.length;
-        maxInCell = Math.max(maxInCell, cell.length);
-      }
+    for (let i = 0; i < nonEmptyCells; i++) {
+      const len = this.cells[this.activeCells[i]].length;
+      totalEntities += len;
+      if (len > maxInCell) maxInCell = len;
     }
     
     return {

@@ -1,5 +1,5 @@
 // ============================================
-// SIMULATION CLASS - Optimized with Spatial Grids
+// SIMULATION CLASS - Optimized with better throttling and batching
 // ============================================
 class Simulation {
   constructor(terrain, config, game, seasonManager) {
@@ -20,45 +20,61 @@ class Simulation {
     };
 
     // Spatial grids with appropriate cell sizes
-    // Cell size should be roughly equal to the largest typical query radius
-    this.moaGrid = new SpatialGrid(terrain.mapWidth, terrain.mapHeight, 60);
-    this.eagleGrid = new SpatialGrid(terrain.mapWidth, terrain.mapHeight, 100);
-    this.plantGrid = new SpatialGrid(terrain.mapWidth, terrain.mapHeight, 50);
-    this.placeableGrid = new SpatialGrid(terrain.mapWidth, terrain.mapHeight, 80);
-    this.eggGrid = new SpatialGrid(terrain.mapWidth, terrain.mapHeight, 40);
+    const mapW = terrain.mapWidth;
+    const mapH = terrain.mapHeight;
+    this.moaGrid = new SpatialGrid(mapW, mapH, 60);
+    this.eagleGrid = new SpatialGrid(mapW, mapH, 100);
+    this.plantGrid = new SpatialGrid(mapW, mapH, 50);
+    this.placeableGrid = new SpatialGrid(mapW, mapH, 80);
+    this.eggGrid = new SpatialGrid(mapW, mapH, 40);
 
-    // Cache for population counts to avoid repeated filtering
+    // Cache for population counts
     this._cachedAliveMoas = 0;
     this._cachedAliveEggs = 0;
     this._cacheFrame = -1;
+    
+    // Plant update batching
+    this._plantBatchIndex = 0;
+    this._plantBatchSize = 50; // Update 50 plants per frame
+    
+    // Reusable position vector
+    this._tempPos = null;
   }
   
   init() {
+    this._tempPos = createVector(0, 0);
     this.spawnPlants();
     const levelSpecies = this.config.startingSpecies || null;
     this.spawnMoas(this.config.initialMoaCount, levelSpecies);
     this.spawnEagles(this.config.eagleCount);
   }
   
-  spawnPlants() {
-    const scale = this.config.pixelScale;
-    for (let row = 0; row < this.terrain.biomeMap.length; row++) {
-      for (let col = 0; col < this.terrain.biomeMap[row].length; col++) {
-        const biome = this.terrain.biomeMap[row][col];
-        if (biome.canHavePlants && random() < this.config.plantDensity) {
-          const x = col * scale + random(-scale/2, scale/2);
-          const y = row * scale + random(-scale/2, scale/2);
-          this.plants.push(new Plant(x, y, random(biome.plantTypes), this.terrain, biome.key));
-        }
+spawnPlants() {
+  // Use a fixed spawn grid regardless of pixelScale
+  const spawnScale = 2;  // Always use 2-unit spacing for plants
+  const spawnCols = Math.ceil(this.terrain.mapWidth / spawnScale);
+  const spawnRows = Math.ceil(this.terrain.mapHeight / spawnScale);
+  
+  for (let row = 0; row < spawnRows; row++) {
+    for (let col = 0; col < spawnCols; col++) {
+      const x = col * spawnScale + random(-1, 1);
+      const y = row * spawnScale + random(-1, 1);
+      const biome = this.terrain.getBiomeAt(x, y);
+      
+      if (biome.canHavePlants && random() < this.config.plantDensity) {
+        const plantTypes = biome.plantTypes;
+        const plantType = plantTypes[(random() * plantTypes.length) | 0];
+        this.plants.push(new Plant(x, y, plantType, this.terrain, biome.key));
       }
     }
   }
+}
   
   spawnMoas(count, speciesKey = null) {
-    let pref = this.seasonManager.getPreferredElevation();
+    const pref = this.seasonManager.getPreferredElevation();
     
     for (let i = 0; i < count; i++) {
-      let pos = this.findWalkablePosition(pref.min, pref.max);
+      const pos = this.findWalkablePosition(pref.min, pref.max);
       
       let moa;
       if (speciesKey && typeof REGISTRY !== 'undefined') {
@@ -84,14 +100,15 @@ class Simulation {
   spawnEagle(speciesKey = null) {
     let pos = this.findWalkablePosition(0.25, 0.7);
     let attempts = 0;
+    const eagles = this.eagles;
     
     while (attempts < 20) {
       let tooClose = false;
-      for (let i = 0; i < this.eagles.length; i++) {
-        const e = this.eagles[i];
+      for (let i = 0, len = eagles.length; i < len; i++) {
+        const e = eagles[i];
         const dx = pos.x - e.pos.x;
         const dy = pos.y - e.pos.y;
-        if (dx * dx + dy * dy < 6400) { // 80^2
+        if (dx * dx + dy * dy < 6400) {
           tooClose = true;
           break;
         }
@@ -115,22 +132,28 @@ class Simulation {
     }
   }
   
-  findWalkablePosition(minElev = 0.15, maxElev = 0.8) {
-    let attempts = 0;
-    while (attempts < 100) {
-      let x = random(30, this.terrain.mapWidth - 30);
-      let y = random(30, this.terrain.mapHeight - 30);
-      let elev = this.terrain.getElevationAt(x, y);
-      if (elev > minElev && elev < maxElev && this.terrain.isWalkable(x, y)) {
-        return createVector(x, y);
+  findWalkablePosition(minElev, maxElev) {
+    const terrain = this.terrain;
+    const maxX = terrain.mapWidth - 30;
+    const maxY = terrain.mapHeight - 30;
+    
+    for (let attempts = 0; attempts < 100; attempts++) {
+      const x = 30 + random() * (maxX - 30);
+      const y = 30 + random() * (maxY - 30);
+      const elev = terrain.getElevationAt(x, y);
+      
+      if (elev > minElev && elev < maxElev && terrain.isWalkable(x, y)) {
+        this._tempPos.set(x, y);
+        return this._tempPos;
       }
-      attempts++;
     }
-    return createVector(this.terrain.mapWidth / 2, this.terrain.mapHeight / 2);
+    
+    this._tempPos.set(terrain.mapWidth * 0.5, terrain.mapHeight * 0.5);
+    return this._tempPos;
   }
   
   addEgg(x, y) {
-    let egg = new Egg(x, y, this.terrain, this.config);
+    const egg = new Egg(x, y, this.terrain, this.config);
     this.eggs.push(egg);
     return egg;
   }
@@ -165,20 +188,25 @@ class Simulation {
   }
   
   _updatePopulationCache() {
-    this._cachedAliveMoas = 0;
-    this._cachedAliveEggs = 0;
+    let moaCount = 0;
+    let eggCount = 0;
     
-    for (let i = 0; i < this.moas.length; i++) {
-      if (this.moas[i].alive) this._cachedAliveMoas++;
-    }
-    for (let i = 0; i < this.eggs.length; i++) {
-      if (this.eggs[i].alive && !this.eggs[i].hatched) this._cachedAliveEggs++;
+    const moas = this.moas;
+    for (let i = 0, len = moas.length; i < len; i++) {
+      if (moas[i].alive) moaCount++;
     }
     
+    const eggs = this.eggs;
+    for (let i = 0, len = eggs.length; i < len; i++) {
+      const e = eggs[i];
+      if (e.alive && !e.hatched) eggCount++;
+    }
+    
+    this._cachedAliveMoas = moaCount;
+    this._cachedAliveEggs = eggCount;
     this._cacheFrame = frameCount;
   }
   
-  // Invalidate cache when population changes
   _invalidateCache() {
     this._cacheFrame = -1;
   }
@@ -195,47 +223,48 @@ class Simulation {
     this.placeableGrid.clear();
     this.eggGrid.clear();
     
-    // Populate moa grid (only alive moas)
-    for (let i = 0; i < this.moas.length; i++) {
-      const moa = this.moas[i];
-      if (moa.alive) {
-        this.moaGrid.insert(moa);
-      }
+    // Populate moa grid
+    const moas = this.moas;
+    const moaGrid = this.moaGrid;
+    for (let i = 0, len = moas.length; i < len; i++) {
+      const moa = moas[i];
+      if (moa.alive) moaGrid.insert(moa);
     }
     
     // Populate eagle grid
-    for (let i = 0; i < this.eagles.length; i++) {
-      this.eagleGrid.insert(this.eagles[i]);
+    const eagles = this.eagles;
+    const eagleGrid = this.eagleGrid;
+    for (let i = 0, len = eagles.length; i < len; i++) {
+      eagleGrid.insert(eagles[i]);
     }
     
-    // Populate plant grid (only alive plants)
-    for (let i = 0; i < this.plants.length; i++) {
-      const plant = this.plants[i];
-      if (plant.alive) {
-        this.plantGrid.insert(plant);
-      }
+    // Populate plant grid
+    const plants = this.plants;
+    const plantGrid = this.plantGrid;
+    for (let i = 0, len = plants.length; i < len; i++) {
+      const plant = plants[i];
+      if (plant.alive) plantGrid.insert(plant);
     }
     
-    // Populate placeable grid (only alive placeables)
-    for (let i = 0; i < this.placeables.length; i++) {
-      const p = this.placeables[i];
-      if (p.alive) {
-        this.placeableGrid.insert(p);
-      }
+    // Populate placeable grid
+    const placeables = this.placeables;
+    const placeableGrid = this.placeableGrid;
+    for (let i = 0, len = placeables.length; i < len; i++) {
+      const p = placeables[i];
+      if (p.alive) placeableGrid.insert(p);
     }
     
     // Populate egg grid
-    for (let i = 0; i < this.eggs.length; i++) {
-      const egg = this.eggs[i];
-      if (egg.alive) {
-        this.eggGrid.insert(egg);
-      }
+    const eggs = this.eggs;
+    const eggGrid = this.eggGrid;
+    for (let i = 0, len = eggs.length; i < len; i++) {
+      const egg = eggs[i];
+      if (egg.alive) eggGrid.insert(egg);
     }
   }
   
   // ============================================
   // SPATIAL QUERY HELPER METHODS
-  // These are called by entities to find nearby objects
   // ============================================
   
   getNearbyMoas(x, y, radius) {
@@ -278,125 +307,200 @@ class Simulation {
     // Update spatial grids at start of frame
     this.updateSpatialGrids();
   
-    // Update plants with seasonal effects (throttled for performance)
-    if (frameCount % 3 === 0) {
-      for (let i = 0; i < this.plants.length; i++) {
-        this.plants[i].update(this.seasonManager);
-      }
-    }
+    // Update plants in batches (throttled for performance)
+    this.updatePlantsBatched();
     
     // Handle season change effects
     if (this.seasonManager.justChanged) {
       this.onSeasonChange();
     }
     
-    // Update placeables (throttled)
-    if (frameCount % 2 === 0) {
-      for (let i = 0; i < this.placeables.length; i++) {
-        this.placeables[i].update();
-      }
-      // Remove dead placeables
-      this.placeables = this.placeables.filter(p => p.alive);
+    // Update placeables (every other frame)
+    if ((frameCount & 1) === 0) {
+      this.updatePlaceables();
     }
     
     // Update eggs
-    for (let i = 0; i < this.eggs.length; i++) {
-      const egg = this.eggs[i];
+    this.updateEggs(mauri);
+    
+    // Track deaths
+    const aliveBeforeUpdate = this.getMoaPopulation();
+    
+    // Update moas
+    this.updateMoas(mauri);
+    
+    // Recalculate after moa updates
+    this._invalidateCache();
+    const aliveAfterUpdate = this.getMoaPopulation();
+    const newDeaths = aliveBeforeUpdate - aliveAfterUpdate;
+    if (newDeaths > 0) {
+      this.stats.starvations += newDeaths;
+      this.stats.deaths += newDeaths;
+    }
+    
+    // Update eagles
+    this.updateEagles();
+    
+    // Periodic cleanup
+    if ((frameCount & 511) === 0) { // Every ~512 frames
+      this.cleanup();
+    }
+  }
+  
+  updatePlantsBatched() {
+    const plants = this.plants;
+    const len = plants.length;
+    if (len === 0) return;
+    
+    const seasonManager = this.seasonManager;
+    const batchSize = this._plantBatchSize;
+    const startIdx = this._plantBatchIndex;
+    const endIdx = Math.min(startIdx + batchSize, len);
+    
+    for (let i = startIdx; i < endIdx; i++) {
+      plants[i].update(seasonManager);
+    }
+    
+    this._plantBatchIndex = endIdx;
+    if (this._plantBatchIndex >= len) {
+      this._plantBatchIndex = 0;
+    }
+  }
+  
+  updatePlaceables() {
+    const placeables = this.placeables;
+    let writeIdx = 0;
+    
+    for (let i = 0, len = placeables.length; i < len; i++) {
+      const p = placeables[i];
+      p.update();
+      if (p.alive) {
+        placeables[writeIdx++] = p;
+      }
+    }
+    
+    placeables.length = writeIdx;
+  }
+  
+  updateEggs(mauri) {
+    const eggs = this.eggs;
+    const moas = this.moas;
+    const config = this.config;
+    const game = this.game;
+    const terrain = this.terrain;
+    
+    let writeIdx = 0;
+    
+    for (let i = 0, len = eggs.length; i < len; i++) {
+      const egg = eggs[i];
       
-      // Check if egg is in a nest using spatial grid
+      // Check if egg is in a nest
       const nearbyPlaceables = this.getNearbyPlaceables(egg.pos.x, egg.pos.y, 50);
-      for (let j = 0; j < nearbyPlaceables.length; j++) {
+      for (let j = 0, pLen = nearbyPlaceables.length; j < pLen; j++) {
         const p = nearbyPlaceables[j];
         if (p.alive && p.type === 'nest' && p.isInRange(egg.pos)) {
-          egg.speedBonus = Math.max(egg.speedBonus, p.def.eggSpeedBonus);
+          const bonus = p.def.eggSpeedBonus;
+          if (bonus > egg.speedBonus) egg.speedBonus = bonus;
         }
       }
       
       egg.update();
       
       if (egg.hatched && egg.alive) {
-        if (this.getMoaPopulation() < this.config.maxMoaPopulation) {
+        if (this.getMoaPopulation() < config.maxMoaPopulation) {
           const offspringSpecies = egg.getOffspringSpecies();
           
           let newMoa;
           if (typeof REGISTRY !== 'undefined' && offspringSpecies) {
-            newMoa = REGISTRY.createAnimal(offspringSpecies, egg.pos.x, egg.pos.y, this.terrain, this.config);
+            newMoa = REGISTRY.createAnimal(offspringSpecies, egg.pos.x, egg.pos.y, terrain, config);
           } else {
-            newMoa = new Moa(egg.pos.x, egg.pos.y, this.terrain, this.config);
+            newMoa = new Moa(egg.pos.x, egg.pos.y, terrain, config);
           }
           
           if (newMoa) {
             newMoa.hunger = 35;
-            newMoa.size = newMoa.size * 0.6;
-            newMoa.homeRange = egg.pos.copy();
-            this.moas.push(newMoa);
+            newMoa.size *= 0.6;
+            newMoa._cacheSizeMultipliers(); // Recache after size change
+            newMoa.homeRange.set(egg.pos.x, egg.pos.y);
+            moas.push(newMoa);
             this.stats.births++;
             this._invalidateCache();
             mauri.earn(mauri.onEggHatch, egg.pos.x, egg.pos.y, 'hatch');
             
             const speciesName = newMoa.species?.displayName || 'moa';
-            this.game.addNotification(`A ${speciesName} has hatched!`, 'success');
+            game.addNotification(`A ${speciesName} has hatched!`, 'success');
           }
           
           egg.alive = false;
         }
       }
-    }
-    this.eggs = this.eggs.filter(e => e.alive);
-    
-    // Track deaths
-    let aliveBeforeUpdate = this.getMoaPopulation();
-    
-    // Update moas - pass simulation reference for spatial queries
-    for (let i = 0; i < this.moas.length; i++) {
-      const moa = this.moas[i];
-      if (moa.alive) {
-        moa.behave(this, mauri, this.seasonManager);
-        moa.update();
+      
+      if (egg.alive) {
+        eggs[writeIdx++] = egg;
       }
     }
     
-    // Recalculate after moa updates
-    this._invalidateCache();
-    let aliveAfterUpdate = this.getMoaPopulation();
-    let newDeaths = aliveBeforeUpdate - aliveAfterUpdate;
-    if (newDeaths > 0) {
-      this.stats.starvations += newDeaths;
-      this.stats.deaths += newDeaths;
-    }
+    eggs.length = writeIdx;
+  }
+  
+  updateMoas(mauri) {
+    const moas = this.moas;
+    const seasonManager = this.seasonManager;
     
-    // Update eagles - pass simulation reference for spatial queries
-    for (let i = 0; i < this.eagles.length; i++) {
-      const eagle = this.eagles[i];
-      eagle.behave(this);
-      eagle.update();
-    }
-    
-    // Periodic cleanup of dead moas from array
-    if (frameCount % 600 === 0) {
-      const beforeLength = this.moas.length;
-      this.moas = this.moas.filter(m => m.alive);
-      if (this.moas.length !== beforeLength) {
-        this._invalidateCache();
+    for (let i = 0, len = moas.length; i < len; i++) {
+      const moa = moas[i];
+      if (moa.alive) {
+        moa.behave(this, mauri, seasonManager);
+        moa.update();
       }
     }
   }
   
+  updateEagles() {
+    const eagles = this.eagles;
+    
+    for (let i = 0, len = eagles.length; i < len; i++) {
+      const eagle = eagles[i];
+      eagle.behave(this);
+      eagle.update();
+    }
+  }
+  
+  cleanup() {
+    const moas = this.moas;
+    let writeIdx = 0;
+    
+    for (let i = 0, len = moas.length; i < len; i++) {
+      if (moas[i].alive) {
+        moas[writeIdx++] = moas[i];
+      }
+    }
+    
+    if (writeIdx !== moas.length) {
+      moas.length = writeIdx;
+      this._invalidateCache();
+    }
+  }
+  
   onSeasonChange() {
+    const plants = this.plants;
+    const seasonManager = this.seasonManager;
+    const dormancyChance = seasonManager.getDormancyChance();
+    
     let dormantCount = 0;
     let wokeCount = 0;
     
-    for (let i = 0; i < this.plants.length; i++) {
-      const plant = this.plants[i];
+    for (let i = 0, len = plants.length; i < len; i++) {
+      const plant = plants[i];
       if (plant.isSpawned) continue;
       
-      let shouldBeDormant = this.seasonManager.shouldPlantBeDormant(
+      const shouldBeDormant = seasonManager.shouldPlantBeDormant(
         plant.elevation, 
         plant.biomeKey
       );
       
       if (shouldBeDormant && !plant.dormant && plant.alive) {
-        if (random() < this.seasonManager.getDormancyChance()) {
+        if (random() < dormancyChance) {
           plant.goDormant();
           dormantCount++;
         }
@@ -416,31 +520,36 @@ class Simulation {
 
   render() {
     // Render plants
-    for (let i = 0; i < this.plants.length; i++) {
-      this.plants[i].render();
+    const plants = this.plants;
+    for (let i = 0, len = plants.length; i < len; i++) {
+      plants[i].render();
     }
     
     // Render placeables
-    for (let i = 0; i < this.placeables.length; i++) {
-      this.placeables[i].render();
+    const placeables = this.placeables;
+    for (let i = 0, len = placeables.length; i < len; i++) {
+      placeables[i].render();
     }
     
     // Render eggs
-    for (let i = 0; i < this.eggs.length; i++) {
-      this.eggs[i].render();
+    const eggs = this.eggs;
+    for (let i = 0, len = eggs.length; i < len; i++) {
+      eggs[i].render();
     }
     
     // Render moas
-    for (let i = 0; i < this.moas.length; i++) {
-      this.moas[i].render();
+    const moas = this.moas;
+    for (let i = 0, len = moas.length; i < len; i++) {
+      moas[i].render();
     }
     
     // Render eagles
-    for (let i = 0; i < this.eagles.length; i++) {
-      this.eagles[i].render();
+    const eagles = this.eagles;
+    for (let i = 0, len = eagles.length; i < len; i++) {
+      eagles[i].render();
     }
     
-    // Debug: render spatial grid stats
+    // Debug grid stats
     if (CONFIG.debugMode && CONFIG.showGridStats) {
       this.renderGridStats();
     }
@@ -472,7 +581,8 @@ class Simulation {
     y += 12;
     text(`Placeables: ${stats.placeables.totalEntities} in ${stats.placeables.nonEmptyCells} cells`, 10, y);
     y += 12;
-    text(`Max/cell: ${Math.max(stats.moas.maxInCell, stats.plants.maxInCell)}`, 10, y);
+    const maxInCell = Math.max(stats.moas.maxInCell, stats.plants.maxInCell);
+    text(`Max/cell: ${maxInCell}`, 10, y);
     
     pop();
   }

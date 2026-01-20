@@ -87,7 +87,7 @@ class GameUI {
     fill(CONFIG.col_UI);
     stroke(80, 100, 85);
     strokeWeight(1);
-    rect(x - 10, y - 10, 180, 45, 8);
+    rect(x - 10, y - 10, 200, 45, 8);
     
     // Season icon and name
     fill(255);
@@ -103,14 +103,14 @@ class GameUI {
     
     // Progress bar
     fill(60, 70, 65);
-    rect(x, y + 22, 155, 6, 3);
+    rect(x, y + 22, 175, 6, 3);
     
     // Fill with gradient toward next season
     let nextSeason = this.seasonManager.next;
     let nextCol = color(nextSeason.color);
     let gradientCol = lerpColor(seasonCol, nextCol, progress);
     fill(gradientCol);
-    rect(x, y + 22, 155 * progress, 6, 3);
+    rect(x, y + 22, 175 * progress, 6, 3);
     
     // Next season hint
     fill(150, 160, 155);
@@ -386,7 +386,7 @@ class GameUI {
     fill(CONFIG.col_UI);
     stroke(80, 100, 85);
     strokeWeight(1);
-    rect(x - 10, y - 10, 180, 45, 8);
+    rect(x - 10, y - 10, 200, 45, 8);
     
     // Direction arrow
     fill(this.seasonManager.current.color);
@@ -405,14 +405,6 @@ class GameUI {
     textSize(9);
     text(hint.detail, x, y + 22);
     
-    // Migrating count
-    const migratingCount = aliveMoas.filter(m => m.isMigrating).length;
-    if (migratingCount > 0) {
-      fill(100, 150, 255);
-      textSize(9);
-      textAlign(RIGHT, CENTER);
-      text(`${migratingCount} migrating`, x + 130, y + 5);
-    }
   }
   
   renderSelectedInfo() {

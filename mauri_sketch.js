@@ -23,15 +23,15 @@ function preload(){
 const CONFIG = {
   width: 720,
   height: 600,
-  pixelScale: 2,
+  pixelScale: 1,
   zoom: 2,
   debugMode: false,
   col_UI: [40,70,30,180],
   
   noiseScale: 0.005,
-  octaves: 4,
+  octaves: 2,
   persistence: 0.4,
-  lacunarity: 2.0,
+  lacunarity: 3.0,
   
   ridgeInfluence: 2.25,
   elevationPower: 2.2,
@@ -48,7 +48,7 @@ const CONFIG = {
   eagleCount: 2,
   startingSpecies: 'upland_moa',
   
-  plantDensity: 0.003,
+  plantDensity: 0.002,
   
   startingMauri: 30,
   targetPopulation: 30,

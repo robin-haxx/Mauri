@@ -33,9 +33,9 @@ const CONFIG = {
   persistence: 0.4,
   lacunarity: 2.0,
   
-  ridgeInfluence: 1.55,
+  ridgeInfluence: 2.25,
   elevationPower: 1.8,
-  islandFalloff: 0.4, 
+  islandFalloff: 0.3, 
   
   showContours: true,
   contourInterval: 0.045,
@@ -759,25 +759,21 @@ class Game {
     pop();
     
     fill(CACHED_COLORS.menuText);
-    textSize(13);
+    textSize(16);
     const instructions = [
-      "Guide the Upland Moa through the seasons",
-      "Place food sources, shelters, and nesting sites",
-      "Moa migrate between highlands and lowlands seasonally",
-      "Earn mauri by keeping your moa population thriving",
-      "Beware: More moa attracts more Haast's Eagles!"
+      "Guide the Upland Moa through the seasons;",
+      "Cold regions become barren during winter.",
+      "Grow the ecosystem to gain Mauri",
+      "Beware: More moa attracts more Pouākai!"
     ];
     
     for (let i = 0; i < instructions.length; i++) {
       text(instructions[i], centerX, 350 + i * 22);
     }
     
-    fill(CACHED_COLORS.menuHint);
-    textSize(11);
-    text("Seasons: ☀️ Summer (upland) → 🍂 Autumn → ❄️ Winter (lowland) → 🌸 Spring", centerX, 480);
-    
+
     const btnX = centerX - 80;
-    const btnY = 520;
+    const btnY = 480;
     const btnW = 160;
     const btnH = 50;
     
@@ -979,7 +975,7 @@ class Game {
   handleClick(mx, my) {
     if (this.state === GAME_STATE.MENU) {
       const btnX = CONFIG.width * 0.5 - 80;
-      const btnY = 520;
+      const btnY = 480;
       const btnW = 160;
       const btnH = 50;
       

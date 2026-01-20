@@ -1,5 +1,5 @@
 // ============================================
-// MOA CLASS - Simplified and Optimized
+// MOA CLASS - Simplified
 // ============================================
 
 const MOA_STATE = {
@@ -11,14 +11,12 @@ const MOA_STATE = {
 };
 
 class Moa extends Boid {
-  // Static defaults - single source of truth for species config
   static DEFAULTS = {
     size: { min: 8, max: 11 },
     baseSpeed: 0.25,
     fleeSpeed: 0.6,
     maxForce: 0.025,
     flockTendency: 0.8,
-    curiosity: 0.6,
     flightiness: 0.7,
     eagleResistance: 0,
     foragingBonus: 1.0,
@@ -29,28 +27,19 @@ class Moa extends Boid {
     criticalHunger: 80,
     eggCooldownTime: 800,
     hasCrest: false,
-    preferredElevation: { min: 0.25, max: 0.70 },
-    temperatureTolerance: { cold: 0.6, heat: 0.6 }
+    preferredElevation: { min: 0.25, max: 0.70 }
   };
-
-  // Shared static resources
-  static TWO_PI = Math.PI * 2;
-  static _tempVec = null;
-  
-  static getTempVec() {
-    return Moa._tempVec || (Moa._tempVec = createVector());
-  }
 
   constructor(x, y, terrain, config, speciesData = null) {
     super(x, y, terrain);
     this.config = config;
     
-    // Species data with defaults
+    // Merge species config with defaults
     this.species = speciesData || this.getDefaultSpecies();
     const s = { ...Moa.DEFAULTS, ...(this.species.config || {}) };
     this.speciesConfig = s;
     
-    // Physical characteristics
+    // Physical
     this.size = this.randomizeValue(s.size);
     this.bodyColor = this.generateBodyColor(s.bodyColor);
     this._initColors();
@@ -58,27 +47,18 @@ class Moa extends Boid {
     // Movement
     this.baseSpeed = s.baseSpeed;
     this.fleeSpeed = s.fleeSpeed;
-    this.starvingSpeedMultiplier = 0.6;
     this.maxSpeed = this.baseSpeed;
     this.maxForce = s.maxForce;
-    
-    // Perception (with pre-squared values for distance checks)
-    this.perceptionRadius = 35;
-    this.separationDist = 50;
-    this.separationDistSq = 2500;
-    this.fleeRadius = 85;
-    this.fleeRadiusSq = 7225;
-    
-    // Behavior modifiers
     this.flockTendency = s.flockTendency;
-    this.curiosity = s.curiosity;
     this.flightiness = s.flightiness;
     
-    // Pre-calculate effective flee radius
-    this._effectiveFleeRadius = this.fleeRadius * this.flightiness;
-    this._effectiveFleeRadiusSq = this._effectiveFleeRadius * this._effectiveFleeRadius;
+    // Perception
+    this.separationDistSq = 2500;
+    this.fleeRadius = 85 * this.flightiness;
+    this.fleeRadiusSq = this.fleeRadius * this.fleeRadius;
+    this.eatRadiusSq = 196;
     
-    // Special abilities
+    // Abilities
     this.eagleResistance = s.eagleResistance;
     this.foragingBonus = s.foragingBonus;
     this.camouflage = s.camouflage;
@@ -87,10 +67,9 @@ class Moa extends Boid {
     this.homeRange = createVector(x, y);
     this.homeRangeRadius = random(50, 90);
     this.homeRangeRadiusSq = this.homeRangeRadius * this.homeRangeRadius;
-    this.homeRangeStrength = 0.12;
     
     // Visual
-    this.legPhase = random(Moa.TWO_PI);
+    this.legPhase = random(TWO_PI);
     this.hasCrest = s.hasCrest;
     if (this.hasCrest && s.crestColor) {
       this.crestColor = this.generateBodyColor(s.crestColor);
@@ -100,6 +79,7 @@ class Moa extends Boid {
     this.alive = true;
     this.currentState = MOA_STATE.IDLE;
     this.panicLevel = 0;
+    this.inShelter = false;
     
     // Hunger
     this.hunger = random(15, 35);
@@ -108,77 +88,52 @@ class Moa extends Boid {
     this.hungerRate = this.baseHungerRate;
     this.hungerThreshold = s.hungerThreshold;
     this.criticalHunger = s.criticalHunger;
-    this.eatRadius = 14;
-    this.eatRadiusSq = 196;
     
     // Foraging
     this.targetPlant = null;
-    this.targetPlaceable = null;
-    this.isForaging = false;
     this.isFeeding = false;
     this.feedingAt = null;
-    this.lastFedTime = 0;
     
     // Reproduction
-    this.baseSecurityTime = s.securityTimeBase || config.securityTimeToLay;
-    this.securityTimeRequired = this.baseSecurityTime + 
-      ((random() * (s.securityTimeVariation || config.securityTimeVariation)) | 0);
     this.securityTime = 0;
+    this.securityTimeRequired = (s.securityTimeBase || config.securityTimeToLay) + 
+      random(s.securityTimeVariation || config.securityTimeVariation);
     this.canLayEgg = true;
     this.eggCooldown = 0;
     this.eggCooldownTime = s.eggCooldownTime;
     this.securityBonus = 1;
     this.eggSpeedBonus = 1;
     
-    // Shelter & habitat
-    this.inShelter = false;
-    this.preferredElevation = s.preferredElevation;
-    this.temperatureTolerance = s.temperatureTolerance;
-    
     // Migration
     this.isMigrating = false;
     this.migrationTarget = null;
-    this.lastMigrationCheck = 0;
     this.migrationCooldown = 0;
     this.localFoodScore = 1.0;
     this.foodCheckTimer = 0;
+    this.preferredElevation = s.preferredElevation;
     
-    // Single reusable vector for force calculations
+    // Reusable vector
     this._tempForce = createVector();
-    
-    // Cached size calculations (lazy-loaded)
     this._sizeCache = null;
   }
 
   // ============================================
-  // INITIALIZATION HELPERS
+  // INIT HELPERS
   // ============================================
 
   getDefaultSpecies() {
-    if (typeof REGISTRY !== 'undefined') {
-      return REGISTRY.getSpecies('upland_moa') || { config: {} };
-    }
-    return { config: {} };
+    return (typeof REGISTRY !== 'undefined' && REGISTRY.getSpecies('upland_moa')) || { config: {} };
   }
 
   randomizeValue(val) {
-    if (!val) return null;
-    if (typeof val === 'object' && 'min' in val && 'max' in val) {
-      return random(val.min, val.max);
-    }
-    return val;
+    if (!val) return random(8, 11);
+    return (typeof val === 'object') ? random(val.min, val.max) : val;
   }
 
-  generateBodyColor(colorConfig) {
-    if (!colorConfig) {
-      return color(random(90, 110), random(60, 75), random(28, 40));
-    }
-    
-    const r = Array.isArray(colorConfig.r) ? random(colorConfig.r[0], colorConfig.r[1]) : colorConfig.r;
-    const g = Array.isArray(colorConfig.g) ? random(colorConfig.g[0], colorConfig.g[1]) : colorConfig.g;
-    const b = Array.isArray(colorConfig.b) ? random(colorConfig.b[0], colorConfig.b[1]) : colorConfig.b;
-    
-    return color(r, g, b);
+  generateBodyColor(cfg) {
+    if (!cfg) return color(random(90, 110), random(60, 75), random(28, 40));
+    const ch = (v) => Array.isArray(v) ? random(v[0], v[1]) : v;
+    return color(ch(cfg.r), ch(cfg.g), ch(cfg.b));
   }
 
   _initColors() {
@@ -186,394 +141,260 @@ class Moa extends Boid {
     const r = red(bc), g = green(bc), b = blue(bc);
     
     this._colors = {
-      // Base colors
       body: bc,
       neck: color(r - 5, g - 3, b - 3),
-      
-      // State tint targets
       panic: color(lerp(r, 150, 0.5), lerp(g, 80, 0.5), lerp(b, 60, 0.5)),
       starving: color(lerp(r, 70, 0.4), lerp(g, 50, 0.4), lerp(b, 35, 0.4)),
       feeding: color(lerp(r, 80, 0.2), lerp(g, 100, 0.2), lerp(b, 60, 0.2)),
-      migrating: color(lerp(r, 80, 0.15), lerp(g, 80, 0.15), lerp(b, 110, 0.15)),
-      
-      // Static colors
       leg: color(60, 42, 25),
       beak: color(70, 55, 35),
       beakStroke: color(50, 40, 25),
-      beakNostril: color(40, 30, 20),
-      eyeWhite: color(240, 235, 220),
-      eyePupil: color(25, 20, 15),
-      eyeHighlight: color(255, 255, 255, 180),
+      eye: color(240, 235, 220),
+      pupil: color(25, 20, 15),
       shadow: color(0, 0, 0, 25)
     };
   }
 
-  // Lazy-loaded size cache
   get sc() {
-    if (!this._sizeCache || this._sizeCache._size !== this.size) {
-      this._sizeCache = this._computeSizeCache();
+    if (!this._sizeCache || this._sizeCache._s !== this.size) {
+      const s = this.size;
+      this._sizeCache = {
+        _s: s,
+        bodyW: s * 0.85, bodyH: s * 0.65,
+        legLen: s * 0.55, legAttach: -s * 0.1,
+        legY: [s * 0.18, s * 0.28, s * 0.35],
+        tailX: [-s * 0.35, -s * 0.55, -s * 0.48], tailY: s * 0.12,
+        neckX: [s * 0.2, s * 0.52], neckY: [s * 0.12, s * 0.07],
+        headX: s * 0.6, headW: s * 0.28, headH: s * 0.24,
+        eyeX: s * 0.57, eyeY: s * 0.085, eyeSize: s * 0.08,
+        beakX: [s * 0.68, s * 0.88, s * 0.9, s * 0.7],
+        beakY: s * 0.04
+      };
     }
     return this._sizeCache;
   }
 
-  _computeSizeCache() {
-    const s = this.size;
-    return {
-      _size: s,
-      // Body
-      bodyW: s * 0.85, bodyH: s * 0.65,
-      shadowW: s, shadowH: s * 0.65,
-      // Legs
-      legLen: s * 0.55, legAttachX: -s * 0.1,
-      legY1: s * 0.18, legY2: s * 0.28, legY3: s * 0.35,
-      // Tail
-      tailX1: -s * 0.35, tailX2: -s * 0.55, tailX3: -s * 0.48, tailY: s * 0.12,
-      // Neck
-      neckX1: s * 0.2, neckX2: s * 0.52, neckY1: s * 0.12, neckY2: s * 0.07,
-      // Head
-      headX: s * 0.6, headW: s * 0.28, headH: s * 0.24,
-      headHighX: s * 0.58, headHighW: s * 0.15, headHighH: s * 0.1,
-      // Eyes
-      eyeX: s * 0.57, eyeOffsetY: s * 0.085, eyeSize: s * 0.08,
-      // Beak
-      beakX1: s * 0.68, beakX2: s * 0.88, beakX3: s * 0.9, beakX4: s * 0.7, beakX5: s * 0.74,
-      beakY1: s * 0.04, beakY2: s * 0.01, beakNostrilY: s * 0.015,
-      // Crest
-      crestX: [s * 0.5, s * 0.55, s * 0.62, s * 0.68, s * 0.72, s * 0.65],
-      crestY: [-s * 0.12, -s * 0.22, -s * 0.18, -s * 0.25, -s * 0.15, -s * 0.1],
-      // Status bars
-      barYOffset: -s * 0.8 - 4
-    };
-  }
-
   _cacheSizeMultipliers() {
-    this._sizeCache = this._computeSizeCache();
+    this._sizeCache = null;
+    this.sc; // Force recompute
   }
 
   // ============================================
-  // SEASONAL MODIFIERS
+  // MAIN BEHAVIOR
   // ============================================
 
-  getSeasonalModifier(season, stat) {
-    const mods = this.speciesConfig.seasonalModifiers;
-    if (!mods || !mods[season]) return 1.0;
-    return mods[season][stat] || 1.0;
-  }
-
-  calculateSpeed(isFleeing, isStarving, seasonManager) {
-    let speed = isFleeing ? this.fleeSpeed : this.baseSpeed;
-    if (isStarving) speed *= this.starvingSpeedMultiplier;
-    if (seasonManager) speed *= this.getSeasonalModifier(seasonManager.currentKey, 'speed');
-    return speed;
-  }
-
-  // ============================================
-  // STATE MACHINE
-  // ============================================
-
-  updateState(nearbyEagles, nearbyPlaceables, seasonManager) {
-    // Check for threats first (highest priority)
-    if (this.detectThreats(nearbyEagles)) {
-      return MOA_STATE.FLEEING;
+  behave(simulation, mauri, seasonManager) {
+    // Hunger
+    const hungerMod = this.speciesConfig.seasonalModifiers?.[seasonManager.currentKey]?.hungerRate || 1;
+    this.hungerRate = this.baseHungerRate * seasonManager.getHungerModifier() * hungerMod;
+    this.hunger = Math.min(this.hunger + this.hungerRate, this.maxHunger);
+    
+    // Egg cooldown
+    if (this.eggCooldown > 0 && --this.eggCooldown <= 0) this.canLayEgg = true;
+    
+    // Food assessment (throttled)
+    if (++this.foodCheckTimer >= 60) {
+      this.foodCheckTimer = 0;
+      const plants = simulation.getNearbyPlants(this.pos.x, this.pos.y, 60);
+      let edible = 0;
+      for (let i = 0; i < plants.length && edible < 8; i++) {
+        if (plants[i].alive && !plants[i].dormant && plants[i].growth > 0.5) edible++;
+      }
+      this.localFoodScore = edible * 0.125;
     }
     
-    // Check migration
+    // Get nearby entities
+    const px = this.pos.x, py = this.pos.y;
+    const placeables = simulation.getNearbyPlaceables(px, py, 80);
+    const eagles = simulation.getNearbyEagles(px, py, this.fleeRadius * 1.5);
+    const moas = simulation.getNearbyMoas(px, py, 100);
+    
+    // Placeable effects
+    this.applyPlaceableEffects(placeables);
+    
+    // Update elevation preference
+    const sp = seasonManager.getPreferredElevation();
+    const pp = this.speciesConfig.preferredElevation || sp;
+    this.preferredElevation = { min: (pp.min + sp.min) * 0.5, max: (pp.max + sp.max) * 0.5 };
+    
+    // Determine and execute state
+    this.currentState = this.determineState(eagles, placeables, seasonManager);
+    this.executeState(simulation, mauri, seasonManager, eagles, moas, placeables);
+    
+    // Common behaviors
+    this.applySeparation(moas);
+    const avoid = this.avoidUnwalkable();
+    avoid.mult(2);
+    this.applyForce(avoid);
+    this.edges();
+    
+    // Security time
+    this.updateSecurity(eagles);
+    
+    // Try laying egg
+    if (this.currentState !== MOA_STATE.FLEEING) {
+      this.tryLayEgg(simulation, mauri, placeables);
+    }
+    
+    // Death check
+    if (this.hunger >= this.maxHunger) this.alive = false;
+  }
+
+  determineState(eagles, placeables, seasonManager) {
+    // Flee from threats
+    for (let i = 0; i < eagles.length; i++) {
+      const e = eagles[i];
+      if (this.camouflage > 0 && random() < this.camouflage) continue;
+      if (this.inShelter && !e.isHunting()) continue;
+      
+      const dx = e.pos.x - this.pos.x, dy = e.pos.y - this.pos.y;
+      if (e.isHunting() && dx * dx + dy * dy < this.fleeRadiusSq) {
+        return MOA_STATE.FLEEING;
+      }
+    }
+    
+    // Migration
     if (this.isMigrating || this.shouldMigrate(seasonManager)) {
       return MOA_STATE.MIGRATING;
     }
     
-    // Check if being fed by placeable
-    if (this.isFeeding) {
-      return MOA_STATE.FEEDING;
-    }
+    // Feeding at placeable
+    if (this.isFeeding) return MOA_STATE.FEEDING;
     
-    // Check hunger
-    if (this.hunger > this.hungerThreshold) {
-      return MOA_STATE.FORAGING;
-    }
+    // Hungry or attracted
+    if (this.hunger > this.hungerThreshold) return MOA_STATE.FORAGING;
     
-    // Check placeable attractions
-    if (this.hasPlaceableAttraction(nearbyPlaceables)) {
-      return MOA_STATE.FORAGING;
+    for (let i = 0; i < placeables.length; i++) {
+      if (placeables[i].alive && placeables[i].getAttractionStrength(this) > 0) {
+        return MOA_STATE.FORAGING;
+      }
     }
     
     return MOA_STATE.IDLE;
   }
 
-  detectThreats(nearbyEagles) {
-    const effectiveFleeRadiusSq = this._effectiveFleeRadiusSq;
-    const px = this.pos.x, py = this.pos.y;
+  executeState(simulation, mauri, seasonManager, eagles, moas, placeables) {
+    this.panicLevel = 0;
+    const isStarving = this.hunger > this.criticalHunger;
     
-    for (let i = 0, len = nearbyEagles.length; i < len; i++) {
-      const eagle = nearbyEagles[i];
-      
-      // Check camouflage
-      if (this.camouflage > 0 && random() < this.camouflage) continue;
-      
-      // Skip if in shelter and eagle not actively hunting
-      if (this.inShelter && !eagle.isHunting()) continue;
-      
-      const dx = eagle.pos.x - px;
-      const dy = eagle.pos.y - py;
-      const dSq = dx * dx + dy * dy;
-      
-      if (eagle.isHunting() && dSq < effectiveFleeRadiusSq) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  hasPlaceableAttraction(nearbyPlaceables) {
-    for (let i = 0, len = nearbyPlaceables.length; i < len; i++) {
-      const p = nearbyPlaceables[i];
-      if (p.alive && p.getAttractionStrength(this) > 0) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  // ============================================
-  // MAIN BEHAVIOR UPDATE
-  // ============================================
-
-  behave(simulation, mauri, seasonManager) {
-    // Update hunger
-    this.updateHunger(seasonManager);
-    
-    // Update egg cooldown
-    if (this.eggCooldown > 0) {
-      this.eggCooldown--;
-      if (this.eggCooldown <= 0) this.canLayEgg = true;
-    }
-    
-    // Periodic food assessment
-    this.assessLocalFood(simulation, seasonManager);
-    
-    // Get nearby entities
-    const px = this.pos.x, py = this.pos.y;
-    const nearbyPlaceables = simulation.getNearbyPlaceables(px, py, 80);
-    const nearbyEagles = simulation.getNearbyEagles(px, py, this._effectiveFleeRadius * 1.5);
-    const nearbyMoas = simulation.getNearbyMoas(px, py, this.separationDist * 2);
-    
-    // Apply placeable effects (shelter, feeding zones, etc.)
-    this.checkPlaceableEffects(nearbyPlaceables);
-    
-    // Update preferred elevation based on season
-    this.updatePreferredElevation(seasonManager);
-    
-    // Determine current state
-    this.currentState = this.updateState(nearbyEagles, nearbyPlaceables, seasonManager);
-    
-    // Handle state-specific behavior
     switch (this.currentState) {
       case MOA_STATE.FLEEING:
-        this.handleFleeing(nearbyEagles, nearbyMoas);
-        break;
-      case MOA_STATE.MIGRATING:
-        this.handleMigrating(simulation, mauri, seasonManager);
-        break;
-      case MOA_STATE.FORAGING:
-        this.handleForaging(simulation, mauri, nearbyPlaceables);
-        break;
-      case MOA_STATE.FEEDING:
-        this.handleFeeding();
-        break;
-      case MOA_STATE.IDLE:
-        this.handleIdle(nearbyPlaceables, simulation, mauri);
-        break;
-    }
-    
-    // Common behaviors
-    this.applySeparation(nearbyMoas);
-    this.applyTerrainAvoidance();
-    this.edges();
-    
-    // Update security time for egg laying
-    this.updateSecurityTime(nearbyEagles);
-    
-    // Try to lay egg if conditions are met
-    if (this.currentState !== MOA_STATE.FLEEING) {
-      this.tryLayEgg(simulation, mauri, nearbyPlaceables);
-    }
-    
-    // Check death
-    if (this.hunger >= this.maxHunger) {
-      this.alive = false;
-    }
-  }
-
-  updateHunger(seasonManager) {
-    const seasonKey = seasonManager.currentKey;
-    const hungerMod = this.getSeasonalModifier(seasonKey, 'hungerRate');
-    this.hungerRate = this.baseHungerRate * seasonManager.getHungerModifier() * hungerMod;
-    this.hunger += this.hungerRate;
-    if (this.hunger > this.maxHunger) this.hunger = this.maxHunger;
-  }
-
-  updatePreferredElevation(seasonManager) {
-    const seasonalPref = seasonManager.getPreferredElevation();
-    const speciesPref = this.speciesConfig.preferredElevation || seasonalPref;
-    this.preferredElevation = {
-      min: (speciesPref.min + seasonalPref.min) * 0.5,
-      max: (speciesPref.max + seasonalPref.max) * 0.5
-    };
-  }
-
-  updateSecurityTime(nearbyEagles) {
-    const safeDistSq = this._effectiveFleeRadiusSq * 0.64;
-    let nearestThreatDistSq = Infinity;
-    const px = this.pos.x, py = this.pos.y;
-    
-    for (let i = 0, len = nearbyEagles.length; i < len; i++) {
-      const eagle = nearbyEagles[i];
-      const dx = eagle.pos.x - px;
-      const dy = eagle.pos.y - py;
-      const dSq = dx * dx + dy * dy;
-      if (dSq < nearestThreatDistSq) nearestThreatDistSq = dSq;
-    }
-    
-    if (nearestThreatDistSq > safeDistSq) {
-      this.securityTime += this.securityBonus;
-    } else {
-      this.securityTime = 0;
-    }
-  }
-
-  // ============================================
-  // STATE HANDLERS
-  // ============================================
-
-  handleFleeing(nearbyEagles, nearbyMoas) {
-    this.isMigrating = false;
-    this.isForaging = false;
-    this.targetPlant = null;
-    this.targetPlaceable = null;
-    this.panicLevel = 0;
-    
-    const effectiveFleeRadiusSq = this._effectiveFleeRadiusSq;
-    const effectiveFleeRadius = this._effectiveFleeRadius;
-    const px = this.pos.x, py = this.pos.y;
-    
-    for (let i = 0, len = nearbyEagles.length; i < len; i++) {
-      const eagle = nearbyEagles[i];
-      
-      if (this.camouflage > 0 && random() < this.camouflage) continue;
-      if (this.inShelter && !eagle.isHunting()) continue;
-      
-      const dx = eagle.pos.x - px;
-      const dy = eagle.pos.y - py;
-      const dSq = dx * dx + dy * dy;
-      
-      if (eagle.isHunting() && dSq < effectiveFleeRadiusSq) {
-        const fleeForce = this.fleeFrom(eagle.pos.x, eagle.pos.y, effectiveFleeRadiusSq);
-        fleeForce.mult(2.5 * this.flightiness);
-        this.applyForce(fleeForce);
+        this.isMigrating = false;
+        this.targetPlant = null;
+        this.maxSpeed = this.fleeSpeed * (isStarving ? 0.6 : 1);
         
-        const d = Math.sqrt(dSq);
-        const panic = 1 - d / effectiveFleeRadius;
-        if (panic > this.panicLevel) this.panicLevel = panic;
-      }
+        for (let i = 0; i < eagles.length; i++) {
+          const e = eagles[i];
+          if (!e.isHunting()) continue;
+          if (this.inShelter && !e.isHunting()) continue;
+          
+          const dx = e.pos.x - this.pos.x, dy = e.pos.y - this.pos.y;
+          const dSq = dx * dx + dy * dy;
+          
+          if (dSq < this.fleeRadiusSq) {
+            const flee = this.fleeFrom(e.pos.x, e.pos.y);
+            flee.mult(2.5 * this.flightiness);
+            this.applyForce(flee);
+            
+            const d = Math.sqrt(dSq);
+            this.panicLevel = Math.max(this.panicLevel, 1 - d / this.fleeRadius);
+          }
+        }
+        break;
+        
+      case MOA_STATE.MIGRATING:
+        this.maxSpeed = this.baseSpeed * (isStarving ? 0.6 : 1);
+        this.executeMigration(seasonManager);
+        if (this.hunger > 60) this.forage(simulation, mauri);
+        break;
+        
+      case MOA_STATE.FORAGING:
+        this.maxSpeed = this.baseSpeed * (isStarving ? 0.6 : 1);
+        if (!this.seekAttractions(placeables)) {
+          this.forage(simulation, mauri);
+        }
+        break;
+        
+      case MOA_STATE.FEEDING:
+        this.maxSpeed = this.baseSpeed * 0.7;
+        if (this.feedingAt) {
+          const dx = this.feedingAt.pos.x - this.pos.x;
+          const dy = this.feedingAt.pos.y - this.pos.y;
+          if (dx * dx + dy * dy > this.feedingAt.radius * this.feedingAt.radius * 0.25) {
+            this.applyForce(this.seek(this.feedingAt.pos, 0.3));
+          } else {
+            const w = this.wander();
+            w.mult(0.2);
+            this.applyForce(w);
+          }
+        }
+        break;
+        
+      default: // IDLE
+        this.maxSpeed = this.baseSpeed;
+        this.targetPlant = null;
+        if (!this.seekAttractions(placeables)) {
+          const w = this.wander();
+          w.mult(0.4);
+          this.applyForce(w);
+          this.applyForce(this.stayInHomeRange());
+        }
     }
-    
-    // Update speed for fleeing
-    this.maxSpeed = this.calculateSpeed(true, this.hunger > this.criticalHunger, null);
-    
-    // Reduced separation while fleeing
-    const sep = this.calculateSeparation(nearbyMoas);
-    sep.mult(0.5 * this.flockTendency);
-    this.applyForce(sep);
-  }
-
-  handleMigrating(simulation, mauri, seasonManager) {
-    this.migrateSeasonally(seasonManager);
-    
-    // Opportunistic foraging during migration
-    if (this.hunger > 60) {
-      this.forage(simulation, mauri);
-    }
-    
-    this.maxSpeed = this.calculateSpeed(false, this.hunger > this.criticalHunger, seasonManager);
-  }
-
-  handleForaging(simulation, mauri, nearbyPlaceables) {
-    // First check placeable attractions
-    const attracted = this.seekPlaceableAttractions(nearbyPlaceables);
-    
-    if (!attracted) {
-      this.forage(simulation, mauri);
-    }
-    
-    this.maxSpeed = this.calculateSpeed(false, this.hunger > this.criticalHunger, null);
-  }
-
-  handleFeeding() {
-    // Slow down while feeding
-    if (this.feedingAt) {
-      const dx = this.feedingAt.pos.x - this.pos.x;
-      const dy = this.feedingAt.pos.y - this.pos.y;
-      const dSq = dx * dx + dy * dy;
-      const halfRadiusSq = this.feedingAt.radius * this.feedingAt.radius * 0.25;
-      
-      if (dSq > halfRadiusSq) {
-        const seekForce = this.seek(this.feedingAt.pos, 0.3);
-        this.applyForce(seekForce);
-      } else {
-        const wander = this.wander();
-        wander.mult(0.2);
-        this.applyForce(wander);
-      }
-    }
-    
-    this.maxSpeed = this.baseSpeed * 0.7;
-  }
-
-  handleIdle(nearbyPlaceables, simulation, mauri) {
-    this.isForaging = false;
-    this.targetPlant = null;
-    this.targetPlaceable = null;
-    
-    // Check for placeable attractions even when not hungry
-    const attracted = this.seekPlaceableAttractions(nearbyPlaceables);
-    
-    if (!attracted) {
-      const wander = this.wander();
-      wander.mult(0.4);
-      this.applyForce(wander);
-      
-      const homeForce = this.stayInHomeRange();
-      this.applyForce(homeForce);
-    }
-    
-    this.maxSpeed = this.baseSpeed;
-    this.homeRangeStrength = 0.12;
   }
 
   // ============================================
-  // MOVEMENT HELPERS
+  // MOVEMENT
   // ============================================
 
-  calculateSeparation(nearbyMoas) {
+  fleeFrom(tx, ty) {
+    const force = this._tempForce;
+    const dx = this.pos.x - tx, dy = this.pos.y - ty;
+    const dSq = dx * dx + dy * dy;
+    
+    if (dSq < this.fleeRadiusSq && dSq > 0.0001) {
+      const d = Math.sqrt(dSq);
+      const urgency = 1 - d / this.fleeRadius;
+      force.set(dx, dy);
+      force.setMag(this.maxSpeed * (1 + urgency));
+      force.sub(this.vel);
+      force.limit(this.maxForce * 2);
+    } else {
+      force.set(0, 0);
+    }
+    return force.copy();
+  }
+
+  stayInHomeRange() {
+    const dx = this.homeRange.x - this.pos.x;
+    const dy = this.homeRange.y - this.pos.y;
+    const dSq = dx * dx + dy * dy;
+    
+    if (dSq > this.homeRangeRadiusSq) {
+      const f = this._tempForce;
+      f.set(dx, dy);
+      f.setMag(this.maxForce * 0.12);
+      f.mult(1 + (Math.sqrt(dSq) - this.homeRangeRadius) * 0.02);
+      return f.copy();
+    }
+    return this._tempForce.set(0, 0);
+  }
+
+  applySeparation(moas) {
     const force = this._tempForce;
     force.set(0, 0);
-    
     let count = 0;
-    const sepDistSq = this.separationDistSq;
-    const px = this.pos.x, py = this.pos.y;
     
-    for (let i = 0, len = nearbyMoas.length; i < len; i++) {
-      const other = nearbyMoas[i];
+    for (let i = 0; i < moas.length; i++) {
+      const other = moas[i];
       if (!other.alive || other === this) continue;
       
-      const dx = px - other.pos.x;
-      const dy = py - other.pos.y;
-      const distSq = dx * dx + dy * dy;
+      const dx = this.pos.x - other.pos.x;
+      const dy = this.pos.y - other.pos.y;
+      const dSq = dx * dx + dy * dy;
       
-      if (distSq < sepDistSq && distSq > 0.0001) {
-        const invDistSq = 1 / distSq;
-        force.x += dx * invDistSq;
-        force.y += dy * invDistSq;
+      if (dSq < this.separationDistSq && dSq > 0.0001) {
+        force.x += dx / dSq;
+        force.y += dy / dSq;
         count++;
       }
     }
@@ -583,150 +404,85 @@ class Moa extends Boid {
       force.setMag(this.maxSpeed);
       force.sub(this.vel);
       force.limit(this.maxForce);
-    }
-    
-    return force.copy();
-  }
-
-  applySeparation(nearbyMoas) {
-    const sep = this.calculateSeparation(nearbyMoas);
-    const mult = this.currentState === MOA_STATE.FLEEING 
-      ? 0.5 * this.flockTendency 
-      : 0.8 * (2 - this.flockTendency);
-    sep.mult(mult);
-    this.applyForce(sep);
-  }
-
-  applyTerrainAvoidance() {
-    const avoid = this.avoidUnwalkable();
-    avoid.mult(2);
-    this.applyForce(avoid);
-  }
-
-  fleeFrom(targetX, targetY, radiusSq) {
-    const force = this._tempForce;
-    const dx = this.pos.x - targetX;
-    const dy = this.pos.y - targetY;
-    const distSq = dx * dx + dy * dy;
-    
-    if (distSq < radiusSq && distSq > 0.0001) {
-      const d = Math.sqrt(distSq);
-      const radius = Math.sqrt(radiusSq);
-      const urgency = 1 - (d / radius);
-      const speed = this.maxSpeed * (1 + urgency);
       
-      force.set(dx, dy);
-      force.setMag(speed);
-      force.sub(this.vel);
-      force.limit(this.maxForce * 2);
-    } else {
-      force.set(0, 0);
+      const mult = this.currentState === MOA_STATE.FLEEING 
+        ? 0.5 * this.flockTendency 
+        : 0.8 * (2 - this.flockTendency);
+      force.mult(mult);
+      this.applyForce(force);
     }
-    
-    return force.copy();
-  }
-
-  stayInHomeRange() {
-    const force = this._tempForce;
-    const dx = this.homeRange.x - this.pos.x;
-    const dy = this.homeRange.y - this.pos.y;
-    const distSq = dx * dx + dy * dy;
-    
-    if (distSq > this.homeRangeRadiusSq) {
-      const distFromHome = Math.sqrt(distSq);
-      force.set(dx, dy);
-      force.setMag(this.maxForce * this.homeRangeStrength);
-      force.mult(1 + (distFromHome - this.homeRangeRadius) * 0.02);
-      return force.copy();
-    }
-    
-    force.set(0, 0);
-    return force;
   }
 
   // ============================================
-  // FORAGING
+  // FORAGING & PLACEABLES
   // ============================================
 
-  assessLocalFood(simulation, seasonManager) {
-    this.foodCheckTimer++;
-    if (this.foodCheckTimer < 60) return;
-    this.foodCheckTimer = 0;
+  applyPlaceableEffects(placeables) {
+    this.inShelter = false;
+    this.securityBonus = 1;
+    this.eggSpeedBonus = 1;
+    this.isFeeding = false;
+    this.feedingAt = null;
     
-    const nearbyPlants = simulation.getNearbyPlants(this.pos.x, this.pos.y, 60);
-    let ediblePlants = 0;
+    let hungerMod = 1;
+    let feedTotal = 0;
     
-    for (let i = 0, len = nearbyPlants.length; i < len; i++) {
-      const plant = nearbyPlants[i];
-      if (plant.alive && !plant.dormant && plant.growth > 0.5) {
-        ediblePlants++;
-        if (ediblePlants >= 8) break;
+    for (let i = 0; i < placeables.length; i++) {
+      const p = placeables[i];
+      if (!p.alive || !p.isInRange(this.pos)) continue;
+      
+      const d = p.def;
+      if (d.blocksEagleVision) this.inShelter = true;
+      if (d.securityBonus) this.securityBonus = Math.max(this.securityBonus, d.securityBonus * p.seasonalMultiplier);
+      if (d.eggSpeedBonus) this.eggSpeedBonus = Math.max(this.eggSpeedBonus, d.eggSpeedBonus * p.seasonalMultiplier);
+      if (d.hungerSlowdown) hungerMod = Math.min(hungerMod, d.hungerSlowdown);
+      if (d.feedingRate) {
+        feedTotal += p.feedMoa(this);
+        this.isFeeding = true;
+        this.feedingAt = p;
       }
     }
     
-    this.localFoodScore = Math.min(ediblePlants * 0.125, 1);
+    this.hungerRate = this.baseHungerRate * hungerMod;
+    if (feedTotal > 0) this.hunger = Math.max(0, this.hunger - feedTotal);
   }
 
-  findNearestPlant(simulation) {
-    const searchRadius = 100 * this.foragingBonus;
-    const nearbyPlants = simulation.getNearbyPlants(this.pos.x, this.pos.y, searchRadius);
+  seekAttractions(placeables) {
+    let best = null, bestScore = 10;
     
-    let nearest = null;
-    let nearestScore = Infinity;
-    const px = this.pos.x, py = this.pos.y;
-    const homeX = this.homeRange.x, homeY = this.homeRange.y;
-    const homeRadiusSq = this.homeRangeRadiusSq;
-    const invForaging = 1 / this.foragingBonus;
-    
-    for (let i = 0, len = nearbyPlants.length; i < len; i++) {
-      const plant = nearbyPlants[i];
-      if (!plant.alive || plant.growth < 0.5) continue;
-      if (plant.seasonalModifier < 0.3 && this.hunger < 70) continue;
+    for (let i = 0; i < placeables.length; i++) {
+      const p = placeables[i];
+      if (!p.alive) continue;
       
-      const dx = plant.pos.x - px;
-      const dy = plant.pos.y - py;
-      const d = Math.sqrt(dx * dx + dy * dy);
+      const strength = p.getAttractionStrength(this);
+      if (strength <= 0) continue;
       
-      let score = d * invForaging / plant.seasonalModifier / (plant.nutrition * 0.0333);
+      const dx = p.pos.x - this.pos.x, dy = p.pos.y - this.pos.y;
+      let score = strength * 50 - Math.sqrt(dx * dx + dy * dy) * 0.3;
       
-      const homeDx = homeX - plant.pos.x;
-      const homeDy = homeY - plant.pos.y;
-      if (homeDx * homeDx + homeDy * homeDy < homeRadiusSq) {
-        score *= 0.7;
+      if (this.hunger > 30 && p.def.feedingRate) {
+        score += this.hunger * 0.3 * p.seasonalMultiplier;
       }
+      score *= p.seasonalMultiplier;
       
-      if (plant.isSpawned) score *= 0.6;
-      
-      if (score < nearestScore) {
-        nearestScore = score;
-        nearest = plant;
+      if (score > bestScore) {
+        bestScore = score;
+        best = p;
       }
     }
     
-    return nearest;
+    if (best) {
+      this.applyForce(this.seek(best.pos, 0.8));
+      if (best.isInRange(this.pos)) this.vel.mult(0.7);
+      return true;
+    }
+    return false;
   }
 
   forage(simulation, mauri) {
-    this.isForaging = true;
-    
-    // Check placeable food sources first
-    const nearbyPlaceables = simulation.getNearbyPlaceables(this.pos.x, this.pos.y, 30);
-    
-    for (let i = 0, len = nearbyPlaceables.length; i < len; i++) {
-      const p = nearbyPlaceables[i];
-      if (!p.alive || !p.def.nutrition || p.foodRemaining <= 0) continue;
-      if (p.isInRange(this.pos)) {
-        const nutrition = p.consumeFood ? p.consumeFood(15) : 0;
-        this.hunger = Math.max(0, this.hunger - nutrition);
-        mauri.earnFromEating(mauri.onMoaEat * 0.5, this.pos.x, this.pos.y);
-        this.vel.mult(0.3);
-        return;
-      }
-    }
-    
-    // Find and pursue plants
+    // Find target if needed
     if (!this.targetPlant || !this.targetPlant.alive) {
-      this.targetPlant = this.findNearestPlant(simulation);
+      this.targetPlant = this.findPlant(simulation);
     }
     
     if (this.targetPlant) {
@@ -735,119 +491,43 @@ class Moa extends Boid {
       const dSq = dx * dx + dy * dy;
       
       if (dSq < this.eatRadiusSq) {
-        const nutrition = this.targetPlant.consume();
-        this.hunger = Math.max(0, this.hunger - nutrition);
+        this.hunger = Math.max(0, this.hunger - this.targetPlant.consume());
         mauri.earnFromEating(mauri.onMoaEat, this.pos.x, this.pos.y);
         this.targetPlant = null;
         this.vel.mult(0.3);
-        this.lastFedTime = frameCount;
       } else {
         const urgency = map(this.hunger, this.hungerThreshold, this.maxHunger, 0.5, 0.9);
-        const seekForce = this.seek(this.targetPlant.pos, urgency);
-        this.applyForce(seekForce);
+        this.applyForce(this.seek(this.targetPlant.pos, urgency));
       }
     } else {
-      const wander = this.wander();
-      wander.mult(0.6);
-      this.applyForce(wander);
+      const w = this.wander();
+      w.mult(0.6);
+      this.applyForce(w);
     }
   }
 
-  // ============================================
-  // PLACEABLES
-  // ============================================
-
-  checkPlaceableEffects(nearbyPlaceables) {
-    this.inShelter = false;
-    this.securityBonus = 1;
-    this.eggSpeedBonus = 1;
-    this.isFeeding = false;
-    this.feedingAt = null;
+  findPlant(simulation) {
+    const plants = simulation.getNearbyPlants(this.pos.x, this.pos.y, 100 * this.foragingBonus);
+    let best = null, bestScore = Infinity;
     
-    let hungerMod = 1;
-    let feedingRateTotal = 0;
-    
-    for (let i = 0, len = nearbyPlaceables.length; i < len; i++) {
-      const p = nearbyPlaceables[i];
-      if (!p.alive || !p.isInRange(this.pos)) continue;
+    for (let i = 0; i < plants.length; i++) {
+      const p = plants[i];
+      if (!p.alive || p.growth < 0.5) continue;
+      if (p.seasonalModifier < 0.3 && this.hunger < 70) continue;
       
-      const def = p.def;
+      const dx = p.pos.x - this.pos.x, dy = p.pos.y - this.pos.y;
+      let score = Math.sqrt(dx * dx + dy * dy) / this.foragingBonus / p.seasonalModifier / (p.nutrition * 0.033);
       
-      if (def.blocksEagleVision) this.inShelter = true;
+      const hx = this.homeRange.x - p.pos.x, hy = this.homeRange.y - p.pos.y;
+      if (hx * hx + hy * hy < this.homeRangeRadiusSq) score *= 0.7;
+      if (p.isSpawned) score *= 0.6;
       
-      if (def.securityBonus) {
-        const bonus = def.securityBonus * p.seasonalMultiplier;
-        if (bonus > this.securityBonus) this.securityBonus = bonus;
-      }
-      
-      if (def.eggSpeedBonus) {
-        const bonus = def.eggSpeedBonus * p.seasonalMultiplier;
-        if (bonus > this.eggSpeedBonus) this.eggSpeedBonus = bonus;
-      }
-      
-      if (def.hungerSlowdown && def.hungerSlowdown < hungerMod) {
-        hungerMod = def.hungerSlowdown;
-      }
-      
-      if (def.feedingRate) {
-        feedingRateTotal += p.feedMoa(this);
-        this.isFeeding = true;
-        this.feedingAt = p;
-      }
-    }
-    
-    this.hungerRate = this.baseHungerRate * hungerMod;
-    
-    if (feedingRateTotal > 0) {
-      this.hunger = Math.max(0, this.hunger - feedingRateTotal);
-      this.lastFedTime = frameCount;
-    }
-  }
-
-  seekPlaceableAttractions(nearbyPlaceables) {
-    let bestTarget = null;
-    let bestScore = -Infinity;
-    const px = this.pos.x, py = this.pos.y;
-    const hungerFactor = this.hunger * 0.01;
-    
-    for (let i = 0, len = nearbyPlaceables.length; i < len; i++) {
-      const p = nearbyPlaceables[i];
-      if (!p.alive) continue;
-      
-      const attractionStrength = p.getAttractionStrength(this);
-      if (attractionStrength <= 0) continue;
-      
-      const dx = p.pos.x - px;
-      const dy = p.pos.y - py;
-      const d = Math.sqrt(dx * dx + dy * dy);
-      
-      let score = attractionStrength * 50 - d * 0.3;
-      
-      if (this.hunger > 30 && p.def.feedingRate) {
-        score += hungerFactor * 30 * p.seasonalMultiplier;
-      }
-      
-      score *= p.seasonalMultiplier;
-      
-      if (score > bestScore) {
+      if (score < bestScore) {
         bestScore = score;
-        bestTarget = p;
+        best = p;
       }
     }
-    
-    if (bestTarget && bestScore > 10) {
-      const seekForce = this.seek(bestTarget.pos, 0.8);
-      this.applyForce(seekForce);
-      this.targetPlaceable = bestTarget;
-      
-      if (bestTarget.isInRange(this.pos)) {
-        this.vel.mult(0.7);
-      }
-      
-      return true;
-    }
-    
-    return false;
+    return best;
   }
 
   // ============================================
@@ -855,92 +535,67 @@ class Moa extends Boid {
   // ============================================
 
   shouldMigrate(seasonManager) {
-    const currentElev = this.terrain.getElevationAt(this.pos.x, this.pos.y);
-    const pref = this.preferredElevation;
+    const elev = this.terrain.getElevationAt(this.pos.x, this.pos.y);
+    const p = this.preferredElevation;
     
-    let elevationError = 0;
-    if (currentElev < pref.min) elevationError = pref.min - currentElev;
-    else if (currentElev > pref.max) elevationError = currentElev - pref.max;
+    let err = 0;
+    if (elev < p.min) err = p.min - elev;
+    else if (elev > p.max) err = elev - p.max;
     
-    if (elevationError > 0.08) return true;
-    if (this.localFoodScore < 0.3 && this.hunger > 30) return true;
-    if (elevationError > 0.03 && seasonManager.getMigrationStrength() > 0.7) return true;
-    
-    return false;
-  }
-
-  findMigrationTarget(seasonManager) {
-    const pref = this.preferredElevation;
-    const targetElev = (pref.min + pref.max) * 0.5;
-    const currentElev = this.terrain.getElevationAt(this.pos.x, this.pos.y);
-    
-    let bestPos = null;
-    let bestScore = -Infinity;
-    
-    const px = this.pos.x, py = this.pos.y;
-    const mapW = this.terrain.mapWidth - 20;
-    const mapH = this.terrain.mapHeight - 20;
-    
-    for (let i = 0; i < 20; i++) {
-      const angle = random(Moa.TWO_PI);
-      const dist = random(50, 150);
-      let testX = constrain(px + cos(angle) * dist, 20, mapW);
-      let testY = constrain(py + sin(angle) * dist, 20, mapH);
-      
-      if (!this.terrain.isWalkable(testX, testY)) continue;
-      
-      const elev = this.terrain.getElevationAt(testX, testY);
-      const elevError = abs(elev - targetElev);
-      let score = 1 - elevError * 5;
-      
-      if (elev >= pref.min && elev <= pref.max) score += 0.5;
-      
-      if ((currentElev < targetElev && elev > currentElev) ||
-          (currentElev > targetElev && elev < currentElev)) {
-        score += 0.3;
-      }
-      
-      if (score > bestScore) {
-        bestScore = score;
-        bestPos = createVector(testX, testY);
-      }
-    }
-    
-    return bestPos;
-  }
-
-  migrateSeasonally(seasonManager) {
-    if (this.migrationCooldown > 0) this.migrationCooldown--;
-    
-    if (frameCount - this.lastMigrationCheck < 30) {
-      if (this.isMigrating && this.migrationTarget) {
-        this.executeMigration(seasonManager);
-      }
-      return;
-    }
-    this.lastMigrationCheck = frameCount;
-    
-    if (!this.isMigrating && this.migrationCooldown <= 0) {
-      if (this.shouldMigrate(seasonManager)) {
-        this.migrationTarget = this.findMigrationTarget(seasonManager);
-        if (this.migrationTarget) this.isMigrating = true;
-      }
-    }
-    
-    if (this.isMigrating) this.executeMigration(seasonManager);
+    return err > 0.08 || 
+           (this.localFoodScore < 0.3 && this.hunger > 30) ||
+           (err > 0.03 && seasonManager.getMigrationStrength() > 0.7);
   }
 
   executeMigration(seasonManager) {
-    if (!this.migrationTarget) {
-      this.isMigrating = false;
+    if (this.migrationCooldown > 0) {
+      this.migrationCooldown--;
+      if (this.migrationTarget) this.moveToMigrationTarget(seasonManager);
       return;
     }
     
+    if (!this.isMigrating && this.shouldMigrate(seasonManager)) {
+      this.migrationTarget = this.findMigrationTarget();
+      this.isMigrating = !!this.migrationTarget;
+    }
+    
+    if (this.isMigrating && this.migrationTarget) {
+      this.moveToMigrationTarget(seasonManager);
+    }
+  }
+
+  findMigrationTarget() {
+    const target = (this.preferredElevation.min + this.preferredElevation.max) * 0.5;
+    const current = this.terrain.getElevationAt(this.pos.x, this.pos.y);
+    let best = null, bestScore = -Infinity;
+    
+    for (let i = 0; i < 20; i++) {
+      const angle = random(TWO_PI);
+      const dist = random(50, 150);
+      const x = constrain(this.pos.x + cos(angle) * dist, 20, this.terrain.mapWidth - 20);
+      const y = constrain(this.pos.y + sin(angle) * dist, 20, this.terrain.mapHeight - 20);
+      
+      if (!this.terrain.isWalkable(x, y)) continue;
+      
+      const elev = this.terrain.getElevationAt(x, y);
+      let score = 1 - abs(elev - target) * 5;
+      
+      if (elev >= this.preferredElevation.min && elev <= this.preferredElevation.max) score += 0.5;
+      if ((current < target && elev > current) || (current > target && elev < current)) score += 0.3;
+      
+      if (score > bestScore) {
+        bestScore = score;
+        best = createVector(x, y);
+      }
+    }
+    return best;
+  }
+
+  moveToMigrationTarget(seasonManager) {
     const dx = this.migrationTarget.x - this.pos.x;
     const dy = this.migrationTarget.y - this.pos.y;
-    const distSq = dx * dx + dy * dy;
     
-    if (distSq < 400) {
+    if (dx * dx + dy * dy < 400) {
       this.homeRange.set(this.migrationTarget.x, this.migrationTarget.y);
       this.homeRangeRadiusSq = this.homeRangeRadius * this.homeRangeRadius;
       this.isMigrating = false;
@@ -949,43 +604,53 @@ class Moa extends Boid {
       return;
     }
     
-    const migrationStrength = seasonManager.getMigrationStrength();
-    let urgency = 0.5 + migrationStrength * 0.5;
-    
+    const strength = seasonManager.getMigrationStrength();
+    let urgency = 0.5 + strength * 0.5;
     if (this.hunger > 50 && this.localFoodScore < 0.3) urgency *= 1.5;
     
-    const seekForce = this.seek(this.migrationTarget, urgency);
-    seekForce.mult(migrationStrength);
-    this.applyForce(seekForce);
-    
-    this.homeRangeStrength = 0.02;
+    const seek = this.seek(this.migrationTarget, urgency);
+    seek.mult(strength);
+    this.applyForce(seek);
   }
 
   // ============================================
   // REPRODUCTION
   // ============================================
 
-  tryLayEgg(simulation, mauri, nearbyPlaceables) {
-    if (!this.canLayEgg) return;
-    if (this.hunger > this.config.layingHungerThreshold) return;
+  updateSecurity(eagles) {
+    const safeDist = this.fleeRadiusSq * 0.64;
+    let nearest = Infinity;
     
-    let requiredSecurity = this.securityTimeRequired;
+    for (let i = 0; i < eagles.length; i++) {
+      const dx = eagles[i].pos.x - this.pos.x;
+      const dy = eagles[i].pos.y - this.pos.y;
+      nearest = Math.min(nearest, dx * dx + dy * dy);
+    }
     
-    // Check for nest bonus
-    for (let i = 0, len = nearbyPlaceables.length; i < len; i++) {
-      const p = nearbyPlaceables[i];
+    if (nearest > safeDist) {
+      this.securityTime += this.securityBonus;
+    } else {
+      this.securityTime = 0;
+    }
+  }
+
+  tryLayEgg(simulation, mauri, placeables) {
+    if (!this.canLayEgg || this.hunger > this.config.layingHungerThreshold) return;
+    
+    let required = this.securityTimeRequired;
+    for (let i = 0; i < placeables.length; i++) {
+      const p = placeables[i];
       if (p.alive && p.type === 'nest' && p.isInRange(this.pos)) {
-        requiredSecurity *= 0.5;
+        required *= 0.5;
         break;
       }
     }
     
-    if (this.securityTime < requiredSecurity) return;
+    if (this.securityTime < required) return;
     if (simulation.getMoaPopulation() >= this.config.maxMoaPopulation) return;
     
     const egg = simulation.addEgg(this.pos.x, this.pos.y);
     egg.speedBonus = this.eggSpeedBonus;
-    
     if (this.speciesKey) egg.parentSpecies = this.speciesKey;
     
     mauri.earn(mauri.onEggLaid, this.pos.x, this.pos.y, 'egg');
@@ -995,9 +660,8 @@ class Moa extends Boid {
     this.eggCooldown = this.eggCooldownTime;
     this.hunger += 25;
     this.homeRange.set(this.pos.x, this.pos.y);
-    
-    this.securityTimeRequired = this.baseSecurityTime + 
-      ((random() * (this.speciesConfig.securityTimeVariation || this.config.securityTimeVariation)) | 0);
+    this.securityTimeRequired = (this.speciesConfig.securityTimeBase || this.config.securityTimeToLay) +
+      random(this.speciesConfig.securityTimeVariation || this.config.securityTimeVariation);
   }
 
   resistEagleAttack() {
@@ -1011,132 +675,54 @@ class Moa extends Boid {
   render() {
     if (!this.alive) return;
     
+    const sc = this.sc;
+    const bodyCol = this.getBodyColor();
+    const colors = this._colors;
+    
     push();
     translate(this.pos.x, this.pos.y);
     rotate(this.vel.heading());
     
-    this.renderShadow();
-    this.renderLegs();
-    this.renderTail();
-    this.renderBody();
-    this.renderNeck();
-    this.renderHead();
-    
-    if (CONFIG.debugMode) this.renderDebugIndicators();
-    
-    pop();
-    
-    if (CONFIG.debugMode && this.isMigrating && this.migrationTarget) {
-      this.renderMigrationLine();
-    }
-    
-    if (CONFIG.showHungerBars) this.renderStatusBars();
-  }
-
-  getBodyColor() {
-    const colors = this._colors;
-    
-    if (this.panicLevel > 0) {
-      return lerpColor(colors.body, colors.panic, this.panicLevel);
-    }
-    if (this.hunger > this.criticalHunger) return colors.starving;
-    if (this.isFeeding) return colors.feeding;
-    if (this.isMigrating) return colors.migrating;
-    return colors.body;
-  }
-
-  renderShadow() {
-    const sc = this.sc;
+    // Shadow
     noStroke();
-    fill(this._colors.shadow);
-    ellipse(1.5, 1.5, sc.shadowW, sc.shadowH);
-  }
-
-  renderLegs() {
-    const sc = this.sc;
+    fill(colors.shadow);
+    ellipse(1.5, 1.5, sc.bodyW * 1.2, sc.bodyH);
+    
+    // Legs (FIXED: alternating motion)
     const speed = this.vel.mag();
-    const walkCycle = frameCount * 0.18 + this.legPhase;
-    const legSwing = sin(walkCycle) * (0.5 + speed * 2);
+    const cycle = frameCount * 0.18 + this.legPhase;
+    const swing = sin(cycle) * (0.5 + speed * 2);
     
-    stroke(this._colors.leg);
+    stroke(colors.leg);
     strokeWeight(1.8);
+    this.renderLeg(-1, swing, sc);      // Left leg
+    this.renderLeg(1, -swing, sc);      // Right leg (opposite phase)
     
-    // Left leg
-    this.renderLeg(-1, legSwing * 2, sc);
-    // Right leg
-    this.renderLeg(1, -legSwing * 2, sc);
-  }
-
-  renderLeg(side, swing, sc) {
-    const y1 = sc.legY1 * side;
-    const y2 = sc.legY2 * side;
-    const y3 = sc.legY3 * side;
-    const legLenX = sc.legLen * 0.7;
-    const legMidX = sc.legLen * 0.3;
-    const endX = sc.legAttachX - legLenX + swing * side;
-    
-    strokeWeight(1.8);
-    line(sc.legAttachX, y1, sc.legAttachX - legMidX, y2);
-    line(sc.legAttachX - legMidX, y2, endX, y3);
-    
-    // Toes
-    strokeWeight(1.2);
-    line(endX, y3, endX - 3, y3 - 2.5 * side);
-    line(endX, y3, endX - 4, y3);
-    line(endX, y3, endX - 3, y3 + 2.5 * side);
-  }
-
-  renderTail() {
-    const sc = this.sc;
-    const bodyCol = this.getBodyColor();
-    
+    // Tail
     noStroke();
     fill(red(bodyCol) - 20, green(bodyCol) - 15, blue(bodyCol) - 10);
     beginShape();
-    vertex(sc.tailX1, 0);
-    vertex(sc.tailX2, -sc.tailY);
-    vertex(sc.tailX3, 0);
-    vertex(sc.tailX2, sc.tailY);
+    vertex(sc.tailX[0], 0);
+    vertex(sc.tailX[1], -sc.tailY);
+    vertex(sc.tailX[2], 0);
+    vertex(sc.tailX[1], sc.tailY);
     endShape(CLOSE);
-  }
-
-  renderBody() {
-    const sc = this.sc;
-    const bodyCol = this.getBodyColor();
     
-    noStroke();
+    // Body
     fill(bodyCol);
     ellipse(-2, 0, sc.bodyW, sc.bodyH);
     
-    // Feather texture highlights
-    fill(red(bodyCol) + 8, green(bodyCol) + 5, blue(bodyCol) + 3, 80);
-    ellipse(-sc.bodyW * 0.06, -sc.bodyH * 0.12, sc.bodyW * 0.35, sc.bodyH * 0.23);
-    ellipse(-sc.bodyW * 0.06, sc.bodyH * 0.12, sc.bodyW * 0.35, sc.bodyH * 0.23);
-  }
-
-  renderNeck() {
-    const sc = this.sc;
-    const bodyCol = this.getBodyColor();
+    // Neck
     const neckCol = this.panicLevel > 0 
-      ? lerpColor(this._colors.neck, this._colors.panic, this.panicLevel)
-      : this._colors.neck;
-    
-    noStroke();
+      ? lerpColor(colors.neck, colors.panic, this.panicLevel) 
+      : colors.neck;
     fill(neckCol);
     beginShape();
-    vertex(sc.neckX1, -sc.neckY1);
-    vertex(sc.neckX1, sc.neckY1);
-    vertex(sc.neckX2, sc.neckY2);
-    vertex(sc.neckX2, -sc.neckY2);
+    vertex(sc.neckX[0], -sc.neckY[0]);
+    vertex(sc.neckX[0], sc.neckY[0]);
+    vertex(sc.neckX[1], sc.neckY[1]);
+    vertex(sc.neckX[1], -sc.neckY[1]);
     endShape(CLOSE);
-  }
-
-  renderHead() {
-    const sc = this.sc;
-    const bodyCol = this.getBodyColor();
-    const colors = this._colors;
-    
-    noStroke();
     
     // Head
     fill(bodyCol);
@@ -1145,136 +731,105 @@ class Moa extends Boid {
     // Crest
     if (this.hasCrest) {
       fill(this.crestColor || color(140, 100, 60));
+      const cx = this.size;
       beginShape();
-      for (let i = 0; i < 6; i++) {
-        vertex(sc.crestX[i], sc.crestY[i]);
-      }
+      vertex(cx * 0.5, -cx * 0.12);
+      vertex(cx * 0.55, -cx * 0.22);
+      vertex(cx * 0.62, -cx * 0.18);
+      vertex(cx * 0.68, -cx * 0.25);
+      vertex(cx * 0.72, -cx * 0.15);
+      vertex(cx * 0.65, -cx * 0.1);
       endShape(CLOSE);
     }
     
-    // Head highlight
-    fill(red(bodyCol) + 10, green(bodyCol) + 8, blue(bodyCol) + 5, 100);
-    ellipse(sc.headHighX, 0, sc.headHighW, sc.headHighH);
-    
     // Eyes
-    const eyeSizePlus = sc.eyeSize + 1;
-    fill(colors.eyeWhite);
-    ellipse(sc.eyeX, -sc.eyeOffsetY, eyeSizePlus, eyeSizePlus);
-    ellipse(sc.eyeX, sc.eyeOffsetY, eyeSizePlus, eyeSizePlus);
-    
-    fill(colors.eyePupil);
-    ellipse(sc.eyeX + 0.3, -sc.eyeOffsetY, sc.eyeSize, sc.eyeSize);
-    ellipse(sc.eyeX + 0.3, sc.eyeOffsetY, sc.eyeSize, sc.eyeSize);
-    
-    const eyeHlSize = sc.eyeSize * 0.4;
-    fill(colors.eyeHighlight);
-    ellipse(sc.eyeX + 0.8, -sc.eyeOffsetY - 0.5, eyeHlSize, eyeHlSize);
-    ellipse(sc.eyeX + 0.8, sc.eyeOffsetY - 0.5, eyeHlSize, eyeHlSize);
+    fill(colors.eye);
+    ellipse(sc.eyeX, -sc.eyeY, sc.eyeSize + 1, sc.eyeSize + 1);
+    ellipse(sc.eyeX, sc.eyeY, sc.eyeSize + 1, sc.eyeSize + 1);
+    fill(colors.pupil);
+    ellipse(sc.eyeX + 0.3, -sc.eyeY, sc.eyeSize, sc.eyeSize);
+    ellipse(sc.eyeX + 0.3, sc.eyeY, sc.eyeSize, sc.eyeSize);
     
     // Beak
     fill(colors.beak);
     stroke(colors.beakStroke);
     strokeWeight(0.5);
     beginShape();
-    vertex(sc.beakX1, -sc.beakY1);
-    vertex(sc.beakX2, -sc.beakY2);
-    vertex(sc.beakX3, 0);
-    vertex(sc.beakX2, sc.beakY2);
-    vertex(sc.beakX1, sc.beakY1);
-    vertex(sc.beakX4, 0);
+    vertex(sc.beakX[0], -sc.beakY);
+    vertex(sc.beakX[1], -sc.beakY * 0.25);
+    vertex(sc.beakX[2], 0);
+    vertex(sc.beakX[1], sc.beakY * 0.25);
+    vertex(sc.beakX[0], sc.beakY);
+    vertex(sc.beakX[3], 0);
     endShape(CLOSE);
     
-    line(sc.beakX4, 0, sc.beakX2, 0);
-    
-    noStroke();
-    fill(colors.beakNostril);
-    ellipse(sc.beakX5, -sc.beakNostrilY, 1.2, 0.8);
-    ellipse(sc.beakX5, sc.beakNostrilY, 1.2, 0.8);
-  }
-
-  renderDebugIndicators() {
-    const s = this.size;
-    noFill();
-    strokeWeight(1);
-    
-    if (this.inShelter) {
-      stroke(100, 200, 100, 100);
-      ellipse(0, 0, s * 2.2, s * 2.2);
-    }
-    if (this.isMigrating) {
-      stroke(100, 150, 255, 80);
-      const pulse = sin(frameCount * 0.1) * 2;
-      ellipse(0, 0, s * 2 + pulse, s * 2 + pulse);
-    }
-    if (this.isFeeding) {
-      stroke(150, 255, 150, 80);
-      const pulse = sin(frameCount * 0.15) * 2;
-      ellipse(0, 0, s * 1.8 + pulse, s * 1.8 + pulse);
-    }
-  }
-
-  renderMigrationLine() {
-    push();
-    stroke(100, 150, 255, 40);
-    strokeWeight(1);
-    drawingContext.setLineDash([3, 3]);
-    line(this.pos.x, this.pos.y, this.migrationTarget.x, this.migrationTarget.y);
-    drawingContext.setLineDash([]);
     pop();
+    
+    if (CONFIG.showHungerBars) this.renderStatusBars();
+  }
+
+  renderLeg(side, swing, sc) {
+    const y1 = sc.legY[0] * side;
+    const y2 = sc.legY[1] * side;
+    const y3 = sc.legY[2] * side;
+    const midX = sc.legAttach - sc.legLen * 0.3;
+    const endX = sc.legAttach - sc.legLen * 0.7 + swing;  // Swing NOT multiplied by side
+    
+    strokeWeight(1.8);
+    line(sc.legAttach, y1, midX, y2);
+    line(midX, y2, endX, y3);
+    
+    // Toes
+    strokeWeight(1.2);
+    line(endX, y3, endX - 3, y3 - 2.5 * side);
+    line(endX, y3, endX - 4, y3);
+    line(endX, y3, endX - 3, y3 + 2.5 * side);
+  }
+
+  getBodyColor() {
+    const c = this._colors;
+    if (this.panicLevel > 0) return lerpColor(c.body, c.panic, this.panicLevel);
+    if (this.hunger > this.criticalHunger) return c.starving;
+    if (this.isFeeding) return c.feeding;
+    return c.body;
   }
 
   renderStatusBars() {
-    const sc = this.sc;
-    const barWidth = 14;
-    const barHeight = 2;
-    const yOffset = sc.barYOffset;
+    const s = this.size;
     const px = this.pos.x, py = this.pos.y;
+    const yOff = -s * 0.8 - 4;
     
     noStroke();
     
-    // Hunger bar background
+    // Hunger bar
     fill(40, 40, 40, 150);
-    rect(px - 7, py + yOffset, barWidth, barHeight, 1);
+    rect(px - 7, py + yOff, 14, 2, 1);
     
-    // Hunger bar fill
-    const hungerPercent = this.hunger / this.maxHunger;
-    const hungerWidth = barWidth * (1 - hungerPercent);
-    fill(80 + hungerPercent * 120, 180 - hungerPercent * 120, 80);
-    rect(px - 7, py + yOffset, hungerWidth, barHeight, 1);
+    const pct = this.hunger / this.maxHunger;
+    fill(80 + pct * 120, 180 - pct * 120, 80);
+    rect(px - 7, py + yOff, 14 * (1 - pct), 2, 1);
     
     // Egg progress
     if (this.canLayEgg && this.hunger <= this.config.layingHungerThreshold) {
-      const progress = Math.min(this.securityTime / this.securityTimeRequired, 1);
-      if (progress > 0.1) {
+      const prog = Math.min(this.securityTime / this.securityTimeRequired, 1);
+      if (prog > 0.1) {
         fill(40, 40, 40, 150);
-        rect(px - 7, py + yOffset - 3, barWidth, barHeight, 1);
+        rect(px - 7, py + yOff - 3, 14, 2, 1);
         fill(220, 200, 100);
-        rect(px - 7, py + yOffset - 3, barWidth * progress, barHeight, 1);
+        rect(px - 7, py + yOff - 3, 14 * prog, 2, 1);
       }
     }
     
     // State indicators
-    const indicatorY = py + yOffset - 5;
-    let indicatorX = px;
-    
     textAlign(CENTER, BOTTOM);
     textSize(6);
     
     if (this.isMigrating) {
       fill(100, 150, 255, 220);
-      text("↗", indicatorX, indicatorY);
-      indicatorX += 8;
-    }
-    
-    if (this.localFoodScore < 0.3 && !this.isMigrating && !this.isFeeding) {
+      text("↗", px, py + yOff - 5);
+    } else if (this.localFoodScore < 0.3 && !this.isFeeding) {
       fill(255, 180, 80, 220);
-      text("!", indicatorX, indicatorY);
-    }
-    
-    if (CONFIG.debugMode && this.species) {
-      fill(200, 200, 200, 150);
-      textSize(5);
-      text(this.species.displayName || this.speciesKey, px, py + yOffset + 10);
+      text("!", px, py + yOff - 5);
     }
   }
 }

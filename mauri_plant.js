@@ -406,6 +406,7 @@ class Plant {
     const angles = PlantStatics.kawakawaAngles;
     const stemLen = displaySize * 0.3;
     const leafPosOffset = stemLen + displaySize * 0.15;
+
     
     for (let i = 0; i < 5; i++) {
       push();

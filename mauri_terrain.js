@@ -1,5 +1,6 @@
 // ============================================
 // TERRAIN GENERATOR - Optimized with cached lookups and typed arrays
+// Works in WORLD coordinates (game area only, not full canvas)
 // ============================================
 class TerrainGenerator {
   constructor(config, biomes) {
@@ -15,9 +16,19 @@ class TerrainGenerator {
     
     this.terrainBuffer = null;
     
-    // Pre-compute dimensions
-    this.mapWidth = Math.ceil(config.width / config.zoom);
-    this.mapHeight = Math.ceil(config.height / config.zoom);
+    // IMPORTANT: Use game area dimensions, not canvas dimensions
+    // These are WORLD dimensions (before zoom is applied)
+    const gameWidth = config.gameAreaWidth || config.width;
+    const gameHeight = config.gameAreaHeight || config.height;
+    const zoom = config.zoom || 1;
+    
+    this.mapWidth = Math.ceil(gameWidth / zoom);
+    this.mapHeight = Math.ceil(gameHeight / zoom);
+    
+    // Store for reference
+    this.worldWidth = gameWidth;
+    this.worldHeight = gameHeight;
+    this.zoom = zoom;
     
     // Pre-compute inverse scale for faster lookups
     this.scale = config.pixelScale;
@@ -42,6 +53,41 @@ class TerrainGenerator {
       this.biomeIndexByKey[this.biomeArray[i].key] = i;
     }
   }
+  
+  // ============================================
+  // COORDINATE HELPERS
+  // ============================================
+  
+  /**
+   * Check if world coordinates are within bounds
+   */
+  isInBounds(x, y) {
+    return x >= 0 && x < this.mapWidth && y >= 0 && y < this.mapHeight;
+  }
+  
+  /**
+   * Clamp world coordinates to valid range
+   */
+  clampToBounds(x, y) {
+    return {
+      x: Math.max(0, Math.min(this.mapWidth - 1, x)),
+      y: Math.max(0, Math.min(this.mapHeight - 1, y))
+    };
+  }
+  
+  /**
+   * Get a random position within the world bounds with padding
+   */
+  getRandomPosition(padding = 0) {
+    return {
+      x: padding + random() * (this.mapWidth - padding * 2),
+      y: padding + random() * (this.mapHeight - padding * 2)
+    };
+  }
+  
+  // ============================================
+  // NOISE GENERATION
+  // ============================================
   
   fractalNoise(x, y) {
     let total = 0;
@@ -102,7 +148,11 @@ class TerrainGenerator {
     return elevation;
   }
   
-  // Optimized: Direct array access with pre-computed values
+  // ============================================
+  // ELEVATION & BIOME LOOKUPS (Optimized)
+  // ============================================
+  
+  // Direct array access with pre-computed values
   getElevationAt(x, y) {
     const col = (x * this.invScale) | 0;
     const row = (y * this.invScale) | 0;
@@ -126,7 +176,7 @@ class TerrainGenerator {
     return list[list.length - 1];
   }
   
-  // Optimized: Direct array access
+  // Direct array access
   getBiomeAt(x, y) {
     const col = (x * this.invScale) | 0;
     const row = (y * this.invScale) | 0;
@@ -145,8 +195,14 @@ class TerrainGenerator {
   }
   
   canPlace(x, y) {
+    // Also check bounds
+    if (!this.isInBounds(x, y)) return false;
     return this.getBiomeAt(x, y).canPlace;
   }
+  
+  // ============================================
+  // COLOR MANAGEMENT
+  // ============================================
   
   // Cache color lookups
   _getCachedColor(hexColor) {
@@ -208,6 +264,10 @@ class TerrainGenerator {
     return false;
   }
   
+  // ============================================
+  // TERRAIN GENERATION
+  // ============================================
+  
   generate() {
     const gridCols = this.gridCols;
     const gridRows = this.gridRows;
@@ -230,8 +290,6 @@ class TerrainGenerator {
     }
     
     // Generate biome map
-    const grasslandIdx = this.biomeIndexByKey['grassland'];
-    
     idx = 0;
     for (let row = 0; row < gridRows; row++) {
       for (let col = 0; col < gridCols; col++) {
@@ -327,6 +385,31 @@ class TerrainGenerator {
   }
   
   render() {
+    // Renders at origin (0,0) in world space
+    // The game's render loop handles positioning this in the game area
     image(this.terrainBuffer, 0, 0);
+  }
+  
+  // ============================================
+  // MINIMAP SUPPORT
+  // ============================================
+  
+  /**
+   * Get the terrain buffer for minimap rendering
+   */
+  getTerrainBuffer() {
+    return this.terrainBuffer;
+  }
+  
+  /**
+   * Get dimensions for minimap scaling
+   */
+  getDimensions() {
+    return {
+      width: this.mapWidth,
+      height: this.mapHeight,
+      worldWidth: this.worldWidth,
+      worldHeight: this.worldHeight
+    };
   }
 }

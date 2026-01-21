@@ -4,6 +4,8 @@
 // ============================================
 class SpatialGrid {
   constructor(width, height, cellSize) {
+    this.width = width;
+    this.height = height;
     this.cellSize = cellSize;
     this.invCellSize = 1 / cellSize; // Pre-compute for faster division
     this.cols = Math.ceil(width * this.invCellSize);
@@ -24,6 +26,19 @@ class SpatialGrid {
     // Reusable result array to reduce allocations
     this._resultBuffer = [];
     this._resultBuffer2 = [];
+  }
+  
+  /**
+   * Get grid dimensions
+   */
+  getDimensions() {
+    return {
+      width: this.width,
+      height: this.height,
+      cols: this.cols,
+      rows: this.rows,
+      cellSize: this.cellSize
+    };
   }
   
   clear() {
@@ -48,8 +63,32 @@ class SpatialGrid {
     return row * this.cols + col;
   }
   
+  /**
+   * Get the cell coordinates for a given position
+   */
+  getCellCoords(x, y) {
+    return {
+      col: (x * this.invCellSize) | 0,
+      row: (y * this.invCellSize) | 0
+    };
+  }
+  
   insert(entity) {
     const idx = this.getCellIndex(entity.pos.x, entity.pos.y);
+    if (idx === -1) return;
+    
+    const cell = this.cells[idx];
+    if (cell.length === 0) {
+      this.activeCells.push(idx);
+    }
+    cell.push(entity);
+  }
+  
+  /**
+   * Insert entity at specific position (useful for predictive queries)
+   */
+  insertAt(entity, x, y) {
+    const idx = this.getCellIndex(x, y);
     if (idx === -1) return;
     
     const cell = this.cells[idx];
@@ -355,7 +394,9 @@ class SpatialGrid {
       totalEntities,
       nonEmptyCells,
       maxInCell,
-      avgPerCell: nonEmptyCells > 0 ? (totalEntities / nonEmptyCells).toFixed(1) : 0
+      avgPerCell: nonEmptyCells > 0 ? (totalEntities / nonEmptyCells).toFixed(1) : 0,
+      gridSize: `${this.cols}x${this.rows}`,
+      worldSize: `${this.width}x${this.height}`
     };
   }
 }

@@ -1,5 +1,6 @@
 // ============================================
 // SIMULATION CLASS - Optimized with better throttling and batching
+// All coordinates are in WORLD space (game area, not canvas)
 // ============================================
 class Simulation {
   constructor(terrain, config, game, seasonManager) {
@@ -19,14 +20,20 @@ class Simulation {
       starvations: 0
     };
 
+    // World dimensions from terrain (these are the authoritative dimensions)
+    const worldWidth = terrain.mapWidth;
+    const worldHeight = terrain.mapHeight;
+    
+    // Store for easy access
+    this.worldWidth = worldWidth;
+    this.worldHeight = worldHeight;
+
     // Spatial grids with appropriate cell sizes
-    const mapW = terrain.mapWidth;
-    const mapH = terrain.mapHeight;
-    this.moaGrid = new SpatialGrid(mapW, mapH, 60);
-    this.eagleGrid = new SpatialGrid(mapW, mapH, 100);
-    this.plantGrid = new SpatialGrid(mapW, mapH, 50);
-    this.placeableGrid = new SpatialGrid(mapW, mapH, 80);
-    this.eggGrid = new SpatialGrid(mapW, mapH, 40);
+    this.moaGrid = new SpatialGrid(worldWidth, worldHeight, 60);
+    this.eagleGrid = new SpatialGrid(worldWidth, worldHeight, 100);
+    this.plantGrid = new SpatialGrid(worldWidth, worldHeight, 50);
+    this.placeableGrid = new SpatialGrid(worldWidth, worldHeight, 80);
+    this.eggGrid = new SpatialGrid(worldWidth, worldHeight, 40);
 
     // Cache for population counts
     this._cachedAliveMoas = 0;
@@ -39,6 +46,9 @@ class Simulation {
     
     // Reusable position vector
     this._tempPos = null;
+    
+    // Spawn boundary padding (entities won't spawn within this distance of edge)
+    this.spawnPadding = 30;
   }
   
   init() {
@@ -49,26 +59,30 @@ class Simulation {
     this.spawnEagles(this.config.eagleCount);
   }
   
-spawnPlants() {
-  // Use a fixed spawn grid regardless of pixelScale
-  const spawnScale = 2;  // Always use 2-unit spacing for plants
-  const spawnCols = Math.ceil(this.terrain.mapWidth / spawnScale);
-  const spawnRows = Math.ceil(this.terrain.mapHeight / spawnScale);
+  // ============================================
+  // SPAWNING
+  // ============================================
   
-  for (let row = 0; row < spawnRows; row++) {
-    for (let col = 0; col < spawnCols; col++) {
-      const x = col * spawnScale + random(-1, 1);
-      const y = row * spawnScale + random(-1, 1);
-      const biome = this.terrain.getBiomeAt(x, y);
-      
-      if (biome.canHavePlants && random() < this.config.plantDensity) {
-        const plantTypes = biome.plantTypes;
-        const plantType = plantTypes[(random() * plantTypes.length) | 0];
-        this.plants.push(new Plant(x, y, plantType, this.terrain, biome.key));
+  spawnPlants() {
+    // Use a fixed spawn grid regardless of pixelScale
+    const spawnScale = 2;  // Always use 2-unit spacing for plants
+    const spawnCols = Math.ceil(this.worldWidth / spawnScale);
+    const spawnRows = Math.ceil(this.worldHeight / spawnScale);
+    
+    for (let row = 0; row < spawnRows; row++) {
+      for (let col = 0; col < spawnCols; col++) {
+        const x = col * spawnScale + random(-1, 1);
+        const y = row * spawnScale + random(-1, 1);
+        const biome = this.terrain.getBiomeAt(x, y);
+        
+        if (biome.canHavePlants && random() < this.config.plantDensity) {
+          const plantTypes = biome.plantTypes;
+          const plantType = plantTypes[(random() * plantTypes.length) | 0];
+          this.plants.push(new Plant(x, y, plantType, this.terrain, biome.key));
+        }
       }
     }
   }
-}
   
   spawnMoas(count, speciesKey = null) {
     const pref = this.seasonManager.getPreferredElevation();
@@ -101,6 +115,7 @@ spawnPlants() {
     let pos = this.findWalkablePosition(0.25, 0.7);
     let attempts = 0;
     const eagles = this.eagles;
+    const minDistSq = 6400; // 80^2
     
     while (attempts < 20) {
       let tooClose = false;
@@ -108,7 +123,7 @@ spawnPlants() {
         const e = eagles[i];
         const dx = pos.x - e.pos.x;
         const dy = pos.y - e.pos.y;
-        if (dx * dx + dy * dy < 6400) {
+        if (dx * dx + dy * dy < minDistSq) {
           tooClose = true;
           break;
         }
@@ -132,14 +147,21 @@ spawnPlants() {
     }
   }
   
+  /**
+   * Find a walkable position within elevation range
+   * @param {number} minElev - Minimum elevation (0-1)
+   * @param {number} maxElev - Maximum elevation (0-1)
+   * @returns {p5.Vector} - Position vector (reused, copy if needed to store)
+   */
   findWalkablePosition(minElev, maxElev) {
     const terrain = this.terrain;
-    const maxX = terrain.mapWidth - 30;
-    const maxY = terrain.mapHeight - 30;
+    const padding = this.spawnPadding;
+    const maxX = this.worldWidth - padding;
+    const maxY = this.worldHeight - padding;
     
     for (let attempts = 0; attempts < 100; attempts++) {
-      const x = 30 + random() * (maxX - 30);
-      const y = 30 + random() * (maxY - 30);
+      const x = padding + random() * (maxX - padding);
+      const y = padding + random() * (maxY - padding);
       const elev = terrain.getElevationAt(x, y);
       
       if (elev > minElev && elev < maxElev && terrain.isWalkable(x, y)) {
@@ -148,12 +170,45 @@ spawnPlants() {
       }
     }
     
-    this._tempPos.set(terrain.mapWidth * 0.5, terrain.mapHeight * 0.5);
+    // Fallback to center
+    this._tempPos.set(this.worldWidth * 0.5, this.worldHeight * 0.5);
     return this._tempPos;
   }
   
-  addEgg(x, y) {
-    const egg = new Egg(x, y, this.terrain, this.config);
+  /**
+   * Find a walkable position near a given point
+   * @param {number} x - Center X
+   * @param {number} y - Center Y
+   * @param {number} radius - Search radius
+   * @returns {p5.Vector|null} - Position vector or null if not found
+   */
+  findWalkablePositionNear(x, y, radius) {
+    for (let attempts = 0; attempts < 30; attempts++) {
+      const angle = random(TWO_PI);
+      const dist = random(radius * 0.3, radius);
+      const px = x + cos(angle) * dist;
+      const py = y + sin(angle) * dist;
+      
+      // Check bounds
+      if (px < 0 || px >= this.worldWidth || py < 0 || py >= this.worldHeight) {
+        continue;
+      }
+      
+      if (this.terrain.isWalkable(px, py)) {
+        this._tempPos.set(px, py);
+        return this._tempPos;
+      }
+    }
+    
+    return null;
+  }
+  
+  // ============================================
+  // ENTITY CREATION
+  // ============================================
+  
+  addEgg(x, y, parentSpecies = null) {
+    const egg = new Egg(x, y, this.terrain, this.config, parentSpecies);
     this.eggs.push(egg);
     return egg;
   }
@@ -297,6 +352,29 @@ spawnPlants() {
   
   getClosestPlaceable(x, y, radius, filter = null) {
     return this.placeableGrid.getClosest(x, y, radius, filter);
+  }
+  
+  // ============================================
+  // BOUNDS CHECKING FOR ENTITIES
+  // ============================================
+  
+  /**
+   * Check if position is within world bounds with optional padding
+   */
+  isInBounds(x, y, padding = 0) {
+    return x >= padding && 
+           x < this.worldWidth - padding && 
+           y >= padding && 
+           y < this.worldHeight - padding;
+  }
+  
+  /**
+   * Constrain position to world bounds
+   */
+  constrainToBounds(pos, padding = 5) {
+    pos.x = constrain(pos.x, padding, this.worldWidth - padding);
+    pos.y = constrain(pos.y, padding, this.worldHeight - padding);
+    return pos;
   }
   
   // ============================================
@@ -452,6 +530,9 @@ spawnPlants() {
       if (moa.alive) {
         moa.behave(this, mauri, seasonManager);
         moa.update();
+        
+        // Ensure moa stays in bounds
+        this.constrainToBounds(moa.pos);
       }
     }
   }
@@ -463,6 +544,9 @@ spawnPlants() {
       const eagle = eagles[i];
       eagle.behave(this);
       eagle.update();
+      
+      // Ensure eagle stays in bounds
+      this.constrainToBounds(eagle.pos);
     }
   }
   
@@ -518,6 +602,10 @@ spawnPlants() {
     }
   }
 
+  // ============================================
+  // RENDERING
+  // ============================================
+
   render() {
     // Render plants
     const plants = this.plants;
@@ -566,13 +654,15 @@ spawnPlants() {
     push();
     fill(0, 0, 0, 150);
     noStroke();
-    rect(5, 100, 120, 80, 5);
+    rect(5, 100, 140, 100, 5);
     
     fill(255);
     textSize(8);
     textAlign(LEFT, TOP);
     let y = 105;
     
+    text(`World: ${this.worldWidth}x${this.worldHeight}`, 10, y);
+    y += 12;
     text(`Moas: ${stats.moas.totalEntities} in ${stats.moas.nonEmptyCells} cells`, 10, y);
     y += 12;
     text(`Eagles: ${stats.eagles.totalEntities} in ${stats.eagles.nonEmptyCells} cells`, 10, y);
@@ -585,5 +675,32 @@ spawnPlants() {
     text(`Max/cell: ${maxInCell}`, 10, y);
     
     pop();
+  }
+  
+  // ============================================
+  // DATA FOR UI
+  // ============================================
+  
+  /**
+   * Get summary data for UI display
+   */
+  getSummary() {
+    const aliveMoas = [];
+    const moas = this.moas;
+    for (let i = 0, len = moas.length; i < len; i++) {
+      if (moas[i].alive) aliveMoas.push(moas[i]);
+    }
+    
+    return {
+      moaCount: aliveMoas.length,
+      aliveMoas: aliveMoas,
+      migratingCount: aliveMoas.filter(m => m.isMigrating).length,
+      eggCount: this.getAliveEggsCount(),
+      eagleCount: this.eagles.length,
+      plantCount: this.plants.filter(p => p.alive && !p.dormant).length,
+      dormantPlantCount: this.plants.filter(p => p.dormant).length,
+      births: this.stats.births,
+      deaths: this.stats.deaths
+    };
   }
 }

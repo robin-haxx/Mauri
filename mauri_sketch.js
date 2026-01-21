@@ -21,12 +21,35 @@ function preload(){
 // CONFIGURATION
 // ============================================
 const CONFIG = {
-  width: 800,
-  height: 600,
+  // Canvas dimensions
+  canvasWidth: 1920,
+  canvasHeight: 1080,
+  
+  // Game area (where simulation runs)
+  gameAreaX: 0,
+  gameAreaY: 180,
+  gameAreaWidth: 1280,
+  gameAreaHeight: 720,
+  
+  // UI Panel dimensions
+  topBarHeight: 180,
+  bottomBarHeight: 180,
+  rightSidebarWidth: 640,
+  rightSidebarX: 1280, // gameAreaWidth
+  
+  // Legacy compatibility (point to game area)
+  get width() { return this.gameAreaWidth; },
+  get height() { return this.gameAreaHeight; },
+  
   pixelScale: 1,
   zoom: 2,
   debugMode: false,
-  col_UI: [40,70,30,180],
+  
+  // UI Colors
+  col_UI: [40, 70, 30, 180],
+  col_panelBg: [25, 35, 30, 240],
+  col_panelBorder: [60, 90, 70],
+  col_panelHeader: [45, 75, 55],
   
   noiseScale: 0.005,
   octaves: 2,
@@ -64,6 +87,32 @@ const CONFIG = {
   eagleSpawnMilestones: [10, 15, 20, 25, 35, 45, 55]
 };
 
+function fillColor(colorArray, alphaOverride = null) {
+  if (!colorArray) {
+    fill(128, 128, 128); // Fallback gray
+    return;
+  }
+  if (alphaOverride !== null) {
+    fill(colorArray[0], colorArray[1], colorArray[2], alphaOverride);
+  } else if (colorArray.length === 4) {
+    fill(colorArray[0], colorArray[1], colorArray[2], colorArray[3]);
+  } else {
+    fill(colorArray[0], colorArray[1], colorArray[2]);
+  }
+}
+
+function strokeColor(colorArray) {
+  if (!colorArray) {
+    stroke(128, 128, 128); // Fallback gray
+    return;
+  }
+  if (colorArray.length === 4) {
+    stroke(colorArray[0], colorArray[1], colorArray[2], colorArray[3]);
+  } else {
+    stroke(colorArray[0], colorArray[1], colorArray[2]);
+  }
+}
+
 // ============================================
 // PRE-CACHED COLORS (avoid creating in render loops)
 // ============================================
@@ -98,6 +147,15 @@ function initCachedColors() {
   CACHED_COLORS.notifInfoText = [200, 220, 240];
 }
 
+function initPanelColors() {
+  // Panel colors - stored as arrays
+  CACHED_COLORS.panelBg = [25, 35, 30, 240];
+  CACHED_COLORS.panelBorder = [60, 90, 70];
+  CACHED_COLORS.panelHeader = [45, 75, 55];
+  CACHED_COLORS.panelDivider = [50, 80, 60];
+  CACHED_COLORS.sidebarBg = [30, 45, 35, 250];
+}
+
 // ============================================
 // GAME STATE
 // ============================================
@@ -128,7 +186,7 @@ const PLACEABLES = {
     baseFeedingRate: 0.2,
     plantSpawnCount: 5,
     plantType: 'kawakawa',
-    seasonalBonus: { summer: 1.5, autumn: 1.0, winter: 0.8, spring: 1.2 },
+    seasonalBonus: { summer: 1.5, autumn: 0.8, winter: 0.4, spring: 1.0 },
     attractsHungryMoa: true,
     attractionStrength: 1.3
   },
@@ -423,6 +481,8 @@ class Game {
     
     this.playTime = 0;
     this.maxPlayTime = 0;
+
+    this._menuBtnBounds = null;
     
     this.goals = [
       { name: "Survive 60 seconds", condition: () => this.playTime >= 3600, reward: 50, achieved: false },
@@ -465,6 +525,13 @@ class Game {
     for (let i = 0; i < this.goals.length; i++) {
       this.goals[i].achieved = false;
     }
+  }
+
+  isInGameArea(mx, my) {
+    return mx >= CONFIG.gameAreaX && 
+           mx < CONFIG.gameAreaX + CONFIG.gameAreaWidth &&
+           my >= CONFIG.gameAreaY && 
+           my < CONFIG.gameAreaY + CONFIG.gameAreaHeight;
   }
   
   // Cache population counts once per frame
@@ -564,12 +631,13 @@ class Game {
     this.notifications.push({
       text: text,
       type: type,
-      life: 300,
-      maxLife: 300,
-      _cachedWidth: null // Will be calculated once when needed
+      life: 600,      // 2x longer (was 300)
+      maxLife: 600,   // 2x longer (was 300)
+      time: this.playTime,  // Add timestamp for "X seconds ago" display
+      _cachedWidth: null
     });
     
-    if (this.notifications.length > 5) {
+    if (this.notifications.length > 8) {  // Fewer max since they're bigger in sidebar
       this.notifications.shift();
     }
   }
@@ -692,14 +760,32 @@ class Game {
   }
   
   render() {
-    background(30);
+    background(20, 30, 25); // Dark background for panels
     
     if (this.state === GAME_STATE.MENU) {
       this.renderMenu();
       return;
     }
     
+    // Render UI panels first (behind game area)
+    this.ui.renderPanels();
+    
+    // Render game area with offset and clipping
     push();
+    
+    // Clip to game area to prevent overflow
+    drawingContext.save();
+    drawingContext.beginPath();
+    drawingContext.rect(
+      CONFIG.gameAreaX, 
+      CONFIG.gameAreaY, 
+      CONFIG.gameAreaWidth, 
+      CONFIG.gameAreaHeight
+    );
+    drawingContext.clip();
+    
+    // Translate to game area origin
+    translate(CONFIG.gameAreaX, CONFIG.gameAreaY);
     scale(CONFIG.zoom);
     
     this.terrain.render();
@@ -710,10 +796,12 @@ class Game {
       this.renderPlacementPreview();
     }
     
+    drawingContext.restore();
     pop();
     
+    // Render UI content on top of panels
     this.ui.render();
-    this.renderNotifications();
+    //this.renderNotifications();
     
     if (this.state === GAME_STATE.PAUSED) {
       this.renderPauseOverlay();
@@ -725,27 +813,43 @@ class Game {
   }
   
   renderMenu() {
-    fill(CACHED_COLORS.menuBg);
-    rect(0, 0, CONFIG.width, CONFIG.height);
+    // Use full canvas dimensions for menu
+    const cw = CONFIG.canvasWidth;
+    const ch = CONFIG.canvasHeight;
+    const centerX = cw * 0.5;
+    const centerY = ch * 0.5;
     
-    const centerX = CONFIG.width * 0.5;
+    // Full canvas background
+    fill(CACHED_COLORS.menuBg);
+    noStroke();
+    rect(0, 0, cw, ch);
+    
+    // Subtle vignette effect
+    for (let i = 0; i < 5; i++) {
+      const alpha = 3 - i * 0.5;
+      fill(0, 0, 0, alpha);
+      rect(i * 20, i * 20, cw - i * 40, ch - i * 40);
+    }
     
     textAlign(CENTER, CENTER);
+    
+    // Game title
     fill(CACHED_COLORS.menuTitle);
-    textSize(48);
+    textSize(64);
     push();
     textFont(GroceryRounded);
-    text("MAURI", centerX, 100);
+    text("MAURI", centerX, centerY - 280);
     pop();
     
+    // Subtitle
     fill(CACHED_COLORS.menuSubtitle);
-    textSize(16);
-    text("A New Zealand Ecosystem Strategy Game", centerX, 145);
+    textSize(20);
+    text("A New Zealand Ecosystem Strategy Game", centerX, centerY - 220);
     
     // Moa illustration
     push();
-    translate(centerX, 240);
-    scale(4);
+    translate(centerX, centerY - 100);
+    scale(5);
     noStroke();
     fill(101, 67, 33);
     ellipse(0, 0, 8, 11);
@@ -758,6 +862,7 @@ class Game {
     line(3, 5, 4, 12);
     pop();
     
+    // Instructions
     fill(CACHED_COLORS.menuText);
     textSize(16);
     const instructions = [
@@ -768,41 +873,62 @@ class Game {
     ];
     
     for (let i = 0; i < instructions.length; i++) {
-      text(instructions[i], centerX, 350 + i * 22);
+      text(instructions[i], centerX, centerY + 60 + i * 28);
     }
     
-
-    const btnX = centerX - 80;
-    const btnY = 480;
-    const btnW = 160;
-    const btnH = 50;
+    // Start button - centered on full canvas
+    const btnW = 200;
+    const btnH = 60;
+    const btnX = centerX - btnW / 2;
+    const btnY = centerY + 200;
     
-    const hover = mouseX > btnX && mouseX < btnX + btnW && mouseY > btnY && mouseY < btnY + btnH;
+    const hover = mouseX > btnX && mouseX < btnX + btnW && 
+                  mouseY > btnY && mouseY < btnY + btnH;
     
+    // Button shadow
+    fill(0, 0, 0, 30);
+    noStroke();
+    rect(btnX + 3, btnY + 3, btnW, btnH, 12);
+    
+    // Button background
     fill(hover ? CACHED_COLORS.btnHover : CACHED_COLORS.btnNormal);
     stroke(CACHED_COLORS.btnStroke);
     strokeWeight(2);
-    rect(btnX, btnY, btnW, btnH, 10);
+    rect(btnX, btnY, btnW, btnH, 12);
     
+    // Button text
     fill(255);
     noStroke();
-    textSize(24);
+    textSize(28);
     push();
     textFont(GroceryRounded);
     text("Start Level", centerX, btnY + btnH * 0.5);
     pop();
     
+    // Hint text
+    fill(CACHED_COLORS.menuHint);
+    textSize(12);
+    text("Press any key or click to start", centerX, btnY + btnH + 30);
+    
+    // Footer
     fill(CACHED_COLORS.menuFooter);
-    textSize(10);
-    text("Inspired by Equilinox • Upland Moa & Haast's Eagle", centerX, CONFIG.height - 30);
+    textSize(11);
+    text("Inspired by Equilinox • Upland Moa & Haast's Eagle", centerX, ch - 40);
+    
+    // Store button bounds for click detection
+    this._menuBtnBounds = { x: btnX, y: btnY, w: btnW, h: btnH };
   }
+
   
   renderPlacementPreview() {
-    const invZoom = 1 / CONFIG.zoom;
-    const tx = mouseX * invZoom;
-    const ty = mouseY * invZoom;
-    
-    if (tx < 0 || tx > this.terrain.mapWidth || ty < 0 || ty > this.terrain.mapHeight) return;
+
+  if (!this.isInGameArea(mouseX, mouseY)) return;
+  
+  const invZoom = 1 / CONFIG.zoom;
+  const tx = (mouseX - CONFIG.gameAreaX) * invZoom;
+  const ty = (mouseY - CONFIG.gameAreaY) * invZoom;
+  
+  if (tx < 0 || tx > this.terrain.mapWidth || ty < 0 || ty > this.terrain.mapHeight) return;
     
     const def = PLACEABLES[this.selectedPlaceable];
     const canPlaceTerrain = this.terrain.canPlace(tx, ty);
@@ -861,15 +987,15 @@ class Game {
     const notifs = this.notifications;
     if (notifs.length === 0) return;
     
-    const centerX = CONFIG.width * 0.5;
-    let y = 100;
+    // Position notifications in the game area, below the top bar
+    const centerX = CONFIG.gameAreaX + CONFIG.gameAreaWidth * 0.5;
+    let y = CONFIG.gameAreaY + 50; // 50px below top of game area
     
     textSize(12);
     
     for (let i = 0; i < notifs.length; i++) {
       const notif = notifs[i];
       const alpha = min(255, notif.life * 2);
-      const alphaRatio = alpha / 255;
       
       let bgColor, textColor;
       switch (notif.type) {
@@ -888,111 +1014,176 @@ class Game {
       
       // Cache text width
       if (notif._cachedWidth === null) {
-        notif._cachedWidth = textWidth(notif.text) + 20;
+        notif._cachedWidth = textWidth(notif.text) + 24;
       }
       const tw = notif._cachedWidth;
       
-      fill(red(bgColor), green(bgColor), blue(bgColor), alpha * 0.8);
+      fill(bgColor[0], bgColor[1], bgColor[2], alpha * 0.85);
       noStroke();
-      rect(centerX - tw * 0.5, y, tw, 24, 5);
+      rect(centerX - tw * 0.5, y, tw, 26, 6);
       
-      fill(red(textColor), green(textColor), blue(textColor), alpha);
+      fill(textColor[0], textColor[1], textColor[2], alpha);
       textAlign(CENTER, CENTER);
-      text(notif.text, centerX, y + 12);
+      text(notif.text, centerX, y + 13);
       
-      y += 30;
+      y += 32;
     }
   }
   
   renderPauseOverlay() {
-    const centerX = CONFIG.width * 0.5;
-    const centerY = CONFIG.height * 0.5;
+    const cw = CONFIG.canvasWidth;
+    const ch = CONFIG.canvasHeight;
+    const centerX = cw * 0.5;
+    const centerY = ch * 0.5;
+    
+    // Darken entire screen
+    fill(0, 0, 0, 150);
+    noStroke();
+    rect(0, 0, cw, ch);
+    
+    // Pause box
+    fill(30, 45, 35, 240);
+    stroke(70, 110, 80);
+    strokeWeight(2);
+    rect(centerX - 150, centerY - 80, 300, 160, 15);
     
     fill(255);
-    textAlign(CENTER, CENTER);
-    textSize(36);
-    text("PAUSED", centerX, centerY - 30);
-    
-    textSize(16);
-    fill(200);
-    text("Press P to resume or R to restart", centerX, centerY + 20);
-  }
-  
-  renderWinOverlay() {
-    const centerX = CONFIG.width * 0.5;
-    const centerY = CONFIG.height * 0.5;
-    
-    fill(0, 50, 0, 180);
-    rect(0, 0, CONFIG.width, CONFIG.height);
-    
-    fill(180, 255, 180);
+    noStroke();
     textAlign(CENTER, CENTER);
     textSize(42);
-    text("ECOSYSTEM THRIVING!", centerX, centerY - 60);
+    push();
+    textFont(GroceryRounded);
+    text("PAUSED", centerX, centerY - 30);
+    pop();
+    
+    textSize(16);
+    fill(180, 200, 180);
+    text("Press P or SPACE to resume", centerX, centerY + 20);
+    
+    fill(150, 170, 150);
+    textSize(14);
+    text("Press R to restart", centerX, centerY + 50);
+  }
+
+  renderWinOverlay() {
+    const cw = CONFIG.canvasWidth;
+    const ch = CONFIG.canvasHeight;
+    const centerX = cw * 0.5;
+    const centerY = ch * 0.5;
+    
+    // Green tinted overlay
+    fill(0, 50, 0, 180);
+    noStroke();
+    rect(0, 0, cw, ch);
+    
+    // Win box
+    fill(30, 60, 40, 250);
+    stroke(100, 180, 120);
+    strokeWeight(3);
+    rect(centerX - 200, centerY - 120, 400, 280, 15);
+    
+    fill(180, 255, 180);
+    noStroke();
+    textAlign(CENTER, CENTER);
+    textSize(42);
+    push();
+    textFont(GroceryRounded);
+    text("ECOSYSTEM THRIVING!", centerX, centerY - 70);
+    pop();
     
     fill(150, 220, 150);
     textSize(18);
-    text("All goals achieved!", centerX, centerY - 10);
+    text("All goals achieved!", centerX, centerY - 20);
     
     textSize(14);
     fill(120, 180, 120);
-    text(`Final population: ${this._cachedMoaCount} moa`, centerX, centerY + 30);
-    text(`Total mauri earned: ${this.mauri.totalEarned | 0}`, centerX, centerY + 50);
+    text(`Final population: ${this._cachedMoaCount} moa`, centerX, centerY + 20);
+    text(`Total mauri earned: ${this.mauri.totalEarned | 0}`, centerX, centerY + 45);
     text(`Time survived: ${(this.playTime / 60) | 0} seconds`, centerX, centerY + 70);
     
-    fill(200);
-    textSize(16);
+    fill(200, 240, 200);
+    textSize(18);
     text("Press R to play again", centerX, centerY + 120);
   }
-  
+
   renderLoseOverlay() {
-    const centerX = CONFIG.width * 0.5;
-    const centerY = CONFIG.height * 0.5;
+    const cw = CONFIG.canvasWidth;
+    const ch = CONFIG.canvasHeight;
+    const centerX = cw * 0.5;
+    const centerY = ch * 0.5;
     
+    // Red tinted overlay
     fill(50, 0, 0, 180);
-    rect(0, 0, CONFIG.width, CONFIG.height);
+    noStroke();
+    rect(0, 0, cw, ch);
+    
+    // Lose box
+    fill(60, 35, 35, 250);
+    stroke(150, 100, 100);
+    strokeWeight(3);
+    rect(centerX - 200, centerY - 120, 400, 280, 15);
     
     fill(255, 180, 180);
+    noStroke();
     textAlign(CENTER, CENTER);
-    textSize(36);
-    text("EXTINCTION", centerX, centerY - 60);
+    textSize(42);
+    push();
+    textFont(GroceryRounded);
+    text("EXTINCTION", centerX, centerY - 70);
+    pop();
     
     fill(220, 150, 150);
     textSize(16);
-    text(this.gameOverReason, centerX, centerY - 10);
+    text(this.gameOverReason, centerX, centerY - 20);
     
     textSize(14);
     fill(180, 120, 120);
-    text(`Time survived: ${(this.playTime / 60) | 0} seconds`, centerX, centerY + 30);
-    text(`Moa hatched: ${this.simulation.stats.births}`, centerX, centerY + 50);
+    text(`Time survived: ${(this.playTime / 60) | 0} seconds`, centerX, centerY + 20);
+    text(`Moa hatched: ${this.simulation.stats.births}`, centerX, centerY + 45);
     text(`Total mauri earned: ${this.mauri.totalEarned | 0}`, centerX, centerY + 70);
     
-    fill(200);
-    textSize(16);
+    fill(220, 180, 180);
+    textSize(18);
     text("Press R to try again", centerX, centerY + 120);
   }
   
   handleClick(mx, my) {
     if (this.state === GAME_STATE.MENU) {
-      const btnX = CONFIG.width * 0.5 - 80;
-      const btnY = 480;
-      const btnW = 160;
-      const btnH = 50;
-      
-      if (mx > btnX && mx < btnX + btnW && my > btnY && my < btnY + btnH) {
-        this.init();
+      // Check button bounds (stored during render)
+      if (this._menuBtnBounds) {
+        const btn = this._menuBtnBounds;
+        if (mx > btn.x && mx < btn.x + btn.w && 
+            my > btn.y && my < btn.y + btn.h) {
+          this.init();
+          return;
+        }
       }
+      
+      // Fallback: click anywhere to start (optional)
+      // this.init();
       return;
     }
     
     if (this.state !== GAME_STATE.PLAYING) return;
     
+    // Check UI panel clicks first
     if (this.ui.handleClick(mx, my)) return;
     
-    if (this.selectedPlaceable) {
+    // Check if click is within game area
+    if (this.isInGameArea(mx, my) && this.selectedPlaceable) {
+      // Convert to game area coordinates
+      const gameX = mx - CONFIG.gameAreaX;
+      const gameY = my - CONFIG.gameAreaY;
       const invZoom = 1 / CONFIG.zoom;
-      this.tryPlace(mx * invZoom, my * invZoom);
+      this.tryPlace(gameX * invZoom, gameY * invZoom);
     }
+  }
+
+  isInGameArea(mx, my) {
+    return mx >= CONFIG.gameAreaX && 
+          mx < CONFIG.gameAreaX + CONFIG.gameAreaWidth &&
+          my >= CONFIG.gameAreaY && 
+          my < CONFIG.gameAreaY + CONFIG.gameAreaHeight;
   }
   
   handleKey(key) {
@@ -1038,19 +1229,27 @@ class Game {
 let game;
 
 function setup() {
-  createCanvas(CONFIG.width, CONFIG.height);
+  createCanvas(CONFIG.canvasWidth, CONFIG.canvasHeight);
   pixelDensity(1);
   frameRate(60);
   textFont('OpenDyslexic');
   
-  // Initialize cached colors after p5 is ready
+ 
   initCachedColors();
+  initPanelColors();  
   initPlaceableColors();
   initPlantSprites(plantSprites);
-
   initializeRegistry();
   
   game = new Game();
+}
+
+function initPanelColors() {
+  CACHED_COLORS.panelBg = CONFIG.col_panelBg;
+  CACHED_COLORS.panelBorder = CONFIG.col_panelBorder;
+  CACHED_COLORS.panelHeader = CONFIG.col_panelHeader;
+  CACHED_COLORS.panelDivider = [50, 80, 60];
+  CACHED_COLORS.sidebarBg = [30, 45, 35, 250];
 }
 
 function initializeRegistry() {

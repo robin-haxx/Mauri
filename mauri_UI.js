@@ -196,8 +196,7 @@ class GameUI {
   renderTopBar() {
     const contentY = 20;
     
-    // Title/Logo area (left)
-    this.renderGameTitle(30, contentY);
+
     
     // Mauri counter (left-center)
     this.renderMauriCounter(250, contentY);
@@ -212,24 +211,7 @@ class GameUI {
     this.renderMigrationHint(30, 110);
   }
   
-  renderGameTitle(x, y) {
-    push();
-    textFont(GroceryRounded);
-    
-    // Game title
-    fill(140, 200, 150);
-    textSize(36);
-    textAlign(LEFT, TOP);
-    text("MAURI", x, y);
-    
-    // Subtitle
-    fill(100, 140, 110);
-    textSize(12);
-    textFont('OpenDyslexic');
-    text("Ecosystem Strategy", x, y + 42);
-    
-    pop();
-  }
+
   
   renderMauriCounter(x, y) {
     // Container

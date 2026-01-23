@@ -416,8 +416,8 @@ class GameUI {
     if (this.simulation.eagles.some(e => e.state === 'hunting' || e.state === 'diving')) {
       return {
         icon: '🦅',
-        text: 'Eagle hunting! Moa need shelter to hide.',
-        subtext: 'Fern shelters block eagle vision. Decoys can distract.',
+        text: 'A Pouākai is on the hunt!',
+        subtext: 'A sudden thunderstorm or heavy fern cover could thwart its pursuit.',
         color: [255, 120, 120]
       };
     }
@@ -436,25 +436,25 @@ class GameUI {
       'autumn': {
         icon: '🍂',
         text: 'Autumn approaching - temperatures will drop soon.',
-        subtext: 'High elevation plants will begin going dormant. Stock up on food.',
+        subtext: 'High elevation plants will become less nutritious; be prepared!',
         color: [255, 200, 130]
       },
       'winter': {
         icon: '❄️',
         text: 'Winter is coming! High ground will become barren.',
-        subtext: 'Moa will migrate to lower elevations. Prepare shelters.',
+        subtext: 'Moa will migrate to the forest. Help them out!',
         color: [180, 200, 255]
       },
       'spring': {
         icon: '🌸',
         text: 'Spring is near - plants will begin to regrow.',
-        subtext: 'Good nesting conditions ahead. Prepare nesting sites.',
+        subtext: 'Good nesting conditions ahead!',
         color: [255, 180, 200]
       },
       'summer': {
         icon: '☀️',
-        text: 'Summer approaching - higher elevations will become accessible.',
-        subtext: 'Moa can forage across all elevations. Peak growing season.',
+        text: 'Summer approaching - Upland moa will migrate.',
+        subtext: 'Moa can forage across all elevations below the snow line!',
         color: [255, 240, 150]
       }
     };

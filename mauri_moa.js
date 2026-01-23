@@ -1,5 +1,5 @@
 // ============================================
-// MOA CLASS - Simplified
+// MOA CLASS - Optimized
 // ============================================
 
 const MOA_STATE = {
@@ -112,9 +112,26 @@ class Moa extends Boid {
     this.foodCheckTimer = 0;
     this.preferredElevation = s.preferredElevation;
     
-    // Reusable vector
+    // Reusable vectors - avoid allocations in hot paths
     this._tempForce = createVector();
+    this._returnForce = createVector();      // For methods that return forces
+    this._homeForce = createVector();        // For stayInHomeRange
+    this._migrationTargetVec = null;         // Lazy-created for migration
+    
+    // Size cache
     this._sizeCache = null;
+    
+    // Color caching for panic interpolation
+    this._lastPanicLevel = -1;
+    this._cachedPanicColor = null;
+    
+    // Cached season data (updated each frame in behave)
+    this._seasonCache = {
+      key: null,
+      hungerMod: 1,
+      migrationStrength: 0,
+      preferredElevation: { min: 0.25, max: 0.70 }
+    };
   }
 
   // ============================================
@@ -180,13 +197,34 @@ class Moa extends Boid {
   }
 
   // ============================================
+  // SEASON DATA CACHING
+  // ============================================
+  
+  _updateSeasonCache(seasonManager) {
+    const cache = this._seasonCache;
+    cache.key = seasonManager.currentKey;
+    cache.hungerMod = seasonManager.getHungerModifier();
+    cache.migrationStrength = seasonManager.getMigrationStrength();
+    
+    // Blend species preference with season preference
+    const sp = seasonManager.getPreferredElevation();
+    const pp = this.speciesConfig.preferredElevation || sp;
+    cache.preferredElevation.min = (pp.min + sp.min) * 0.5;
+    cache.preferredElevation.max = (pp.max + sp.max) * 0.5;
+  }
+
+  // ============================================
   // MAIN BEHAVIOR
   // ============================================
 
   behave(simulation, mauri, seasonManager) {
-    // Hunger
-    const hungerMod = this.speciesConfig.seasonalModifiers?.[seasonManager.currentKey]?.hungerRate || 1;
-    this.hungerRate = this.baseHungerRate * seasonManager.getHungerModifier() * hungerMod;
+    // Cache season data once per frame
+    this._updateSeasonCache(seasonManager);
+    const seasonCache = this._seasonCache;
+    
+    // Hunger - use cached season data
+    const hungerMod = this.speciesConfig.seasonalModifiers?.[seasonCache.key]?.hungerRate || 1;
+    this.hungerRate = this.baseHungerRate * seasonCache.hungerMod * hungerMod;
     this.hunger = Math.min(this.hunger + this.hungerRate, this.maxHunger);
     
     // Egg cooldown
@@ -212,14 +250,12 @@ class Moa extends Boid {
     // Placeable effects
     this.applyPlaceableEffects(placeables);
     
-    // Update elevation preference
-    const sp = seasonManager.getPreferredElevation();
-    const pp = this.speciesConfig.preferredElevation || sp;
-    this.preferredElevation = { min: (pp.min + sp.min) * 0.5, max: (pp.max + sp.max) * 0.5 };
+    // Update elevation preference from cache
+    this.preferredElevation = seasonCache.preferredElevation;
     
     // Determine and execute state
-    this.currentState = this.determineState(eagles, placeables, seasonManager);
-    this.executeState(simulation, mauri, seasonManager, eagles, moas, placeables);
+    this.currentState = this.determineState(eagles, placeables, seasonCache);
+    this.executeState(simulation, mauri, seasonCache, eagles, moas, placeables);
     
     // Common behaviors
     this.applySeparation(moas);
@@ -240,7 +276,7 @@ class Moa extends Boid {
     if (this.hunger >= this.maxHunger) this.alive = false;
   }
 
-  determineState(eagles, placeables, seasonManager) {
+  determineState(eagles, placeables, seasonCache) {
     // Flee from threats
     for (let i = 0; i < eagles.length; i++) {
       const e = eagles[i];
@@ -253,8 +289,8 @@ class Moa extends Boid {
       }
     }
     
-    // Migration
-    if (this.isMigrating || this.shouldMigrate(seasonManager)) {
+    // Migration - use cached migration strength
+    if (this.isMigrating || this.shouldMigrate(seasonCache)) {
       return MOA_STATE.MIGRATING;
     }
     
@@ -273,7 +309,7 @@ class Moa extends Boid {
     return MOA_STATE.IDLE;
   }
 
-  executeState(simulation, mauri, seasonManager, eagles, moas, placeables) {
+  executeState(simulation, mauri, seasonCache, eagles, moas, placeables) {
     this.panicLevel = 0;
     const isStarving = this.hunger > this.criticalHunger;
     
@@ -304,7 +340,7 @@ class Moa extends Boid {
         
       case MOA_STATE.MIGRATING:
         this.maxSpeed = this.baseSpeed * (isStarving ? 0.6 : 1);
-        this.executeMigration(seasonManager);
+        this.executeMigration(seasonCache);
         if (this.hunger > 60) this.forage(simulation, mauri);
         break;
         
@@ -343,11 +379,11 @@ class Moa extends Boid {
   }
 
   // ============================================
-  // MOVEMENT
+  // MOVEMENT - Optimized to avoid vector allocations
   // ============================================
 
   fleeFrom(tx, ty) {
-    const force = this._tempForce;
+    const force = this._returnForce;
     const dx = this.pos.x - tx, dy = this.pos.y - ty;
     const dSq = dx * dx + dy * dy;
     
@@ -361,7 +397,7 @@ class Moa extends Boid {
     } else {
       force.set(0, 0);
     }
-    return force.copy();
+    return force;  // Return reusable vector directly (no copy)
   }
 
   stayInHomeRange() {
@@ -369,14 +405,16 @@ class Moa extends Boid {
     const dy = this.homeRange.y - this.pos.y;
     const dSq = dx * dx + dy * dy;
     
+    const force = this._homeForce;
+    
     if (dSq > this.homeRangeRadiusSq) {
-      const f = this._tempForce;
-      f.set(dx, dy);
-      f.setMag(this.maxForce * 0.12);
-      f.mult(1 + (Math.sqrt(dSq) - this.homeRangeRadius) * 0.02);
-      return f.copy();
+      force.set(dx, dy);
+      force.setMag(this.maxForce * 0.12);
+      force.mult(1 + (Math.sqrt(dSq) - this.homeRangeRadius) * 0.02);
+    } else {
+      force.set(0, 0);
     }
-    return this._tempForce.set(0, 0);
+    return force;  // Return reusable vector directly
   }
 
   applySeparation(moas) {
@@ -531,10 +569,10 @@ class Moa extends Boid {
   }
 
   // ============================================
-  // MIGRATION
+  // MIGRATION - Optimized vector allocation
   // ============================================
 
-  shouldMigrate(seasonManager) {
+  shouldMigrate(seasonCache) {
     const elev = this.terrain.getElevationAt(this.pos.x, this.pos.y);
     const p = this.preferredElevation;
     
@@ -544,36 +582,43 @@ class Moa extends Boid {
     
     return err > 0.08 || 
            (this.localFoodScore < 0.3 && this.hunger > 30) ||
-           (err > 0.03 && seasonManager.getMigrationStrength() > 0.7);
+           (err > 0.03 && seasonCache.migrationStrength > 0.7);
   }
 
-  executeMigration(seasonManager) {
+  executeMigration(seasonCache) {
     if (this.migrationCooldown > 0) {
       this.migrationCooldown--;
-      if (this.migrationTarget) this.moveToMigrationTarget(seasonManager);
+      if (this.migrationTarget) this.moveToMigrationTarget(seasonCache);
       return;
     }
     
-    if (!this.isMigrating && this.shouldMigrate(seasonManager)) {
+    if (!this.isMigrating && this.shouldMigrate(seasonCache)) {
       this.migrationTarget = this.findMigrationTarget();
       this.isMigrating = !!this.migrationTarget;
     }
     
     if (this.isMigrating && this.migrationTarget) {
-      this.moveToMigrationTarget(seasonManager);
+      this.moveToMigrationTarget(seasonCache);
     }
   }
 
   findMigrationTarget() {
     const target = (this.preferredElevation.min + this.preferredElevation.max) * 0.5;
     const current = this.terrain.getElevationAt(this.pos.x, this.pos.y);
-    let best = null, bestScore = -Infinity;
+    
+    let bestX = 0, bestY = 0;
+    let bestScore = -Infinity;
+    let foundValid = false;
+    
+    const px = this.pos.x, py = this.pos.y;
+    const mapW = this.terrain.mapWidth - 20;
+    const mapH = this.terrain.mapHeight - 20;
     
     for (let i = 0; i < 20; i++) {
       const angle = random(TWO_PI);
       const dist = random(50, 150);
-      const x = constrain(this.pos.x + cos(angle) * dist, 20, this.terrain.mapWidth - 20);
-      const y = constrain(this.pos.y + sin(angle) * dist, 20, this.terrain.mapHeight - 20);
+      const x = constrain(px + cos(angle) * dist, 20, mapW);
+      const y = constrain(py + sin(angle) * dist, 20, mapH);
       
       if (!this.terrain.isWalkable(x, y)) continue;
       
@@ -585,13 +630,25 @@ class Moa extends Boid {
       
       if (score > bestScore) {
         bestScore = score;
-        best = createVector(x, y);
+        bestX = x;
+        bestY = y;
+        foundValid = true;
       }
     }
-    return best;
+    
+    // Only create/reuse vector if we found something
+    if (foundValid) {
+      if (!this._migrationTargetVec) {
+        this._migrationTargetVec = createVector(bestX, bestY);
+      } else {
+        this._migrationTargetVec.set(bestX, bestY);
+      }
+      return this._migrationTargetVec;
+    }
+    return null;
   }
 
-  moveToMigrationTarget(seasonManager) {
+  moveToMigrationTarget(seasonCache) {
     const dx = this.migrationTarget.x - this.pos.x;
     const dy = this.migrationTarget.y - this.pos.y;
     
@@ -604,7 +661,7 @@ class Moa extends Boid {
       return;
     }
     
-    const strength = seasonManager.getMigrationStrength();
+    const strength = seasonCache.migrationStrength;
     let urgency = 0.5 + strength * 0.5;
     if (this.hunger > 50 && this.localFoodScore < 0.3) urgency *= 1.5;
     
@@ -688,15 +745,15 @@ class Moa extends Boid {
     fill(colors.shadow);
     ellipse(1.5, 1.5, sc.bodyW * 1.2, sc.bodyH);
     
-    // Legs (FIXED: alternating motion)
+    // Legs (alternating motion)
     const speed = this.vel.mag();
     const cycle = frameCount * 0.18 + this.legPhase;
     const swing = sin(cycle) * (0.5 + speed * 2);
     
     stroke(colors.leg);
     strokeWeight(1.8);
-    this.renderLeg(-1, swing, sc);      // Left leg
-    this.renderLeg(1, -swing, sc);      // Right leg (opposite phase)
+    this.renderLeg(-1, swing, sc);
+    this.renderLeg(1, -swing, sc);
     
     // Tail
     noStroke();
@@ -773,7 +830,7 @@ class Moa extends Boid {
     const y2 = sc.legY[1] * side;
     const y3 = sc.legY[2] * side;
     const midX = sc.legAttach - sc.legLen * 0.3;
-    const endX = sc.legAttach - sc.legLen * 0.7 + swing;  // Swing NOT multiplied by side
+    const endX = sc.legAttach - sc.legLen * 0.7 + swing;
     
     strokeWeight(1.8);
     line(sc.legAttach, y1, midX, y2);
@@ -788,7 +845,19 @@ class Moa extends Boid {
 
   getBodyColor() {
     const c = this._colors;
-    if (this.panicLevel > 0) return lerpColor(c.body, c.panic, this.panicLevel);
+    
+    if (this.panicLevel > 0) {
+      // Only recalculate if panic changed significantly
+      if (!this._cachedPanicColor || abs(this._lastPanicLevel - this.panicLevel) > 0.05) {
+        this._cachedPanicColor = lerpColor(c.body, c.panic, this.panicLevel);
+        this._lastPanicLevel = this.panicLevel;
+      }
+      return this._cachedPanicColor;
+    }
+    
+    // Reset panic cache when not panicking
+    this._lastPanicLevel = -1;
+    
     if (this.hunger > this.criticalHunger) return c.starving;
     if (this.isFeeding) return c.feeding;
     return c.body;

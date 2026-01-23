@@ -202,6 +202,45 @@ class Simulation {
     
     return null;
   }
+
+  /**
+ * Handle eagle catching a moa - called by eagle when it catches prey
+ * @param {HaastsEagle} eagle - The eagle that made the catch
+ * @param {Moa} moa - The moa that was caught
+ * @param {MauriManager} mauri - The mauri manager
+ */
+handleEagleCatch(eagle, moa, mauri) {
+  // Kill the moa
+  moa.alive = false;
+  
+  // Update eagle state
+  eagle.kills++;
+  eagle.hunger = Math.max(0, eagle.hunger - 60);
+  eagle.vel.mult(0.1);
+  eagle.hunting = false;
+  eagle.target = null;
+  eagle.huntSearchTimer = 0;
+  eagle.state = 'resting';
+  eagle.restTimer = eagle.restDuration;
+  eagle.patrolCenter.set(eagle.pos.x, eagle.pos.y);
+  
+  // Check for balanced ecosystem reward
+  const moaCount = this.getMoaPopulation();
+  const eagleCount = this.eagles.length;
+  
+  // Reward if moa population is at least 2x eagle population
+  if (moaCount >= eagleCount * 2) {
+    const balanceReward = 5;
+    mauri.earn(balanceReward, moa.pos.x, moa.pos.y, 'ecosystem_balance');
+    this.game.addNotification(`Balanced ecosystem! Eagle fed. +${balanceReward} mauri`, 'info');
+  } else {
+    this.game.addNotification('Eagle caught a moa - population low!', 'error');
+  }
+  
+  // Track death
+  this.stats.deaths++;
+  this._invalidateCache();
+}
   
   // ============================================
   // ENTITY CREATION
@@ -417,7 +456,7 @@ class Simulation {
     }
     
     // Update eagles
-    this.updateEagles();
+    this.updateEagles(mauri);
     
     // Periodic cleanup
     if ((frameCount & 511) === 0) { // Every ~512 frames
@@ -537,18 +576,17 @@ class Simulation {
     }
   }
   
-  updateEagles() {
-    const eagles = this.eagles;
+  updateEagles(mauri) {  // Add mauri parameter
+  const eagles = this.eagles;
+  
+  for (let i = 0, len = eagles.length; i < len; i++) {
+    const eagle = eagles[i];
+    eagle.behave(this, mauri);  // Pass mauri
+    eagle.update();
     
-    for (let i = 0, len = eagles.length; i < len; i++) {
-      const eagle = eagles[i];
-      eagle.behave(this);
-      eagle.update();
-      
-      // Ensure eagle stays in bounds
-      this.constrainToBounds(eagle.pos);
-    }
+    this.constrainToBounds(eagle.pos);
   }
+}
   
   cleanup() {
     const moas = this.moas;

@@ -36,6 +36,9 @@ class GameUI {
     this.toolbarY = this.bottomBar.y + 60;
     this.hoveredTool = null;
     
+    // Calculate centered positions for UI elements
+    this._calculateLayoutPositions();
+    
     // Message feed for sidebar
     this.messageFeed = [];
     this.maxMessages = 15;
@@ -44,6 +47,45 @@ class GameUI {
     this._defaultPanelBg = [25, 35, 30, 240];
     this._defaultPanelBorder = [60, 90, 70];
     this._defaultPanelHeader = [45, 75, 55];
+  }
+  
+  _calculateLayoutPositions() {
+    const gameAreaWidth = this.config.gameAreaWidth;
+    const gameAreaCenter = gameAreaWidth / 2;
+    
+    // Top bar element sizes
+    const mauriWidth = 180;
+    const seasonWidth = 280;
+    const timerWidth = 120;
+    const elementSpacing = 30;
+    
+    // Total width of top bar elements
+    const topBarElementsWidth = mauriWidth + seasonWidth + timerWidth + (elementSpacing * 2);
+    const topBarStartX = (gameAreaWidth - topBarElementsWidth) / 2;
+    
+    // Store calculated positions for top bar
+    this.layout = {
+      // Top bar elements (centered)
+      mauriX: topBarStartX,
+      seasonX: topBarStartX + mauriWidth + elementSpacing,
+      timerX: topBarStartX + mauriWidth + seasonWidth + (elementSpacing * 2),
+      
+      // Migration hint (centered, slightly narrower than game area)
+      migrationHintWidth: 940,
+      migrationHintX: (gameAreaWidth - 940) / 2,
+      
+      // Bottom bar toolbar
+      toolbarBtnSize: 70,
+      toolbarSpacing: 85,
+      toolbarBtnCount: Object.keys(PLACEABLES).length
+    };
+    
+    // Calculate toolbar start position (centered)
+    const toolbarTotalWidth = (this.layout.toolbarBtnCount - 1) * this.layout.toolbarSpacing + this.layout.toolbarBtnSize;
+    this.layout.toolbarStartX = (gameAreaWidth - toolbarTotalWidth) / 2;
+    
+    // Selected tool info panel (positioned to the right of toolbar)
+    this.layout.selectedToolX = this.layout.toolbarStartX + toolbarTotalWidth + 40;
   }
   
   // Safe color getter
@@ -87,10 +129,10 @@ class GameUI {
   }
   
   handleToolbarClick(mx, my) {
-    const btnX = 30;
+    const btnX = this.layout.toolbarStartX;
     const btnY = this.toolbarY;
-    const btnSize = 70;
-    const spacing = 85;
+    const btnSize = this.layout.toolbarBtnSize;
+    const spacing = this.layout.toolbarSpacing;
     
     let i = 0;
     for (let type in PLACEABLES) {
@@ -190,28 +232,24 @@ class GameUI {
   }
   
   // ==========================================
-  // TOP BAR (180px height) - Simplified, stats moved to sidebar
+  // TOP BAR (180px height) - Centered layout
   // ==========================================
   
   renderTopBar() {
     const contentY = 20;
     
-
-    
-    // Mauri counter (left-center)
-    this.renderMauriCounter(250, contentY);
+    // Mauri counter (centered left)
+    this.renderMauriCounter(this.layout.mauriX, contentY);
     
     // Season & Migration info (center)
-    this.renderSeasonPanel(500, contentY);
+    this.renderSeasonPanel(this.layout.seasonX, contentY);
     
-    // Timer (right of center)
-    this.renderTimer(850, contentY);
+    // Timer (centered right)
+    this.renderTimer(this.layout.timerX, contentY);
     
-    // Migration hint row (bottom of top bar)
-    this.renderMigrationHint(30, 110);
+    // Migration hint row (bottom of top bar, centered)
+    this.renderMigrationHint(this.layout.migrationHintX, 110);
   }
-  
-
   
   renderMauriCounter(x, y) {
     // Container
@@ -292,9 +330,7 @@ class GameUI {
     textSize(11);
     textAlign(LEFT, TOP);
     text(`Next: ${nextSeason.icon} ${nextSeason.name}`, x + 60, y + 52);
-    
   }
-  
   
   renderTimer(x, y) {
     const seconds = Math.floor(this.game.playTime / 60);
@@ -329,7 +365,7 @@ class GameUI {
     // Container
     fill(30, 45, 35, 180);
     noStroke();
-    rect(x, y, 940, 50, 8);
+    rect(x, y, this.layout.migrationHintWidth, 50, 8);
     
     // Get seasonal message
     const message = this.getSeasonalMessage();
@@ -356,10 +392,9 @@ class GameUI {
   }
 
   getSeasonalMessage() {
-    const season = this.seasonManager.current;
-    const nextSeason = this.seasonManager.next;
+    const seasonKey = this.seasonManager.currentKey;
+    const nextSeasonKey = this.seasonManager.nextKey;
     const progress = this.seasonManager.progress;
-    const migStrength = this.seasonManager.getMigrationStrength();
     
     // Check for urgent conditions first
     const aliveMoas = this.simulation.moas.filter(m => m.alive);
@@ -389,34 +424,34 @@ class GameUI {
     
     // Season transition warnings (when close to changing)
     if (progress > 0.75) {
-      return this.getSeasonTransitionMessage(season, nextSeason);
+      return this.getSeasonTransitionMessage(nextSeasonKey);
     }
     
     // Current season messages
-    return this.getCurrentSeasonMessage(season, migratingCount, aliveMoas.length);
+    return this.getCurrentSeasonMessage(seasonKey, migratingCount, aliveMoas.length);
   }
 
-  getSeasonTransitionMessage(currentSeason, nextSeason) {
+  getSeasonTransitionMessage(nextSeasonKey) {
     const messages = {
-      'summer': {
+      'autumn': {
         icon: '🍂',
         text: 'Autumn approaching - temperatures will drop soon.',
-        subtext: `High elevation plants will begin going dormant. Stock up on food.`,
+        subtext: 'High elevation plants will begin going dormant. Stock up on food.',
         color: [255, 200, 130]
       },
-      'autumn': {
+      'winter': {
         icon: '❄️',
         text: 'Winter is coming! High ground will become barren.',
         subtext: 'Moa will migrate to lower elevations. Prepare shelters.',
         color: [180, 200, 255]
       },
-      'winter': {
+      'spring': {
         icon: '🌸',
         text: 'Spring is near - plants will begin to regrow.',
         subtext: 'Good nesting conditions ahead. Prepare nesting sites.',
         color: [255, 180, 200]
       },
-      'spring': {
+      'summer': {
         icon: '☀️',
         text: 'Summer approaching - higher elevations will become accessible.',
         subtext: 'Moa can forage across all elevations. Peak growing season.',
@@ -424,10 +459,10 @@ class GameUI {
       }
     };
     
-    return messages[currentSeason.key] || messages['summer'];
+    return messages[nextSeasonKey] || messages['summer'];
   }
 
-  getCurrentSeasonMessage(season, migratingCount, moaCount) {
+  getCurrentSeasonMessage(seasonKey, migratingCount, moaCount) {
     const messages = {
       'summer': {
         icon: '☀️',
@@ -463,27 +498,29 @@ class GameUI {
       }
     };
     
-    return messages[season.key] || messages['summer'];
+    return messages[seasonKey] || messages['summer'];
   }
-  
+
   // ==========================================
-  // BOTTOM BAR (180px height)
+  // BOTTOM BAR (180px height) - Centered layout
   // ==========================================
   
   renderBottomBar() {
     const barY = this.bottomBar.y;
+    const gameAreaCenter = this.config.gameAreaWidth / 2;
     
-    // Section header
+    // Section header (centered above toolbar)
     fill(100, 140, 110);
     noStroke();
     textSize(14);
-    textAlign(LEFT, TOP);
-    text("TOOLS", 30, barY + 20);
+    textAlign(CENTER, TOP);
+    text("TOOLS", gameAreaCenter, barY + 20);
     
-    // Hotkey hint
+    // Hotkey hint (centered)
     fill(80, 110, 90);
     textSize(10);
-    text("Press 1-6 to select • Hold SHIFT to place multiple • ESC to cancel", 30, barY + 38);
+    textAlign(CENTER, TOP);
+    text("Press 1-6 to select • Hold SHIFT to place multiple • ESC to cancel", gameAreaCenter, barY + 38);
     
     // Tool buttons
     this.renderToolbar();
@@ -495,10 +532,10 @@ class GameUI {
   }
   
   renderToolbar() {
-    const btnX = 30;
+    const btnX = this.layout.toolbarStartX;
     const btnY = this.toolbarY;
-    const btnSize = 70;
-    const spacing = 85;
+    const btnSize = this.layout.toolbarBtnSize;
+    const spacing = this.layout.toolbarSpacing;
     
     let i = 0;
     for (let type in PLACEABLES) {
@@ -598,39 +635,43 @@ class GameUI {
   
   renderSelectedToolInfo() {
     const def = PLACEABLES[this.game.selectedPlaceable];
-    const x = 560;
+    const x = this.layout.selectedToolX;
     const y = this.bottomBar.y + 60;
+    
+    // Make sure the panel fits within the game area
+    const panelWidth = 280;
+    const adjustedX = Math.min(x, this.config.gameAreaWidth - panelWidth - 20);
     
     // Info panel
     fill(40, 70, 50, 220);
     stroke(90, 140, 110);
     strokeWeight(1);
-    rect(x, y, 280, 70, 8);
+    rect(adjustedX, y, panelWidth, 70, 8);
     
     // Icon
     const iconCol = color(def.color);
     fill(red(iconCol), green(iconCol), blue(iconCol));
     noStroke();
-    ellipse(x + 35, y + 35, 40, 40);
+    ellipse(adjustedX + 35, y + 35, 40, 40);
     textSize(22);
     fill(255);
     textAlign(CENTER, CENTER);
-    text(def.icon, x + 35, y + 35);
+    text(def.icon, adjustedX + 35, y + 35);
     
     // Name and cost
     fill(200, 240, 210);
     textSize(14);
     textAlign(LEFT, TOP);
-    text(def.name, x + 65, y + 12);
+    text(def.name, adjustedX + 65, y + 12);
     
     fill(140, 255, 160);
     textSize(12);
-    text(`Cost: ${def.cost} mauri`, x + 65, y + 32);
+    text(`Cost: ${def.cost} mauri`, adjustedX + 65, y + 32);
     
     // Instruction
     fill(140, 170, 150);
     textSize(10);
-    text("Click in game area to place", x + 65, y + 50);
+    text("Click in game area to place", adjustedX + 65, y + 50);
   }
   
   // ==========================================
@@ -721,7 +762,7 @@ class GameUI {
   
   renderEventLog(x, y) {
     const panelWidth = this.sidebar.width - 40;
-    const panelHeight = 320; // Larger to accommodate bigger text
+    const panelHeight = 320;
     
     // Panel header
     const header = this._getPanelHeader();
@@ -748,15 +789,15 @@ class GameUI {
     noStroke();
     rect(x, y + 30, panelWidth, panelHeight - 30, 0, 0, 8, 8);
     
-    // Messages - 1.5x larger text (15px instead of 10px)
+    // Messages
     let msgY = y + 50;
-    const messages = this.game.notifications.slice(0, 8); // Fewer messages since they're bigger
-    const lineHeight = 36; // Larger line height for bigger text
+    const messages = this.game.notifications.slice(0, 8);
+    const lineHeight = 36;
     
     for (const msg of messages) {
-      const alpha = Math.min(255, msg.life * 0.85); // Adjusted for longer life
+      const alpha = Math.min(255, msg.life * 0.85);
       
-      // Message type indicator - larger dot
+      // Message type indicator
       let tr, tg, tb;
       switch (msg.type) {
         case 'success': tr = 100; tg = 200; tb = 120; break;
@@ -766,9 +807,9 @@ class GameUI {
       
       fill(tr, tg, tb, alpha);
       noStroke();
-      ellipse(x + 22, msgY + 8, 10, 10); // Larger indicator dot
+      ellipse(x + 22, msgY + 8, 10, 10);
       
-      // Message text - 1.5x size (15px)
+      // Message text
       fill(190, 210, 200, alpha);
       textSize(15);
       textAlign(LEFT, TOP);
@@ -777,7 +818,6 @@ class GameUI {
       const maxW = panelWidth - 55;
       let displayText = msg.text;
       if (textWidth(displayText) > maxW) {
-        // Simple truncation with ellipsis
         while (textWidth(displayText + '...') > maxW && displayText.length > 10) {
           displayText = displayText.slice(0, -1);
         }
@@ -830,9 +870,7 @@ class GameUI {
     const stats = this.getStats();
     const aliveMoas = this.simulation.moas.filter(m => m.alive);
     
-    // =====================
-    // Population Stats Row (moved from top bar)
-    // =====================
+    // Population Stats Row
     let statY = y + 50;
     
     // Stats grid - 2 columns
@@ -857,9 +895,7 @@ class GameUI {
     
     statY += 45;
     
-    // =====================
     // Average Hunger Bar
-    // =====================
     if (aliveMoas.length > 0) {
       const avgHunger = aliveMoas.reduce((sum, m) => sum + m.hunger, 0) / aliveMoas.length;
       
@@ -924,150 +960,7 @@ class GameUI {
   }
   
   renderMiniMap(x, y) {
-    const panelWidth = this.sidebar.width - 40;
-    const remainingHeight = CONFIG.canvasHeight - y - 20;
-    const panelHeight = Math.min(280, remainingHeight);
-    
-    // Check if we have room
-    if (panelHeight < 120) return;
-    
-    // Panel header
-    const header = this._getPanelHeader();
-    fill(header[0], header[1], header[2]);
-    noStroke();
-    rect(x, y, panelWidth, 30, 8, 8, 0, 0);
-    
-    fill(180, 220, 190);
-    textSize(13);
-    textAlign(LEFT, CENTER);
-    text("  MAP", x + 12, y + 15);
-    
-    // Legend hint
-    fill(120, 150, 130);
-    textSize(9);
-    textAlign(RIGHT, CENTER);
-    text("🟤 Moa  🔴 Eagle", x + panelWidth - 12, y + 15);
-    
-    // Panel body
-    fill(30, 45, 38, 220);
-    noStroke();
-    rect(x, y + 30, panelWidth, panelHeight - 30, 0, 0, 8, 8);
-    
-    // Map area
-    const mapPadding = 10;
-    const mapX = x + mapPadding;
-    const mapY = y + 40;
-    const mapW = panelWidth - mapPadding * 2;
-    const mapH = panelHeight - 50;
-    
-    // Draw terrain
-    if (this.terrain && this.terrain.terrainBuffer) {
-      push();
-      
-      // Clip to map area
-      drawingContext.save();
-      drawingContext.beginPath();
-      drawingContext.rect(mapX, mapY, mapW, mapH);
-      drawingContext.clip();
-      
-      // Draw terrain buffer
-      tint(255, 220);
-      image(this.terrain.terrainBuffer, mapX, mapY, mapW, mapH);
-      noTint();
-      
-      // Calculate scale
-      const scaleX = mapW / this.terrain.mapWidth;
-      const scaleY = mapH / this.terrain.mapHeight;
-      
-      // Draw placeables first (under entities)
-      for (const p of this.simulation.placeables) {
-        if (p.alive) {
-          const px = mapX + p.pos.x * scaleX;
-          const py = mapY + p.pos.y * scaleY;
-          
-          noFill();
-          stroke(255, 255, 255, 60);
-          strokeWeight(1);
-          const markerRadius = p.radius * scaleX * 2;
-          ellipse(px, py, markerRadius, markerRadius);
-        }
-      }
-      
-      // Draw eggs - 4x size (was ~3px, now 12px)
-      noStroke();
-      fill(245, 240, 220, 200);
-      for (const egg of this.simulation.eggs) {
-        if (egg.alive) {
-          const ex = mapX + egg.pos.x * scaleX;
-          const ey = mapY + egg.pos.y * scaleY;
-          ellipse(ex, ey, 10, 12); // Egg shape
-        }
-      }
-      
-      // Draw moa positions - 4x size (was 3px, now 12px)
-      fill(180, 140, 90);
-      stroke(120, 90, 50);
-      strokeWeight(1);
-      for (const moa of this.simulation.moas) {
-        if (moa.alive) {
-          const mx = mapX + moa.pos.x * scaleX;
-          const my = mapY + moa.pos.y * scaleY;
-          ellipse(mx, my, 12, 14); // Slightly oval for moa shape
-          
-          // Migrating indicator
-          if (moa.isMigrating) {
-            noFill();
-            stroke(100, 180, 255, 150);
-            strokeWeight(2);
-            ellipse(mx, my, 18, 18);
-          }
-        }
-      }
-      
-      // Draw eagle positions - 4x size (was 4px, now 16px)
-      fill(200, 60, 60);
-      stroke(150, 40, 40);
-      strokeWeight(1);
-      for (const eagle of this.simulation.eagles) {
-        const ex = mapX + eagle.pos.x * scaleX;
-        const ey = mapY + eagle.pos.y * scaleY;
-        
-        // Eagle marker - diamond/wing shape
-        push();
-        translate(ex, ey);
-        beginShape();
-        vertex(0, -8);
-        vertex(10, 0);
-        vertex(0, 4);
-        vertex(-10, 0);
-        endShape(CLOSE);
-        pop();
-        
-        // Hunting indicator
-        if (eagle.state === 'hunting' || eagle.state === 'diving') {
-          noFill();
-          stroke(255, 100, 100, 200);
-          strokeWeight(2);
-          ellipse(ex, ey, 24, 24);
-        }
-      }
-      
-      drawingContext.restore();
-      
-      // Border
-      noFill();
-      stroke(70, 100, 80);
-      strokeWeight(2);
-      rect(mapX, mapY, mapW, mapH, 4);
-      
-      pop();
-    } else {
-      // Loading state
-      fill(80, 100, 90);
-      textSize(12);
-      textAlign(CENTER, CENTER);
-      text("Loading map...", x + panelWidth/2, y + panelHeight/2);
-    }
+    // Commented out - placeholder for future implementation
   }
   
   // ==========================================

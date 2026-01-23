@@ -1031,17 +1031,21 @@ class Game {
   }
   
   renderPauseOverlay() {
-    const cw = CONFIG.canvasWidth;
-    const ch = CONFIG.canvasHeight;
+    const cw = CONFIG.gameAreaWidth;
+    const ch = CONFIG.gameAreaHeight;
+    const cy = CONFIG.gameAreaY;
+    const UIgreen = [...CONFIG.col_UI.slice(0,3),100];
     const centerX = cw * 0.5;
     const centerY = ch * 0.5;
     
     // Darken entire screen
-    fill(0, 0, 0, 150);
+    fill(UIgreen);
     noStroke();
-    rect(0, 0, cw, ch);
+    rect(0, cy, cw, ch);
     
     // Pause box
+    push();
+    translate(0,cy);
     fill(30, 45, 35, 240);
     stroke(70, 110, 80);
     strokeWeight(2);
@@ -1063,20 +1067,25 @@ class Game {
     fill(150, 170, 150);
     textSize(14);
     text("Press R to restart", centerX, centerY + 50);
+    pop();
   }
 
   renderWinOverlay() {
-    const cw = CONFIG.canvasWidth;
-    const ch = CONFIG.canvasHeight;
+    const cw = CONFIG.gameAreaWidth;
+    const ch = CONFIG.gameAreaHeight;
+    const cy = CONFIG.gameAreaY;
+    const UIgreen = [...CONFIG.col_UI.slice(0, 3), 150];
     const centerX = cw * 0.5;
     const centerY = ch * 0.5;
     
     // Green tinted overlay
-    fill(0, 50, 0, 180);
+    fill(UIgreen);
     noStroke();
-    rect(0, 0, cw, ch);
+    rect(0, cy, cw, ch);
     
     // Win box
+    push();
+    translate(0, cy);
     fill(30, 60, 40, 250);
     stroke(100, 180, 120);
     strokeWeight(3);
@@ -1104,20 +1113,25 @@ class Game {
     fill(200, 240, 200);
     textSize(18);
     text("Press R to play again", centerX, centerY + 120);
+    pop();
   }
 
   renderLoseOverlay() {
-    const cw = CONFIG.canvasWidth;
-    const ch = CONFIG.canvasHeight;
+    const cw = CONFIG.gameAreaWidth;
+    const ch = CONFIG.gameAreaHeight;
+    const cy = CONFIG.gameAreaY;
+    const UIred = [80, 30, 30, 150];
     const centerX = cw * 0.5;
     const centerY = ch * 0.5;
     
     // Red tinted overlay
-    fill(50, 0, 0, 180);
+    fill(UIred);
     noStroke();
-    rect(0, 0, cw, ch);
+    rect(0, cy, cw, ch);
     
     // Lose box
+    push();
+    translate(0, cy);
     fill(60, 35, 35, 250);
     stroke(150, 100, 100);
     strokeWeight(3);
@@ -1145,6 +1159,7 @@ class Game {
     fill(220, 180, 180);
     textSize(18);
     text("Press R to try again", centerX, centerY + 120);
+    pop();
   }
   
   handleClick(mx, my) {

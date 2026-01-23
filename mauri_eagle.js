@@ -58,8 +58,8 @@ class HaastsEagle extends Boid {
     this.species = speciesData;
     
     // Movement
-    this.baseSpeed = 0.6;
-    this.huntSpeed = 1.4;
+    this.baseSpeed = 0.4;
+    this.huntSpeed = 0.8;
     this.maxSpeed = this.baseSpeed;
     this.maxForce = 0.05;
     this.perceptionRadius = 160;

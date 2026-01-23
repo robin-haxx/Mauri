@@ -9,11 +9,12 @@ const PLANT_TYPE_ID = {
   fern: 2,
   kawakawa: 3,
   rimu: 4,
-  beech: 5
+  beech: 5,
+  patotara: 6
 };
 
 // Plants that use sprite rendering
-const SPRITE_PLANTS = new Set(['tussock', 'flax', 'fern', 'rimu', 'beech']);
+const SPRITE_PLANTS = new Set(['tussock', 'flax', 'fern', 'rimu', 'beech', 'patotara']);
 
 // Sprite reference - initialized from mauri_sketch.js
 let PLANT_SPRITES = null;
@@ -205,6 +206,7 @@ class Plant {
     this.regrowthTimer = 0;
     this.growth = 1.0;
     this.seasonalModifier = 1.0;
+    this.plantTypeModifier = 1.0;
     
     this.isSpawned = false;
     this.parentPlaceable = null;
@@ -224,6 +226,7 @@ class Plant {
         return;
       }
       this.seasonalModifier = 1.2;
+      this.plantTypeModifier = 1.0;
       this.handleGrowth();
       return;
     }
@@ -232,6 +235,9 @@ class Plant {
     if (Math.abs(newModifier - this.seasonalModifier) > 0.01) {
       this.seasonalModifier = newModifier;
     }
+    
+    // Get plant-type specific modifier (for patotara berries, etc.)
+    this.plantTypeModifier = seasonManager.getPlantTypeModifier(this.type);
     
     this.checkDormancy(seasonManager);
     
@@ -245,6 +251,9 @@ class Plant {
   
   checkDormancy(seasonManager) {
     if (this.dormant || !this.alive) return;
+    
+    // Summer uses wilting sprites instead of dormancy for harsh conditions
+    if (seasonManager.currentKey === 'summer') return;
     
     if (seasonManager.shouldPlantBeDormant(this.elevation, this.biomeKey)) {
       const dormancyChance = seasonManager.getDormancyChance();
@@ -280,6 +289,8 @@ class Plant {
   }
   
   handleGrowth() {
+    const typeModifier = this.plantTypeModifier || 1.0;
+    
     if (!this.alive) {
       const regrowthRate = this.seasonalModifier;
       this.regrowthTimer += regrowthRate;
@@ -296,9 +307,9 @@ class Plant {
       const growthRate = 0.002 * this.seasonalModifier;
       this.growth += growthRate;
       if (this.growth > 1.0) this.growth = 1.0;
-      this.nutrition = this.maxNutrition * this.growth * this.seasonalModifier;
+      this.nutrition = this.maxNutrition * this.growth * this.seasonalModifier * typeModifier;
     } else {
-      this.nutrition = this.maxNutrition * this.seasonalModifier;
+      this.nutrition = this.maxNutrition * this.seasonalModifier * typeModifier;
     }
     
     this.maxNutrition = this.baseNutrition * this.seasonalModifier;
@@ -322,7 +333,7 @@ class Plant {
   _getSpriteState() {
     // Dormant plants use wilting sprite
     if (this.dormant) {
-      return 'wilting';
+      return 'dormant';
     }
     
     if (this.seasonalModifier < 0.5) {

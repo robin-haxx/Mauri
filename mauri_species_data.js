@@ -19,8 +19,8 @@ const MOA_SPECIES = {
     bodyColor: { r: [90, 110], g: [60, 75], b: [28, 40] },
     
     // Movement
-    baseSpeed: 0.25,
-    fleeSpeed: 0.6,
+    baseSpeed: 0.2,
+    fleeSpeed: 0.35,
     maxForce: 0.025,
     
     // Survival

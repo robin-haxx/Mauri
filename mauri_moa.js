@@ -13,8 +13,8 @@ const MOA_STATE = {
 class Moa extends Boid {
   static DEFAULTS = {
     size: { min: 8, max: 11 },
-    baseSpeed: 0.25,
-    fleeSpeed: 0.6,
+    baseSpeed: 0.2,
+    fleeSpeed: 0.4,
     maxForce: 0.025,
     flockTendency: 0.8,
     flightiness: 0.7,

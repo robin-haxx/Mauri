@@ -15,7 +15,7 @@ function preload(){
   GroceryRounded = loadFont('typefaces/GroceryRounded.ttf');
   // Load plant sprites
   // Plants that have sprites (Kawakawa keeps procedural rendering)
-  const spritePlants = ['Tussock', 'Flax', 'Fern', 'Rimu', 'Beech'];
+  const spritePlants = ['Tussock', 'Flax', 'Fern', 'Rimu', 'Beech', 'Patotara'];
   const states = ['Mature', 'Thriving', 'Wilting', 'Dormant'];
   
   for (const plant of spritePlants) {
@@ -31,6 +31,7 @@ function preload(){
 // CONFIGURATION
 // ============================================
 const CONFIG = {
+  version: '0.7.0',
   // Canvas dimensions
   canvasWidth: 1920,
   canvasHeight: 1080,
@@ -329,12 +330,16 @@ const BIOMES = {
   montane: {
     key: 'montane', name: "Montane Forest", minElevation: 0.45, maxElevation: 0.53,
     colors: ['#4a7c59', '#528764', '#5a926f'], contourColor: '#335740',
-    walkable: true, canHavePlants: true, plantTypes: ['beech', 'fern'], canPlace: true
+    walkable: true, canHavePlants: true, 
+    plantTypes: ['beech', 'fern', 'patotara'],
+    canPlace: true
   },
   subalpine: {
     key: 'subalpine', name: "Subalpine Tussock", minElevation: 0.53, maxElevation: 0.70,
     colors: ['#a8a060', '#b5ad6d', '#c2ba7a'], contourColor: '#7a7445',
-    walkable: true, canHavePlants: true, plantTypes: ['tussock'], canPlace: true
+    walkable: true, canHavePlants: true, 
+    plantTypes: ['tussock', 'patotara'],
+    canPlace: true
   },
   alpine: {
     key: 'alpine', name: "Alpine Rock", minElevation: 0.70, maxElevation: 0.84,
@@ -351,13 +356,15 @@ const BIOMES = {
 // ============================================
 // PLANT DEFINITIONS
 // ============================================
+// Update PLANT_TYPES:
 const PLANT_TYPES = {
   tussock: { name: "Tussock", nutrition: 25, color: '#8ea040', size: 24, growthTime: 200 },
   flax: { name: "Flax", nutrition: 35, color: '#487020', size: 26, growthTime: 280 },
   fern: { name: "Fern", nutrition: 30, color: '#228B22', size: 36, growthTime: 240 },
   rimu: { name: "Rimu Fruit", nutrition: 50, color: '#8B0000', size: 48, growthTime: 400 },
   beech: { name: "Beech Mast", nutrition: 40, color: '#8b430f', size: 52, growthTime: 350 },
-  kawakawa: { name: "Kawakawa", nutrition: 40, color: '#3d9a5e', size: 22, growthTime: 150 }
+  kawakawa: { name: "Kawakawa", nutrition: 40, color: '#3d9a5e', size: 22, growthTime: 150 },
+  patotara: { name: "Patotara", nutrition: 35, color: '#c94c5a', size: 28, growthTime: 160 }
 };
 
 // ============================================
@@ -1342,15 +1349,14 @@ function draw() {
   let t2 = performance.now();
   
   // Show timing breakdown
-  fill(0, 0, 0, 200);
-  rect(80, 5, 150, 35);
   fill(255);
   textSize(10);
-  text(`Update: ${(t1-t0).toFixed(1)}ms`, 85, 18);
-  text(`Render: ${(t2-t1).toFixed(1)}ms`, 85, 32);
+  text(`Update: ${(t1-t0).toFixed(1)}ms`, 85, 38);
+  text(`Render: ${(t2-t1).toFixed(1)}ms`, 85, 52);
+  text(`Version: ${(CONFIG.version)}`, 85, 70);
   
   // Render FPS counter
-  //renderFPSCounter();
+  renderFPSCounter();
 }
 
 function updateFPS() {

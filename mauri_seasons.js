@@ -5,21 +5,22 @@ const SEASONS = {
     icon: "☀️",
     color: '#f4a460',
     plantModifiers: {
-      coastal: 0.2,     // Very dry
-      grassland: 0.3,   // Parched
-      podocarp: 0.4,    // Struggling
-      montane: 0.9,     // Okay
-      subalpine: 1.3    // Thriving
+      coastal: 0.2,
+      grassland: 0.3,
+      podocarp: 0.4,
+      montane: 0.9,
+      subalpine: 1.3
     },
-    // More extreme elevation preference - clearly upland
+    // Plant-type specific modifiers (stacks with biome modifier, check this)
+    plantTypeModifiers: {
+      patotara: 1.8  // Peak berry season
+    },
     preferredElevation: { min: 0.50, max: 0.78 },
-    migrationStrength: 0.8,  // How strongly moa want to migrate
+    migrationStrength: 0.8,
     hungerModifier: 1.15,
     description: "Lowlands dry out. Moa migrate to alpine meadows.",
-    
-    // Plants below this elevation may go dormant
     dormancyElevation: 0.35,
-    dormancyChance: 0.4  // 40% of plants below threshold go dormant
+    dormancyChance: 0.4
   },
   
   autumn: {
@@ -29,13 +30,16 @@ const SEASONS = {
     plantModifiers: {
       coastal: 0.6,
       grassland: 1.0,
-      podocarp: 1.2,    // Fruiting season
+      podocarp: 1.2,
       montane: 1.0,
       subalpine: 0.6
     },
+    plantTypeModifiers: {
+      patotara: 1.5  // Late berry season, still good
+    },
     preferredElevation: { min: 0.30, max: 0.58 },
     migrationStrength: 0.5,
-    hungerModifier: 0.9,  // Abundant food
+    hungerModifier: 0.9,
     description: "Forests fruit. Moa descend to feast.",
     dormancyElevation: null,
     dormancyChance: 0
@@ -49,19 +53,19 @@ const SEASONS = {
       coastal: 0.7,
       grassland: 0.8,
       podocarp: 0.7,
-      montane: 0.3,     // Snow-covered
-      subalpine: 0.1    // Frozen
+      montane: 0.3,
+      subalpine: 0.1
     },
-    // Clearly lowland preference
+    plantTypeModifiers: {
+      patotara: 0.3  // No berries, just foliage
+    },
     preferredElevation: { min: 0.18, max: 0.42 },
-    migrationStrength: 1.0,  // Strong migration drive
-    hungerModifier: 1.25,    // Food is scarce
+    migrationStrength: 1.0,
+    hungerModifier: 1.25,
     description: "Alpine areas freeze. Moa shelter in lowland forests.",
-    
-    // Plants above this elevation go dormant
     dormancyElevation: 0.55,
     dormancyChance: 0.6,
-    dormancyAbove: true  // Dormancy affects plants ABOVE threshold
+    dormancyAbove: true
   },
   
   spring: {
@@ -70,14 +74,17 @@ const SEASONS = {
     color: '#98fb98',
     plantModifiers: {
       coastal: 0.9,
-      grassland: 1.3,   // New growth
+      grassland: 1.3,
       podocarp: 1.1,
-      montane: 0.8,     // Still melting
-      subalpine: 0.5    // Snow melting
+      montane: 0.8,
+      subalpine: 0.5
+    },
+    plantTypeModifiers: {
+      patotara: 0.6  // Flowering, few berries yet
     },
     preferredElevation: { min: 0.22, max: 0.52 },
     migrationStrength: 0.6,
-    hungerModifier: 0.85,  // Easy foraging
+    hungerModifier: 0.85,
     description: "New growth emerges. Best time for nesting.",
     dormancyElevation: 0.65,
     dormancyChance: 0.3,
@@ -136,6 +143,17 @@ class SeasonManager {
       return true;
     }
     return false;
+  }
+
+  getPlantTypeModifier(plantType) {
+    const currentMod = this.current.plantTypeModifiers?.[plantType] || 1.0;
+    
+    if (this.transitionProgress > 0) {
+      const nextMod = this.next.plantTypeModifiers?.[plantType] || 1.0;
+      return lerp(currentMod, nextMod, this.transitionProgress);
+    }
+    
+    return currentMod;
   }
   
   getPlantModifier(biomeKey) {

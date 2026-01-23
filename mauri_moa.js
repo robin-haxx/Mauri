@@ -217,22 +217,29 @@ class Moa extends Boid {
   // MAIN BEHAVIOR
   // ============================================
 
-  behave(simulation, mauri, seasonManager) {
+  behave(simulation, mauri, seasonManager, dt = 1) {
     // Cache season data once per frame
     this._updateSeasonCache(seasonManager);
     const seasonCache = this._seasonCache;
     
-    // Hunger - use cached season data
+    // Hunger - multiply rate by delta time
     const hungerMod = this.speciesConfig.seasonalModifiers?.[seasonCache.key]?.hungerRate || 1;
     this.hungerRate = this.baseHungerRate * seasonCache.hungerMod * hungerMod;
-    this.hunger = Math.min(this.hunger + this.hungerRate, this.maxHunger);
+    this.hunger = Math.min(this.hunger + this.hungerRate * dt, this.maxHunger);
     
-    // Egg cooldown
-    if (this.eggCooldown > 0 && --this.eggCooldown <= 0) this.canLayEgg = true;
+    // Egg cooldown - scale by delta time
+    if (this.eggCooldown > 0) {
+      this.eggCooldown -= dt;
+      if (this.eggCooldown <= 0) {
+        this.eggCooldown = 0;
+        this.canLayEgg = true;
+      }
+    }
     
-    // Food assessment (throttled)
-    if (++this.foodCheckTimer >= 60) {
-      this.foodCheckTimer = 0;
+    // Food assessment (throttled - accumulate time)
+    this.foodCheckTimer += dt;
+    if (this.foodCheckTimer >= 60) {
+      this.foodCheckTimer -= 60;
       const plants = simulation.getNearbyPlants(this.pos.x, this.pos.y, 60);
       let edible = 0;
       for (let i = 0; i < plants.length && edible < 8; i++) {
@@ -248,14 +255,14 @@ class Moa extends Boid {
     const moas = simulation.getNearbyMoas(px, py, 100);
     
     // Placeable effects
-    this.applyPlaceableEffects(placeables);
+    this.applyPlaceableEffects(placeables, dt);
     
     // Update elevation preference from cache
     this.preferredElevation = seasonCache.preferredElevation;
     
     // Determine and execute state
     this.currentState = this.determineState(eagles, placeables, seasonCache);
-    this.executeState(simulation, mauri, seasonCache, eagles, moas, placeables);
+    this.executeState(simulation, mauri, seasonCache, eagles, moas, placeables, dt);
     
     // Common behaviors
     this.applySeparation(moas);
@@ -264,8 +271,8 @@ class Moa extends Boid {
     this.applyForce(avoid);
     this.edges();
     
-    // Security time
-    this.updateSecurity(eagles);
+    // Security time - scale by delta time
+    this.updateSecurity(eagles, dt);
     
     // Try laying egg
     if (this.currentState !== MOA_STATE.FLEEING) {
@@ -309,7 +316,7 @@ class Moa extends Boid {
     return MOA_STATE.IDLE;
   }
 
-  executeState(simulation, mauri, seasonCache, eagles, moas, placeables) {
+  executeState(simulation, mauri, seasonCache, eagles, moas, placeables, dt = 1) {
     this.panicLevel = 0;
     const isStarving = this.hunger > this.criticalHunger;
     
@@ -340,7 +347,7 @@ class Moa extends Boid {
         
       case MOA_STATE.MIGRATING:
         this.maxSpeed = this.baseSpeed * (isStarving ? 0.6 : 1);
-        this.executeMigration(seasonCache);
+        this.executeMigration(seasonCache, dt);
         if (this.hunger > 60) this.forage(simulation, mauri);
         break;
         
@@ -455,7 +462,7 @@ class Moa extends Boid {
   // FORAGING & PLACEABLES
   // ============================================
 
-  applyPlaceableEffects(placeables) {
+  applyPlaceableEffects(placeables, dt = 1) {
     this.inShelter = false;
     this.securityBonus = 1;
     this.eggSpeedBonus = 1;
@@ -475,7 +482,7 @@ class Moa extends Boid {
       if (d.eggSpeedBonus) this.eggSpeedBonus = Math.max(this.eggSpeedBonus, d.eggSpeedBonus * p.seasonalMultiplier);
       if (d.hungerSlowdown) hungerMod = Math.min(hungerMod, d.hungerSlowdown);
       if (d.feedingRate) {
-        feedTotal += p.feedMoa(this);
+        feedTotal += p.feedMoa(this, dt);  // Pass dt to feeding
         this.isFeeding = true;
         this.feedingAt = p;
       }
@@ -585,9 +592,9 @@ class Moa extends Boid {
            (err > 0.03 && seasonCache.migrationStrength > 0.7);
   }
 
-  executeMigration(seasonCache) {
+  executeMigration(seasonCache, dt = 1) {
     if (this.migrationCooldown > 0) {
-      this.migrationCooldown--;
+      this.migrationCooldown -= dt;
       if (this.migrationTarget) this.moveToMigrationTarget(seasonCache);
       return;
     }
@@ -674,7 +681,7 @@ class Moa extends Boid {
   // REPRODUCTION
   // ============================================
 
-  updateSecurity(eagles) {
+  updateSecurity(eagles, dt = 1) {
     const safeDist = this.fleeRadiusSq * 0.64;
     let nearest = Infinity;
     
@@ -685,7 +692,7 @@ class Moa extends Boid {
     }
     
     if (nearest > safeDist) {
-      this.securityTime += this.securityBonus;
+      this.securityTime += this.securityBonus * dt;  // Scale by dt
     } else {
       this.securityTime = 0;
     }

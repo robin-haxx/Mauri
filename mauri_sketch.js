@@ -1,4 +1,14 @@
 let plantSprites = {};
+// Delta time management
+let lastFrameTime = 0;
+let deltaTime = 16.667; // Default to 60fps in ms
+let deltaMultiplier = 1.0; // 1.0 = 60fps
+const TARGET_FRAME_TIME = 16.667; // 60fps target in ms
+
+// FPS tracking
+let fpsHistory = [];
+const FPS_HISTORY_SIZE = 30;
+let currentFPS = 60;
 
 function preload(){
   OpenDyslexic = loadFont('typefaces/OpenDyslexic.ttf');
@@ -433,19 +443,18 @@ class MauriManager {
     return null;
   }
   
-  updateFloatingTexts() {
-    const texts = this.floatingTexts;
-    for (let i = texts.length - 1; i >= 0; i--) {
-      const ft = texts[i];
-      ft.life--;
-      ft.y -= 0.5;
-      if (ft.life <= 0) {
-        // Swap with last and pop (faster than splice)
-        texts[i] = texts[texts.length - 1];
-        texts.pop();
-      }
+  updateFloatingTexts(dt = 1) {
+  const texts = this.floatingTexts;
+  for (let i = texts.length - 1; i >= 0; i--) {
+    const ft = texts[i];
+    ft.life -= dt;
+    ft.y -= 0.5 * dt;
+    if (ft.life <= 0) {
+      texts[i] = texts[texts.length - 1];
+      texts.pop();
     }
   }
+}
   
   renderFloatingTexts() {
     const texts = this.floatingTexts;
@@ -563,43 +572,56 @@ class Game {
     return this._cachedMoaCount;
   }
   
-  update() {
-    if (this.state !== GAME_STATE.PLAYING) return;
-    
-    this.playTime++;
-    if (this.playTime > this.maxPlayTime) this.maxPlayTime = this.playTime;
-    
-    const seasonChanged = this.seasonManager.update();
-    if (seasonChanged) {
-      this.onSeasonChange();
-    }
-    
-    this.simulation.update(this.mauri);
-    
-    // Update cached counts once per frame
-    this.updateCachedCounts();
-    
-    // Passive mauri income (every 60 frames)
-    if ((frameCount & 63) === 0) { // Bitwise AND is faster than modulo for powers of 2
-      const income = this._cachedMoaCount * this.mauri.perMoaPerSecond + 
-                     this._cachedThrivingCount * this.mauri.onMoaThriving;
-      
-      if (income > 0) {
-        this.mauri.earn(income, undefined, undefined, 'passive');
-      }
-    }
-    
-    this.checkGoals();
-    this.mauri.checkMilestones(this._cachedMoaCount, this.simulation, this);
-    
-    if (this._cachedMoaCount === 0 && this._cachedEggCount === 0) {
-      this.state = GAME_STATE.LOST;
-      this.gameOverReason = "All moa have perished!";
-    }
-    
-    this.mauri.updateFloatingTexts();
-    this.updateNotifications();
+  update(dt = 1) {  // dt = delta time multiplier (1.0 = 60fps)
+  if (this.state !== GAME_STATE.PLAYING) return;
+  
+  this.playTime += dt;
+  if (this.playTime > this.maxPlayTime) this.maxPlayTime = this.playTime;
+  
+  const seasonChanged = this.seasonManager.update(dt);
+  if (seasonChanged) {
+    this.onSeasonChange();
   }
+  
+  this.simulation.update(this.mauri, dt);
+  
+  // Update cached counts once per frame
+  this.updateCachedCounts();
+  
+  // Passive mauri income (adjusted for delta time)
+  // Instead of checking every 64 frames, accumulate time
+  this._incomeAccumulator = (this._incomeAccumulator || 0) + dt;
+  if (this._incomeAccumulator >= 64) {
+    this._incomeAccumulator -= 64;
+    const income = this._cachedMoaCount * this.mauri.perMoaPerSecond + 
+                   this._cachedThrivingCount * this.mauri.onMoaThriving;
+    
+    if (income > 0) {
+      this.mauri.earn(income, undefined, undefined, 'passive');
+    }
+  }
+  
+  this.checkGoals();
+  this.mauri.checkMilestones(this._cachedMoaCount, this.simulation, this);
+  
+  if (this._cachedMoaCount === 0 && this._cachedEggCount === 0) {
+    this.state = GAME_STATE.LOST;
+    this.gameOverReason = "All moa have perished!";
+  }
+  
+  this.mauri.updateFloatingTexts(dt);
+  this.updateNotifications(dt);
+}
+
+updateNotifications(dt = 1) {
+  const notifs = this.notifications;
+  for (let i = notifs.length - 1; i >= 0; i--) {
+    notifs[i].life -= dt;
+    if (notifs[i].life <= 0) {
+      notifs.splice(i, 1);
+    }
+  }
+}
   
   checkGoals() {
     const goals = this.goals;
@@ -642,15 +664,6 @@ class Game {
     }
   }
   
-  updateNotifications() {
-    const notifs = this.notifications;
-    for (let i = notifs.length - 1; i >= 0; i--) {
-      notifs[i].life--;
-      if (notifs[i].life <= 0) {
-        notifs.splice(i, 1);
-      }
-    }
-  }
 
   onSeasonChange() {
     const season = this.seasonManager.current;
@@ -1302,8 +1315,59 @@ function initializeRegistry() {
 }
 
 function draw() {
-  game.update();
+  // Calculate delta time
+  const currentTime = millis();
+  deltaTime = currentTime - lastFrameTime;
+  lastFrameTime = currentTime;
+  
+  // Clamp delta time to prevent huge jumps (e.g., after tab switch)
+  deltaTime = constrain(deltaTime, 1, 100);
+  
+  // Calculate multiplier (1.0 = 60fps)
+  deltaMultiplier = deltaTime / TARGET_FRAME_TIME;
+  
+  // Track FPS
+  updateFPS();
+  
+  // Update and render game
+  game.update(deltaMultiplier);
   game.render();
+  
+  // Render FPS counter
+  renderFPSCounter();
+}
+
+function updateFPS() {
+  const fps = 1000 / deltaTime;
+  fpsHistory.push(fps);
+  if (fpsHistory.length > FPS_HISTORY_SIZE) {
+    fpsHistory.shift();
+  }
+  
+  // Calculate average FPS
+  let sum = 0;
+  for (let i = 0; i < fpsHistory.length; i++) {
+    sum += fpsHistory[i];
+  }
+  currentFPS = sum / fpsHistory.length;
+}
+
+function renderFPSCounter() {
+  push();
+  
+  // Background
+  fill(0, 0, 0, 150);
+  noStroke();
+  rect(5, 5, 70, 20, 4);
+  
+  // FPS text
+  fill(currentFPS >= 55 ? [100, 255, 100] : (currentFPS >= 30 ? [255, 255, 100] : [255, 100, 100]));
+  textSize(12);
+  textAlign(LEFT, CENTER);
+  textFont('monospace');
+  text(`FPS: ${currentFPS.toFixed(1)}`, 10, 15);
+  
+  pop();
 }
 
 function mousePressed() {

@@ -420,169 +420,172 @@ handleEagleCatch(eagle, moa, mauri) {
   // MAIN UPDATE LOOP
   // ============================================
   
-  update(mauri) {
-    // Update spatial grids at start of frame
-    this.updateSpatialGrids();
+  update(mauri, dt = 1) {
+  // Update spatial grids at start of frame
+  this.updateSpatialGrids();
+
+  // Update plants in batches (throttled for performance)
+  this.updatePlantsBatched(dt);
   
-    // Update plants in batches (throttled for performance)
-    this.updatePlantsBatched();
-    
-    // Handle season change effects
-    if (this.seasonManager.justChanged) {
-      this.onSeasonChange();
-    }
-    
-    // Update placeables (every other frame)
-    if ((frameCount & 1) === 0) {
-      this.updatePlaceables();
-    }
-    
-    // Update eggs
-    this.updateEggs(mauri);
-    
-    // Track deaths
-    const aliveBeforeUpdate = this.getMoaPopulation();
-    
-    // Update moas
-    this.updateMoas(mauri);
-    
-    // Recalculate after moa updates
-    this._invalidateCache();
-    const aliveAfterUpdate = this.getMoaPopulation();
-    const newDeaths = aliveBeforeUpdate - aliveAfterUpdate;
-    if (newDeaths > 0) {
-      this.stats.starvations += newDeaths;
-      this.stats.deaths += newDeaths;
-    }
-    
-    // Update eagles
-    this.updateEagles(mauri);
-    
-    // Periodic cleanup
-    if ((frameCount & 511) === 0) { // Every ~512 frames
-      this.cleanup();
+  // Handle season change effects
+  if (this.seasonManager.justChanged) {
+    this.onSeasonChange();
+  }
+  
+  // Update placeables (accumulate time instead of frame count)
+  this._placeableTimer = (this._placeableTimer || 0) + dt;
+  if (this._placeableTimer >= 2) {
+    this._placeableTimer -= 2;
+    this.updatePlaceables(dt);
+  }
+  
+  // Update eggs
+  this.updateEggs(mauri, dt);
+  
+  // Track deaths
+  const aliveBeforeUpdate = this.getMoaPopulation();
+  
+  // Update moas
+  this.updateMoas(mauri, dt);
+  
+  // Recalculate after moa updates
+  this._invalidateCache();
+  const aliveAfterUpdate = this.getMoaPopulation();
+  const newDeaths = aliveBeforeUpdate - aliveAfterUpdate;
+  if (newDeaths > 0) {
+    this.stats.starvations += newDeaths;
+    this.stats.deaths += newDeaths;
+  }
+  
+  // Update eagles
+  this.updateEagles(mauri, dt);
+  
+  // Periodic cleanup (accumulate time)
+  this._cleanupTimer = (this._cleanupTimer || 0) + dt;
+  if (this._cleanupTimer >= 512) {
+    this._cleanupTimer -= 512;
+    this.cleanup();
+  }
+}
+
+updatePlantsBatched(dt = 1) {
+  const plants = this.plants;
+  const len = plants.length;
+  if (len === 0) return;
+  
+  const seasonManager = this.seasonManager;
+  const batchSize = Math.ceil(this._plantBatchSize * dt); // Scale batch size with dt
+  const startIdx = this._plantBatchIndex;
+  const endIdx = Math.min(startIdx + batchSize, len);
+  
+  for (let i = startIdx; i < endIdx; i++) {
+    plants[i].update(seasonManager, dt);
+  }
+  
+  this._plantBatchIndex = endIdx;
+  if (this._plantBatchIndex >= len) {
+    this._plantBatchIndex = 0;
+  }
+}
+
+updatePlaceables(dt = 1) {
+  const placeables = this.placeables;
+  let writeIdx = 0;
+  
+  for (let i = 0, len = placeables.length; i < len; i++) {
+    const p = placeables[i];
+    p.update(dt);
+    if (p.alive) {
+      placeables[writeIdx++] = p;
     }
   }
   
-  updatePlantsBatched() {
-    const plants = this.plants;
-    const len = plants.length;
-    if (len === 0) return;
-    
-    const seasonManager = this.seasonManager;
-    const batchSize = this._plantBatchSize;
-    const startIdx = this._plantBatchIndex;
-    const endIdx = Math.min(startIdx + batchSize, len);
-    
-    for (let i = startIdx; i < endIdx; i++) {
-      plants[i].update(seasonManager);
-    }
-    
-    this._plantBatchIndex = endIdx;
-    if (this._plantBatchIndex >= len) {
-      this._plantBatchIndex = 0;
-    }
-  }
+  placeables.length = writeIdx;
+}
+
+updateEggs(mauri, dt = 1) {
+  const eggs = this.eggs;
+  const moas = this.moas;
+  const config = this.config;
+  const game = this.game;
+  const terrain = this.terrain;
   
-  updatePlaceables() {
-    const placeables = this.placeables;
-    let writeIdx = 0;
+  let writeIdx = 0;
+  
+  for (let i = 0, len = eggs.length; i < len; i++) {
+    const egg = eggs[i];
     
-    for (let i = 0, len = placeables.length; i < len; i++) {
-      const p = placeables[i];
-      p.update();
-      if (p.alive) {
-        placeables[writeIdx++] = p;
+    // Check if egg is in a nest
+    const nearbyPlaceables = this.getNearbyPlaceables(egg.pos.x, egg.pos.y, 50);
+    for (let j = 0, pLen = nearbyPlaceables.length; j < pLen; j++) {
+      const p = nearbyPlaceables[j];
+      if (p.alive && p.type === 'nest' && p.isInRange(egg.pos)) {
+        const bonus = p.def.eggSpeedBonus;
+        if (bonus > egg.speedBonus) egg.speedBonus = bonus;
       }
     }
     
-    placeables.length = writeIdx;
-  }
-  
-  updateEggs(mauri) {
-    const eggs = this.eggs;
-    const moas = this.moas;
-    const config = this.config;
-    const game = this.game;
-    const terrain = this.terrain;
+    egg.update(dt);
     
-    let writeIdx = 0;
-    
-    for (let i = 0, len = eggs.length; i < len; i++) {
-      const egg = eggs[i];
-      
-      // Check if egg is in a nest
-      const nearbyPlaceables = this.getNearbyPlaceables(egg.pos.x, egg.pos.y, 50);
-      for (let j = 0, pLen = nearbyPlaceables.length; j < pLen; j++) {
-        const p = nearbyPlaceables[j];
-        if (p.alive && p.type === 'nest' && p.isInRange(egg.pos)) {
-          const bonus = p.def.eggSpeedBonus;
-          if (bonus > egg.speedBonus) egg.speedBonus = bonus;
-        }
-      }
-      
-      egg.update();
-      
-      if (egg.hatched && egg.alive) {
-        if (this.getMoaPopulation() < config.maxMoaPopulation) {
-          const offspringSpecies = egg.getOffspringSpecies();
-          
-          let newMoa;
-          if (typeof REGISTRY !== 'undefined' && offspringSpecies) {
-            newMoa = REGISTRY.createAnimal(offspringSpecies, egg.pos.x, egg.pos.y, terrain, config);
-          } else {
-            newMoa = new Moa(egg.pos.x, egg.pos.y, terrain, config);
-          }
-          
-          if (newMoa) {
-            newMoa.hunger = 35;
-            newMoa.size *= 0.6;
-            newMoa._cacheSizeMultipliers(); // Recache after size change
-            newMoa.homeRange.set(egg.pos.x, egg.pos.y);
-            moas.push(newMoa);
-            this.stats.births++;
-            this._invalidateCache();
-            mauri.earn(mauri.onEggHatch, egg.pos.x, egg.pos.y, 'hatch');
-            
-            const speciesName = newMoa.species?.displayName || 'moa';
-            game.addNotification(`A ${speciesName} has hatched!`, 'success');
-          }
-          
-          egg.alive = false;
-        }
-      }
-      
-      if (egg.alive) {
-        eggs[writeIdx++] = egg;
-      }
-    }
-    
-    eggs.length = writeIdx;
-  }
-  
-  updateMoas(mauri) {
-    const moas = this.moas;
-    const seasonManager = this.seasonManager;
-    
-    for (let i = 0, len = moas.length; i < len; i++) {
-      const moa = moas[i];
-      if (moa.alive) {
-        moa.behave(this, mauri, seasonManager);
-        moa.update();
+    if (egg.hatched && egg.alive) {
+      if (this.getMoaPopulation() < config.maxMoaPopulation) {
+        const offspringSpecies = egg.getOffspringSpecies();
         
-        // Ensure moa stays in bounds
-        this.constrainToBounds(moa.pos);
+        let newMoa;
+        if (typeof REGISTRY !== 'undefined' && offspringSpecies) {
+          newMoa = REGISTRY.createAnimal(offspringSpecies, egg.pos.x, egg.pos.y, terrain, config);
+        } else {
+          newMoa = new Moa(egg.pos.x, egg.pos.y, terrain, config);
+        }
+        
+        if (newMoa) {
+          newMoa.hunger = 35;
+          newMoa.size *= 0.6;
+          newMoa._cacheSizeMultipliers();
+          newMoa.homeRange.set(egg.pos.x, egg.pos.y);
+          moas.push(newMoa);
+          this.stats.births++;
+          this._invalidateCache();
+          mauri.earn(mauri.onEggHatch, egg.pos.x, egg.pos.y, 'hatch');
+          
+          const speciesName = newMoa.species?.displayName || 'moa';
+          game.addNotification(`A ${speciesName} has hatched!`, 'success');
+        }
+        
+        egg.alive = false;
       }
+    }
+    
+    if (egg.alive) {
+      eggs[writeIdx++] = egg;
     }
   }
   
-  updateEagles(mauri) {  // Add mauri parameter
+  eggs.length = writeIdx;
+}
+
+updateMoas(mauri, dt = 1) {
+  const moas = this.moas;
+  const seasonManager = this.seasonManager;
+  
+  for (let i = 0, len = moas.length; i < len; i++) {
+    const moa = moas[i];
+    if (moa.alive) {
+      moa.behave(this, mauri, seasonManager, dt);
+      moa.update(dt);
+      
+      this.constrainToBounds(moa.pos);
+    }
+  }
+}
+
+updateEagles(mauri, dt = 1) {
   const eagles = this.eagles;
   
   for (let i = 0, len = eagles.length; i < len; i++) {
     const eagle = eagles[i];
-    eagle.behave(this, mauri);  // Pass mauri
-    eagle.update();
+    eagle.behave(this, mauri, dt);
+    eagle.update(dt);
     
     this.constrainToBounds(eagle.pos);
   }

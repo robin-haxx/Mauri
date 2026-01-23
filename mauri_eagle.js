@@ -127,33 +127,33 @@ class HaastsEagle extends Boid {
   // BEHAVIOR
   // ============================================
   
-  behave(simulation, mauri) { // now checks mauri
-    this.hunger += this.hungerRate;
+  behave(simulation, mauri, dt = 1) {
+    // Scale hunger by delta time
+    this.hunger += this.hungerRate * dt;
     if (this.hunger > this.maxHunger) this.hunger = this.maxHunger;
     
     // Check for decoys
     const nearbyPlaceables = simulation.getNearbyPlaceables(this.pos.x, this.pos.y, 100);
     this.checkDecoys(nearbyPlaceables);
     
-    // Handle states
+    // Handle states with delta time
     if (this.distractedTimer > 0) {
       this.state = 'distracted';
-      this.distractedTimer--;
+      this.distractedTimer -= dt;
       this.beDistracted();
       return;
     }
     
     if (this.restTimer > 0) {
       this.state = 'resting';
-      this.restTimer--;
+      this.restTimer -= dt;
       this.rest();
       return;
     }
     
-    // Handle relocation (moving to new hunting grounds)
     if (this.relocateTimer > 0) {
       this.state = 'relocating';
-      this.relocate();
+      this.relocate(dt);
       return;
     }
     
@@ -163,19 +163,19 @@ class HaastsEagle extends Boid {
     sep.mult(2);
     this.applyForce(sep);
     
-    // Strong edge avoidance - prevents getting stuck
+    // Strong edge avoidance
     const edgeForce = this.avoidEdges();
     this.applyForce(edgeForce);
     
     // Hunt or patrol
     if (this.hunger > this.huntThreshold) {
-      this.hunt(simulation, mauri);
+      this.hunt(simulation, mauri, dt);
     } else {
       this.state = 'patrol';
       this.hunting = false;
       this.target = null;
-      this.huntSearchTimer = 0; // Reset search timer when not hungry
-      this.patrol();
+      this.huntSearchTimer = 0;
+      this.patrol(dt);
     }
     
     this.edges();
@@ -308,11 +308,11 @@ class HaastsEagle extends Boid {
     this.edges();
   }
   
-  patrol() {
+  patrol(dt = 1) {
     this.maxSpeed = this.baseSpeed;
     
-    // Use simple wanderStrength instead of personality object
-    this.patrolAngle += this.patrolSpeed * this.wanderStrength;
+    // Scale patrol angle change by dt
+    this.patrolAngle += this.patrolSpeed * this.wanderStrength * dt;
     
     this._targetVec.set(
       this.patrolCenter.x + cos(this.patrolAngle) * this.patrolRadius,
@@ -326,8 +326,10 @@ class HaastsEagle extends Boid {
     wander.mult(0.25);
     this.applyForce(wander);
     
-    // Occasionally drift patrol center
-    if ((frameCount & 255) === 0) {
+    // Drift patrol center (accumulate time)
+    this._driftTimer = (this._driftTimer || 0) + dt;
+    if (this._driftTimer >= 256) {
+      this._driftTimer -= 256;
       this.driftPatrolCenter(20);
     }
   }
@@ -351,7 +353,7 @@ class HaastsEagle extends Boid {
   // HUNTING - With timeout and relocation
   // ============================================
   
-  hunt(simulation, mauri) {
+  hunt(simulation, mauri, dt = 1) {
     this.maxSpeed = this.huntSpeed;
     
     const nearbyMoas = simulation.getNearbyMoas(this.pos.x, this.pos.y, this.huntRadius);
@@ -377,14 +379,12 @@ class HaastsEagle extends Boid {
     }
     
     if (nearestMoa) {
-      // Found a target - reset search timer
       this.state = 'hunting';
       this.hunting = true;
       this.target = nearestMoa;
       this.huntSearchTimer = 0;
       this.lastTargetTime = frameCount;
       
-      // Predict target position
       this._targetVec.set(
         nearestMoa.pos.x + nearestMoa.vel.x * 12,
         nearestMoa.pos.y + nearestMoa.vel.y * 12
@@ -397,18 +397,15 @@ class HaastsEagle extends Boid {
         this.catchMoa(nearestMoa, simulation, mauri);
       }
     } else {
-      // No target found - increment search timer
-      this.huntSearchTimer++;
+      this.huntSearchTimer += dt;  // Scale by dt
       this.hunting = true;
       this.target = null;
       
-      // Check if we should relocate to new hunting grounds
       if (this.huntSearchTimer >= this.huntSearchTimeout) {
         this.startRelocation();
         return;
       }
       
-      // While searching, move toward patrol center but keep looking
       this.searchForPrey();
     }
   }
@@ -495,31 +492,28 @@ class HaastsEagle extends Boid {
   /**
    * Move toward relocation target
    */
-  relocate() {
-    this.relocateTimer--;
-    this.maxSpeed = this.huntSpeed * 1.2; // Fly fast to new location
+  relocate(dt = 1) {
+    this.relocateTimer -= dt;  // Scale by dt
+    this.maxSpeed = this.huntSpeed * 1.2;
     
     if (!this.relocateTarget) {
       this.relocateTimer = 0;
       return;
     }
     
-    // Check if we've arrived
     const dx = this.relocateTarget.x - this.pos.x;
     const dy = this.relocateTarget.y - this.pos.y;
     const distSq = dx * dx + dy * dy;
     
-    if (distSq < 900 || this.relocateTimer <= 0) { // Within 30 units or time's up
-      // Set new patrol center at destination
+    if (distSq < 900 || this.relocateTimer <= 0) {
       this.patrolCenter.set(this.relocateTarget.x, this.relocateTarget.y);
       this.patrolAngle = random(TWO_PI);
       this.relocateTarget = null;
       this.relocateTimer = 0;
-      this.state = 'hunting'; // Resume hunting at new location
+      this.state = 'hunting';
       return;
     }
     
-    // Fly toward target
     const seekForce = this.seek(this.relocateTarget, 1.2);
     this.applyForce(seekForce);
     

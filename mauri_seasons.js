@@ -116,8 +116,8 @@ class SeasonManager {
     return this.timer / this.config.seasonDuration;
   }
   
-  update() {
-    this.timer++;
+  update(dt = 1) {
+    this.timer += dt;
     this.justChanged = false;
     
     // Calculate transition (last 15% of season)

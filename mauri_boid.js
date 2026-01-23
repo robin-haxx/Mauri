@@ -1,5 +1,5 @@
 // ============================================
-// BASE BOID CLASS - Fully optimized
+// BASE BOID CLASS - Delta Time Optimized
 // ============================================
 class Boid {
   constructor(x, y, terrain) {
@@ -22,6 +22,7 @@ class Boid {
       turniness: 0.8 + random() * 0.4
     };
     this.noiseOffset = random() * 1000;
+    this.wanderTime = random() * 1000; // For delta-time compatible wander
     
     // Reusable vectors
     this._steeringVec = createVector();
@@ -195,15 +196,18 @@ class Boid {
     return this.fleePoint(target.x, target.y, radius);
   }
   
-  // Optimized wander
-  wander() {
+  // Delta-time compatible wander
+  wander(dt = 1) {
+    // Advance wander time based on delta
+    this.wanderTime += 0.008 * dt;
+    
     const result = this._tempVec1;
     const noiseVal = noise(
       this.pos.x * 0.005 + this.noiseOffset,
       this.pos.y * 0.005 + this.noiseOffset,
-      frameCount * 0.008
+      this.wanderTime
     );
-    const angle = noiseVal * 12.566370614359172 - 6.283185307179586; // TWO_PI * 2 - TWO_PI
+    const angle = noiseVal * 12.566370614359172 - 6.283185307179586;
     const mag = 0.3 * this.personality.wanderStrength;
     
     result.set(Math.cos(angle) * mag, Math.sin(angle) * mag);
@@ -266,7 +270,7 @@ class Boid {
     return result;
   }
   
-  // Edge avoidance
+  // Edge avoidance (force is already frame-independent)
   edges() {
     const margin = 25;
     const turnForce = 0.3 * this.personality.turniness;
@@ -287,10 +291,10 @@ class Boid {
     this.acc.y += force.y;
   }
   
-  update() {
-    // Apply acceleration
-    this.vel.x += this.acc.x;
-    this.vel.y += this.acc.y;
+  update(dt = 1) {
+    // Apply acceleration (scaled by dt)
+    this.vel.x += this.acc.x * dt;
+    this.vel.y += this.acc.y * dt;
     
     // Limit speed (inline for performance)
     const maxSpd = this.maxSpeed * this.personality.speedVariation;
@@ -303,9 +307,9 @@ class Boid {
       this.vel.y *= invSpd;
     }
     
-    // Apply velocity
-    this.pos.x += this.vel.x;
-    this.pos.y += this.vel.y;
+    // Apply velocity (scaled by dt)
+    this.pos.x += this.vel.x * dt;
+    this.pos.y += this.vel.y * dt;
     
     // Reset acceleration
     this.acc.x = 0;

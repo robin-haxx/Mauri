@@ -265,7 +265,7 @@ class Simulation {
     const moaCount = this.getMoaPopulation();
     const eagleCount = this.eagles.length;
     
-    if (moaCount >= eagleCount * 2) {
+    if (moaCount > eagleCount * 2) {
       const balanceReward = 5;
       mauri.earn(balanceReward, moa.pos.x, moa.pos.y, 'ecosystem_balance');
       this.game.addNotification(`Balanced ecosystem! Eagle fed. +${balanceReward} mauri`, 'info');

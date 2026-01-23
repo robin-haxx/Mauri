@@ -708,7 +708,7 @@ class GameUI {
     rect(x, y, panelWidth, 30, 8, 8, 0, 0);
     
     fill(180, 220, 190);
-    textSize(13);
+    textSize(16);
     textAlign(LEFT, CENTER);
     text("  GOALS", x + 12, y + 15);
     
@@ -744,7 +744,7 @@ class GameUI {
       // Goal text
       fill(goal.achieved ? 120 : 180, goal.achieved ? 150 : 210, goal.achieved ? 130 : 190);
       noStroke();
-      textSize(11);
+      textSize(14);
       textAlign(LEFT, CENTER);
       text(goal.name, x + 40, goalY + 8);
       

@@ -1315,6 +1315,8 @@ function initializeRegistry() {
 }
 
 function draw() {
+
+  
   // Calculate delta time
   const currentTime = millis();
   deltaTime = currentTime - lastFrameTime;
@@ -1330,11 +1332,25 @@ function draw() {
   updateFPS();
   
   // Update and render game
+  // game.update(deltaMultiplier);
+  // game.render();
+
+    let t0 = performance.now();
   game.update(deltaMultiplier);
+  let t1 = performance.now();
   game.render();
+  let t2 = performance.now();
+  
+  // Show timing breakdown
+  fill(0, 0, 0, 200);
+  rect(80, 5, 150, 35);
+  fill(255);
+  textSize(10);
+  text(`Update: ${(t1-t0).toFixed(1)}ms`, 85, 18);
+  text(`Render: ${(t2-t1).toFixed(1)}ms`, 85, 32);
   
   // Render FPS counter
-  renderFPSCounter();
+  //renderFPSCounter();
 }
 
 function updateFPS() {

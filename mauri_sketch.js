@@ -31,7 +31,7 @@ function preload(){
 // CONFIGURATION
 // ============================================
 const CONFIG = {
-  version: '0.7.1',
+  version: '0.7.2',
   // Canvas dimensions
   canvasWidth: 1920,
   canvasHeight: 1080,
@@ -63,12 +63,12 @@ const CONFIG = {
   col_panelHeader: [45, 75, 55],
   
   noiseScale: 0.005,
-  octaves: 2,
-  persistence: 0.4,
+  octaves: 3,
+  persistence: 0.3,
   lacunarity: 3.0,
   
-  ridgeInfluence: 2.25,
-  elevationPower: 2.2,
+  ridgeInfluence: 1.4,
+  elevationPower: 1.7,
   islandFalloff: 0.3, 
   
   showContours: true,
@@ -82,7 +82,7 @@ const CONFIG = {
   eagleCount: 2,
   startingSpecies: 'upland_moa',
   
-  plantDensity: 0.002,
+  plantDensity: 0.004,
   
   startingMauri: 30,
   targetPopulation: 30,
@@ -328,21 +328,21 @@ const BIOMES = {
     walkable: true, canHavePlants: true, plantTypes: ['fern', 'rimu'], canPlace: true
   },
   montane: {
-    key: 'montane', name: "Montane Forest", minElevation: 0.45, maxElevation: 0.53,
+    key: 'montane', name: "Montane Forest", minElevation: 0.45, maxElevation: 0.56,
     colors: ['#4a7c59', '#528764', '#5a926f'], contourColor: '#335740',
     walkable: true, canHavePlants: true, 
     plantTypes: ['beech', 'fern', 'patotara'],
     canPlace: true
   },
   subalpine: {
-    key: 'subalpine', name: "Subalpine Tussock", minElevation: 0.53, maxElevation: 0.70,
+    key: 'subalpine', name: "Subalpine Tussock", minElevation: 0.56, maxElevation: 0.77,
     colors: ['#a8a060', '#b5ad6d', '#c2ba7a'], contourColor: '#7a7445',
     walkable: true, canHavePlants: true, 
     plantTypes: ['tussock', 'patotara'],
     canPlace: true
   },
   alpine: {
-    key: 'alpine', name: "Alpine Rock", minElevation: 0.70, maxElevation: 0.84,
+    key: 'alpine', name: "Alpine Rock", minElevation: 0.77, maxElevation: 0.84,
     colors: ['#8b8b8b', '#9a9a9a', '#a9a9a9'], contourColor: '#5c5c5c',
     walkable: false, canHavePlants: false, canPlace: false
   },
@@ -968,15 +968,18 @@ updateNotifications(dt = 1) {
     fill(CACHED_COLORS.menuText);
     textSize(16);
     const instructions = [
+      "Area #1: Kahurangi, Te Waipounamu",
+      "(Upper West Coast, South Island)",
+      " ",
       "Guide the Upland Moa through the seasons;",
       "Cold regions become barren during winter.",
       "Grow the ecosystem to gain Mauri",
       "Beware: More moa attracts more Pouākai!"
     ];
     
-    const instructionsY = centerY + 100;
+    const instructionsY = centerY + 60;
     for (let i = 0; i < instructions.length; i++) {
-      text(instructions[i], centerX, instructionsY + i * 28);
+      text(instructions[i], centerX, instructionsY + i * 22);
     }
     
     // Start button
@@ -1010,13 +1013,13 @@ updateNotifications(dt = 1) {
     
     // Hint text
     fill(CACHED_COLORS.menuHint);
-    textSize(12);
-    text("Press any key or click to start", centerX, btnY + btnH + 30);
+    textSize(14);
+    text("Press P or spacebar to pause", centerX, btnY + btnH + 30);
     
     // Footer
     fill(CACHED_COLORS.menuFooter);
     textSize(11);
-    text("Inspired by Equilinox • Upland Moa & Haast's Eagle", centerX, ch - 40);
+    text("Inspired by Equilinox • Robbie K 2026", centerX, ch - 40);
     
     // Store button bounds for click detection
     this._menuBtnBounds = { x: btnX, y: btnY, w: btnW, h: btnH };
@@ -1325,11 +1328,14 @@ updateNotifications(dt = 1) {
     
     textSize(14);
     fill(120, 180, 120);
-    text(`Final population: ${this._cachedMoaCount} moa`, centerX, centerY + 20);
-    text(`Total mauri earned: ${this.mauri.totalEarned | 0}`, centerX, centerY + 45);
-    text(`Time survived: ${(this.playTime / 60) | 0} seconds`, centerX, centerY + 70);
+    text(`Final population: ${this._cachedMoaCount} moa`, centerX, centerY + 15);
+    text(`Total mauri earned: ${this.mauri.totalEarned | 0}`, centerX, centerY + 40);
+    text(`Time survived: ${(this.playTime / 60) | 0} seconds`, centerX, centerY + 65);
     
+    textSize(16);
     fill(200, 240, 200);
+    text(`Final Score: ${Math.round(((this._cachedMoaCount)*(this.mauri.totalEarned*.001))-((this.playTime / 60)-180)) } points`, centerX, centerY + 90);
+
     textSize(18);
     text("Press R to play again", centerX, centerY + 120);
     pop();

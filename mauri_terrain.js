@@ -117,21 +117,45 @@ class TerrainGenerator {
   }
   
   getIslandFalloff(x, y) {
-    const nx = (x / this.mapWidth) * 2 - 1;
-    const ny = (y / this.mapHeight) * 2 - 1;
+    const nx = x / this.mapWidth;
+    const ny = y / this.mapHeight;
     
-    let d = Math.sqrt(nx * nx + ny * ny) * 0.7071067811865476; // 1/sqrt(2)
+    // Domain warping - distort the coordinates themselves for organic shapes
+    const warpX = noise(x * 0.01 + this.seed, y * 0.01) * 0.2;
+    const warpY = noise(x * 0.01 + this.seed * 2, y * 0.01 + this.seed) * 0.2;
     
-    let falloff = 1 - Math.pow(d, this.config.islandFalloff);
-    if (falloff < 0) falloff = 0;
-    if (falloff > 1) falloff = 1;
+    const warpedNx = nx + warpX - 0.1;
+    const warpedNy = ny + warpY - 0.1;
     
-    const coastNoise = noise(x * 0.02 + this.seed * 2, y * 0.02 + this.seed * 2) * 0.3;
-    falloff += coastNoise - 0.15;
+    // Multi-octave coastline noise
+    let coastNoise = 0;
+    coastNoise += noise(warpedNy * 1.5 + this.seed, this.seed * 0.5) * 0.4;
+    coastNoise += noise(warpedNy * 3 + this.seed * 1.5, warpedNx * 0.5) * 0.2;
+    coastNoise += noise(x * 0.02 + this.seed * 2, y * 0.02 + this.seed * 2) * 0.1;
     
-    if (falloff < 0) return 0;
-    if (falloff > 1) return 1;
-    return falloff;
+    // Coastline meanders between 8% and 50% from left
+    const coastlinePosition = 0.02 + coastNoise * 0.6;
+    
+    let falloff;
+    if (warpedNx < coastlinePosition) {
+      // Sea
+      const seaDepth = (coastlinePosition - warpedNx) / coastlinePosition;
+      falloff = (1 - seaDepth) * 0.12;
+    } else {
+      // Land  
+      const landProgress = (warpedNx - coastlinePosition) / (1 - coastlinePosition);
+      falloff = 0.13 + Math.pow(landProgress, 0.7) * 0.87;
+      
+      // Ridge noise for mountain variation
+      const ridgeNoise = noise(x * 0.012 + this.seed * 4, y * 0.012) * 0.2;
+      falloff += ridgeNoise * landProgress;
+    }
+    
+    // Soft vertical edges
+    const edgeSoftness = Math.pow(Math.sin(ny * Math.PI), 0.3);
+    falloff *= 0.6 + edgeSoftness * 0.4;
+    
+    return Math.max(0, Math.min(1, falloff));
   }
   
   getElevation(x, y) {

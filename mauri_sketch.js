@@ -31,7 +31,7 @@ function preload(){
 // CONFIGURATION
 // ============================================
 const CONFIG = {
-  version: '0.7.0',
+  version: '0.7.1',
   // Canvas dimensions
   canvasWidth: 1920,
   canvasHeight: 1080,
@@ -358,13 +358,62 @@ const BIOMES = {
 // ============================================
 // Update PLANT_TYPES:
 const PLANT_TYPES = {
-  tussock: { name: "Tussock", nutrition: 25, color: '#8ea040', size: 24, growthTime: 200 },
-  flax: { name: "Flax", nutrition: 35, color: '#487020', size: 26, growthTime: 280 },
-  fern: { name: "Fern", nutrition: 30, color: '#228B22', size: 36, growthTime: 240 },
-  rimu: { name: "Rimu Fruit", nutrition: 50, color: '#8B0000', size: 48, growthTime: 400 },
-  beech: { name: "Beech Mast", nutrition: 40, color: '#8b430f', size: 52, growthTime: 350 },
-  kawakawa: { name: "Kawakawa", nutrition: 40, color: '#3d9a5e', size: 22, growthTime: 150 },
-  patotara: { name: "Patotara", nutrition: 35, color: '#c94c5a', size: 28, growthTime: 160 }
+  tussock: { 
+    name: "Tussock", 
+    nutrition: 25, 
+    color: '#8ea040', 
+    size: 24, 
+    growthTime: 200,
+    description: "Hardy grass that covers the high country"
+  },
+  flax: { 
+    name: "Flax", 
+    nutrition: 35, 
+    color: '#487020', 
+    size: 26, 
+    growthTime: 280,
+    description: "Harakeke is versatile, with sweet nectar"
+  },
+  fern: { 
+    name: "Fern", 
+    nutrition: 30, 
+    color: '#228B22', 
+    size: 36, 
+    growthTime: 240,
+    description: "The iconic Ponga's fronds populate forests"
+  },
+  rimu: { 
+    name: "Rimu", 
+    nutrition: 50, 
+    color: '#8B0000', 
+    size: 48, 
+    growthTime: 400,
+    description: "Ancient podocarp with bright red fruit"
+  },
+  beech: { 
+    name: "Beech", 
+    nutrition: 40, 
+    color: '#8b430f', 
+    size: 52, 
+    growthTime: 350,
+    description: "Tawhai produces mast seed in good years"
+  },
+  kawakawa: { 
+    name: "Kawakawa", 
+    nutrition: 40, 
+    color: '#3d9a5e', 
+    size: 22, 
+    growthTime: 150,
+    description: "Heart-shaped leaves with peppery fruit"
+  },
+  patotara: { 
+    name: "Patotara", 
+    nutrition: 35, 
+    color: '#c94c5a', 
+    size: 28, 
+    growthTime: 160,
+    description: "Alpine shrub with summer berries"
+  }
 };
 
 // ============================================
@@ -833,7 +882,6 @@ updateNotifications(dt = 1) {
   }
   
   renderMenu() {
-    // Use full canvas dimensions for menu
     const cw = CONFIG.canvasWidth;
     const ch = CONFIG.canvasHeight;
     const centerX = cw * 0.5;
@@ -858,17 +906,41 @@ updateNotifications(dt = 1) {
     textSize(64);
     push();
     textFont(GroceryRounded);
-    text("MAURI", centerX, centerY - 280);
+    text("MAURI", centerX, centerY - 300);
     pop();
     
     // Subtitle
     fill(CACHED_COLORS.menuSubtitle);
     textSize(20);
-    text("A New Zealand Ecosystem Strategy Game", centerX, centerY - 220);
+    text("A New Zealand Ecosystem Strategy Game", centerX, centerY - 240);
     
-    // Moa illustration
+    // Get plant types to display
+    const plantKeys = Object.keys(PLANT_TYPES);
+    const leftPlants = plantKeys.slice(0, 3);   // tussock, flax, fern
+    const rightPlants = plantKeys.slice(3);      // rimu, beech, kawakawa, patotara
+    
+    // Plant display settings
+    const plantY = centerY - 80;
+    const plantSpacing = 150;
+    const spriteSize = 64;
+    
+    // Render left side plants
+    for (let i = 0; i < leftPlants.length; i++) {
+      const key = leftPlants[i];
+      const x = centerX - 250 - (leftPlants.length - 1 - i) * plantSpacing;
+      this._renderMenuPlant(x, plantY, key, spriteSize);
+    }
+    
+    // Render right side plants
+    for (let i = 0; i < rightPlants.length; i++) {
+      const key = rightPlants[i];
+      const x = centerX + 250 + i * plantSpacing;
+      this._renderMenuPlant(x, plantY, key, spriteSize);
+    }
+    
+    // Moa illustration (center)
     push();
-    translate(centerX, centerY - 100);
+    translate(centerX, plantY);
     scale(5);
     noStroke();
     fill(101, 67, 33);
@@ -882,6 +954,16 @@ updateNotifications(dt = 1) {
     line(3, 5, 4, 12);
     pop();
     
+    // Moa label
+    fill(CACHED_COLORS.menuSubtitle);
+    textSize(14);
+    textStyle(BOLD);
+    text("Upland Moa", centerX, plantY + 75); //55
+    textStyle(NORMAL);
+    fill(CACHED_COLORS.menuText);
+    textSize(11);
+    text("Moa Koukou", centerX, plantY + 92); //72
+    
     // Instructions
     fill(CACHED_COLORS.menuText);
     textSize(16);
@@ -892,15 +974,16 @@ updateNotifications(dt = 1) {
       "Beware: More moa attracts more Pouākai!"
     ];
     
+    const instructionsY = centerY + 100;
     for (let i = 0; i < instructions.length; i++) {
-      text(instructions[i], centerX, centerY + 60 + i * 28);
+      text(instructions[i], centerX, instructionsY + i * 28);
     }
     
-    // Start button - centered on full canvas
+    // Start button
     const btnW = 200;
     const btnH = 60;
     const btnX = centerX - btnW / 2;
-    const btnY = centerY + 200;
+    const btnY = centerY + 230;
     
     const hover = mouseX > btnX && mouseX < btnX + btnW && 
                   mouseY > btnY && mouseY < btnY + btnH;
@@ -937,6 +1020,122 @@ updateNotifications(dt = 1) {
     
     // Store button bounds for click detection
     this._menuBtnBounds = { x: btnX, y: btnY, w: btnW, h: btnH };
+  }
+
+  _renderMenuPlant(x, y, plantKey, size) {
+    const plantDef = PLANT_TYPES[plantKey];
+    const sprite = plantSprites[plantKey]?.mature;
+    
+    push();
+    
+    // Draw sprite or fallback shape
+    if (sprite) {
+      imageMode(CENTER);
+      image(sprite, x, y, size, size);
+    } else if (plantKey === 'kawakawa') {
+      // Special kawakawa rendering (simplified)
+      this._renderMenuKawakawa(x, y, size);
+    } else {
+      // Fallback: colored circle with highlight
+      const c = color(plantDef.color);
+      const displaySize = size * 0.7;
+      
+      noStroke();
+      fill(red(c), green(c), blue(c), 220);
+      ellipse(x, y, displaySize, displaySize * 0.9);
+      
+      // Highlight
+      fill(red(c) + 40, green(c) + 40, blue(c) + 30, 150);
+      ellipse(x - displaySize * 0.15, y - displaySize * 0.15, displaySize * 0.4, displaySize * 0.35);
+    }
+    
+    // Plant name
+    fill(CACHED_COLORS.menuSubtitle);
+    textSize(13);
+    textStyle(BOLD);
+    textAlign(CENTER, CENTER);
+    text(plantDef.name, x, y + size * 0.8);
+    
+    // Plant description
+    textStyle(NORMAL);
+    fill(CACHED_COLORS.menuText);
+    textSize(11);
+    
+    // Word wrap long descriptions
+    const maxWidth = 140;
+    const desc = plantDef.description || "";
+    if (textWidth(desc) > maxWidth) {
+      const words = desc.split(' ');
+      let line1 = '';
+      let line2 = '';
+      let onLine1 = true;
+      
+      for (const word of words) {
+        const testLine = onLine1 ? line1 + (line1 ? ' ' : '') + word : line2 + (line2 ? ' ' : '') + word;
+        if (onLine1 && textWidth(testLine) > maxWidth) {
+          onLine1 = false;
+          line2 = word;
+        } else if (onLine1) {
+          line1 = testLine;
+        } else {
+          line2 = testLine;
+        }
+      }
+      
+      text(line1, x, y + size * 0.8 + 18);
+      text(line2, x, y + size * 0.8 + 32);
+    } else {
+      text(desc, x, y + size * 0.8 + 16);
+    }
+    
+    pop();
+  }
+
+  _renderMenuKawakawa(x, y, size) {
+    // Simplified kawakawa for menu display
+    const leafSize = size * 0.25;
+    const stemLen = size * 0.15;
+    
+    push();
+    translate(x, y);
+    
+    // Draw 5 heart-shaped leaves
+    for (let i = 0; i < 5; i++) {
+      push();
+      rotate(i * TWO_PI / 5 + 0.2);
+      
+      // Stem
+      stroke(75, 110, 50);
+      strokeWeight(2);
+      line(0, 0, stemLen + leafSize * 0.5, 0);
+      
+      // Leaf
+      translate(stemLen + leafSize * 0.8, 0);
+      rotate(HALF_PI);
+      
+      fill(85, 155, 55);
+      stroke(60, 120, 45);
+      strokeWeight(1);
+      
+      beginShape();
+      const lw = leafSize * 0.5;
+      const lh = leafSize * 0.6;
+      vertex(0, -lh * 0.5);
+      bezierVertex(-lw * 0.3, -lh * 0.5, -lw * 0.5, -lh * 0.2, -lw * 0.5, 0);
+      bezierVertex(-lw * 0.5, lh * 0.3, -lw * 0.2, lh * 0.4, 0, lh * 0.5);
+      bezierVertex(lw * 0.2, lh * 0.4, lw * 0.5, lh * 0.3, lw * 0.5, 0);
+      bezierVertex(lw * 0.5, -lh * 0.2, lw * 0.3, -lh * 0.5, 0, -lh * 0.5);
+      endShape(CLOSE);
+      
+      pop();
+    }
+    
+    // Center node
+    fill(90, 75, 55);
+    noStroke();
+    ellipse(0, 0, size * 0.1, size * 0.1);
+    
+    pop();
   }
 
   

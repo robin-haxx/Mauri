@@ -1398,20 +1398,19 @@ updateNotifications(dt = 1) {
           return;
         }
       }
-      
-      // Fallback: click anywhere to start (optional)
-      // this.init();
       return;
     }
     
-    if (this.state !== GAME_STATE.PLAYING) return;
+    // Allow UI clicks when playing OR paused (for pause button)
+    if (this.state === GAME_STATE.PLAYING || this.state === GAME_STATE.PAUSED) {
+      if (this.ui.handleClick(mx, my)) return;
+    }
     
-    // Check UI panel clicks first
-    if (this.ui.handleClick(mx, my)) return;
+    // Only allow game area interactions when playing
+    if (this.state !== GAME_STATE.PLAYING) return;
     
     // Check if click is within game area
     if (this.isInGameArea(mx, my) && this.selectedPlaceable) {
-      // Convert to game area coordinates
       const gameX = mx - CONFIG.gameAreaX;
       const gameY = my - CONFIG.gameAreaY;
       const invZoom = 1 / CONFIG.zoom;
@@ -1469,7 +1468,13 @@ updateNotifications(dt = 1) {
 let game;
 
 function setup() {
-  createCanvas(CONFIG.canvasWidth, CONFIG.canvasHeight);
+    let cnv = createCanvas(CONFIG.canvasWidth, CONFIG.canvasHeight);
+  cnv.style('display', 'block');
+  document.body.style.margin = '0';
+  document.body.style.overflow = 'hidden';
+  document.body.style.background = '#19231e';
+  
+  scaleCanvasToFit();
   pixelDensity(1);
   frameRate(60);
   textFont('OpenDyslexic');
@@ -1482,6 +1487,20 @@ function setup() {
   initializeRegistry();
   
   game = new Game();
+}
+
+function windowResized() {
+  scaleCanvasToFit();
+}
+
+function scaleCanvasToFit() {
+  const cnv = document.querySelector('canvas');
+  const scale = Math.min(windowWidth / 1920, windowHeight / 1080);
+  cnv.style.width = (1920 * scale) + 'px';
+  cnv.style.height = (1080 * scale) + 'px';
+  cnv.style.position = 'absolute';
+  cnv.style.left = ((windowWidth - 1920 * scale) / 2) + 'px';
+  cnv.style.top = ((windowHeight - 1080 * scale) / 2) + 'px';
 }
 
 function initPanelColors() {

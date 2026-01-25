@@ -70,6 +70,11 @@ class GameUI {
       seasonX: topBarStartX + mauriWidth + elementSpacing,
       timerX: topBarStartX + mauriWidth + seasonWidth + (elementSpacing * 2),
       
+      // Pause button (right edge of game area, before sidebar)
+      pauseBtnX: gameAreaWidth - 90,  // 70px button + 20px padding from sidebar edge
+      pauseBtnY: 20,                      // Same as other top bar elements
+      pauseBtnSize: 70,
+      
       // Migration hint (centered, slightly narrower than game area)
       migrationHintWidth: 940,
       migrationHintX: (gameAreaWidth - 940) / 2,
@@ -115,6 +120,11 @@ class GameUI {
   }
   
   handleClick(mx, my) {
+    // Check pause button click first (top bar area)
+    if (my >= this.topBar.y && my < this.topBar.y + this.topBar.height) {
+      if (this.handlePauseButtonClick(mx, my)) return true;
+    }
+    
     // Check bottom toolbar clicks
     if (my >= this.bottomBar.y && my < this.bottomBar.y + this.bottomBar.height) {
       return this.handleToolbarClick(mx, my);
@@ -152,6 +162,22 @@ class GameUI {
     return false;
   }
   
+  handlePauseButtonClick(mx, my) {
+    const x = this.layout.pauseBtnX;
+    const y = this.layout.pauseBtnY;
+    const size = this.layout.pauseBtnSize;
+    
+    if (mx > x && mx < x + size && my > y && my < y + size) {
+      if (this.game.state === GAME_STATE.PLAYING) {
+        this.game.state = GAME_STATE.PAUSED;
+      } else if (this.game.state === GAME_STATE.PAUSED) {
+        this.game.state = GAME_STATE.PLAYING;
+      }
+      return true;
+    }
+    return false;
+  }
+
   // ==========================================
   // PANEL RENDERING
   // ==========================================
@@ -246,6 +272,9 @@ class GameUI {
     
     // Timer (centered right)
     this.renderTimer(this.layout.timerX, contentY);
+
+    // Pause button (right edge, before sidebar)
+    this.renderPauseButton(this.layout.pauseBtnX, this.layout.pauseBtnY);
     
     // Migration hint row (bottom of top bar, centered)
     this.renderMigrationHint(this.layout.migrationHintX, 110);
@@ -389,6 +418,46 @@ class GameUI {
       textSize(11);
       text(message.subtext, x + 50, y + 36);
     }
+  }
+
+  renderPauseButton(x, y) {
+    const size = this.layout.pauseBtnSize;
+    const isHovered = mouseX > x && mouseX < x + size && 
+                      mouseY > y && mouseY < y + size;
+    const isPaused = this.game.state === GAME_STATE.PAUSED;
+    
+    // Button background
+    if (isHovered) {
+      fill(50, 85, 60);
+      stroke(100, 160, 120);
+      strokeWeight(2);
+    } else {
+      fill(35, 55, 40, 200);
+      stroke(70, 110, 80);
+      strokeWeight(1);
+    }
+    rect(x, y, size, size, 10);
+    
+    // Icon
+    noStroke();
+    const centerX = x + size / 2;
+    const centerY = y + size / 2;
+    
+    if (isPaused) {
+      // Play triangle (green when paused)
+      fill(100, 220, 130);
+      beginShape();
+      vertex(centerX - 8, centerY - 14);
+      vertex(centerX - 8, centerY + 14);
+      vertex(centerX + 14, centerY);
+      endShape(CLOSE);
+    } else {
+      // Pause bars
+      fill(180, 200, 190);
+      rect(centerX - 12, centerY - 12, 8, 24, 2);
+      rect(centerX + 4, centerY - 12, 8, 24, 2);
+    }
+    
   }
 
   getSeasonalMessage() {

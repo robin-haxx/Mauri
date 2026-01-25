@@ -31,7 +31,7 @@ function preload(){
 // CONFIGURATION
 // ============================================
 const CONFIG = {
-  version: '0.7.2',
+  version: '0.7.3',
   // Canvas dimensions
   canvasWidth: 1920,
   canvasHeight: 1080,

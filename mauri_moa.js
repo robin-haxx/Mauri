@@ -1,5 +1,5 @@
 // ============================================
-// MOA CLASS - Optimized
+// MOA CLASS - With Mating Behavior
 // ============================================
 
 const MOA_STATE = {
@@ -7,7 +7,9 @@ const MOA_STATE = {
   FORAGING: 'foraging',
   FLEEING: 'fleeing',
   MIGRATING: 'migrating',
-  FEEDING: 'feeding'
+  FEEDING: 'feeding',
+  SEEKING_MATE: 'seeking_mate',
+  MATING: 'mating'
 };
 
 class Moa extends Boid {
@@ -27,7 +29,13 @@ class Moa extends Boid {
     criticalHunger: 80,
     eggCooldownTime: 800,
     hasCrest: false,
-    preferredElevation: { min: 0.25, max: 0.70 }
+    preferredElevation: { min: 0.25, max: 0.70 },
+    // Mating config
+    matingHungerThreshold: 40,  // Must be below this hunger to mate
+    matingRange: 15,            // Distance to initiate mating
+    matingDuration: 60,         // Frames spent mating
+    pregnancyDuration: 90,      // Frames after mating before laying
+    matingSearchRadius: 80      // How far to look for mates
   };
 
   constructor(x, y, terrain, config, speciesData = null) {
@@ -94,15 +102,33 @@ class Moa extends Boid {
     this.isFeeding = false;
     this.feedingAt = null;
     
-    // Reproduction
+    // Reproduction - security time
     this.securityTime = 0;
     this.securityTimeRequired = (s.securityTimeBase || config.securityTimeToLay) + 
       random(s.securityTimeVariation || config.securityTimeVariation);
-    this.canLayEgg = true;
-    this.eggCooldown = 0;
-    this.eggCooldownTime = s.eggCooldownTime;
     this.securityBonus = 1;
     this.eggSpeedBonus = 1;
+    
+    // Reproduction - mating
+    this.canMate = true;
+    this.mateCooldown = 0;
+    this.mateCooldownTime = s.eggCooldownTime;
+    this.matingHungerThreshold = s.matingHungerThreshold;
+    this.matingRange = s.matingRange;
+    this.matingRangeSq = s.matingRange * s.matingRange;
+    this.matingDuration = s.matingDuration;
+    this.pregnancyDuration = s.pregnancyDuration;
+    this.matingSearchRadius = s.matingSearchRadius;
+    
+    // Mating state
+    this.matingPartner = null;
+    this.matingTimer = 0;
+    this.isPregnant = false;
+    this.pregnancyTimer = 0;
+    this.targetMate = null;  // Moa we're moving toward
+    
+    // Visual mating indicator
+    this.heartTimer = 0;  // For showing hearts
     
     // Migration
     this.isMigrating = false;
@@ -112,20 +138,20 @@ class Moa extends Boid {
     this.foodCheckTimer = 0;
     this.preferredElevation = s.preferredElevation;
     
-    // Reusable vectors - avoid allocations in hot paths
+    // Reusable vectors
     this._tempForce = createVector();
-    this._returnForce = createVector();      // For methods that return forces
-    this._homeForce = createVector();        // For stayInHomeRange
-    this._migrationTargetVec = null;         // Lazy-created for migration
+    this._returnForce = createVector();
+    this._homeForce = createVector();
+    this._migrationTargetVec = null;
     
     // Size cache
     this._sizeCache = null;
     
-    // Color caching for panic interpolation
+    // Color caching
     this._lastPanicLevel = -1;
     this._cachedPanicColor = null;
     
-    // Cached season data (updated each frame in behave)
+    // Season cache
     this._seasonCache = {
       key: null,
       hungerMod: 1,
@@ -163,6 +189,8 @@ class Moa extends Boid {
       panic: color(lerp(r, 150, 0.5), lerp(g, 80, 0.5), lerp(b, 60, 0.5)),
       starving: color(lerp(r, 70, 0.4), lerp(g, 50, 0.4), lerp(b, 35, 0.4)),
       feeding: color(lerp(r, 80, 0.2), lerp(g, 100, 0.2), lerp(b, 60, 0.2)),
+      mating: color(lerp(r, 180, 0.3), lerp(g, 100, 0.3), lerp(b, 120, 0.3)),
+      pregnant: color(lerp(r, 160, 0.2), lerp(g, 140, 0.2), lerp(b, 100, 0.2)),
       leg: color(60, 42, 25),
       beak: color(70, 55, 35),
       beakStroke: color(50, 40, 25),
@@ -193,20 +221,15 @@ class Moa extends Boid {
 
   _cacheSizeMultipliers() {
     this._sizeCache = null;
-    this.sc; // Force recompute
+    this.sc;
   }
 
-  // ============================================
-  // SEASON DATA CACHING
-  // ============================================
-  
   _updateSeasonCache(seasonManager) {
     const cache = this._seasonCache;
     cache.key = seasonManager.currentKey;
     cache.hungerMod = seasonManager.getHungerModifier();
     cache.migrationStrength = seasonManager.getMigrationStrength();
     
-    // Blend species preference with season preference
     const sp = seasonManager.getPreferredElevation();
     const pp = this.speciesConfig.preferredElevation || sp;
     cache.preferredElevation.min = (pp.min + sp.min) * 0.5;
@@ -214,29 +237,61 @@ class Moa extends Boid {
   }
 
   // ============================================
+  // MATING READINESS
+  // ============================================
+  
+  /**
+   * Check if this moa is ready to seek a mate
+   */
+  isReadyToMate() {
+    return this.canMate && 
+           this.mateCooldown <= 0 &&
+           !this.isPregnant &&
+           !this.matingPartner &&
+           this.hunger < this.matingHungerThreshold &&
+           this.securityTime >= this.securityTimeRequired * 0.5; // Need some security
+  }
+  
+  /**
+   * Check if this moa can be a mate target (slightly looser requirements)
+   */
+  canBeMate() {
+    return this.alive &&
+           this.canMate &&
+           this.mateCooldown <= 0 &&
+           !this.isPregnant &&
+           !this.matingPartner &&
+           this.hunger < this.matingHungerThreshold * 1.5; // Slightly higher hunger OK for target
+  }
+
+  // ============================================
   // MAIN BEHAVIOR
   // ============================================
 
   behave(simulation, mauri, seasonManager, dt = 1) {
-    // Cache season data once per frame
     this._updateSeasonCache(seasonManager);
     const seasonCache = this._seasonCache;
     
-    // Hunger - multiply rate by delta time
+    // Hunger
     const hungerMod = this.speciesConfig.seasonalModifiers?.[seasonCache.key]?.hungerRate || 1;
     this.hungerRate = this.baseHungerRate * seasonCache.hungerMod * hungerMod;
     this.hunger = Math.min(this.hunger + this.hungerRate * dt, this.maxHunger);
     
-    // Egg cooldown - scale by delta time
-    if (this.eggCooldown > 0) {
-      this.eggCooldown -= dt;
-      if (this.eggCooldown <= 0) {
-        this.eggCooldown = 0;
-        this.canLayEgg = true;
+    // Mate cooldown
+    if (this.mateCooldown > 0) {
+      this.mateCooldown -= dt;
+      if (this.mateCooldown <= 0) {
+        this.mateCooldown = 0;
+        this.canMate = true;
       }
     }
     
-    // Food assessment (throttled - accumulate time)
+    // Heart animation timer
+    if (this.heartTimer > 0) {
+      this.heartTimer -= dt;
+    }
+    
+    // Food assessment (throttled)
     this.foodCheckTimer += dt;
     if (this.foodCheckTimer >= 60) {
       this.foodCheckTimer -= 60;
@@ -257,11 +312,23 @@ class Moa extends Boid {
     // Placeable effects
     this.applyPlaceableEffects(placeables, dt);
     
-    // Update elevation preference from cache
+    // Update elevation preference
     this.preferredElevation = seasonCache.preferredElevation;
     
+    // Handle active mating first
+    if (this.matingPartner || this.matingTimer > 0) {
+      this.executeMating(simulation, mauri, dt);
+      return;
+    }
+    
+    // Handle pregnancy
+    if (this.isPregnant) {
+      this.executePregnancy(simulation, mauri, placeables, dt);
+      // Continue with normal behavior while pregnant
+    }
+    
     // Determine and execute state
-    this.currentState = this.determineState(eagles, placeables, seasonCache);
+    this.currentState = this.determineState(eagles, placeables, seasonCache, moas);
     this.executeState(simulation, mauri, seasonCache, eagles, moas, placeables, dt);
     
     // Common behaviors
@@ -271,20 +338,15 @@ class Moa extends Boid {
     this.applyForce(avoid);
     this.edges();
     
-    // Security time - scale by delta time
+    // Security time
     this.updateSecurity(eagles, dt);
-    
-    // Try laying egg
-    if (this.currentState !== MOA_STATE.FLEEING) {
-      this.tryLayEgg(simulation, mauri, placeables);
-    }
     
     // Death check
     if (this.hunger >= this.maxHunger) this.alive = false;
   }
 
-  determineState(eagles, placeables, seasonCache) {
-    // Flee from threats
+  determineState(eagles, placeables, seasonCache, moas) {
+    // Flee from threats (highest priority)
     for (let i = 0; i < eagles.length; i++) {
       const e = eagles[i];
       if (this.camouflage > 0 && random() < this.camouflage) continue;
@@ -292,11 +354,44 @@ class Moa extends Boid {
       
       const dx = e.pos.x - this.pos.x, dy = e.pos.y - this.pos.y;
       if (e.isHunting() && dx * dx + dy * dy < this.fleeRadiusSq) {
+        // Clear mating state when fleeing
+        this.targetMate = null;
         return MOA_STATE.FLEEING;
       }
     }
     
-    // Migration - use cached migration strength
+    // Already mating
+    if (this.matingTimer > 0 || this.matingPartner) {
+      return MOA_STATE.MATING;
+    }
+    
+    // Check if being courted - respond if we can mate
+    if (this.canBeMate() && !this.targetMate && this.hunger < this.hungerThreshold) {
+      const suitor = this.isBeingCourted(moas);
+      if (suitor && suitor.alive) {
+        this.targetMate = suitor;
+        return MOA_STATE.SEEKING_MATE;
+      }
+    }
+    
+    // Actively seeking mate
+    if (this.targetMate && this.targetMate.alive && this.canBeMate()) {
+      return MOA_STATE.SEEKING_MATE;
+    }
+    
+    // Ready to seek a new mate
+    if (this.isReadyToMate() && this.hunger < this.hungerThreshold) {
+      const potentialMate = this.findPotentialMate(moas);
+      if (potentialMate) {
+        this.targetMate = potentialMate;
+        return MOA_STATE.SEEKING_MATE;
+      }
+    }
+    
+    // Clear stale target
+    this.targetMate = null;
+    
+    // Migration
     if (this.isMigrating || this.shouldMigrate(seasonCache)) {
       return MOA_STATE.MIGRATING;
     }
@@ -316,77 +411,397 @@ class Moa extends Boid {
     return MOA_STATE.IDLE;
   }
 
-  executeState(simulation, mauri, seasonCache, eagles, moas, placeables, dt = 1) {
-    this.panicLevel = 0;
-    const isStarving = this.hunger > this.criticalHunger;
-    
-    switch (this.currentState) {
-      case MOA_STATE.FLEEING:
-        this.isMigrating = false;
-        this.targetPlant = null;
-        this.maxSpeed = this.fleeSpeed * (isStarving ? 0.6 : 1);
+executeState(simulation, mauri, seasonCache, eagles, moas, placeables, dt = 1) {
+  this.panicLevel = 0;
+  const isStarving = this.hunger > this.criticalHunger;
+  
+  switch (this.currentState) {
+    case MOA_STATE.FLEEING:
+      this.isMigrating = false;
+      this.targetPlant = null;
+      this.targetMate = null;
+      this.maxSpeed = this.fleeSpeed * (isStarving ? 0.6 : 1);
+      
+      for (let i = 0; i < eagles.length; i++) {
+        const e = eagles[i];
+        if (!e.isHunting()) continue;
+        if (this.inShelter && !e.isHunting()) continue;
         
-        for (let i = 0; i < eagles.length; i++) {
-          const e = eagles[i];
-          if (!e.isHunting()) continue;
-          if (this.inShelter && !e.isHunting()) continue;
+        const dx = e.pos.x - this.pos.x, dy = e.pos.y - this.pos.y;
+        const dSq = dx * dx + dy * dy;
+        
+        if (dSq < this.fleeRadiusSq) {
+          const flee = this.fleeFrom(e.pos.x, e.pos.y);
+          flee.mult(2.5 * this.flightiness);
+          this.applyForce(flee);
           
-          const dx = e.pos.x - this.pos.x, dy = e.pos.y - this.pos.y;
-          const dSq = dx * dx + dy * dy;
-          
-          if (dSq < this.fleeRadiusSq) {
-            const flee = this.fleeFrom(e.pos.x, e.pos.y);
-            flee.mult(2.5 * this.flightiness);
-            this.applyForce(flee);
-            
-            const d = Math.sqrt(dSq);
-            this.panicLevel = Math.max(this.panicLevel, 1 - d / this.fleeRadius);
-          }
+          const d = Math.sqrt(dSq);
+          this.panicLevel = Math.max(this.panicLevel, 1 - d / this.fleeRadius);
         }
-        break;
-        
-      case MOA_STATE.MIGRATING:
-        this.maxSpeed = this.baseSpeed * (isStarving ? 0.6 : 1);
-        this.executeMigration(seasonCache, dt);
-        if (this.hunger > 60) this.forage(simulation, mauri);
-        break;
-        
-      case MOA_STATE.FORAGING:
-        this.maxSpeed = this.baseSpeed * (isStarving ? 0.6 : 1);
-        if (!this.seekAttractions(placeables)) {
-          this.forage(simulation, mauri);
-        }
-        break;
-        
-      case MOA_STATE.FEEDING:
-        this.maxSpeed = this.baseSpeed * 0.7;
-        if (this.feedingAt) {
-          const dx = this.feedingAt.pos.x - this.pos.x;
-          const dy = this.feedingAt.pos.y - this.pos.y;
-          if (dx * dx + dy * dy > this.feedingAt.radius * this.feedingAt.radius * 0.25) {
-            this.applyForce(this.seek(this.feedingAt.pos, 0.3));
-          } else {
-            const w = this.wander();
-            w.mult(0.2);
-            this.applyForce(w);
-          }
-        }
-        break;
-        
-      default: // IDLE
-        this.maxSpeed = this.baseSpeed;
-        this.targetPlant = null;
-        if (!this.seekAttractions(placeables)) {
+      }
+      break;
+      
+    case MOA_STATE.SEEKING_MATE:
+      this.maxSpeed = this.baseSpeed * 1.5; // Faster pursuit
+      this.seekMate(moas, dt);
+      break;
+      
+    case MOA_STATE.MATING:
+      // Handled in executeMating()
+      break;
+      
+    case MOA_STATE.MIGRATING:
+      this.targetMate = null;
+      this.maxSpeed = this.baseSpeed * (isStarving ? 0.6 : 1);
+      this.executeMigration(seasonCache, dt);
+      if (this.hunger > 60) this.forage(simulation, mauri);
+      break;
+      
+    case MOA_STATE.FORAGING:
+      this.maxSpeed = this.baseSpeed * (isStarving ? 0.6 : 1);
+      if (!this.seekAttractions(placeables)) {
+        this.forage(simulation, mauri);
+      }
+      break;
+      
+    case MOA_STATE.FEEDING:
+      this.maxSpeed = this.baseSpeed * 0.7;
+      if (this.feedingAt) {
+        const dx = this.feedingAt.pos.x - this.pos.x;
+        const dy = this.feedingAt.pos.y - this.pos.y;
+        if (dx * dx + dy * dy > this.feedingAt.radius * this.feedingAt.radius * 0.25) {
+          this.applyForce(this.seek(this.feedingAt.pos, 0.3));
+        } else {
           const w = this.wander();
-          w.mult(0.4);
+          w.mult(0.2);
           this.applyForce(w);
-          this.applyForce(this.stayInHomeRange());
         }
+      }
+      break;
+      
+    default: // IDLE
+      this.maxSpeed = this.baseSpeed;
+      this.targetPlant = null;
+      if (!this.seekAttractions(placeables)) {
+        const w = this.wander();
+        w.mult(0.4);
+        this.applyForce(w);
+        this.applyForce(this.stayInHomeRange());
+      }
+  }
+}
+
+// ============================================
+// MATING READINESS
+// ============================================
+
+/**
+ * Check if this moa is ready to seek a mate
+ */
+isReadyToMate() {
+  return this.canMate && 
+         this.mateCooldown <= 0 &&
+         !this.isPregnant &&
+         !this.matingPartner &&
+         this.hunger < this.matingHungerThreshold &&
+         this.securityTime >= this.securityTimeRequired * 0.5;
+}
+
+/**
+ * Check if this moa can be a mate target (slightly looser requirements)
+ */
+canBeMate() {
+  return this.alive &&
+         this.canMate &&
+         this.mateCooldown <= 0 &&
+         !this.isPregnant &&
+         !this.matingPartner &&
+         this.hunger < this.matingHungerThreshold * 1.5;
+}
+
+/**
+ * Check if this moa is being courted by another
+ */
+isBeingCourted(moas) {
+  for (let i = 0; i < moas.length; i++) {
+    const other = moas[i];
+    if (other !== this && other.targetMate === this && other.alive) {
+      return other;
+    }
+  }
+  return null;
+}
+
+  // ============================================
+  // MATING BEHAVIOR
+  // ============================================
+
+  /**
+   * Find a potential mate from nearby moa
+   */
+  findPotentialMate(moas) {
+    let bestMate = null;
+    let bestScore = Infinity;
+    const maxDistSq = this.matingSearchRadius * this.matingSearchRadius;
+    
+    const px = this.pos.x, py = this.pos.y;
+    
+    for (let i = 0; i < moas.length; i++) {
+      const other = moas[i];
+      
+      // Skip self and invalid mates
+      if (other === this || !other.canBeMate()) continue;
+      
+      // Skip if they're actively mating with someone else
+      if (other.matingPartner && other.matingPartner !== this) continue;
+      
+      const dx = other.pos.x - px;
+      const dy = other.pos.y - py;
+      const distSq = dx * dx + dy * dy;
+      
+      if (distSq > maxDistSq) continue;
+      
+      // Score based on distance and compatibility
+      let score = distSq;
+      
+      // Big bonus if they're already targeting us (mutual attraction)
+      if (other.targetMate === this) {
+        score *= 0.1; // 10x preference
+      }
+      // Bonus if they're also seeking a mate
+      else if (other.currentState === MOA_STATE.SEEKING_MATE && !other.targetMate) {
+        score *= 0.5;
+      }
+      // Bonus if they're ready to mate
+      else if (other.isReadyToMate()) {
+        score *= 0.7;
+      }
+      // Penalty if they're busy foraging (harder to catch)
+      else if (other.currentState === MOA_STATE.FORAGING) {
+        score *= 1.5;
+      }
+      
+      if (score < bestScore) {
+        bestScore = score;
+        bestMate = other;
+      }
+    }
+    
+    return bestMate;
+  }
+
+  /**
+   * Move toward target mate and initiate mating when close
+   */
+  seekMate(moas, dt = 1) {
+    // Validate target mate still exists and is valid
+    if (!this.targetMate || !this.targetMate.alive || !this.targetMate.canBeMate()) {
+      this.targetMate = this.findPotentialMate(moas);
+      if (!this.targetMate) {
+        this.currentState = MOA_STATE.IDLE;
+        return;
+      }
+    }
+    
+    const target = this.targetMate;
+    const dx = target.pos.x - this.pos.x;
+    const dy = target.pos.y - this.pos.y;
+    const distSq = dx * dx + dy * dy;
+    
+    // Check if close enough to mate
+    if (distSq < this.matingRangeSq) {
+      this.initiateMating(target);
+      return;
+    }
+    
+    // Pursuit with prediction
+    const dist = Math.sqrt(distSq);
+    
+    // Lead the target - predict where they'll be
+    const closingSpeed = this.maxSpeed - target.vel.mag() * 0.5;
+    const predictTime = constrain(dist / max(closingSpeed, 0.1), 0, 40);
+    
+    const predictX = target.pos.x + target.vel.x * predictTime;
+    const predictY = target.pos.y + target.vel.y * predictTime;
+    
+    // Stronger pursuit when closer
+    const urgency = map(dist, 0, this.matingSearchRadius, 1.5, 0.8);
+    
+    this._tempForce.set(predictX, predictY);
+    const seekForce = this.seek(this._tempForce, urgency);
+    this.applyForce(seekForce);
+    
+    // Show hearts when getting close
+    if (distSq < this.matingSearchRadius * this.matingSearchRadius * 0.25) {
+      this.heartTimer = 20;
     }
   }
 
+  initiateMating(partner) {
+    // Both moa enter mating state
+    this.matingPartner = partner;
+    this.matingTimer = this.matingDuration;
+    this.currentState = MOA_STATE.MATING;
+    this.heartTimer = this.matingDuration;
+    this.targetMate = null;
+    
+    partner.matingPartner = this;
+    partner.matingTimer = this.matingDuration;
+    partner.currentState = MOA_STATE.MATING;
+    partner.heartTimer = this.matingDuration;
+    partner.targetMate = null;
+    
+    // Stop movement briefly
+    this.vel.mult(0.2);
+    partner.vel.mult(0.2);
+    
+    // Play mating sound
+    if (typeof audioManager !== 'undefined' && audioManager) {
+      audioManager.playMateCheep();
+    }
+  }
+
+  /**
+   * Execute mating behavior (called each frame while mating)
+   */
+  executeMating(simulation, mauri, dt = 1) {
+    this.matingTimer -= dt;
+    this.maxSpeed = this.baseSpeed * 0.15; // Very slow
+    
+    // Stay close to partner
+    if (this.matingPartner && this.matingPartner.alive) {
+      const dx = this.matingPartner.pos.x - this.pos.x;
+      const dy = this.matingPartner.pos.y - this.pos.y;
+      const distSq = dx * dx + dy * dy;
+      
+      // Move toward partner if drifted apart
+      if (distSq > this.matingRangeSq * 2) {
+        const seekForce = this.seek(this.matingPartner.pos, 0.5);
+        this.applyForce(seekForce);
+      } else if (distSq > 25) {
+        // Gentle attraction when close
+        this._tempForce.set(dx, dy);
+        this._tempForce.setMag(this.maxForce * 0.3);
+        this.applyForce(this._tempForce);
+      }
+      
+      // Very slow wandering in place
+      const w = this.wander();
+      w.mult(0.1);
+      this.applyForce(w);
+    } else {
+      // Partner died or disappeared - cancel mating
+      this.matingTimer = 0;
+    }
+    
+    // Mating complete
+    if (this.matingTimer <= 0) {
+      this.completeMating(simulation, mauri);
+    }
+  }
+
+  /**
+   * Complete mating - one moa becomes pregnant
+   */
+  completeMating(simulation, mauri) {
+    const partner = this.matingPartner;
+    
+    // Determine which one becomes pregnant (random)
+    const thisBecomesPregnant = random() < 0.5;
+    
+    if (thisBecomesPregnant) {
+      this.becomePregnant();
+    } else if (partner && partner.alive) {
+      partner.becomePregnant();
+    } else {
+      // Fallback if partner died
+      this.becomePregnant();
+    }
+    
+    // Both go on cooldown
+    this.canMate = false;
+    this.mateCooldown = this.mateCooldownTime;
+    this.matingPartner = null;
+    this.matingTimer = 0;
+    this.currentState = MOA_STATE.IDLE;
+    
+    if (partner && partner.alive) {
+      partner.canMate = false;
+      partner.mateCooldown = partner.mateCooldownTime;
+      partner.matingPartner = null;
+      partner.matingTimer = 0;
+      partner.currentState = MOA_STATE.IDLE;
+    }
+    
+    // Hunger cost
+    this.hunger += 10;
+    if (partner && partner.alive) {
+      partner.hunger += 10;
+    }
+  }
+
+  /**
+   * This moa becomes pregnant
+   */
+  becomePregnant() {
+    this.isPregnant = true;
+    this.pregnancyTimer = this.pregnancyDuration;
+  }
+
+  /**
+   * Handle pregnancy each frame
+   */
+  executePregnancy(simulation, mauri, placeables, dt = 1) {
+    this.pregnancyTimer -= dt;
+    
+    // Apply nest bonus
+    for (let i = 0; i < placeables.length; i++) {
+      const p = placeables[i];
+      if (p.alive && p.type === 'nest' && p.isInRange(this.pos)) {
+        this.pregnancyTimer -= dt * 0.5;
+        break;
+      }
+    }
+    
+    if (this.pregnancyTimer <= 0) {
+      this.layEgg(simulation, mauri);
+    }
+  }
+
+  /**
+   * Lay the egg
+   */
+  layEgg(simulation, mauri) {
+    if (simulation.getMoaPopulation() >= this.config.maxMoaPopulation) {
+      this.isPregnant = false;
+      this.pregnancyTimer = 0;
+      return;
+    }
+    
+    const isFirstEgg = simulation.eggs.filter(e => e.alive && !e.hatched).length === 0;
+    
+    const egg = simulation.addEgg(this.pos.x, this.pos.y);
+    egg.speedBonus = this.eggSpeedBonus;
+    if (this.speciesKey) egg.parentSpecies = this.speciesKey;
+    
+    if (isFirstEgg && simulation.game?.tutorial) {
+      simulation.game.tutorial.fireEvent(TUTORIAL_EVENTS.FIRST_EGG, { egg: egg });
+    }
+    
+    mauri.earn(mauri.onEggLaid, this.pos.x, this.pos.y, 'egg');
+    
+    this.isPregnant = false;
+    this.pregnancyTimer = 0;
+    this.hunger += 15;
+    this.homeRange.set(this.pos.x, this.pos.y);
+    
+    this.securityTime = 0;
+    this.securityTimeRequired = (this.speciesConfig.securityTimeBase || this.config.securityTimeToLay) +
+      random(this.speciesConfig.securityTimeVariation || this.config.securityTimeVariation);
+  }
+
   // ============================================
-  // MOVEMENT - Optimized to avoid vector allocations
+  // MOVEMENT
   // ============================================
 
   fleeFrom(tx, ty) {
@@ -404,7 +819,7 @@ class Moa extends Boid {
     } else {
       force.set(0, 0);
     }
-    return force;  // Return reusable vector directly (no copy)
+    return force;
   }
 
   stayInHomeRange() {
@@ -421,7 +836,7 @@ class Moa extends Boid {
     } else {
       force.set(0, 0);
     }
-    return force;  // Return reusable vector directly
+    return force;
   }
 
   applySeparation(moas) {
@@ -429,15 +844,31 @@ class Moa extends Boid {
     force.set(0, 0);
     let count = 0;
     
+    // Much weaker separation during mating behavior
+    const isMatingBehavior = (this.currentState === MOA_STATE.MATING || 
+                              this.currentState === MOA_STATE.SEEKING_MATE);
+    const separationDist = isMatingBehavior 
+      ? this.separationDistSq * 0.15  // Very small separation zone
+      : this.separationDistSq;
+    
     for (let i = 0; i < moas.length; i++) {
       const other = moas[i];
       if (!other.alive || other === this) continue;
+      
+      // Don't separate from mating partner
+      if (other === this.matingPartner) continue;
+      
+      // Don't separate from target mate (pursuing them)
+      if (other === this.targetMate) continue;
+      
+      // Don't separate from someone pursuing us
+      if (other.targetMate === this) continue;
       
       const dx = this.pos.x - other.pos.x;
       const dy = this.pos.y - other.pos.y;
       const dSq = dx * dx + dy * dy;
       
-      if (dSq < this.separationDistSq && dSq > 0.0001) {
+      if (dSq < separationDist && dSq > 0.0001) {
         force.x += dx / dSq;
         force.y += dy / dSq;
         count++;
@@ -450,9 +881,14 @@ class Moa extends Boid {
       force.sub(this.vel);
       force.limit(this.maxForce);
       
-      const mult = this.currentState === MOA_STATE.FLEEING 
-        ? 0.5 * this.flockTendency 
-        : 0.8 * (2 - this.flockTendency);
+      let mult;
+      if (isMatingBehavior) {
+        mult = 0.2; // Very weak separation during mating
+      } else if (this.currentState === MOA_STATE.FLEEING) {
+        mult = 0.5 * this.flockTendency;
+      } else {
+        mult = 0.8 * (2 - this.flockTendency);
+      }
       force.mult(mult);
       this.applyForce(force);
     }
@@ -482,7 +918,7 @@ class Moa extends Boid {
       if (d.eggSpeedBonus) this.eggSpeedBonus = Math.max(this.eggSpeedBonus, d.eggSpeedBonus * p.seasonalMultiplier);
       if (d.hungerSlowdown) hungerMod = Math.min(hungerMod, d.hungerSlowdown);
       if (d.feedingRate) {
-        feedTotal += p.feedMoa(this, dt);  // Pass dt to feeding
+        feedTotal += p.feedMoa(this, dt);
         this.isFeeding = true;
         this.feedingAt = p;
       }
@@ -525,7 +961,6 @@ class Moa extends Boid {
   }
 
   forage(simulation, mauri) {
-    // Find target if needed
     if (!this.targetPlant || !this.targetPlant.alive) {
       this.targetPlant = this.findPlant(simulation);
     }
@@ -576,7 +1011,7 @@ class Moa extends Boid {
   }
 
   // ============================================
-  // MIGRATION - Optimized vector allocation
+  // MIGRATION
   // ============================================
 
   shouldMigrate(seasonCache) {
@@ -643,7 +1078,6 @@ class Moa extends Boid {
       }
     }
     
-    // Only create/reuse vector if we found something
     if (foundValid) {
       if (!this._migrationTargetVec) {
         this._migrationTargetVec = createVector(bestX, bestY);
@@ -678,7 +1112,7 @@ class Moa extends Boid {
   }
 
   // ============================================
-  // REPRODUCTION
+  // SECURITY
   // ============================================
 
   updateSecurity(eagles, dt = 1) {
@@ -692,40 +1126,10 @@ class Moa extends Boid {
     }
     
     if (nearest > safeDist) {
-      this.securityTime += this.securityBonus * dt;  // Scale by dt
+      this.securityTime += this.securityBonus * dt;
     } else {
-      this.securityTime = 0;
+      this.securityTime = Math.max(0, this.securityTime - dt * 2); // Lose security faster
     }
-  }
-
-  tryLayEgg(simulation, mauri, placeables) {
-    if (!this.canLayEgg || this.hunger > this.config.layingHungerThreshold) return;
-    
-    let required = this.securityTimeRequired;
-    for (let i = 0; i < placeables.length; i++) {
-      const p = placeables[i];
-      if (p.alive && p.type === 'nest' && p.isInRange(this.pos)) {
-        required *= 0.5;
-        break;
-      }
-    }
-    
-    if (this.securityTime < required) return;
-    if (simulation.getMoaPopulation() >= this.config.maxMoaPopulation) return;
-    
-    const egg = simulation.addEgg(this.pos.x, this.pos.y);
-    egg.speedBonus = this.eggSpeedBonus;
-    if (this.speciesKey) egg.parentSpecies = this.speciesKey;
-    
-    mauri.earn(mauri.onEggLaid, this.pos.x, this.pos.y, 'egg');
-    
-    this.securityTime = 0;
-    this.canLayEgg = false;
-    this.eggCooldown = this.eggCooldownTime;
-    this.hunger += 25;
-    this.homeRange.set(this.pos.x, this.pos.y);
-    this.securityTimeRequired = (this.speciesConfig.securityTimeBase || this.config.securityTimeToLay) +
-      random(this.speciesConfig.securityTimeVariation || this.config.securityTimeVariation);
   }
 
   resistEagleAttack() {
@@ -752,7 +1156,7 @@ class Moa extends Boid {
     fill(colors.shadow);
     ellipse(1.5, 1.5, sc.bodyW * 1.2, sc.bodyH);
     
-    // Legs (alternating motion)
+    // Legs
     const speed = this.vel.mag();
     const cycle = frameCount * 0.18 + this.legPhase;
     const swing = sin(cycle) * (0.5 + speed * 2);
@@ -829,6 +1233,9 @@ class Moa extends Boid {
     
     pop();
     
+    // Render hearts and status indicators (in world space, not rotated)
+    this.renderMatingIndicators();
+    
     if (CONFIG.showHungerBars) this.renderStatusBars();
   }
 
@@ -843,7 +1250,6 @@ class Moa extends Boid {
     line(sc.legAttach, y1, midX, y2);
     line(midX, y2, endX, y3);
     
-    // Toes
     strokeWeight(1.2);
     line(endX, y3, endX - 3, y3 - 2.5 * side);
     line(endX, y3, endX - 4, y3);
@@ -853,8 +1259,17 @@ class Moa extends Boid {
   getBodyColor() {
     const c = this._colors;
     
+    // Mating colors take priority
+    if (this.currentState === MOA_STATE.MATING || this.heartTimer > 0) {
+      return c.mating;
+    }
+    
+    // Pregnant color
+    if (this.isPregnant) {
+      return c.pregnant;
+    }
+    
     if (this.panicLevel > 0) {
-      // Only recalculate if panic changed significantly
       if (!this._cachedPanicColor || abs(this._lastPanicLevel - this.panicLevel) > 0.05) {
         this._cachedPanicColor = lerpColor(c.body, c.panic, this.panicLevel);
         this._lastPanicLevel = this.panicLevel;
@@ -862,12 +1277,47 @@ class Moa extends Boid {
       return this._cachedPanicColor;
     }
     
-    // Reset panic cache when not panicking
     this._lastPanicLevel = -1;
     
     if (this.hunger > this.criticalHunger) return c.starving;
     if (this.isFeeding) return c.feeding;
     return c.body;
+  }
+
+  renderMatingIndicators() {
+    // Hearts when seeking/mating
+    if (this.heartTimer > 0) {
+      const heartAlpha = min(255, this.heartTimer * 8);
+      const heartFloat = sin(frameCount * 0.15) * 2;
+      
+      fill(255, 100, 120, heartAlpha);
+      noStroke();
+      
+      // Draw heart
+      push();
+      translate(this.pos.x, this.pos.y - this.size - 5 + heartFloat);
+      scale(0.4);
+      beginShape();
+      vertex(0, -3);
+      bezierVertex(-5, -8, -10, -3, 0, 5);
+      endShape();
+      beginShape();
+      vertex(0, -3);
+      bezierVertex(5, -8, 10, -3, 0, 5);
+      endShape();
+      pop();
+    }
+    
+    // Pregnancy indicator
+    if (this.isPregnant) {
+      const progress = 1 - (this.pregnancyTimer / this.pregnancyDuration);
+      
+      // Small egg icon
+      fill(245, 238, 220, 200);
+      stroke(200, 195, 180, 200);
+      strokeWeight(0.5);
+      ellipse(this.pos.x, this.pos.y - this.size - 3, 4 * (0.5 + progress * 0.5), 5 * (0.5 + progress * 0.5));
+    }
   }
 
   renderStatusBars() {
@@ -885,15 +1335,30 @@ class Moa extends Boid {
     fill(80 + pct * 120, 180 - pct * 120, 80);
     rect(px - 7, py + yOff, 14 * (1 - pct), 2, 1);
     
-    // Egg progress
-    if (this.canLayEgg && this.hunger <= this.config.layingHungerThreshold) {
-      const prog = Math.min(this.securityTime / this.securityTimeRequired, 1);
+    // Mating readiness indicator (replaces egg progress)
+    if (this.isReadyToMate() && !this.isPregnant) {
+      fill(40, 40, 40, 150);
+      rect(px - 7, py + yOff - 3, 14, 2, 1);
+      fill(255, 150, 180); // Pink for ready to mate
+      rect(px - 7, py + yOff - 3, 14, 2, 1);
+    } else if (this.canMate && !this.isPregnant && this.mateCooldown <= 0) {
+      // Show security progress toward mating readiness
+      const prog = Math.min(this.securityTime / (this.securityTimeRequired * 0.5), 1);
       if (prog > 0.1) {
         fill(40, 40, 40, 150);
         rect(px - 7, py + yOff - 3, 14, 2, 1);
-        fill(220, 200, 100);
+        fill(220, 180, 200); // Light pink for progress
         rect(px - 7, py + yOff - 3, 14 * prog, 2, 1);
       }
+    }
+    
+    // Pregnancy progress
+    if (this.isPregnant) {
+      const prog = 1 - (this.pregnancyTimer / this.pregnancyDuration);
+      fill(40, 40, 40, 150);
+      rect(px - 7, py + yOff - 3, 14, 2, 1);
+      fill(220, 200, 100); // Yellow for pregnancy
+      rect(px - 7, py + yOff - 3, 14 * prog, 2, 1);
     }
     
     // State indicators
@@ -903,6 +1368,9 @@ class Moa extends Boid {
     if (this.isMigrating) {
       fill(100, 150, 255, 220);
       text("↗", px, py + yOff - 5);
+    } else if (this.currentState === MOA_STATE.SEEKING_MATE) {
+      fill(255, 150, 180, 220);
+      text("♥", px, py + yOff - 5);
     } else if (this.localFoodScore < 0.3 && !this.isFeeding) {
       fill(255, 180, 80, 220);
       text("!", px, py + yOff - 5);

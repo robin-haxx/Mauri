@@ -175,6 +175,7 @@ class HaastsEagle extends Boid {
       this.hunting = false;
       this.target = null;
       this.huntSearchTimer = 0;
+      this._huntEventFired = false;  // ADD THIS
       this.patrol(dt);
     }
     
@@ -354,6 +355,7 @@ class HaastsEagle extends Boid {
   // ============================================
   
   hunt(simulation, mauri, dt = 1) {
+
     this.maxSpeed = this.huntSpeed;
     
     const nearbyMoas = simulation.getNearbyMoas(this.pos.x, this.pos.y, this.huntRadius);
@@ -379,11 +381,25 @@ class HaastsEagle extends Boid {
     }
     
     if (nearestMoa) {
+
+      const hadNoTarget = this.target === null;
+
       this.state = 'hunting';
       this.hunting = true;
       this.target = nearestMoa;
       this.huntSearchTimer = 0;
       this.lastTargetTime = frameCount;
+
+      // Fire event when FIRST acquiring a target
+      if (hadNoTarget && !this._huntEventFired) {
+        if (simulation.game?.tutorial) {
+          simulation.onEagleStartHunt(this, this.target);
+        }
+        this._huntEventFired = true;
+        if (typeof audioManager !== 'undefined' && audioManager) {
+          audioManager.playEagleHunt();
+        }
+      }
       
       this._targetVec.set(
         nearestMoa.pos.x + nearestMoa.vel.x * 12,
@@ -400,6 +416,8 @@ class HaastsEagle extends Boid {
       this.huntSearchTimer += dt;  // Scale by dt
       this.hunting = true;
       this.target = null;
+      // Reset hunt flag
+      this._huntEventFired = false;
       
       if (this.huntSearchTimer >= this.huntSearchTimeout) {
         this.startRelocation();
@@ -407,6 +425,10 @@ class HaastsEagle extends Boid {
       }
       
       this.searchForPrey();
+    }
+        // Reset flag when hunt ends
+    if (this.state !== 'hunting') {
+      this._huntEventFired = false;
     }
   }
   

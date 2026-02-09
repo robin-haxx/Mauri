@@ -251,6 +251,9 @@ class Simulation {
 
   handleEagleCatch(eagle, moa, mauri) {
     moa.alive = false;
+    if (typeof audioManager !== 'undefined' && audioManager) {
+      audioManager.playEagleCatch();
+    }
     
     eagle.kills++;
     eagle.hunger = Math.max(0, eagle.hunger - 60);
@@ -271,6 +274,14 @@ class Simulation {
       this.game.addNotification(`Balanced ecosystem! Eagle fed. +${balanceReward} mauri`, 'info');
     } else {
       this.game.addNotification('Eagle caught a moa - population low!', 'error');
+    }
+
+    // Fire tutorial event
+    if (this.game.tutorial) {
+      this.game.tutorial.fireEvent(TUTORIAL_EVENTS.MOA_KILLED, { 
+        moa: moa, 
+        eagle: eagle 
+      });
     }
     
     this.stats.deaths++;
@@ -619,6 +630,14 @@ class Simulation {
             this.stats.births++;
             this._invalidateCache();
             mauri.earn(mauri.onEggHatch, egg.pos.x, egg.pos.y, 'hatch');
+
+            // Fire tutorial event
+            if (this.game.tutorial) {
+              this.game.tutorial.fireEvent(TUTORIAL_EVENTS.EGG_HATCHED, { 
+                egg: egg,
+                moa: newMoa 
+              });
+            }
             
             const speciesName = newMoa.species?.displayName || 'moa';
             game.addNotification(`A ${speciesName} has hatched!`, 'success');
@@ -674,6 +693,16 @@ class Simulation {
     if (writeIdx !== moas.length) {
       moas.length = writeIdx;
       this._invalidateCache();
+    }
+  }
+
+  // Add method for eagle to call when starting hunt:
+  onEagleStartHunt(eagle, target) {
+    if (this.game.tutorial) {
+      this.game.tutorial.fireEvent(TUTORIAL_EVENTS.EAGLE_HUNTING, {
+        eagle: eagle,
+        target: target
+      });
     }
   }
   

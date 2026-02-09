@@ -1,3 +1,7 @@
+// lets goooo
+let tutorialMantisSprite = null;
+//let audioManager = null;
+
 let plantSprites = {};
 // Delta time management
 let lastFrameTime = 0;
@@ -25,13 +29,19 @@ function preload(){
       plantSprites[key][state.toLowerCase()] = loadImage(`sprites/${plant}_${state}.png`);
     }
   }
+
+  tutorialMantisSprite = loadImage('sprites/mantis_talk.png');
+
+  loadPlaceableSprites();
+
+  preloadAudio();
 }
 
 // ============================================
 // CONFIGURATION
 // ============================================
 const CONFIG = {
-  version: '0.7.3',
+  version: '0.8.1',
   // Canvas dimensions
   canvasWidth: 1920,
   canvasHeight: 1080,
@@ -82,7 +92,7 @@ const CONFIG = {
   eagleCount: 2,
   startingSpecies: 'upland_moa',
   
-  plantDensity: 0.004,
+  plantDensity: 0.005,
   
   startingMauri: 30,
   targetPopulation: 30,
@@ -318,12 +328,12 @@ const BIOMES = {
     walkable: true, canHavePlants: false, canPlace: true
   },
   grassland: {
-    key: 'grassland', name: "Lowland Grassland", minElevation: 0.15, maxElevation: 0.25,
+    key: 'grassland', name: "Lowland Grassland", minElevation: 0.15, maxElevation: 0.35,
     colors: ['#7fb069', '#8fbc79', '#9fc889'], contourColor: '#5a7d4a',
     walkable: true, canHavePlants: true, plantTypes: ['tussock', 'flax'], canPlace: true
   },
   podocarp: {
-    key: 'podocarp', name: "Podocarp Forest", minElevation: 0.25, maxElevation: 0.45,
+    key: 'podocarp', name: "Podocarp Forest", minElevation: 0.35, maxElevation: 0.45,
     colors: ['#2d5a3d', '#346644', '#3b724b'], contourColor: '#1e3d29',
     walkable: true, canHavePlants: true, plantTypes: ['fern', 'rimu'], canPlace: true
   },
@@ -419,6 +429,9 @@ const PLANT_TYPES = {
 // ============================================
 // MAURI MANAGER (Optimized)
 // ============================================
+
+// TUTORIAL EVENTS EXAMPLE:
+// Add: this.game.tutorial?.fireEvent(TUTORIAL_EVENTS.EAGLE_SPAWNED);
 class MauriManager {
   constructor(startingAmount) {
     this.mauri = startingAmount;
@@ -482,6 +495,8 @@ class MauriManager {
         this.lastMilestone = m;
         this.earn(this.populationMilestoneBonus, CONFIG.width / 2 / CONFIG.zoom, 50, 'milestone');
         game.addNotification(`Population milestone: ${m} moa! +${this.populationMilestoneBonus} mauri`, 'success');
+
+        if (audioManager) audioManager.playMoaMilestone();
       }
     }
     
@@ -492,6 +507,12 @@ class MauriManager {
         this.eagleSpawnedAt.add(threshold);
         simulation.spawnEagle();
         game.addNotification(`A new Haast's Eagle has arrived!`, 'error');
+        
+        // Fire tutorial event
+        if (game.tutorial) {
+          game.tutorial.fireEvent(TUTORIAL_EVENTS.EAGLE_SPAWNED);
+        }
+        
         return threshold;
       }
     }
@@ -540,6 +561,7 @@ class Game {
     this.mauri = null;
     this.ui = null;
     this.seasonManager = null;
+    this.tutorial = null;
     
     this.selectedPlaceable = null;
     this.placePreview = null;
@@ -590,6 +612,14 @@ class Game {
     for (let i = 0; i < this.goals.length; i++) {
       this.goals[i].achieved = false;
     }
+
+    this.tutorial = new TutorialManager(this);
+    this.tutorial.setGuideSprite(tutorialMantisSprite);
+    this.tutorial.init();
+
+    if (audioManager) {
+      audioManager.playBackground();
+    }
   }
 
   isInGameArea(mx, my) {
@@ -629,55 +659,64 @@ class Game {
   }
   
   update(dt = 1) {  // dt = delta time multiplier (1.0 = 60fps)
-  if (this.state !== GAME_STATE.PLAYING) return;
-  
-  this.playTime += dt;
-  if (this.playTime > this.maxPlayTime) this.maxPlayTime = this.playTime;
-  
-  const seasonChanged = this.seasonManager.update(dt);
-  if (seasonChanged) {
-    this.onSeasonChange();
-  }
-  
-  this.simulation.update(this.mauri, dt);
-  
-  // Update cached counts once per frame
-  this.updateCachedCounts();
-  
-  // Passive mauri income (adjusted for delta time)
-  // Instead of checking every 64 frames, accumulate time
-  this._incomeAccumulator = (this._incomeAccumulator || 0) + dt;
-  if (this._incomeAccumulator >= 64) {
-    this._incomeAccumulator -= 64;
-    const income = this._cachedMoaCount * this.mauri.perMoaPerSecond + 
-                   this._cachedThrivingCount * this.mauri.onMoaThriving;
+    if (this.state !== GAME_STATE.PLAYING && this.state !== GAME_STATE.PAUSED) return;
+      
+      // Update tutorial (runs even when paused for animation)
+    if (this.tutorial) {
+      this.tutorial.update(dt);
+    }
+      
+    // Skip game updates if paused (but tutorial already updated above)
+    if (this.state !== GAME_STATE.PLAYING) return;
     
-    if (income > 0) {
-      this.mauri.earn(income, undefined, undefined, 'passive');
+    this.playTime += dt;
+    if (this.playTime > this.maxPlayTime) this.maxPlayTime = this.playTime;
+    
+    const seasonChanged = this.seasonManager.update(dt);
+    if (seasonChanged) {
+      this.onSeasonChange();
     }
+    
+    this.simulation.update(this.mauri, dt);
+    
+    // Update cached counts once per frame
+    this.updateCachedCounts();
+    
+    // Passive mauri income (adjusted for delta time)
+    // Instead of checking every 64 frames, accumulate time
+    this._incomeAccumulator = (this._incomeAccumulator || 0) + dt;
+    if (this._incomeAccumulator >= 64) {
+      this._incomeAccumulator -= 64;
+      const income = this._cachedMoaCount * this.mauri.perMoaPerSecond + 
+                    this._cachedThrivingCount * this.mauri.onMoaThriving;
+      
+      if (income > 0) {
+        this.mauri.earn(income, undefined, undefined, 'passive');
+      }
+    }
+    
+    this.checkGoals();
+    this.mauri.checkMilestones(this._cachedMoaCount, this.simulation, this);
+    
+    if (this._cachedMoaCount === 0 && this._cachedEggCount === 0) {
+      this.state = GAME_STATE.LOST;
+      this.gameOverReason = "All moa have perished!";
+      if (audioManager) audioManager.playLoss();
+    }
+    
+    this.mauri.updateFloatingTexts(dt);
+    this.updateNotifications(dt);
   }
-  
-  this.checkGoals();
-  this.mauri.checkMilestones(this._cachedMoaCount, this.simulation, this);
-  
-  if (this._cachedMoaCount === 0 && this._cachedEggCount === 0) {
-    this.state = GAME_STATE.LOST;
-    this.gameOverReason = "All moa have perished!";
-  }
-  
-  this.mauri.updateFloatingTexts(dt);
-  this.updateNotifications(dt);
-}
 
-updateNotifications(dt = 1) {
-  const notifs = this.notifications;
-  for (let i = notifs.length - 1; i >= 0; i--) {
-    notifs[i].life -= dt;
-    if (notifs[i].life <= 0) {
-      notifs.splice(i, 1);
+  updateNotifications(dt = 1) {
+    const notifs = this.notifications;
+    for (let i = notifs.length - 1; i >= 0; i--) {
+      notifs[i].life -= dt;
+      if (notifs[i].life <= 0) {
+        notifs.splice(i, 1);
+      }
     }
   }
-}
   
   checkGoals() {
     const goals = this.goals;
@@ -702,6 +741,7 @@ updateNotifications(dt = 1) {
     }
     if (allAchieved) {
       this.state = GAME_STATE.WON;
+      if (audioManager) audioManager.playWin();
     }
   }
   
@@ -723,7 +763,21 @@ updateNotifications(dt = 1) {
 
   onSeasonChange() {
     const season = this.seasonManager.current;
+    const seasonKey = this.seasonManager.currentKey;
+
     this.addNotification(`Season changed to ${season.name} ${season.icon}`, 'info');
+
+    if (audioManager) {
+      audioManager.playSeasonChange(seasonKey);
+    }
+
+    // Fire tutorial event
+    if (this.tutorial) {
+      this.tutorial.fireEvent(TUTORIAL_EVENTS.SEASON_CHANGE, { 
+        season: season,
+        seasonKey: this.seasonManager.currentKey 
+      });
+    }
     
     const aliveMoas = [];
     const moas = this.simulation.moas;
@@ -821,6 +875,15 @@ updateNotifications(dt = 1) {
     this.simulation.addPlaceable(x, y, this.selectedPlaceable);
     this.addNotification(`Placed ${def.name}`, 'info');
     
+    // Play appropriate placement sound
+    if (audioManager) {
+      if (this.selectedPlaceable === 'decoy') {
+        audioManager.playBoltStrike();
+      } else {
+        audioManager.playPlantRustle();
+      }
+    }
+    
     if (!keyIsDown(SHIFT)) {
       this.selectedPlaceable = null;
     }
@@ -878,6 +941,11 @@ updateNotifications(dt = 1) {
       this.renderWinOverlay();
     } else if (this.state === GAME_STATE.LOST) {
       this.renderLoseOverlay();
+    }
+
+    // render tutorial dialogs
+    if (this.tutorial) {
+      this.tutorial.render();
     }
   }
   
@@ -1334,7 +1402,7 @@ updateNotifications(dt = 1) {
     
     textSize(16);
     fill(200, 240, 200);
-    text(`Final Score: ${Math.round(((this._cachedMoaCount)*(this.mauri.totalEarned*.001))-((this.playTime / 60)-180)) } points`, centerX, centerY + 90);
+    text(`Final Score: ${Math.round(((this._cachedMoaCount)*(this.mauri.totalEarned*.001))-((this.playTime / 60)-180)+60) } points`, centerX, centerY + 90);
 
     textSize(18);
     text("Press R to play again", centerX, centerY + 120);
@@ -1400,6 +1468,11 @@ updateNotifications(dt = 1) {
       }
       return;
     }
+
+    // Tutorial gets first chance at clicks when active
+    if (this.tutorial && this.tutorial.active && this.tutorial.handleClick(mx, my)) {
+      return;
+    }
     
     // Allow UI clicks when playing OR paused (for pause button)
     if (this.state === GAME_STATE.PLAYING || this.state === GAME_STATE.PAUSED) {
@@ -1459,6 +1532,41 @@ updateNotifications(dt = 1) {
         this.state = GAME_STATE.PLAYING;
       }
     }
+    
+
+    // check this ordering is fine (tutorial)
+    if ((key === 't' || key === 'T') && this.state === GAME_STATE.PLAYING) {
+      if (this.tutorial && !this.tutorial.active) {
+        this.tutorial.toggle();
+      }
+    }
+
+    if (key === 'm' || key === 'M') {
+      if (audioManager) {
+        const enabled = audioManager.toggleMusic();
+        this.addNotification(enabled ? 'Music enabled' : 'Music disabled', 'info');
+      }
+    }
+    
+    if (key === 'n' || key === 'N') {
+      if (audioManager) {
+        const enabled = audioManager.toggleAudio();
+        this.addNotification(enabled ? 'Audio enabled' : 'Audio muted', 'info');
+      }
+    }
+  }
+
+  handleVisibilityChange(isVisible) {
+    if (audioManager) {
+      if (isVisible) {
+        audioManager.unmute();
+        if (this.state === GAME_STATE.PLAYING) {
+          audioManager.resumeBackground();
+        }
+      } else {
+        audioManager.mute();
+      }
+    }
   }
 }
 
@@ -1468,7 +1576,13 @@ updateNotifications(dt = 1) {
 let game;
 
 function setup() {
-    let cnv = createCanvas(CONFIG.canvasWidth, CONFIG.canvasHeight);
+
+  if (!audioManager) {
+    audioManager = initAudioManager();
+  }
+
+  let cnv = createCanvas(CONFIG.canvasWidth, CONFIG.canvasHeight);
+
   cnv.style('display', 'block');
   document.body.style.margin = '0';
   document.body.style.overflow = 'hidden';
@@ -1487,6 +1601,12 @@ function setup() {
   initializeRegistry();
   
   game = new Game();
+
+  document.addEventListener('visibilitychange', () => {
+    if (game) {
+      game.handleVisibilityChange(!document.hidden);
+    }
+  });
 }
 
 function windowResized() {

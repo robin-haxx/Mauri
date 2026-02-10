@@ -29,7 +29,7 @@ class Moa extends Boid {
     criticalHunger: 80,
     eggCooldownTime: 800,
     hasCrest: false,
-    preferredElevation: { min: 0.25, max: 0.70 },
+    preferredElevation: { min: 0.35, max: 0.75 },
     // Mating config
     matingHungerThreshold: 40,  // Must be below this hunger to mate
     matingRange: 15,            // Distance to initiate mating
@@ -88,6 +88,7 @@ class Moa extends Boid {
     this.currentState = MOA_STATE.IDLE;
     this.panicLevel = 0;
     this.inShelter = false;
+    this.timeAlive = 0;
     
     // Hunger
     this.hunger = random(15, 35);
@@ -243,6 +244,8 @@ class Moa extends Boid {
   /**
    * Check if this moa is ready to seek a mate
    */
+
+  //perhaps use size to determine rather than timeAlive
   isReadyToMate() {
     return this.canMate && 
            this.mateCooldown <= 0 &&
@@ -269,6 +272,8 @@ class Moa extends Boid {
   // ============================================
 
   behave(simulation, mauri, seasonManager, dt = 1) {
+
+    this.timeAlive+= dt;
     this._updateSeasonCache(seasonManager);
     const seasonCache = this._seasonCache;
     
@@ -501,6 +506,7 @@ executeState(simulation, mauri, seasonCache, eagles, moas, placeables, dt = 1) {
 isReadyToMate() {
   return this.canMate && 
          this.mateCooldown <= 0 &&
+         this.timeAlive >= 1200 &&
          !this.isPregnant &&
          !this.matingPartner &&
          this.hunger < this.matingHungerThreshold &&

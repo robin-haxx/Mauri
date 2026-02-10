@@ -41,7 +41,7 @@ function preload(){
 // CONFIGURATION
 // ============================================
 const CONFIG = {
-  version: '0.8.1',
+  version: '0.8.2',
   // Canvas dimensions
   canvasWidth: 1920,
   canvasHeight: 1080,
@@ -79,7 +79,7 @@ const CONFIG = {
   
   ridgeInfluence: 1.4,
   elevationPower: 1.7,
-  islandFalloff: 0.3, 
+  islandFalloff: 0.6, 
   
   showContours: true,
   contourInterval: 0.045,
@@ -318,27 +318,27 @@ function initPlaceableColors() {
 // ============================================
 const BIOMES = {
   sea: {
-    key: 'sea', name: "Sea", minElevation: 0, maxElevation: 0.12,
+    key: 'sea', name: "Sea", minElevation: 0, maxElevation: 0.1,
     colors: ['#1a3a52', '#1e4d6b', '#236384'], contourColor: '#0f2533',
     walkable: false, canHavePlants: false, canPlace: false
   },
   coastal: {
-    key: 'coastal', name: "Coastal/Beach", minElevation: 0.12, maxElevation: 0.15,
+    key: 'coastal', name: "Coastal/Beach", minElevation: 0.1, maxElevation: 0.15,
     colors: ['#c2b280', '#d4c794', '#e6dca8'], contourColor: '#8a7d5a',
     walkable: true, canHavePlants: false, canPlace: true
   },
   grassland: {
-    key: 'grassland', name: "Lowland Grassland", minElevation: 0.15, maxElevation: 0.35,
+    key: 'grassland', name: "Lowland Grassland", minElevation: 0.15, maxElevation: 0.3,
     colors: ['#7fb069', '#8fbc79', '#9fc889'], contourColor: '#5a7d4a',
     walkable: true, canHavePlants: true, plantTypes: ['tussock', 'flax'], canPlace: true
   },
   podocarp: {
-    key: 'podocarp', name: "Podocarp Forest", minElevation: 0.35, maxElevation: 0.45,
+    key: 'podocarp', name: "Podocarp Forest", minElevation: 0.3, maxElevation: 0.4,
     colors: ['#2d5a3d', '#346644', '#3b724b'], contourColor: '#1e3d29',
     walkable: true, canHavePlants: true, plantTypes: ['fern', 'rimu'], canPlace: true
   },
   montane: {
-    key: 'montane', name: "Montane Forest", minElevation: 0.45, maxElevation: 0.56,
+    key: 'montane', name: "Montane Forest", minElevation: 0.4, maxElevation: 0.56,
     colors: ['#4a7c59', '#528764', '#5a926f'], contourColor: '#335740',
     walkable: true, canHavePlants: true, 
     plantTypes: ['beech', 'fern', 'patotara'],

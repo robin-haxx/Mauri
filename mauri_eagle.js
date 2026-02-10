@@ -1,58 +1,10 @@
 // ============================================
-// HAAST'S EAGLE CLASS - Optimized
+// HAAST'S EAGLE CLASS - Sprite Only
 // ============================================
-
-// Consolidated eagle colors (initialized in setup)
-const EagleColors = {
-  initialized: false,
-  
-  wing: null,
-  wingDark: null,
-  wingLight: null,
-  body: null,
-  bodyLight: null,
-  head: null,
-  beak: null,
-  beakTip: null,
-  eye: null,
-  eyeGold: null,
-  talon: null,
-  shadow: null,
-  
-  init() {
-    if (this.initialized) return;
-    
-    this.wing = color(65, 45, 30);
-    this.wingDark = color(40, 28, 18);
-    this.wingLight = color(90, 65, 45);
-    this.body = color(55, 40, 28);
-    this.bodyLight = color(95, 80, 60);
-    this.head = color(85, 70, 50);
-    this.beak = color(45, 45, 48);
-    this.beakTip = color(25, 25, 28);
-    this.eye = color(200, 161, 50);
-    this.eyeGold = color(220, 180, 60);
-    this.talon = color(50, 45, 40);
-    this.shadow = color(0, 0, 0, 30);
-    
-    this.initialized = true;
-  }
-};
-
-// Flap parameters lookup table (avoids object creation in render loop)
-const EAGLE_FLAP_PARAMS = {
-  'hunting':    { speed: 0.4,  amount: 0.5 },
-  'relocating': { speed: 0.3,  amount: 0.4 },
-  'resting':    { speed: 0.06, amount: 0.1 },
-  'distracted': { speed: 0.12, amount: 0.15 },
-  'patrol':     { speed: 0.1,  amount: 0.2 }
-};
 
 class HaastsEagle extends Boid {
   constructor(x, y, terrain, config = null, speciesData = null) {
     super(x, y, terrain);
-    
-    EagleColors.init();
     
     this.config = config;
     this.species = speciesData;
@@ -66,7 +18,6 @@ class HaastsEagle extends Boid {
     this.separationDist = 100;
     this.separationDistSq = 10000;
     
-    // Behavior modifier (simple default - keeps patrol stable)
     this.wanderStrength = 1.0;
     
     // Hunting
@@ -77,10 +28,9 @@ class HaastsEagle extends Boid {
     this.target = null;
     this.hunting = false;
     
-    // Hunt search timeout - relocate after 5 seconds of fruitless searching
     this.huntSearchTimer = 0;
-    this.huntSearchTimeout = 300; // 5 seconds at 60fps
-    this.lastTargetTime = 0; // Track when we last had a target
+    this.huntSearchTimeout = 300;
+    this.lastTargetTime = 0;
     
     // Hunger
     this.hunger = random(20, 45);
@@ -96,7 +46,7 @@ class HaastsEagle extends Boid {
     this.patrolSpeed = random(0.008, 0.012);
     
     // State tracking
-    this.state = 'patrol'; // 'patrol', 'hunting', 'resting', 'distracted', 'relocating'
+    this.state = 'patrol';
     
     // State timers
     this.restTimer = 0;
@@ -111,12 +61,15 @@ class HaastsEagle extends Boid {
     this.wingPhase = random(TWO_PI);
     this.bodyLength = this.wingspan * 0.45;
     
-    // Reusable vectors - dedicated vectors to avoid conflicts
+    // Animation timing
+    this.animTime = random(1000);
+    
+    // Reusable vectors
     this._tempForce = createVector();
     this._targetVec = createVector();
     this._edgeForce = createVector();
-    this._separationForce = createVector();    // Dedicated for separate()
-    this._relocateTargetVec = createVector();  // Reusable for relocation
+    this._separationForce = createVector();
+    this._relocateTargetVec = createVector();
   }
   
   isHunting() { 
@@ -128,15 +81,14 @@ class HaastsEagle extends Boid {
   // ============================================
   
   behave(simulation, mauri, dt = 1) {
-    // Scale hunger by delta time
+    this.animTime += dt;
+    
     this.hunger += this.hungerRate * dt;
     if (this.hunger > this.maxHunger) this.hunger = this.maxHunger;
     
-    // Check for decoys
     const nearbyPlaceables = simulation.getNearbyPlaceables(this.pos.x, this.pos.y, 100);
     this.checkDecoys(nearbyPlaceables);
     
-    // Handle states with delta time
     if (this.distractedTimer > 0) {
       this.state = 'distracted';
       this.distractedTimer -= dt;
@@ -157,17 +109,14 @@ class HaastsEagle extends Boid {
       return;
     }
     
-    // Separation from other eagles
     const nearbyEagles = simulation.getNearbyEagles(this.pos.x, this.pos.y, this.separationDist * 1.5);
     const sep = this.separate(nearbyEagles);
     sep.mult(2);
     this.applyForce(sep);
     
-    // Strong edge avoidance
     const edgeForce = this.avoidEdges();
     this.applyForce(edgeForce);
     
-    // Hunt or patrol
     if (this.hunger > this.huntThreshold) {
       this.hunt(simulation, mauri, dt);
     } else {
@@ -175,16 +124,12 @@ class HaastsEagle extends Boid {
       this.hunting = false;
       this.target = null;
       this.huntSearchTimer = 0;
-      this._huntEventFired = false;  // ADD THIS
+      this._huntEventFired = false;
       this.patrol(dt);
     }
     
     this.edges();
   }
-  
-  // ============================================
-  // EDGE AVOIDANCE - Prevents getting stuck at boundaries
-  // ============================================
   
   avoidEdges() {
     const force = this._edgeForce;
@@ -200,7 +145,6 @@ class HaastsEagle extends Boid {
     
     let urgency = 1;
     
-    // Calculate repulsion from edges
     if (px < margin) {
       const strength = (margin - px) / margin;
       force.x += strength * 2;
@@ -229,7 +173,6 @@ class HaastsEagle extends Boid {
   }
   
   separate(nearbyEagles) {
-    // Use dedicated separation force vector
     const force = this._separationForce;
     force.set(0, 0);
     
@@ -289,13 +232,11 @@ class HaastsEagle extends Boid {
       const dx = this.distractedBy.pos.x - this.pos.x;
       const dy = this.distractedBy.pos.y - this.pos.y;
       
-      // Circle around decoy
       this._tempForce.set(-dy, dx);
       this._tempForce.normalize();
       this._tempForce.mult(this.maxForce * 0.8);
       this.applyForce(this._tempForce);
       
-      // Stay near it
       const distSq = dx * dx + dy * dy;
       if (distSq > 400) {
         const dist = Math.sqrt(distSq);
@@ -312,7 +253,6 @@ class HaastsEagle extends Boid {
   patrol(dt = 1) {
     this.maxSpeed = this.baseSpeed;
     
-    // Scale patrol angle change by dt
     this.patrolAngle += this.patrolSpeed * this.wanderStrength * dt;
     
     this._targetVec.set(
@@ -327,7 +267,6 @@ class HaastsEagle extends Boid {
     wander.mult(0.25);
     this.applyForce(wander);
     
-    // Drift patrol center (accumulate time)
     this._driftTimer = (this._driftTimer || 0) + dt;
     if (this._driftTimer >= 256) {
       this._driftTimer -= 256;
@@ -351,11 +290,10 @@ class HaastsEagle extends Boid {
   }
   
   // ============================================
-  // HUNTING - With timeout and relocation
+  // HUNTING
   // ============================================
   
   hunt(simulation, mauri, dt = 1) {
-
     this.maxSpeed = this.huntSpeed;
     
     const nearbyMoas = simulation.getNearbyMoas(this.pos.x, this.pos.y, this.huntRadius);
@@ -381,7 +319,6 @@ class HaastsEagle extends Boid {
     }
     
     if (nearestMoa) {
-
       const hadNoTarget = this.target === null;
 
       this.state = 'hunting';
@@ -390,7 +327,6 @@ class HaastsEagle extends Boid {
       this.huntSearchTimer = 0;
       this.lastTargetTime = frameCount;
 
-      // Fire event when FIRST acquiring a target
       if (hadNoTarget && !this._huntEventFired) {
         if (simulation.game?.tutorial) {
           simulation.onEagleStartHunt(this, this.target);
@@ -413,10 +349,9 @@ class HaastsEagle extends Boid {
         this.catchMoa(nearestMoa, simulation, mauri);
       }
     } else {
-      this.huntSearchTimer += dt;  // Scale by dt
+      this.huntSearchTimer += dt;
       this.hunting = true;
       this.target = null;
-      // Reset hunt flag
       this._huntEventFired = false;
       
       if (this.huntSearchTimer >= this.huntSearchTimeout) {
@@ -426,22 +361,16 @@ class HaastsEagle extends Boid {
       
       this.searchForPrey();
     }
-        // Reset flag when hunt ends
+    
     if (this.state !== 'hunting') {
       this._huntEventFired = false;
     }
   }
   
-  /**
-   * Behavior while searching for prey (no target found yet)
-   */
   searchForPrey() {
-    this.state = 'hunting'; // Still in hunting mode, just searching
-    
-    // Reduce speed slightly while searching
+    this.state = 'hunting';
     this.maxSpeed = this.huntSpeed * 0.8;
     
-    // Spiral outward from patrol center while searching
     const searchAngle = frameCount * 0.02 + this.wingPhase;
     const searchRadius = this.patrolRadius + (this.huntSearchTimer * 0.3);
     
@@ -450,7 +379,6 @@ class HaastsEagle extends Boid {
       this.patrolCenter.y + sin(searchAngle) * searchRadius
     );
     
-    // Constrain search target to map bounds
     const mapW = this.terrain.mapWidth;
     const mapH = this.terrain.mapHeight;
     this._targetVec.x = constrain(this._targetVec.x, 50, mapW - 50);
@@ -459,33 +387,26 @@ class HaastsEagle extends Boid {
     const seekForce = this.seek(this._targetVec, 0.8);
     this.applyForce(seekForce);
     
-    // Add some wander to cover more ground
     const wander = this.wander();
     wander.mult(0.3);
     this.applyForce(wander);
   }
   
-  /**
-   * Start relocating to new hunting grounds
-   */
   startRelocation() {
     this.huntSearchTimer = 0;
     this.hunting = false;
     this.target = null;
     this.state = 'relocating';
     
-    // Pick a new location far from current position
     const mapW = this.terrain.mapWidth;
     const mapH = this.terrain.mapHeight;
     
-    // Try to find a spot at least 150 units away from current position
     let newX, newY;
     let attempts = 0;
     const minRelocateDist = 150;
     const minRelocateDistSq = minRelocateDist * minRelocateDist;
     
     do {
-      // Bias toward center of map to avoid edges
       newX = random(80, mapW - 80);
       newY = random(80, mapH - 80);
       
@@ -495,27 +416,22 @@ class HaastsEagle extends Boid {
       
       attempts++;
       
-      // Accept if far enough away or we've tried too many times
       if (distSq >= minRelocateDistSq || attempts > 10) {
         break;
       }
     } while (attempts <= 10);
     
-    // Reuse vector instead of creating new one
     this._relocateTargetVec.set(newX, newY);
     this.relocateTarget = this._relocateTargetVec;
-    this.relocateTimer = 180; // 3 seconds to reach new area
+    this.relocateTimer = 180;
     
     if (CONFIG.debugMode) {
       console.log(`Eagle relocating from (${this.pos.x.toFixed(0)}, ${this.pos.y.toFixed(0)}) to (${newX.toFixed(0)}, ${newY.toFixed(0)})`);
     }
   }
   
-  /**
-   * Move toward relocation target
-   */
   relocate(dt = 1) {
-    this.relocateTimer -= dt;  // Scale by dt
+    this.relocateTimer -= dt;
     this.maxSpeed = this.huntSpeed * 1.2;
     
     if (!this.relocateTarget) {
@@ -542,9 +458,6 @@ class HaastsEagle extends Boid {
     this.edges();
   }
   
-  /**
-   * Drift patrol center slightly (used during normal patrol)
-   */
   driftPatrolCenter(amount) {
     const mapW = this.terrain.mapWidth;
     const mapH = this.terrain.mapHeight;
@@ -559,236 +472,77 @@ class HaastsEagle extends Boid {
   }
   
   catchMoa(moa, simulation, mauri) {
-  // Delegate to simulation for ecosystem balance handling
-  if (simulation && mauri) {
-    simulation.handleEagleCatch(this, moa, mauri);
-  } else {
-    // Fallback if called without simulation/mauri (shouldn't happen)
-    moa.alive = false;
-    this.kills++;
-    this.hunger = Math.max(0, this.hunger - 60);
-    this.vel.mult(0.1);
-    this.hunting = false;
-    this.target = null;
-    this.huntSearchTimer = 0;
-    this.state = 'resting';
-    this.restTimer = this.restDuration;
-    this.patrolCenter.set(this.pos.x, this.pos.y);
+    if (simulation && mauri) {
+      simulation.handleEagleCatch(this, moa, mauri);
+    } else {
+      moa.alive = false;
+      this.kills++;
+      this.hunger = Math.max(0, this.hunger - 60);
+      this.vel.mult(0.1);
+      this.hunting = false;
+      this.target = null;
+      this.huntSearchTimer = 0;
+      this.state = 'resting';
+      this.restTimer = this.restDuration;
+      this.patrolCenter.set(this.pos.x, this.pos.y);
+    }
   }
-}
   
   // ============================================
-  // RENDERING - Optimized with lookup table and pre-calculated flags
+  // RENDERING - Sprite Only
   // ============================================
+  
+  getSpriteState() {
+    if (this.hunting && this.target !== null) {
+      return 'hunting';
+    }
+    if (this.state === 'resting') {
+      return 'resting';
+    }
+    return 'flying';
+  }
   
   render() {
-    const ws = this.wingspan;
-    const colors = EagleColors;
+    const spriteState = this.getSpriteState();
+    const sprite = EntitySprites.getEagleSprite(this.animTime, spriteState);
     
-    push();
-    translate(this.pos.x, this.pos.y);
-    rotate(this.vel.heading() + HALF_PI);
-    
-    // Pre-calculate state flags once
-    const currentState = this.state;
-    const isHunting = this.hunting || currentState === 'hunting';
-    const isResting = currentState === 'resting';
-    const isDistracted = currentState === 'distracted';
-    const isRelocating = currentState === 'relocating';
-    const hasTarget = this.target !== null;
-    
-    // Use lookup table for flap parameters
-    const flapKey = isHunting ? 'hunting' : currentState;
-    const flapParams = EAGLE_FLAP_PARAMS[flapKey] || EAGLE_FLAP_PARAMS['patrol'];
-    const wingFlap = sin(frameCount * flapParams.speed + this.wingPhase) * flapParams.amount;
-    
-    // Shadow
-    noStroke();
-    fill(colors.shadow);
-    ellipse(isHunting ? 2 : 5, 3, ws * 0.9, ws * 0.3);
-    
-    // Talons (when diving)
-    if (isHunting && hasTarget && wingFlap < -0.2) {
-      this.renderTalons(ws, colors);
-    }
-    
-    // Wings
-    this.renderWing(-1, wingFlap, ws, colors);
-    this.renderWing(1, wingFlap, ws, colors);
-    
-    // Tail
-    this.renderTail(ws, isHunting, colors);
-    
-    // Body
-    noStroke();
-    fill(colors.body);
-    ellipse(0, 0, 7, this.bodyLength * 0.85);
-    fill(colors.bodyLight);
-    ellipse(0, -this.bodyLength * 0.15, 5, this.bodyLength * 0.35);
-    
-    // Head
-    this.renderHead(ws, colors, isHunting);
-    
-    // State indicators
-    if (isDistracted) {
-      fill(255, 200, 100);
-      textSize(7);
-      textAlign(CENTER, CENTER);
-      text("?", 0, -this.bodyLength * 0.7);
-    } else if (isRelocating) {
-      fill(150, 200, 255);
-      textSize(6);
-      textAlign(CENTER, CENTER);
-      text("→", 0, -this.bodyLength * 0.7);
-    }
-    
-    pop();
-    
-    if (CONFIG.showHungerBars) {
-      this.renderHungerBar();
-    }
-  }
-  
-  renderWing(side, flap, ws, colors) {
-    push();
-    rotate(side * flap);
-    scale(side, 1);
-    
-    // Main wing shape
-    noStroke();
-    fill(colors.wing);
-    beginShape();
-    vertex(0, -1);
-    bezierVertex(ws * 0.2, -2, ws * 0.4, 0, ws * 0.5, 4);
-    bezierVertex(ws * 0.45, 6, ws * 0.2, 5, 0, 2);
-    endShape(CLOSE);
-    
-    // Wing edge feathers (simplified)
-    fill(colors.wingDark);
-    for (let i = 0; i < 5; i++) {
-      const t = i * 0.25; // Avoid division
-      const x = ws * (0.3 + t * 0.2);
-      const y = 1 + t * 4;
-      push();
-      translate(x, y);
-      rotate(0.3 + t * 0.3);
-      ellipse(0, 0, ws * 0.1, 3);
-      pop();
-    }
-    
-    // Wing highlight
-    stroke(colors.wingLight);
-    strokeWeight(0.8);
-    noFill();
-    bezier(ws * 0.05, -0.5, ws * 0.2, -1.5, ws * 0.35, -0.5, ws * 0.45, 2);
-    
-    pop();
-  }
-  
-  renderTail(ws, isHunting, colors) {
-    const tailLen = ws * 0.3;
-    const spread = isHunting ? 0.35 : 0.2;
-    
-    noStroke();
-    fill(colors.wing);
-    
-    for (let i = -2; i <= 2; i++) {
-      const angle = i * spread * 0.25;
-      const len = tailLen * (1 - abs(i) * 0.1);
+    if (sprite) {
+      const isHunting = this.hunting && this.target !== null;
       
       push();
-      rotate(angle);
-      beginShape();
-      vertex(-1.5, 2);
-      vertex(0, len);
-      vertex(1.5, 2);
-      endShape(CLOSE);
-      pop();
-    }
-    
-    // Tail base
-    fill(colors.body);
-    ellipse(0, 3, 5, 3);
-  }
-  
-  renderHead(ws, colors, isHunting) {
-    const headY = -this.bodyLength * 0.5;
-    const headSize = ws * 0.2;
-    
-    push();
-    translate(0, headY);
-    
-    noStroke();
-    
-    // Head
-    fill(colors.head);
-    ellipse(0, 0, headSize * 0.85, headSize);
-    
-    // Beak (hooked shape)
-    fill(colors.beak);
-    beginShape();
-    vertex(-headSize * 0.25, -headSize * 0.1);
-    bezierVertex(
-      -headSize * 0.2, -headSize * 0.5,
-      0, -headSize * 0.7,
-      headSize * 0.05, -headSize * 0.65
-    );
-    bezierVertex(
-      headSize * 0.1, -headSize * 0.5,
-      headSize * 0.2, -headSize * 0.2,
-      headSize * 0.25, -headSize * 0.1
-    );
-    endShape(CLOSE);
-    
-    // Beak tip
-    fill(colors.beakTip);
-    ellipse(0, -headSize * 0.6, 2, 3);
-    
-    // Eyes
-    fill(colors.eye);
-    ellipse(-headSize * 0.2, 0, headSize * 0.22, headSize * 0.2);
-    ellipse(headSize * 0.2, 0, headSize * 0.22, headSize * 0.2);
-    
-    // Pupils - larger when hunting
-    fill(20);
-    const pupilSize = isHunting ? 0.12 : 0.08;
-    ellipse(-headSize * 0.18, 0, headSize * pupilSize, headSize * pupilSize);
-    ellipse(headSize * 0.18, 0, headSize * pupilSize, headSize * pupilSize);
-    
-    // Eye highlights
-    fill(255, 255, 255, 180);
-    ellipse(-headSize * 0.22, -headSize * 0.03, 1.5, 1.5);
-    ellipse(headSize * 0.22, -headSize * 0.03, 1.5, 1.5);
-    
-    pop();
-  }
-  
-  renderTalons(ws, colors) {
-    push();
-    translate(0, this.bodyLength * 0.25);
-    
-    stroke(colors.talon);
-    strokeWeight(1.5);
-    
-    // Two feet with simple talons
-    for (let foot = -1; foot <= 1; foot += 2) {
-      push();
-      translate(foot * 2.5, 0);
+      translate(this.pos.x, this.pos.y);
       
-      // Leg
-      line(0, -2, 0, 2);
+      // Shadow
+      noStroke();
+      fill(0, 0, 0, isHunting ? 35 : 25);
+      const shadowOffset = isHunting ? 2 : 5;
+      ellipse(shadowOffset, 3, this.wingspan * 0.9, this.wingspan * 0.3);
       
-      // Talons
-      strokeWeight(1);
-      for (let t = -1; t <= 1; t++) {
-        line(0, 2, t * 2, 6);
+      // Snap rotation to pixel-art friendly angles (eagle uses +HALF_PI offset)
+      const targetAngle = this.vel.heading() + HALF_PI;
+      this._displayAngle = SpriteAngle.snapWithHysteresis(this._displayAngle, targetAngle);
+      rotate(this._displayAngle);
+      
+      imageMode(CENTER);
+      image(sprite, 0, 0, this.wingspan * 2.2, this.wingspan * 2.2);
+      
+      // State indicators
+      if (this.state === 'distracted') {
+        fill(255, 200, 100);
+        textSize(7);
+        textAlign(CENTER, CENTER);
+        text("?", 0, -this.bodyLength * 0.7);
+      } else if (this.state === 'relocating') {
+        fill(150, 200, 255);
+        textSize(6);
+        textAlign(CENTER, CENTER);
+        text("→", 0, -this.bodyLength * 0.7);
       }
-      line(0, 2, 0, 7);
       
       pop();
     }
     
-    pop();
+    if (CONFIG.showHungerBars) this.renderHungerBar();
   }
   
   renderHungerBar() {
@@ -797,7 +551,6 @@ class HaastsEagle extends Boid {
     const px = this.pos.x;
     const py = this.pos.y - 16;
     
-    // Pre-calculate state flags
     const isHunting = this.state === 'hunting';
     const hasTarget = this.target !== null;
     const isRelocating = this.state === 'relocating';
@@ -817,20 +570,17 @@ class HaastsEagle extends Boid {
     
     // State indicator
     if (isHunting && hasTarget) {
-      // Active hunt - red dot
       fill(255, 80, 80);
       ellipse(px + 11, py + 1, 4, 4);
     } else if (isHunting) {
-      // Searching - yellow dot
       fill(255, 200, 80);
       ellipse(px + 11, py + 1, 4, 4);
     } else if (isRelocating) {
-      // Relocating - blue dot
       fill(100, 150, 255);
       ellipse(px + 11, py + 1, 4, 4);
     }
     
-    // Search timer indicator (when searching for prey)
+    // Search timer indicator
     if (isHunting && !hasTarget && this.huntSearchTimer > 0) {
       const searchProgress = this.huntSearchTimer / this.huntSearchTimeout;
       fill(255, 200, 80, 150);

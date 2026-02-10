@@ -17,8 +17,8 @@ let currentFPS = 60;
 function preload(){
   OpenDyslexic = loadFont('typefaces/OpenDyslexic.ttf');
   GroceryRounded = loadFont('typefaces/GroceryRounded.ttf');
+  
   // Load plant sprites
-  // Plants that have sprites (Kawakawa keeps procedural rendering)
   const spritePlants = ['Tussock', 'Flax', 'Fern', 'Rimu', 'Beech', 'Patotara'];
   const states = ['Mature', 'Thriving', 'Wilting', 'Dormant'];
   
@@ -33,6 +33,9 @@ function preload(){
   tutorialMantisSprite = loadImage('sprites/mantis_talk.png');
 
   loadPlaceableSprites();
+  
+  // Load entity sprites
+  loadEntitySprites();
 
   preloadAudio();
 }
@@ -41,7 +44,7 @@ function preload(){
 // CONFIGURATION
 // ============================================
 const CONFIG = {
-  version: '0.8.2',
+  version: '0.8.3',
   // Canvas dimensions
   canvasWidth: 1920,
   canvasHeight: 1080,

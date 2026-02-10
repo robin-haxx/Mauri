@@ -57,7 +57,7 @@ class HaastsEagle extends Boid {
     this.relocateTimer = 0;
     
     // Visual
-    this.wingspan = random(22, 28);
+    this.wingspan = random(14, 18);
     this.wingPhase = random(TWO_PI);
     this.bodyLength = this.wingspan * 0.45;
     

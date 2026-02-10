@@ -66,7 +66,7 @@ const CONFIG = {
   get height() { return this.gameAreaHeight; },
   
   pixelScale: 1,
-  zoom: 2,
+  zoom: 2.5,
   debugMode: false,
   
   // UI Colors

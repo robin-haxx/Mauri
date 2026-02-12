@@ -533,7 +533,7 @@ class GameUI {
     const messages = {
       'summer': {
         icon: '☀️',
-        text: 'Summer - Moa can forage freely across all elevations.',
+        text: 'Summer: Moa can forage freely across all elevations.',
         subtext: migratingCount > 0 
           ? `${migratingCount} moa currently moving to new areas.`
           : 'All biomes are productive. Good time to expand territory.',
@@ -541,7 +541,7 @@ class GameUI {
       },
       'autumn': {
         icon: '🍂',
-        text: 'Autumn - Plants slowing growth. Prepare for winter.',
+        text: 'Autumn: Plants slowing growth. Prepare for winter.',
         subtext: migratingCount > 0
           ? `${migratingCount} moa moving to lower ground.`
           : 'High elevation food becoming scarce.',
@@ -549,7 +549,7 @@ class GameUI {
       },
       'winter': {
         icon: '❄️',
-        text: 'Winter - High elevations are barren. Stay in lowlands.',
+        text: 'Winter: High elevations are barren. Stay in lowlands.',
         subtext: migratingCount > 0
           ? `${migratingCount} moa still migrating to safety.`
           : 'Focus on shelters and maintaining food sources.',
@@ -557,7 +557,7 @@ class GameUI {
       },
       'spring': {
         icon: '🌸',
-        text: 'Spring - Plants regrowing. Excellent nesting conditions.',
+        text: 'Spring: Plants regrowing. Excellent nesting conditions.',
         subtext: moaCount < CONFIG.maxMoaPopulation * 0.5
           ? 'Population is low - encourage breeding with nesting sites.'
           : 'Territory expanding as dormant plants wake up.',

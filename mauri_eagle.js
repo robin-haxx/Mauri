@@ -87,7 +87,7 @@ class HaastsEagle extends Boid {
     if (this.hunger > this.maxHunger) this.hunger = this.maxHunger;
     
     const nearbyPlaceables = simulation.getNearbyPlaceables(this.pos.x, this.pos.y, 100);
-    this.checkDecoys(nearbyPlaceables);
+    this.checkStorms(nearbyPlaceables);
     
     if (this.distractedTimer > 0) {
       this.state = 'distracted';
@@ -204,7 +204,7 @@ class HaastsEagle extends Boid {
     return force;
   }
   
-  checkDecoys(nearbyPlaceables) {
+  checkStorms(nearbyPlaceables) {
     if (this.distractedTimer > 0) return;
     
     for (let i = 0; i < nearbyPlaceables.length; i++) {

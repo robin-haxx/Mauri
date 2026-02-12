@@ -53,14 +53,14 @@ class PlaceableObject {
       }
     }
     
-    // Decoy-specific: thunderstorm effect
-    if (this.type === 'decoy') {
+    // Storm-specific: thunderstorm effect
+    if (this.type === 'Storm') {
       this._initThunderstorm();
     }
   }
   
   // ============================================
-  // THUNDERSTORM EFFECT (Decoy)
+  // THUNDERSTORM EFFECT (Storm)
   // ============================================
   
   _initThunderstorm() {
@@ -174,7 +174,7 @@ class PlaceableObject {
   _renderThunderstorm(lifeRatio) {
     if (!placeableSprites.loaded) {
       // Fallback if sprites not loaded
-      this._renderDecoyFallback(lifeRatio);
+      this._renderStormFallback(lifeRatio);
       return;
     }
     
@@ -221,7 +221,7 @@ class PlaceableObject {
     pop();
   }
   
-  _renderDecoyFallback(lifeRatio) {
+  _renderStormFallback(lifeRatio) {
     // Original simple rendering as fallback
     fill(200, 100, 80, 220 * lifeRatio);
     ellipse(0, 0, 10, 10);
@@ -294,8 +294,8 @@ class PlaceableObject {
     this.feedingMoa = [];
     this.updateParticles(dt);
     
-    // Update decoy thunderstorm
-    if (this.type === 'decoy' && this.clouds) {
+    // Update Storm thunderstorm
+    if (this.type === 'Storm' && this.clouds) {
       this._updateThunderstorm(dt);
     }
   }
@@ -397,9 +397,9 @@ class PlaceableObject {
     let lifeRatio = this.life / this.maxLife;
     let pulse = sin(frameCount * 0.05 + this.pulsePhase) * 0.1 + 1;
     
-    // Decoy has special rendering
-    if (this.type === 'decoy') {
-      this._renderDecoy(lifeRatio, pulse);
+    // Storm has special rendering
+    if (this.type === 'Storm') {
+      this._renderStorm(lifeRatio, pulse);
       pop();
       return;
     }
@@ -412,7 +412,7 @@ class PlaceableObject {
     this.renderParticles();
   }
   
-  _renderDecoy(lifeRatio, pulse) {
+  _renderStorm(lifeRatio, pulse) {
     // Subtle radius indicator (darker, stormy)
     let radiusAlpha = (20 + sin(frameCount * 0.03 + this.pulsePhase) * 10) * lifeRatio;
     
@@ -567,7 +567,7 @@ class PlaceableObject {
         }
         break;
         
-      // 'decoy' is handled separately in _renderDecoy
+      // 'Storm' is handled separately in _renderStorm
     }
   }
 }

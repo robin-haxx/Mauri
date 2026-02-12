@@ -250,13 +250,13 @@ const PLACEABLES = {
     seasonalBonus: { summer: 0.8, autumn: 1.0, winter: 0.6, spring: 1.5 }
   },
   
-  decoy: {
-    name: "Decoy",
+  Storm: {
+    name: "Storm",
     description: "Distracts hunting eagles",
     cost: 35,
     icon: '🌩️',
     color: '#c4a35a',
-    effect: 'decoy',
+    effect: 'Storm',
     radius: 70,
     duration: 600,
     distractsEagles: true,
@@ -886,7 +886,7 @@ class Game {
     
     // Play appropriate placement sound
     if (audioManager) {
-      if (this.selectedPlaceable === 'decoy') {
+      if (this.selectedPlaceable === 'Storm') {
         audioManager.playBoltStrike();
       } else {
         audioManager.playPlantRustle();
@@ -1027,13 +1027,13 @@ class Game {
     
     // Moa label
     fill(CACHED_COLORS.menuSubtitle);
-    textSize(14);
+    textSize(16);
     textStyle(BOLD);
-    text("Upland Moa", centerX, plantY + 75); //55
+    text("Upland Moa", centerX, plantY + 80); //55
     textStyle(NORMAL);
     fill(CACHED_COLORS.menuText);
-    textSize(11);
-    text("Moa Koukou", centerX, plantY + 92); //72
+    textSize(14);
+    text("Moa Koukou", centerX, plantY + 98); //72
     
     // Instructions
     fill(CACHED_COLORS.menuText);
@@ -1125,7 +1125,7 @@ class Game {
     
     // Plant name
     fill(CACHED_COLORS.menuSubtitle);
-    textSize(13);
+    textSize(16);
     textStyle(BOLD);
     textAlign(CENTER, CENTER);
     text(plantDef.name, x, y + size * 0.8);
@@ -1133,7 +1133,7 @@ class Game {
     // Plant description
     textStyle(NORMAL);
     fill(CACHED_COLORS.menuText);
-    textSize(11);
+    textSize(12);
     
     // Word wrap long descriptions
     const maxWidth = 140;
@@ -1523,7 +1523,7 @@ class Game {
         case '1': this.selectPlaceable('kawakawa'); break;
         case '2': this.selectPlaceable('shelter'); break;
         case '3': this.selectPlaceable('nest'); break;
-        case '4': this.selectPlaceable('decoy'); break;
+        case '4': this.selectPlaceable('Storm'); break;
         case '5': this.selectPlaceable('waterhole'); break;
         case '6': this.selectPlaceable('harakeke'); break;
         case 'h': case 'H':

@@ -780,14 +780,14 @@ class Simulation {
     }
     
     // ========================================
-    // LAYER 2: Placeables (except decoys)
+    // LAYER 2: Placeables (except Storms)
     // ========================================
     const placeables = this.placeables;
     const placeableMargin = margin + 50;
     for (let i = 0, len = placeables.length; i < len; i++) {
       const p = placeables[i];
-      // Skip decoys - they render above eagles
-      if (p.type === 'decoy') continue;
+      // Skip Storms - they render above eagles
+      if (p.type === 'Storm') continue;
       
       const px = p.pos.x;
       const py = p.pos.y;
@@ -864,19 +864,19 @@ class Simulation {
     }
     
     // ========================================
-    // LAYER 7: Decoys (thunderclouds) - above eagles
+    // LAYER 7: Storms (thunderclouds) - above eagles
     // ========================================
-    const decoyMargin = margin + 80; // Decoys have large visual radius
+    const StormMargin = margin + 80; // Storms have large visual radius
     for (let i = 0, len = placeables.length; i < len; i++) {
       const p = placeables[i];
-      // Only render decoys in this pass
-      if (p.type !== 'decoy') continue;
+      // Only render Storms in this pass
+      if (p.type !== 'Storm') continue;
       
       const px = p.pos.x;
       const py = p.pos.y;
       
-      if (px >= viewLeft - decoyMargin && px <= viewRight + decoyMargin &&
-          py >= viewTop - decoyMargin && py <= viewBottom + decoyMargin) {
+      if (px >= viewLeft - StormMargin && px <= viewRight + StormMargin &&
+          py >= viewTop - StormMargin && py <= viewBottom + StormMargin) {
         p.render();
       }
     }

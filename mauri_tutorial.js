@@ -170,7 +170,7 @@ const TUTORIAL_TIPS = {
       "or a Fern Shelter (🌴) to create cover."
     ],
     guidePosition: 'bottomRight',
-    highlight: { type: 'element', target: 'decoyButton' },
+    highlight: { type: 'element', target: 'StormButton' },
     highlightAlt: { type: 'element', target: 'shelterButton' },
     nextTip: null,
     pauseGame: true,
@@ -464,7 +464,7 @@ class TutorialUIMapper {
         return this._getToolButtonBounds(1);
       case 'nestButton':
         return this._getToolButtonBounds(2);
-      case 'decoyButton':
+      case 'StormButton':
         return this._getToolButtonBounds(3);
       case 'waterholeButton':
         return this._getToolButtonBounds(4);

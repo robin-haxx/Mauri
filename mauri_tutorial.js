@@ -56,7 +56,7 @@ const TUTORIAL_TIPS = {
     title: "The Upland Moa need your help!",
     content: [
       "Temperatures were far colder 30,000 years ago.",
-      "The moa need your guidance finding food each season,",
+      "The moa need a guide to find food each season,",
       "and protection from the mighty Haast's Eagle!"
     ],
     guidePosition: 'topLeft',

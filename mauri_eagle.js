@@ -523,10 +523,16 @@ class HaastsEagle extends Boid {
       this._displayAngle = SpriteAngle.snapWithHysteresis(this._displayAngle, targetAngle);
       rotate(this._displayAngle);
       
-      imageMode(CENTER);
-      image(sprite, 0, 0, this.wingspan * 2.2, this.wingspan * 2.2);
+      // Mirror horizontally when in 45°-225° range to keep left side visible
+      if (SpriteAngle.shouldMirror(this._displayAngle)) {
+        scale(-1, 1);
+      }
       
-      // State indicators
+      imageMode(CENTER);
+      image(sprite, 0, 0, this.wingspan * 2.8, this.wingspan * 2.1);
+      
+      // State indicators (adjust for potential mirror)
+      const mirrorX = SpriteAngle.shouldMirror(this._displayAngle) ? -1 : 1;
       if (this.state === 'distracted') {
         fill(255, 200, 100);
         textSize(7);

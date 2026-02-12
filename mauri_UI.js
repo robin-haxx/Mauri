@@ -502,7 +502,7 @@ class GameUI {
     const messages = {
       'autumn': {
         icon: '🍂',
-        text: 'Autumn approaching - temperatures will drop soon.',
+        text: 'Summer is ending; the mountains will snow over.',
         subtext: 'High elevation plants will become less nutritious; be prepared!',
         color: [255, 200, 130]
       },
@@ -514,13 +514,13 @@ class GameUI {
       },
       'spring': {
         icon: '🌸',
-        text: 'Spring is near - plants will begin to regrow.',
+        text: 'Spring is near; plants will begin to regrow.',
         subtext: 'Good nesting conditions ahead!',
         color: [255, 180, 200]
       },
       'summer': {
         icon: '☀️',
-        text: 'Summer approaching - Upland moa will migrate.',
+        text: 'It\'s nearly summer; Upland moa will migrate.',
         subtext: 'Moa can forage across all elevations below the snow line!',
         color: [255, 240, 150]
       }

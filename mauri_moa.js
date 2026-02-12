@@ -903,11 +903,15 @@ class Moa extends Boid {
       this._displayAngle = SpriteAngle.snapWithHysteresis(this._displayAngle, targetAngle);
       rotate(this._displayAngle);
       
+      // Mirror vertically when in 45°-225° range to keep right side visible
+      if (SpriteAngle.shouldMirror(this._displayAngle)) {
+        scale(1, -1);
+      }
+      
       imageMode(CENTER);
       image(sprite, 0, 0, this.size * 2.5, this.size * 2.5);
       pop();
     }
-
   }
 
 

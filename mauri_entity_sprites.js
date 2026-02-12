@@ -1,3 +1,11 @@
+// my game is top down but the sprites are designed to look angled to show one side more to the camera.
+// this needs some altering as just rotation means they look "upside down" half the time.
+// the eagle sprite is oriented upward (and designed to show more of its left side) and the moa oriented to the right with its right side shown more.
+// when the eagle sprite is being rotated between 45 and 225 degrees clockwise I would like to mirror the sprite horizontally
+// for the moa sprite angles between 45 and 225 degrees clockwise I would like to mirror the sprite vertically.
+// I think this will fix how they look so as to be angled for more typical game rendering.
+
+
 // ============================================
 // ANGLE SNAPPING FOR PIXEL ART SPRITES
 // ============================================
@@ -25,6 +33,17 @@ const SpriteAngle = {
     }
     
     return currentDisplayAngle;
+  },
+  
+  // NEW: Check if angle falls within the 45°-225° range (clockwise)
+  shouldMirror(angle) {
+    const TWO_PI = Math.PI * 2;
+    // Normalize to 0-2π range
+    const normalized = ((angle % TWO_PI) + TWO_PI) % TWO_PI;
+    // 45° = π/4 ≈ 0.785,  225° = 5π/4 ≈ 3.927
+    const START = Math.PI / 4;
+    const END = 5 * Math.PI / 4;
+    return normalized >= START && normalized <= END;
   }
 };
 
@@ -81,7 +100,7 @@ const EntitySprites = {
     );
     
     // Eagle fly cycle (3 frames)
-    for (let i = 1; i <= 3; i++) {
+    for (let i = 1; i <= 7; i++) {
       this.eagle.fly.push(loadImage(
         `${spritePath}eagle_fly_${i}.png`,
         () => console.log(`Loaded eagle_fly_${i}.png`),

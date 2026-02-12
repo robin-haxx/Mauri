@@ -33,11 +33,11 @@ class Moa extends Boid {
     foragingBonus: 1.0,
     camouflage: 0,
     maxHunger: 100,
-    baseHungerRate: 0.04,
+    baseHungerRate: 0.03,
     hungerThreshold: 35,
     criticalHunger: 80,
-    eggCooldownTime: 800,
-    preferredElevation: { min: 0.35, max: 0.75 },
+    eggCooldownTime: 600,
+    preferredElevation: { min: 0.35, max: 0.85 },
     matingHungerThreshold: 40,
     matingRange: 15,
     matingDuration: 60,
@@ -267,6 +267,14 @@ class Moa extends Boid {
     this.updateSecurity(eagles, dt);
     
     if (this.hunger >= this.maxHunger) this.alive = false;
+      // Apply terrain slope speed modifier
+    const terrainMult = this.getTerrainSpeedMultiplier();
+    this.maxSpeed *= terrainMult;
+    
+    // Also slightly reduce acceleration on steep terrain for smoother movement
+    if (terrainMult < 0.7) {
+      this.vel.mult(0.95); // Slight drag on very steep terrain
+    }
   }
 
   determineState(eagles, placeables, seasonCache, moas) {
@@ -295,7 +303,8 @@ class Moa extends Boid {
     }
     
     // Already seeking
-    if (this.targetMate?.alive && this.canBeMate()) return MOA_STATE.SEEKING_MATE;
+    if (this.targetMate?.alive && this.canBeMate() && this.hunger < this.hungerThreshold) 
+    return MOA_STATE.SEEKING_MATE;
     
     // Find new mate
     if (this.isReadyToMate() && this.hunger < this.hungerThreshold) {
@@ -345,7 +354,7 @@ class Moa extends Boid {
         break;
         
       case MOA_STATE.SEEKING_MATE:
-        this.maxSpeed = this.baseSpeed * 1.5;
+        this.maxSpeed = this.baseSpeed * 1.2;
         this.seekMate(moas, dt);
         break;
         
@@ -353,7 +362,7 @@ class Moa extends Boid {
         this.targetMate = null;
         this.maxSpeed = this.baseSpeed * speedMod;
         this.executeMigration(seasonCache, dt);
-        if (this.hunger > 60) this.forage(simulation, mauri);
+        if (this.hunger > this.hungerThreshold) this.forage(simulation, mauri);
         break;
         
       case MOA_STATE.FORAGING:
@@ -381,6 +390,56 @@ class Moa extends Boid {
           this.applyForce(this.stayInHomeRange());
         }
     }
+  }
+
+  // ============================================
+  // TERRAIN-BASED SPEED MODIFIER
+  // ============================================
+
+  /**
+   * Calculate speed multiplier based on terrain slope
+   * Moving uphill is slower, downhill is slightly faster
+   */
+  getTerrainSpeedMultiplier() {
+    const velMagSq = this.vel.magSq();
+    if (velMagSq < 0.0001) return 1.0; // Not moving
+    
+    const velMag = Math.sqrt(velMagSq);
+    const lookAhead = 3; // World units to look ahead
+    
+    // Direction we're moving (normalized)
+    const dirX = this.vel.x / velMag;
+    const dirY = this.vel.y / velMag;
+    
+    // Sample elevation ahead
+    const aheadX = this.pos.x + dirX * lookAhead;
+    const aheadY = this.pos.y + dirY * lookAhead;
+    
+    const currentElev = this.terrain.getElevationAt(this.pos.x, this.pos.y);
+    const aheadElev = this.terrain.getElevationAt(aheadX, aheadY);
+    
+    // Calculate slope (elevation change per unit distance)
+    // Positive = uphill, negative = downhill
+    const slope = (aheadElev - currentElev) / lookAhead;
+    
+    // Apply speed modifier based on slope
+    let multiplier;
+    
+    if (slope > 0) {
+      // Uphill - significant slowdown
+      // slope of 0.03 (moderate hill) = ~80% speed
+      // slope of 0.08 (steep) = ~50% speed
+      multiplier = 1 - slope * 6;
+      multiplier = Math.max(0.35, multiplier); // Min 35% speed on steep climbs
+    } else {
+      // Downhill - slight speed boost
+      // slope of -0.03 = ~106% speed
+      // slope of -0.08 = ~116% speed (capped)
+      multiplier = 1 - slope * 2;
+      multiplier = Math.min(1.2, multiplier); // Max 120% speed downhill
+    }
+    
+    return multiplier;
   }
 
   // ============================================
@@ -682,7 +741,9 @@ class Moa extends Boid {
   }
 
   forage(simulation, mauri) {
-    if (!this.targetPlant?.alive) this.targetPlant = this.findPlant(simulation);
+    if (!this.targetPlant?.alive || this.targetPlant.growth < 0.5) {
+      this.targetPlant = this.findPlant(simulation);
+    }
     
     if (this.targetPlant) {
       const dx = this.targetPlant.pos.x - this.pos.x, dy = this.targetPlant.pos.y - this.pos.y;
@@ -847,8 +908,8 @@ class Moa extends Boid {
       pop();
     }
 
-    this.renderIndicators();
   }
+
 
   renderIndicators() {
     const px = this.pos.x, py = this.pos.y, s = this.size;
@@ -857,7 +918,7 @@ class Moa extends Boid {
     // Heart indicator
     if (this.heartTimer > 0) {
       const a = min(255, this.heartTimer * 8);
-      fill(255, 100, 120, a);
+      fill(255, 120, 140, a);
       noStroke();
       push();
       translate(px, py - s - 5 + sin(this.animTime * 0.15) * 2);
@@ -870,7 +931,7 @@ class Moa extends Boid {
     // Pregnancy indicator
     if (this.isPregnant) {
       const prog = 1 - this.pregnancyTimer / this.pregnancyDuration;
-      fill(245, 238, 220, 200);
+      fill(245, 238, 220, 220);
       stroke(200, 195, 180, 200);
       strokeWeight(0.5);
       ellipse(px, py - s - 3, 4 * (0.5 + prog * 0.5), 5 * (0.5 + prog * 0.5));
@@ -882,7 +943,7 @@ class Moa extends Boid {
     
     // Hunger bar
     this._drawBar(px, py + yOff, 14, 2, 1 - this.hunger / this.maxHunger, 
-      [80 + (this.hunger / this.maxHunger) * 120, 180 - (this.hunger / this.maxHunger) * 120, 80]);
+      [120 + (this.hunger / this.maxHunger) * 120, 260 - (this.hunger / this.maxHunger) * 120, 120]);
     
     // Secondary bar (age/mating/pregnancy)
     if (!this.canMateByAge()) {

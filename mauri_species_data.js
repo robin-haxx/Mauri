@@ -25,7 +25,7 @@ const MOA_SPECIES = {
     
     // Survival
     maxHunger: 100,
-    baseHungerRate: 0.04,
+    baseHungerRate: 0.03,
     hungerThreshold: 35,
     criticalHunger: 80,
     

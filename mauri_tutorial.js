@@ -290,13 +290,12 @@ const TUTORIAL_TIPS = {
     title: "Mauri Running Low",
     content: [
       "Your Mauri is getting low!",
-      "Focus on helping moa thrive—",
       "complete goals for bonus Mauri."
     ],
     guidePosition: 'topLeft',
     highlight: { type: 'element', target: 'mauriDisplay' },
     nextTip: null,
-    pauseGame: false,
+    pauseGame: true,
     showOnce: false,
     priority: 2
   },
@@ -343,7 +342,7 @@ const TUTORIAL_TIPS = {
     guidePosition: 'bottomLeft',
     highlight: { type: 'element', target: 'kawakawaButton' },
     nextTip: null,
-    pauseGame: false,
+    pauseGame: true,
     showOnce: false,
     priority: 1
   },

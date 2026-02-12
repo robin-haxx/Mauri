@@ -1,5 +1,6 @@
 // lets goooo
 let tutorialMantisSprite = null;
+let splashScreenMoa = null;
 //let audioManager = null;
 
 let plantSprites = {};
@@ -30,13 +31,11 @@ function preload(){
     }
   }
 
+  splashScreenMoa = loadImage('sprites/moa_idle.png')
   tutorialMantisSprite = loadImage('sprites/mantis_talk.png');
 
   loadPlaceableSprites();
-  
-  // Load entity sprites
   loadEntitySprites();
-
   preloadAudio();
 }
 
@@ -44,7 +43,7 @@ function preload(){
 // CONFIGURATION
 // ============================================
 const CONFIG = {
-  version: '0.8.3',
+  version: '0.8.4',
   // Canvas dimensions
   canvasWidth: 1920,
   canvasHeight: 1080,
@@ -52,14 +51,14 @@ const CONFIG = {
   // Game area (where simulation runs)
   gameAreaX: 0,
   gameAreaY: 180,
-  gameAreaWidth: 1280,
-  gameAreaHeight: 720,
+  gameAreaWidth: 1360,
+  gameAreaHeight: 760,
   
   // UI Panel dimensions
   topBarHeight: 180,
-  bottomBarHeight: 180,
-  rightSidebarWidth: 640,
-  rightSidebarX: 1280, // gameAreaWidth
+  bottomBarHeight: 140,
+  rightSidebarWidth: 560,
+  rightSidebarX: 1360, // gameAreaWidth
   
   // Legacy compatibility (point to game area)
   get width() { return this.gameAreaWidth; },
@@ -80,9 +79,9 @@ const CONFIG = {
   persistence: 0.3,
   lacunarity: 3.0,
   
-  ridgeInfluence: 1.4,
-  elevationPower: 1.7,
-  islandFalloff: 0.6, 
+  ridgeInfluence: 1.3,
+  elevationPower: 1.5,
+  islandFalloff: .6, 
   
   showContours: true,
   contourInterval: 0.045,
@@ -106,7 +105,7 @@ const CONFIG = {
   securityTimeVariation: 400, 
   layingHungerThreshold: 28,
   
-  seasonDuration: 1500, 
+  seasonDuration: 1800, 
   
   eagleSpawnMilestones: [10, 15, 20, 25, 35, 45, 55]
 };
@@ -210,7 +209,7 @@ const PLACEABLES = {
     baseFeedingRate: 0.2,
     plantSpawnCount: 5,
     plantType: 'kawakawa',
-    seasonalBonus: { summer: 1.5, autumn: 0.8, winter: 0.4, spring: 1.0 },
+    seasonalBonus: { summer: 1.2, autumn: 0.8, winter: 0.5, spring: 1.0 },
     attractsHungryMoa: true,
     attractionStrength: 1.3
   },
@@ -341,26 +340,26 @@ const BIOMES = {
     walkable: true, canHavePlants: true, plantTypes: ['fern', 'rimu'], canPlace: true
   },
   montane: {
-    key: 'montane', name: "Montane Forest", minElevation: 0.4, maxElevation: 0.56,
+    key: 'montane', name: "Montane Forest", minElevation: 0.4, maxElevation: 0.60,
     colors: ['#4a7c59', '#528764', '#5a926f'], contourColor: '#335740',
     walkable: true, canHavePlants: true, 
     plantTypes: ['beech', 'fern', 'patotara'],
     canPlace: true
   },
   subalpine: {
-    key: 'subalpine', name: "Subalpine Tussock", minElevation: 0.56, maxElevation: 0.77,
+    key: 'subalpine', name: "Subalpine Tussock", minElevation: 0.60, maxElevation: 0.80,
     colors: ['#a8a060', '#b5ad6d', '#c2ba7a'], contourColor: '#7a7445',
     walkable: true, canHavePlants: true, 
     plantTypes: ['tussock', 'patotara'],
     canPlace: true
   },
   alpine: {
-    key: 'alpine', name: "Alpine Rock", minElevation: 0.77, maxElevation: 0.84,
+    key: 'alpine', name: "Alpine Rock", minElevation: 0.77, maxElevation: 0.9,
     colors: ['#8b8b8b', '#9a9a9a', '#a9a9a9'], contourColor: '#5c5c5c',
     walkable: false, canHavePlants: false, canPlace: false
   },
   snow: {
-    key: 'snow', name: "Permanent Snow", minElevation: 0.84, maxElevation: 1.0,
+    key: 'snow', name: "Permanent Snow", minElevation: 0.9, maxElevation: 1.0,
     colors: ['#e8e8e8', '#f0f0f0', '#ffffff'], contourColor: '#b0b0b0',
     walkable: false, canHavePlants: false, canPlace: false
   }
@@ -574,14 +573,17 @@ class Game {
 
     this._menuBtnBounds = null;
     
-    this.goals = [
-      { name: "Survive 60 seconds", condition: () => this.playTime >= 3600, reward: 50, achieved: false },
-      { name: "Reach 10 moa", condition: () => this._cachedMoaCount >= 10, reward: 50, achieved: false },
-      { name: "Hatch 10 eggs", condition: () => this.simulation?.stats.births >= 10, reward: 100, achieved: false },
-      { name: "Reach 20 moa", condition: () => this._cachedMoaCount >= 20, reward: 50, achieved: false },
-      { name: "Survive 3 minutes", condition: () => this.playTime >= 10800, reward: 100, achieved: false },
-      { name: "Reach 30 moa", condition: () => this._cachedMoaCount >= 30, reward: 100, achieved: false }
-    ];
+  this.goals = [
+    { name: "Hatch 5 eggs", condition: () => this.simulation?.stats.births >= 5, reward: 50, achieved: false },
+    { name: "Hatch 10 eggs", condition: () => this.simulation?.stats.births >= 10, reward: 100, achieved: false }, 
+    { name: "Raise Moa population to 15", condition: () => this._cachedMoaCount >= 15, reward: 50, achieved: false },
+    { name: "Raise Moa population to 20", condition: () => this._cachedMoaCount >= 20, reward: 50, achieved: false },
+    { name: "Raise Moa population to 30", condition: () => this._cachedMoaCount >= 30, reward: 100, achieved: false },
+    { name: "Reach 1 minute", condition: () => this.playTime >= 3600, reward: 50, achieved: false },
+    { name: "Reach 3 minutes", condition: () => this.playTime >= 10800, reward: 100, achieved: false }
+    ,{ name: "Reach 4 minutes", condition: () => this.playTime >= 14400, reward: 100, achieved: false }
+    //,{ name: "Reach 5 minutes", condition: () => this.playTime >= 18000, reward: 150, achieved: false }
+  ];
     
     this.notifications = [];
     this.gameOverReason = '';
@@ -596,10 +598,14 @@ class Game {
   }
   
   init() {
+
     this.terrain = new TerrainGenerator(CONFIG, BIOMES);
-    this.terrain.generate();
-    
     this.seasonManager = new SeasonManager(CONFIG);
+    
+    // Connect season manager to terrain for seasonal snow effects
+    this.terrain.setSeasonManager(this.seasonManager);
+    
+    this.terrain.generate();
     
     this.simulation = new Simulation(this.terrain, CONFIG, this, this.seasonManager);
     this.simulation.init();
@@ -1009,20 +1015,14 @@ class Game {
       this._renderMenuPlant(x, plantY, key, spriteSize);
     }
     
+    // REPLACE WITH NEW SPRITE
     // Moa illustration (center)
+
     push();
+    imageMode(CENTER);
     translate(centerX, plantY);
-    scale(5);
-    noStroke();
-    fill(101, 67, 33);
-    ellipse(0, 0, 8, 11);
-    ellipse(3, -3, 7, 5);
-    fill(185, 170, 140);
-    triangle(5, -5, 10, -2, 6, -2);
-    stroke(55, 38, 20);
-    strokeWeight(1.5);
-    line(-3, 5, -4, 12);
-    line(3, 5, 4, 12);
+    scale(2);
+    image(splashScreenMoa,0,0)
     pop();
     
     // Moa label
@@ -1405,7 +1405,7 @@ class Game {
     
     textSize(16);
     fill(200, 240, 200);
-    text(`Final Score: ${Math.round(((this._cachedMoaCount)*(this.mauri.totalEarned*.001))-((this.playTime / 60)-180)+60) } points`, centerX, centerY + 90);
+    text(`Final Score: ${Math.round(((this._cachedMoaCount)*(this.mauri.totalEarned*.001))-((this.playTime / 60)-240)+60) } points`, centerX, centerY + 90);
 
     textSize(18);
     text("Press R to play again", centerX, centerY + 120);

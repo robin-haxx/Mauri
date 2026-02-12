@@ -109,9 +109,9 @@ const EntitySprites = {
   },
 
   getMoaSprite(animTime, isMoving, isJuvenile = false) {
-    if (isJuvenile && this.isValid(this.moa.juvenile)) {
-      return this.moa.juvenile;
-    }
+    // if (isJuvenile && this.isValid(this.moa.juvenile)) {
+    //   return this.moa.juvenile;
+    // }
     
     if (isMoving && this.moa.walk.length > 0) {
       const frameIndex = Math.floor(animTime * this.animation.moaWalkSpeed) % this.moa.walk.length;

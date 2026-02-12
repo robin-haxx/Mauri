@@ -170,6 +170,15 @@ class Simulation {
     for (let i = 0; i < count; i++) {
       this.spawnEagle();
     }
+    
+    // Parameters for starting eagles
+    for (let i = 1; i < this.eagles.length; i++) {
+      const eagle = this.eagles[i];
+      eagle.hunger = 0;
+      eagle.hunting = false;
+      eagle.state = 'patrolling';
+      eagle.restTimer = eagle.restDuration || 200; // Give them a rest period
+    }
   }
 
   spawnEagle(speciesKey = null) {
@@ -742,10 +751,6 @@ class Simulation {
     }
   }
 
-  // ============================================
-  // RENDERING (with viewport culling)
-  // ============================================
-
   render() {
     // Update viewport bounds for culling
     this.updateViewport();
@@ -756,25 +761,34 @@ class Simulation {
     const viewBottom = this._viewBottom;
     const margin = this._viewMargin;
     
-    // Render plants (with culling - largest collection)
+    // ========================================
+    // LAYER 1: Ground plants (non-trees)
+    // ========================================
     const plants = this.plants;
     for (let i = 0, len = plants.length; i < len; i++) {
       const p = plants[i];
+      // Skip trees - they render after moas
+      if (p.type === 'rimu' || p.type === 'beech') continue;
+      
       const px = p.pos.x;
       const py = p.pos.y;
       
-      // Cull plants outside viewport
       if (px >= viewLeft - margin && px <= viewRight + margin &&
           py >= viewTop - margin && py <= viewBottom + margin) {
         p.render();
       }
     }
     
-    // Render placeables (with culling)
+    // ========================================
+    // LAYER 2: Placeables (except decoys)
+    // ========================================
     const placeables = this.placeables;
-    const placeableMargin = margin + 50; // Larger margin for placeable radius
+    const placeableMargin = margin + 50;
     for (let i = 0, len = placeables.length; i < len; i++) {
       const p = placeables[i];
+      // Skip decoys - they render above eagles
+      if (p.type === 'decoy') continue;
+      
       const px = p.pos.x;
       const py = p.pos.y;
       
@@ -784,7 +798,9 @@ class Simulation {
       }
     }
     
-    // Render eggs (with culling)
+    // ========================================
+    // LAYER 3: Eggs
+    // ========================================
     const eggs = this.eggs;
     for (let i = 0, len = eggs.length; i < len; i++) {
       const e = eggs[i];
@@ -797,7 +813,9 @@ class Simulation {
       }
     }
     
-    // Render moas (with culling)
+    // ========================================
+    // LAYER 4: Moas (body only)
+    // ========================================
     const moas = this.moas;
     for (let i = 0, len = moas.length; i < len; i++) {
       const m = moas[i];
@@ -812,7 +830,26 @@ class Simulation {
       }
     }
     
-    // Render eagles (with culling - they can fly off-screen but usually few)
+    // ========================================
+    // LAYER 5: Trees (rimu, beech)
+    // ========================================
+    const treeMargin = margin + 30;
+    for (let i = 0, len = plants.length; i < len; i++) {
+      const p = plants[i];
+      if (p.type !== 'rimu' && p.type !== 'beech') continue;
+      
+      const px = p.pos.x;
+      const py = p.pos.y;
+      
+      if (px >= viewLeft - treeMargin && px <= viewRight + treeMargin &&
+          py >= viewTop - treeMargin && py <= viewBottom + treeMargin) {
+        p.render();
+      }
+    }
+    
+    // ========================================
+    // LAYER 6: Eagles
+    // ========================================
     const eagles = this.eagles;
     const eagleMargin = margin + 30;
     for (let i = 0, len = eagles.length; i < len; i++) {
@@ -823,6 +860,40 @@ class Simulation {
       if (px >= viewLeft - eagleMargin && px <= viewRight + eagleMargin &&
           py >= viewTop - eagleMargin && py <= viewBottom + eagleMargin) {
         e.render();
+      }
+    }
+    
+    // ========================================
+    // LAYER 7: Decoys (thunderclouds) - above eagles
+    // ========================================
+    const decoyMargin = margin + 80; // Decoys have large visual radius
+    for (let i = 0, len = placeables.length; i < len; i++) {
+      const p = placeables[i];
+      // Only render decoys in this pass
+      if (p.type !== 'decoy') continue;
+      
+      const px = p.pos.x;
+      const py = p.pos.y;
+      
+      if (px >= viewLeft - decoyMargin && px <= viewRight + decoyMargin &&
+          py >= viewTop - decoyMargin && py <= viewBottom + decoyMargin) {
+        p.render();
+      }
+    }
+    
+    // ========================================
+    // LAYER 8: All indicators (topmost)
+    // ========================================
+    for (let i = 0, len = moas.length; i < len; i++) {
+      const m = moas[i];
+      if (!m.alive) continue;
+      
+      const px = m.pos.x;
+      const py = m.pos.y;
+      
+      if (px >= viewLeft - margin && px <= viewRight + margin &&
+          py >= viewTop - margin && py <= viewBottom + margin) {
+        m.renderIndicators();
       }
     }
     

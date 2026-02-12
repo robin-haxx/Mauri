@@ -33,9 +33,9 @@ class HaastsEagle extends Boid {
     this.lastTargetTime = 0;
     
     // Hunger
-    this.hunger = random(20, 45);
+    this.hunger = random(25, 35);
     this.maxHunger = 100;
-    this.hungerRate = 0.022;
+    this.hungerRate = 0.018;
     this.huntThreshold = 40;
     this.kills = 0;
     

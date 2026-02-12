@@ -145,6 +145,59 @@ class SeasonManager {
     return false;
   }
 
+    /**
+   * Get the effective snow line elevation based on current season
+   * Snow extends lower in winter, retreats in summer
+   * @returns {number} Elevation threshold where snow appears
+   */
+  getSnowLineElevation() {
+    // Seasonal snow line elevations
+    const snowLineByseason = {
+      summer: 0.92,  // Snow retreats slightly in summer
+      autumn: 0.85,  // Snow starts creeping down
+      winter: 0.77,  // Snow extends to top of subalpine (covers all alpine rock)
+      spring: 0.82   // Snow melts back in spring
+    };
+    
+    const currentLine = snowLineByseason[this.currentKey];
+    
+    // Smooth transitions between seasons
+    if (this.transitionProgress > 0) {
+      const nextLine = snowLineByseason[this.nextKey];
+      return lerp(currentLine, nextLine, this.transitionProgress);
+    }
+    
+    return currentLine;
+  }
+
+  /**
+   * Check if a given elevation should render as snow based on season
+   * @param {number} elevation - The terrain elevation (0-1)
+   * @returns {boolean} True if should render as seasonal snow
+   */
+  isSeasonalSnow(elevation) {
+    return elevation >= this.getSnowLineElevation();
+  }
+
+  /**
+   * Get snow coverage amount for partial snow effects (optional)
+   * Returns 0-1 for blending snow with underlying terrain
+   * @param {number} elevation - The terrain elevation (0-1)
+   * @returns {number} Snow coverage (0 = none, 1 = full)
+   */
+  getSnowCoverage(elevation) {
+    const snowLine = this.getSnowLineElevation();
+    const fullSnowLine = 0.9; // Original permanent snow line
+    
+    if (elevation >= fullSnowLine) {
+      return 1.0; // Full snow in permanent snow zone
+    } else if (elevation >= snowLine) {
+      // Gradual snow coverage in seasonal zone
+      return map(elevation, snowLine, fullSnowLine, 0.3, 1.0);
+    }
+    return 0;
+  }
+
   getPlantTypeModifier(plantType) {
     const currentMod = this.current.plantTypeModifiers?.[plantType] || 1.0;
     

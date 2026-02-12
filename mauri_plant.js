@@ -1,5 +1,5 @@
 // ============================================
-// PLANT CLASS - Sprite-based rendering with procedural fallback
+// PLANT CLASS 
 // ============================================
 
 // Plant type constants (avoid string comparisons)
@@ -457,8 +457,6 @@ class Plant {
   
   _renderGenericPlant(px, py, displaySize, dormant) {
     const alpha = dormant ? 150 : 255;
-    
-    // Adjust colors for dormant state
     let r, g, b;
     if (dormant) {
       r = this.baseR * 0.5 + 80;
@@ -469,37 +467,26 @@ class Plant {
       g = this.baseG;
       b = this.baseB;
     }
-    
-    // Shadow
     noStroke();
     fill(0, 0, 0, dormant ? 10 : 20);
     ellipse(px + 1, py + 1, displaySize * 1.2, displaySize * 0.6);
-    
-    // Main body
     fill(r, g, b, alpha);
     ellipse(px, py, displaySize, displaySize * 0.9);
-    
-    // Highlight
     fill(r + 30, g + 30, b + 20, alpha * 0.5);
     ellipse(px - displaySize * 0.15, py - displaySize * 0.15, displaySize * 0.4, displaySize * 0.35);
-    
-    // Center/shadow
     fill(r - 30, g - 25, b - 20, alpha * 0.6);
     ellipse(px + displaySize * 0.05, py + displaySize * 0.05, displaySize * 0.5, displaySize * 0.45);
-    
-    // Dormant indicator
     if (dormant) {
       this._drawDormantIndicator(px, py - displaySize * 0.6);
     }
   }
   
   // ============================================
-  // DORMANT INDICATOR (simple shape, no emoji)
+  // DORMANT INDICATOR 
   // ============================================
   
   _drawDormantIndicator(x, y) {
-    // Simple snowflake shape - much faster than emoji text
-    stroke(200, 200, 200, 180);
+    stroke(160, 160, 160, 180);
     strokeWeight(0.8);
     const s = 3;
     line(x - s, y, x + s, y);

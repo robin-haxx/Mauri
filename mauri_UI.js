@@ -297,7 +297,7 @@ class GameUI {
     stroke(100, 200, 130);
     strokeWeight(4);
     arc(0, 0, 28, 28, PI, TWO_PI);
-    arc(6, 3, 18, 18, 0, PI);
+    arc(6, 3, 16, 16, 0, PI);
     pop();
     
     // Label
@@ -559,7 +559,7 @@ class GameUI {
         icon: '🌸',
         text: 'Spring: Plants regrowing. Excellent nesting conditions.',
         subtext: moaCount < CONFIG.maxMoaPopulation * 0.5
-          ? 'Population is low - encourage breeding with nesting sites.'
+          ? 'Moa are struggling! encourage breeding with nesting sites.'
           : 'Territory expanding as dormant plants wake up.',
         color: [255, 200, 220]
       }

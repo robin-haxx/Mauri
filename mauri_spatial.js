@@ -1,5 +1,5 @@
 // ============================================
-// SPATIAL GRID - Heavily optimized for performance
+// SPATIAL GRID 
 // Uses numeric keys and pre-allocated arrays
 // ============================================
 class SpatialGrid {

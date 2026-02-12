@@ -31,8 +31,8 @@ const MOA_SPECIES = {
     
     // Reproduction
     eggCooldownTime: 800,
-    securityTimeBase: 900,
-    securityTimeVariation: 400,
+    securityTimeBase: 600,
+    securityTimeVariation: 300,
     
     // Habitat preferences
     preferredElevation: { min: 0.35, max: 0.70 },

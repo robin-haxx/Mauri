@@ -1,5 +1,5 @@
 // ============================================
-// MOA CLASS - Optimized with Age & Sprites
+// MOA CLASS
 // ============================================
 
 const MOA_STATE = {
@@ -15,7 +15,7 @@ const MOA_STATE = {
 const MOA_AGE = {
   JUVENILE_MAX: 600,
   ADULT_MIN: 1200,
-  MATING_AGE: 1500,
+  MATING_AGE: 1200,
   SIZE_JUVENILE: 0.6,
   SIZE_ADOLESCENT: 0.8,
   SIZE_ADULT: 1.0
@@ -53,12 +53,18 @@ class Moa extends Boid {
     const s = { ...Moa.DEFAULTS, ...(species.config || {}) };
     this.speciesConfig = s;
     
+    // Store species key for offspring
+    this.speciesKey = species.key || null;
+
+    this.isFemale = random() < 0.5;
+
     // Size & age
     this.baseSize = typeof s.size === 'object' ? random(s.size.min, s.size.max) : (s.size || random(8, 11));
     this.size = this.baseSize * MOA_AGE.SIZE_JUVENILE;
     this.age = 0;
     this.ageStage = 'juvenile';
     this.animTime = random(1000);
+
     
     // Movement
     this.baseSpeed = s.baseSpeed;
@@ -139,11 +145,14 @@ class Moa extends Boid {
     this._homeForce = createVector();
     this._migrationTargetVec = null;
     
+    // Cached per-frame: threatening eagles (avoids double iteration)
+    this._threateningEagles = [];
+    
     // Season cache
     this._seasonCache = { key: null, hungerMod: 1, migrationStrength: 0, preferredElevation: { min: 0.25, max: 0.70 } };
   }
 
-  // Compatibility stub
+  // Called from simulation's updateEggs when hatching new moa
   _cacheSizeMultipliers() {}
 
   _updateSeasonCache(sm) {
@@ -167,10 +176,12 @@ class Moa extends Boid {
     let sizeMult;
     if (this.age >= MOA_AGE.ADULT_MIN) {
       this.ageStage = 'adult';
-      sizeMult = MOA_AGE.SIZE_ADULT;
+      // Adult females ~10% larger than males (sexual dimorphism)
+      sizeMult = this.isFemale ? MOA_AGE.SIZE_ADULT : MOA_AGE.SIZE_ADULT * 0.9;
     } else if (this.age >= MOA_AGE.JUVENILE_MAX) {
       this.ageStage = 'adolescent';
-      sizeMult = lerp(MOA_AGE.SIZE_ADOLESCENT, MOA_AGE.SIZE_ADULT, 
+      const adultSize = this.isFemale ? MOA_AGE.SIZE_ADULT : MOA_AGE.SIZE_ADULT * 0.9;
+      sizeMult = lerp(MOA_AGE.SIZE_ADOLESCENT, adultSize, 
         (this.age - MOA_AGE.JUVENILE_MAX) / (MOA_AGE.ADULT_MIN - MOA_AGE.JUVENILE_MAX));
     } else {
       this.ageStage = 'juvenile';
@@ -182,7 +193,6 @@ class Moa extends Boid {
   }
 
   isJuvenile() { return this.age < MOA_AGE.JUVENILE_MAX; }
-  isAdult() { return this.age >= MOA_AGE.ADULT_MIN; }
   canMateByAge() { return this.age >= MOA_AGE.MATING_AGE; }
 
   // ============================================
@@ -243,6 +253,9 @@ class Moa extends Boid {
     const eagles = simulation.getNearbyEagles(px, py, this.fleeRadius * 1.5);
     const moas = simulation.getNearbyMoas(px, py, 100);
     
+    // Cache threatening eagles once (used by both determineState and executeState)
+    this._cacheThreateningEagles(eagles);
+    
     this.applyPlaceableEffects(placeables, dt);
     this.preferredElevation = sc.preferredElevation;
     
@@ -255,8 +268,8 @@ class Moa extends Boid {
     if (this.isPregnant) this.executePregnancy(simulation, mauri, placeables, dt);
     
     // Determine and execute state
-    this.currentState = this.determineState(eagles, placeables, sc, moas);
-    this.executeState(simulation, mauri, sc, eagles, moas, placeables, dt);
+    this.currentState = this.determineState(placeables, sc, moas);
+    this.executeState(simulation, mauri, sc, moas, placeables, dt);
     
     // Common behaviors
     this.applySeparation(moas);
@@ -267,52 +280,57 @@ class Moa extends Boid {
     this.updateSecurity(eagles, dt);
     
     if (this.hunger >= this.maxHunger) this.alive = false;
-      // Apply terrain slope speed modifier
+    
     const terrainMult = this.getTerrainSpeedMultiplier();
     this.maxSpeed *= terrainMult;
-    
-    // Also slightly reduce acceleration on steep terrain for smoother movement
-    if (terrainMult < 0.7) {
-      this.vel.mult(0.95); // Slight drag on very steep terrain
-    }
+    if (terrainMult < 0.7) this.vel.mult(0.95);
   }
 
-  determineState(eagles, placeables, seasonCache, moas) {
-    // Flee check
+  // Cache which eagles are threatening (hunting + in flee range)
+  _cacheThreateningEagles(eagles) {
+    const threats = this._threateningEagles;
+    threats.length = 0;
+    
     for (let i = 0; i < eagles.length; i++) {
       const e = eagles[i];
       if (this.camouflage > 0 && random() < this.camouflage) continue;
       if (this.inShelter && !e.isHunting()) continue;
+      if (!e.isHunting()) continue;
+      
       const dx = e.pos.x - this.pos.x, dy = e.pos.y - this.pos.y;
-      if (e.isHunting() && dx * dx + dy * dy < this.fleeRadiusSq) {
-        this.targetMate = null;
-        return MOA_STATE.FLEEING;
+      const dSq = dx * dx + dy * dy;
+      if (dSq < this.fleeRadiusSq) {
+        threats.push({ eagle: e, distSq: dSq });
       }
+    }
+  }
+
+  determineState(placeables, seasonCache, moas) {
+    // Flee check (uses cached threats)
+    if (this._threateningEagles.length > 0) {
+      this.targetMate = null;
+      return MOA_STATE.FLEEING;
     }
     
     if (this.matingTimer > 0 || this.matingPartner) return MOA_STATE.MATING;
     
-    // Respond to courtship
+    // Respond to courtship (opposite sex only)
     if (this.canBeMate() && !this.targetMate && this.hunger < this.hungerThreshold) {
       for (let i = 0; i < moas.length; i++) {
-        if (moas[i] !== this && moas[i].targetMate === this && moas[i].alive) {
+        if (moas[i] !== this && moas[i].targetMate === this && 
+            moas[i].alive && moas[i].isFemale !== this.isFemale) {
           this.targetMate = moas[i];
           return MOA_STATE.SEEKING_MATE;
         }
       }
     }
     
-    // Already seeking
     if (this.targetMate?.alive && this.canBeMate() && this.hunger < this.hungerThreshold) 
-    return MOA_STATE.SEEKING_MATE;
+      return MOA_STATE.SEEKING_MATE;
     
-    // Find new mate
     if (this.isReadyToMate() && this.hunger < this.hungerThreshold) {
       const mate = this.findPotentialMate(moas);
-      if (mate) {
-        this.targetMate = mate;
-        return MOA_STATE.SEEKING_MATE;
-      }
+      if (mate) { this.targetMate = mate; return MOA_STATE.SEEKING_MATE; }
     }
     
     this.targetMate = null;
@@ -328,7 +346,7 @@ class Moa extends Boid {
     return MOA_STATE.IDLE;
   }
 
-  executeState(simulation, mauri, seasonCache, eagles, moas, placeables, dt) {
+  executeState(simulation, mauri, seasonCache, moas, placeables, dt) {
     this.panicLevel = 0;
     const starving = this.hunger > this.criticalHunger;
     const speedMod = starving ? 0.6 : 1;
@@ -339,17 +357,13 @@ class Moa extends Boid {
         this.targetPlant = null;
         this.targetMate = null;
         this.maxSpeed = this.fleeSpeed * speedMod;
-        for (let i = 0; i < eagles.length; i++) {
-          const e = eagles[i];
-          if (!e.isHunting() || (this.inShelter && !e.isHunting())) continue;
-          const dx = e.pos.x - this.pos.x, dy = e.pos.y - this.pos.y;
-          const dSq = dx * dx + dy * dy;
-          if (dSq < this.fleeRadiusSq) {
-            const flee = this.fleeFrom(e.pos.x, e.pos.y);
-            flee.mult(2.5 * this.flightiness);
-            this.applyForce(flee);
-            this.panicLevel = Math.max(this.panicLevel, 1 - Math.sqrt(dSq) / this.fleeRadius);
-          }
+        // Use cached threatening eagles
+        for (let i = 0; i < this._threateningEagles.length; i++) {
+          const { eagle, distSq } = this._threateningEagles[i];
+          const flee = this.fleeFrom(eagle.pos.x, eagle.pos.y);
+          flee.mult(2.5 * this.flightiness);
+          this.applyForce(flee);
+          this.panicLevel = Math.max(this.panicLevel, 1 - Math.sqrt(distSq) / this.fleeRadius);
         }
         break;
         
@@ -393,53 +407,26 @@ class Moa extends Boid {
   }
 
   // ============================================
-  // TERRAIN-BASED SPEED MODIFIER
+  // TERRAIN-BASED SPEED
   // ============================================
 
-  /**
-   * Calculate speed multiplier based on terrain slope
-   * Moving uphill is slower, downhill is slightly faster
-   */
   getTerrainSpeedMultiplier() {
     const velMagSq = this.vel.magSq();
-    if (velMagSq < 0.0001) return 1.0; // Not moving
+    if (velMagSq < 0.0001) return 1.0;
     
     const velMag = Math.sqrt(velMagSq);
-    const lookAhead = 3; // World units to look ahead
-    
-    // Direction we're moving (normalized)
+    const lookAhead = 3;
     const dirX = this.vel.x / velMag;
     const dirY = this.vel.y / velMag;
     
-    // Sample elevation ahead
-    const aheadX = this.pos.x + dirX * lookAhead;
-    const aheadY = this.pos.y + dirY * lookAhead;
-    
     const currentElev = this.terrain.getElevationAt(this.pos.x, this.pos.y);
-    const aheadElev = this.terrain.getElevationAt(aheadX, aheadY);
-    
-    // Calculate slope (elevation change per unit distance)
-    // Positive = uphill, negative = downhill
+    const aheadElev = this.terrain.getElevationAt(this.pos.x + dirX * lookAhead, this.pos.y + dirY * lookAhead);
     const slope = (aheadElev - currentElev) / lookAhead;
     
-    // Apply speed modifier based on slope
-    let multiplier;
-    
-    if (slope > 0) {
-      // Uphill - significant slowdown
-      // slope of 0.03 (moderate hill) = ~80% speed
-      // slope of 0.08 (steep) = ~50% speed
-      multiplier = 1 - slope * 6;
-      multiplier = Math.max(0.35, multiplier); // Min 35% speed on steep climbs
-    } else {
-      // Downhill - slight speed boost
-      // slope of -0.03 = ~106% speed
-      // slope of -0.08 = ~116% speed (capped)
-      multiplier = 1 - slope * 2;
-      multiplier = Math.min(1.2, multiplier); // Max 120% speed downhill
-    }
-    
-    return multiplier;
+    // Uphill: significant slowdown; Downhill: slight boost
+    return slope > 0
+      ? Math.max(0.35, 1 - slope * 6)
+      : Math.min(1.2, 1 - slope * 2);
   }
 
   // ============================================
@@ -454,6 +441,7 @@ class Moa extends Boid {
     for (let i = 0; i < moas.length; i++) {
       const o = moas[i];
       if (o === this || !o.canBeMate()) continue;
+      if (o.isFemale === this.isFemale) continue; // Must be opposite sex
       if (o.matingPartner && o.matingPartner !== this) continue;
       
       const dx = o.pos.x - px, dy = o.pos.y - py;
@@ -495,22 +483,19 @@ class Moa extends Boid {
   }
 
   initiateMating(partner) {
-    this.matingPartner = partner;
-    this.matingTimer = this.matingDuration;
-    this.currentState = MOA_STATE.MATING;
-    this.heartTimer = this.matingDuration;
-    this.targetMate = null;
-    
-    partner.matingPartner = this;
-    partner.matingTimer = this.matingDuration;
-    partner.currentState = MOA_STATE.MATING;
-    partner.heartTimer = this.matingDuration;
-    partner.targetMate = null;
-    
+    this._setMatingState(this, partner);
+    this._setMatingState(partner, this);
     this.vel.mult(0.2);
     partner.vel.mult(0.2);
-    
-    if (typeof audioManager !== 'undefined' && audioManager) audioManager.playMateCheep();
+    if (audioManager) audioManager.playMateCheep();
+  }
+
+  _setMatingState(moa, partner) {
+    moa.matingPartner = partner;
+    moa.matingTimer = this.matingDuration;
+    moa.currentState = MOA_STATE.MATING;
+    moa.heartTimer = this.matingDuration;
+    moa.targetMate = null;
   }
 
   executeMating(simulation, mauri, dt) {
@@ -540,34 +525,25 @@ class Moa extends Boid {
   completeMating(simulation, mauri) {
     const partner = this.matingPartner;
     
-    // One becomes pregnant
-    if (random() < 0.5) {
-      this.isPregnant = true;
-      this.pregnancyTimer = this.pregnancyDuration;
-    } else if (partner?.alive) {
-      partner.isPregnant = true;
-      partner.pregnancyTimer = partner.pregnancyDuration;
-    } else {
-      this.isPregnant = true;
-      this.pregnancyTimer = this.pregnancyDuration;
+    // The female becomes pregnant
+    const female = this.isFemale ? this : partner;
+    if (female?.alive) {
+      female.isPregnant = true;
+      female.pregnancyTimer = female.pregnancyDuration;
     }
     
-    // Reset state for both
-    this.canMate = false;
-    this.mateCooldown = this.mateCooldownTime;
-    this.matingPartner = null;
-    this.matingTimer = 0;
-    this.currentState = MOA_STATE.IDLE;
-    this.hunger += 10;
-    
-    if (partner?.alive) {
-      partner.canMate = false;
-      partner.mateCooldown = partner.mateCooldownTime;
-      partner.matingPartner = null;
-      partner.matingTimer = 0;
-      partner.currentState = MOA_STATE.IDLE;
-      partner.hunger += 10;
-    }
+    // Reset both
+    this._resetAfterMating(this);
+    if (partner?.alive) this._resetAfterMating(partner);
+  }
+
+  _resetAfterMating(moa) {
+    moa.canMate = false;
+    moa.mateCooldown = moa.mateCooldownTime;
+    moa.matingPartner = null;
+    moa.matingTimer = 0;
+    moa.currentState = MOA_STATE.IDLE;
+    moa.hunger += 10;
   }
 
   executePregnancy(simulation, mauri, placeables, dt) {
@@ -591,12 +567,12 @@ class Moa extends Boid {
       return;
     }
     
-    const isFirstEgg = simulation.eggs.filter(e => e.alive && !e.hatched).length === 0;
+    const aliveEggs = simulation.eggs.filter(e => e.alive && !e.hatched);
     const egg = simulation.addEgg(this.pos.x, this.pos.y);
     egg.speedBonus = this.eggSpeedBonus;
     if (this.speciesKey) egg.parentSpecies = this.speciesKey;
     
-    if (isFirstEgg && simulation.game?.tutorial) {
+    if (aliveEggs.length === 0 && simulation.game?.tutorial) {
       simulation.game.tutorial.fireEvent(TUTORIAL_EVENTS.FIRST_EGG, { egg });
     }
     
@@ -888,32 +864,26 @@ class Moa extends Boid {
     if (!this.alive) return;
 
     const sprite = EntitySprites.getMoaSprite(this.animTime, this.vel.magSq() > 0.01, this.isJuvenile());
+    if (!sprite) return;
     
-    if (sprite) {
-      push();
-      translate(this.pos.x, this.pos.y);
-      
-      // Shadow
-      noStroke();
-      fill(0, 0, 0, 25);
-      ellipse(1.5, 1.5, this.size * 1.0, this.size * 0.5);
-      
-      // Snap rotation to pixel-art friendly angles
-      const targetAngle = this.vel.heading();
-      this._displayAngle = SpriteAngle.snapWithHysteresis(this._displayAngle, targetAngle);
-      rotate(this._displayAngle);
-      
-      // Mirror vertically when in 45°-225° range to keep right side visible
-      if (SpriteAngle.shouldMirror(this._displayAngle)) {
-        scale(1, -1);
-      }
-      
-      imageMode(CENTER);
-      image(sprite, 0, 0, this.size * 2.5, this.size * 2.5);
-      pop();
-    }
+    push();
+    translate(this.pos.x, this.pos.y);
+    
+    // Shadow
+    noStroke();
+    fill(0, 0, 0, 25);
+    ellipse(1.5, 1.5, this.size * 1.0, this.size * 0.5);
+    
+    const targetAngle = this.vel.heading();
+    this._displayAngle = SpriteAngle.snapWithHysteresis(this._displayAngle, targetAngle);
+    rotate(this._displayAngle);
+    
+    if (SpriteAngle.shouldMirror(this._displayAngle)) scale(1, -1);
+    
+    imageMode(CENTER);
+    image(sprite, 0, 0, this.size * 2.5, this.size * 2.5);
+    pop();
   }
-
 
   renderIndicators() {
     const px = this.pos.x, py = this.pos.y, s = this.size;
@@ -932,7 +902,7 @@ class Moa extends Boid {
       pop();
     }
     
-    // Pregnancy indicator
+    // Pregnancy indicator (females only now)
     if (this.isPregnant) {
       const prog = 1 - this.pregnancyTimer / this.pregnancyDuration;
       fill(245, 238, 220, 220);
@@ -968,6 +938,11 @@ class Moa extends Boid {
     else if (this.isMigrating) { fill(100, 150, 255, 220); text("↗", px, py + yOff - 5); }
     else if (this.currentState === MOA_STATE.SEEKING_MATE) { fill(255, 150, 180, 220); text("♥", px, py + yOff - 5); }
     else if (this.localFoodScore < 0.3 && !this.isFeeding) { fill(255, 180, 80, 220); text("!", px, py + yOff - 5); }
+    // Sex indicator for adults
+    else if (this.canMateByAge()) { 
+      fill(200, 200, 200, 140); 
+      text(this.isFemale ? "♀" : "♂", px, py + yOff - 5); 
+    }
   }
 
   _drawBar(x, y, w, h, pct, col) {

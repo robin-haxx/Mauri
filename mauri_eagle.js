@@ -1,5 +1,5 @@
 // ============================================
-// HAAST'S EAGLE CLASS - Sprite Only
+// HAAST'S EAGLE CLASS
 // ============================================
 
 class HaastsEagle extends Boid {
@@ -7,7 +7,6 @@ class HaastsEagle extends Boid {
     super(x, y, terrain);
     
     this.config = config;
-    this.species = speciesData;
     
     // Movement
     this.baseSpeed = 0.4;
@@ -17,7 +16,6 @@ class HaastsEagle extends Boid {
     this.perceptionRadius = 160;
     this.separationDist = 100;
     this.separationDistSq = 10000;
-    
     this.wanderStrength = 1.0;
     
     // Hunting
@@ -27,15 +25,15 @@ class HaastsEagle extends Boid {
     this.catchRadiusSq = 144;
     this.target = null;
     this.hunting = false;
-    
     this.huntSearchTimer = 0;
     this.huntSearchTimeout = 300;
     this.lastTargetTime = 0;
+    this._huntEventFired = false;
     
     // Hunger
     this.hunger = random(25, 35);
     this.maxHunger = 100;
-    this.hungerRate = 0.018;
+    this.hungerRate = 0.015;
     this.huntThreshold = 40;
     this.kills = 0;
     
@@ -44,11 +42,10 @@ class HaastsEagle extends Boid {
     this.patrolRadius = random(70, 100);
     this.patrolAngle = random(TWO_PI);
     this.patrolSpeed = random(0.008, 0.012);
+    this._driftTimer = 0;
     
-    // State tracking
+    // State
     this.state = 'patrol';
-    
-    // State timers
     this.restTimer = 0;
     this.restDuration = 180;
     this.distractedBy = null;
@@ -60,8 +57,6 @@ class HaastsEagle extends Boid {
     this.wingspan = random(14, 18);
     this.wingPhase = random(TWO_PI);
     this.bodyLength = this.wingspan * 0.45;
-    
-    // Animation timing
     this.animTime = random(1000);
     
     // Reusable vectors
@@ -82,9 +77,7 @@ class HaastsEagle extends Boid {
   
   behave(simulation, mauri, dt = 1) {
     this.animTime += dt;
-    
-    this.hunger += this.hungerRate * dt;
-    if (this.hunger > this.maxHunger) this.hunger = this.maxHunger;
+    this.hunger = Math.min(this.hunger + this.hungerRate * dt, this.maxHunger);
     
     const nearbyPlaceables = simulation.getNearbyPlaceables(this.pos.x, this.pos.y, 100);
     this.checkStorms(nearbyPlaceables);
@@ -113,9 +106,7 @@ class HaastsEagle extends Boid {
     const sep = this.separate(nearbyEagles);
     sep.mult(2);
     this.applyForce(sep);
-    
-    const edgeForce = this.avoidEdges();
-    this.applyForce(edgeForce);
+    this.applyForce(this.avoidEdges());
     
     if (this.hunger > this.huntThreshold) {
       this.hunt(simulation, mauri, dt);
@@ -139,43 +130,34 @@ class HaastsEagle extends Boid {
     const strongMargin = 25;
     const mapW = this.terrain.mapWidth;
     const mapH = this.terrain.mapHeight;
-    
     const px = this.pos.x;
     const py = this.pos.y;
     
     let urgency = 1;
     
     if (px < margin) {
-      const strength = (margin - px) / margin;
-      force.x += strength * 2;
+      force.x += (margin - px) / margin * 2;
       if (px < strongMargin) urgency = 3;
     } else if (px > mapW - margin) {
-      const strength = (px - (mapW - margin)) / margin;
-      force.x -= strength * 2;
+      force.x -= (px - (mapW - margin)) / margin * 2;
       if (px > mapW - strongMargin) urgency = 3;
     }
     
     if (py < margin) {
-      const strength = (margin - py) / margin;
-      force.y += strength * 2;
+      force.y += (margin - py) / margin * 2;
       if (py < strongMargin) urgency = 3;
     } else if (py > mapH - margin) {
-      const strength = (py - (mapH - margin)) / margin;
-      force.y -= strength * 2;
+      force.y -= (py - (mapH - margin)) / margin * 2;
       if (py > mapH - strongMargin) urgency = 3;
     }
     
-    if (force.magSq() > 0) {
-      force.setMag(this.maxForce * urgency);
-    }
-    
+    if (force.magSq() > 0) force.setMag(this.maxForce * urgency);
     return force;
   }
   
   separate(nearbyEagles) {
     const force = this._separationForce;
     force.set(0, 0);
-    
     let count = 0;
     const px = this.pos.x, py = this.pos.y;
     
@@ -228,10 +210,11 @@ class HaastsEagle extends Boid {
   beDistracted() {
     this.maxSpeed = this.baseSpeed * 0.8;
     
-    if (this.distractedBy && this.distractedBy.alive) {
+    if (this.distractedBy?.alive) {
       const dx = this.distractedBy.pos.x - this.pos.x;
       const dy = this.distractedBy.pos.y - this.pos.y;
       
+      // Orbit around the distraction
       this._tempForce.set(-dy, dx);
       this._tempForce.normalize();
       this._tempForce.mult(this.maxForce * 0.8);
@@ -260,14 +243,13 @@ class HaastsEagle extends Boid {
       this.patrolCenter.y + sin(this.patrolAngle) * this.patrolRadius
     );
     
-    const seekForce = this.seek(this._targetVec, 0.4);
-    this.applyForce(seekForce);
+    this.applyForce(this.seek(this._targetVec, 0.4));
     
     const wander = this.wander();
     wander.mult(0.25);
     this.applyForce(wander);
     
-    this._driftTimer = (this._driftTimer || 0) + dt;
+    this._driftTimer += dt;
     if (this._driftTimer >= 256) {
       this._driftTimer -= 256;
       this.driftPatrolCenter(20);
@@ -282,9 +264,7 @@ class HaastsEagle extends Boid {
     const wander = this.wander();
     wander.mult(0.15);
     this.applyForce(wander);
-    
-    const toCenter = this.seek(this.patrolCenter, 0.2);
-    this.applyForce(toCenter);
+    this.applyForce(this.seek(this.patrolCenter, 0.2));
     
     this.edges();
   }
@@ -328,25 +308,20 @@ class HaastsEagle extends Boid {
       this.lastTargetTime = frameCount;
 
       if (hadNoTarget && !this._huntEventFired) {
-        if (simulation.game?.tutorial) {
-          simulation.onEagleStartHunt(this, this.target);
-        }
+        simulation.onEagleStartHunt(this, this.target);
         this._huntEventFired = true;
-        if (typeof audioManager !== 'undefined' && audioManager) {
-          audioManager.playEagleHunt();
-        }
+        if (audioManager) audioManager.playEagleHunt();
       }
       
+      // Pursue with prediction
       this._targetVec.set(
         nearestMoa.pos.x + nearestMoa.vel.x * 12,
         nearestMoa.pos.y + nearestMoa.vel.y * 12
       );
-      
-      const pursue = this.seek(this._targetVec, 1.4);
-      this.applyForce(pursue);
+      this.applyForce(this.seek(this._targetVec, 1.4));
       
       if (nearestDistSq < this.catchRadiusSq) {
-        this.catchMoa(nearestMoa, simulation, mauri);
+        simulation.handleEagleCatch(this, nearestMoa, mauri);
       }
     } else {
       this.huntSearchTimer += dt;
@@ -362,30 +337,24 @@ class HaastsEagle extends Boid {
       this.searchForPrey();
     }
     
-    if (this.state !== 'hunting') {
-      this._huntEventFired = false;
-    }
+    if (this.state !== 'hunting') this._huntEventFired = false;
   }
   
   searchForPrey() {
-    this.state = 'hunting';
     this.maxSpeed = this.huntSpeed * 0.8;
     
     const searchAngle = frameCount * 0.02 + this.wingPhase;
     const searchRadius = this.patrolRadius + (this.huntSearchTimer * 0.3);
     
-    this._targetVec.set(
-      this.patrolCenter.x + cos(searchAngle) * searchRadius,
-      this.patrolCenter.y + sin(searchAngle) * searchRadius
-    );
-    
     const mapW = this.terrain.mapWidth;
     const mapH = this.terrain.mapHeight;
-    this._targetVec.x = constrain(this._targetVec.x, 50, mapW - 50);
-    this._targetVec.y = constrain(this._targetVec.y, 50, mapH - 50);
     
-    const seekForce = this.seek(this._targetVec, 0.8);
-    this.applyForce(seekForce);
+    this._targetVec.set(
+      constrain(this.patrolCenter.x + cos(searchAngle) * searchRadius, 50, mapW - 50),
+      constrain(this.patrolCenter.y + sin(searchAngle) * searchRadius, 50, mapH - 50)
+    );
+    
+    this.applyForce(this.seek(this._targetVec, 0.8));
     
     const wander = this.wander();
     wander.mult(0.3);
@@ -400,26 +369,17 @@ class HaastsEagle extends Boid {
     
     const mapW = this.terrain.mapWidth;
     const mapH = this.terrain.mapHeight;
+    const minRelocateDistSq = 22500; // 150^2
     
     let newX, newY;
-    let attempts = 0;
-    const minRelocateDist = 150;
-    const minRelocateDistSq = minRelocateDist * minRelocateDist;
-    
-    do {
+    for (let attempts = 0; attempts <= 10; attempts++) {
       newX = random(80, mapW - 80);
       newY = random(80, mapH - 80);
       
       const dx = newX - this.pos.x;
       const dy = newY - this.pos.y;
-      const distSq = dx * dx + dy * dy;
-      
-      attempts++;
-      
-      if (distSq >= minRelocateDistSq || attempts > 10) {
-        break;
-      }
-    } while (attempts <= 10);
+      if (dx * dx + dy * dy >= minRelocateDistSq || attempts === 10) break;
+    }
     
     this._relocateTargetVec.set(newX, newY);
     this.relocateTarget = this._relocateTargetVec;
@@ -441,9 +401,8 @@ class HaastsEagle extends Boid {
     
     const dx = this.relocateTarget.x - this.pos.x;
     const dy = this.relocateTarget.y - this.pos.y;
-    const distSq = dx * dx + dy * dy;
     
-    if (distSq < 900 || this.relocateTimer <= 0) {
+    if (dx * dx + dy * dy < 900 || this.relocateTimer <= 0) {
       this.patrolCenter.set(this.relocateTarget.x, this.relocateTarget.y);
       this.patrolAngle = random(TWO_PI);
       this.relocateTarget = null;
@@ -452,100 +411,59 @@ class HaastsEagle extends Boid {
       return;
     }
     
-    const seekForce = this.seek(this.relocateTarget, 1.2);
-    this.applyForce(seekForce);
-    
+    this.applyForce(this.seek(this.relocateTarget, 1.2));
     this.edges();
   }
   
   driftPatrolCenter(amount) {
     const mapW = this.terrain.mapWidth;
     const mapH = this.terrain.mapHeight;
-    this.patrolCenter.x = constrain(
-      this.patrolCenter.x + random(-amount, amount), 
-      80, mapW - 80
-    );
-    this.patrolCenter.y = constrain(
-      this.patrolCenter.y + random(-amount, amount), 
-      80, mapH - 80
-    );
-  }
-  
-  catchMoa(moa, simulation, mauri) {
-    if (simulation && mauri) {
-      simulation.handleEagleCatch(this, moa, mauri);
-    } else {
-      moa.alive = false;
-      this.kills++;
-      this.hunger = Math.max(0, this.hunger - 60);
-      this.vel.mult(0.1);
-      this.hunting = false;
-      this.target = null;
-      this.huntSearchTimer = 0;
-      this.state = 'resting';
-      this.restTimer = this.restDuration;
-      this.patrolCenter.set(this.pos.x, this.pos.y);
-    }
+    this.patrolCenter.x = constrain(this.patrolCenter.x + random(-amount, amount), 80, mapW - 80);
+    this.patrolCenter.y = constrain(this.patrolCenter.y + random(-amount, amount), 80, mapH - 80);
   }
   
   // ============================================
-  // RENDERING - Sprite Only
+  // RENDERING
   // ============================================
-  
-  getSpriteState() {
-    if (this.hunting && this.target !== null) {
-      return 'hunting';
-    }
-    if (this.state === 'resting') {
-      return 'resting';
-    }
-    return 'flying';
-  }
   
   render() {
-    const spriteState = this.getSpriteState();
+    const isActiveHunt = this.hunting && this.target !== null;
+    const spriteState = isActiveHunt ? 'hunting' : (this.state === 'resting' ? 'resting' : 'flying');
     const sprite = EntitySprites.getEagleSprite(this.animTime, spriteState);
     
     if (sprite) {
-      const isHunting = this.hunting && this.target !== null;
-      
       push();
       translate(this.pos.x, this.pos.y);
       
       // Shadow
       noStroke();
-      fill(0, 0, 0, isHunting ? 35 : 25);
-      const shadowOffset = isHunting ? 2 : 5;
-      ellipse(shadowOffset, 3, this.wingspan * 0.9, this.wingspan * 0.3);
+      fill(0, 0, 0, isActiveHunt ? 35 : 25);
+      ellipse(isActiveHunt ? 2 : 5, 3, this.wingspan * 1.5, this.wingspan * 0.6);
       
-      // Snap rotation to pixel-art friendly angles (eagle uses +HALF_PI offset)
       const targetAngle = this.vel.heading() + HALF_PI;
       this._displayAngle = SpriteAngle.snapWithHysteresis(this._displayAngle, targetAngle);
       rotate(this._displayAngle);
       
-      // Mirror horizontally when in 45°-225° range to keep left side visible
-      if (SpriteAngle.shouldMirror(this._displayAngle)) {
-        scale(-1, 1);
-      }
+      if (SpriteAngle.shouldMirror(this._displayAngle)) scale(-1, 1);
       
       imageMode(CENTER);
       image(sprite, 0, 0, this.wingspan * 2.8, this.wingspan * 2.1);
       
-      // State indicators (adjust for potential mirror)
-      const mirrorX = SpriteAngle.shouldMirror(this._displayAngle) ? -1 : 1;
-      if (this.state === 'distracted') {
-        fill(255, 200, 100);
-        textSize(7);
-        textAlign(CENTER, CENTER);
-        text("?", 0, -this.bodyLength * 0.7);
-      } else if (this.state === 'relocating') {
-        fill(150, 200, 255);
-        textSize(6);
-        textAlign(CENTER, CENTER);
-        text("→", 0, -this.bodyLength * 0.7);
-      }
-      
       pop();
+    }
+    
+    if (this.state === 'distracted') {
+      fill(255, 200, 100);
+      noStroke();
+      textSize(7);
+      textAlign(CENTER, CENTER);
+      text("?", this.pos.x, this.pos.y - this.wingspan - 5);
+    } else if (this.state === 'relocating') {
+      fill(150, 200, 255);
+      noStroke();
+      textSize(6);
+      textAlign(CENTER, CENTER);
+      text("→", this.pos.x, this.pos.y - this.wingspan - 2);
     }
     
     if (CONFIG.showHungerBars) this.renderHungerBar();
@@ -557,9 +475,8 @@ class HaastsEagle extends Boid {
     const px = this.pos.x;
     const py = this.pos.y - 16;
     
-    const isHunting = this.state === 'hunting';
     const hasTarget = this.target !== null;
-    const isRelocating = this.state === 'relocating';
+    const isHunting = this.state === 'hunting';
     
     noStroke();
     
@@ -568,42 +485,36 @@ class HaastsEagle extends Boid {
     rect(px - 8, py, barWidth, barHeight, 1);
     
     // Hunger level
-    const hungerPercent = this.hunger / this.maxHunger;
-    const r = 100 + hungerPercent * 100;
-    const g = 160 - hungerPercent * 80;
-    fill(r, g, 120);
-    rect(px - 8, py, barWidth * (1 - hungerPercent), barHeight, 1);
+    const hungerPct = this.hunger / this.maxHunger;
+    fill(100 + hungerPct * 100, 160 - hungerPct * 80, 120);
+    rect(px - 8, py, barWidth * (1 - hungerPct), barHeight, 1);
     
-    // State indicator
-    if (isHunting && hasTarget) {
-      fill(255, 80, 80);
+    // State dot
+    if (isHunting) {
+      fill(hasTarget ? [255, 80, 80] : [255, 200, 80]);
       ellipse(px + 11, py + 1, 4, 4);
-    } else if (isHunting) {
-      fill(255, 200, 80);
-      ellipse(px + 11, py + 1, 4, 4);
-    } else if (isRelocating) {
+    } else if (this.state === 'relocating') {
       fill(100, 150, 255);
       ellipse(px + 11, py + 1, 4, 4);
     }
     
-    // Search timer indicator
+    // Search timer bar
     if (isHunting && !hasTarget && this.huntSearchTimer > 0) {
-      const searchProgress = this.huntSearchTimer / this.huntSearchTimeout;
       fill(255, 200, 80, 150);
-      rect(px - 8, py + 3, barWidth * searchProgress, 1, 0.5);
+      rect(px - 8, py + 3, barWidth * (this.huntSearchTimer / this.huntSearchTimeout), 1, 0.5);
     }
     
-    // Debug info
+    // Debug
     if (CONFIG.debugMode) {
       fill(200, 200, 200, 180);
       textSize(6);
       textAlign(CENTER, TOP);
-      
-      let stateText = this.state.toUpperCase();
-      if (isHunting) {
-        stateText = hasTarget ? 'HUNTING' : `SEARCH ${((this.huntSearchTimer / 60) | 0)}s`;
-      }
-      text(stateText, px, py + 5);
+      text(
+        isHunting 
+          ? (hasTarget ? 'HUNTING' : `SEARCH ${((this.huntSearchTimer / 60) | 0)}s`)
+          : this.state.toUpperCase(), 
+        px, py + 5
+      );
     }
   }
 }

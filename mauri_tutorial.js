@@ -1,10 +1,7 @@
 // ============================================
-// TUTORIAL SYSTEM FOR MAURI
+// TUTORIAL SYSTEM 
 // ============================================
 
-// ============================================
-// TRIGGER TYPES
-// ============================================
 const TRIGGER_TYPE = {
   IMMEDIATE: 'immediate',
   TIME: 'time',
@@ -13,9 +10,6 @@ const TRIGGER_TYPE = {
   MANUAL: 'manual'
 };
 
-// ============================================
-// TUTORIAL EVENTS
-// ============================================
 const TUTORIAL_EVENTS = {
   GAME_START: 'game_start',
   EAGLE_HUNTING: 'eagle_hunting',
@@ -32,18 +26,21 @@ const TUTORIAL_EVENTS = {
   FIRST_EGG: 'first_egg'
 };
 
-// ============================================
-// TUTORIAL TIPS REGISTRY
-// ============================================
+const _PREDATOR_PREY_CONTENT = [
+  "The Moa population is starting to thrive! But be wary..",
+  "Haast's Eagle evolved gigantism with Moa, to eat 'em!",
+  "Knowing these sorts of relationships between flora and fauna is what makes a true eco-steward."
+];
+
 const TUTORIAL_TIPS = {
   // ===== INTRODUCTION SEQUENCE =====
   welcome: {
     id: 'welcome',
     trigger: { type: TRIGGER_TYPE.EVENT, event: TUTORIAL_EVENTS.GAME_START },
-    title: "Kia ora! Welcome to Mauri",
+    title: "Kia ora! And welcome to the glacial Alps.",
     content: [
-      "I'm Te Whē, the mantis, and I will be your guide.",
-      "Let me show you how to become a great kaitiaki!"
+      "I'm Te Whē, the mantis, and I will be your guide!",
+      "Your role in Avian Age is to become a responsible kaitiaki of our ancient land."
     ],
     guidePosition: 'center',
     highlight: null,
@@ -56,11 +53,11 @@ const TUTORIAL_TIPS = {
   goal_intro: {
     id: 'goal_intro',
     trigger: { type: TRIGGER_TYPE.IMMEDIATE },
-    title: "Your Mission",
+    title: "The Upland Moa need your help!",
     content: [
-      "The Upland Moa need your help to survive.",
-      "Guide them through the seasons, help them find food,",
-      "and protect them from the mighty Pouākai!"
+      "Temperatures were far colder 30,000 years ago.",
+      "The moa need your guidance finding food each season,",
+      "and protection from the mighty Haast's Eagle!"
     ],
     guidePosition: 'topLeft',
     highlight: { type: 'element', target: 'gameArea' },
@@ -145,7 +142,7 @@ const TUTORIAL_TIPS = {
     content: [
       "That's the basics! I'll pop up when something",
       "important happens. Press T anytime to toggle tips.",
-      "Good luck, kaitiaki!"
+      "Good luck, budding eco-guardian!"
     ],
     guidePosition: 'center',
     highlight: null,
@@ -165,9 +162,9 @@ const TUTORIAL_TIPS = {
     },
     title: "Haast's Eagle Attack!",
     content: [
-      "The Pouākai is hunting your moa!",
-      "Create a thunderstorm (🌩️) to distract it,",
-      "or a Fern Shelter (🌴) to create cover."
+      "The Pouākai is hunting the upland moa!",
+      "Create a thunderstorm [🌩️] to distract it,",
+      "or a Fern Shelter [🌴] to create cover."
     ],
     guidePosition: 'bottomRight',
     highlight: { type: 'element', target: 'StormButton' },
@@ -189,7 +186,7 @@ const TUTORIAL_TIPS = {
     content: [
       "The eagle caught a moa... but don't lose hope!",
       "Place Kawakawa [🌿] to help moa feed and breed.",
-      "When moa have are food-secure and not threatened, they can reproduce."
+      "When moa are food-secure and not threatened, they can reproduce."
     ],
     guidePosition: 'center',
     highlight: { type: 'element', target: 'kawakawaButton' },
@@ -226,11 +223,7 @@ const TUTORIAL_TIPS = {
       event: TUTORIAL_EVENTS.EAGLE_SPAWNED 
     },
     title: "A New Predator Arrives",
-    content: [
-      "The Moa population is starting to thrive! But be wary..",
-      "Haast's Eagle evolved gigantism with Moa, to eat 'em!",
-      "Knowing these sorts of relationships between flora and fauna is what makes a true eco-steward."
-    ],
+    content: _PREDATOR_PREY_CONTENT,
     guidePosition: 'center',
     highlight: null,
     nextTip: null,
@@ -248,7 +241,7 @@ const TUTORIAL_TIPS = {
     title: "An Egg!",
     content: [
       "A moa has laid an egg! Keep it safe.",
-      "Nesting Sites (🪺) speed up incubation",
+      "Nesting Sites [🪺] speed up incubation",
       "and provide extra protection."
     ],
     guidePosition: 'left',
@@ -274,7 +267,7 @@ const TUTORIAL_TIPS = {
     guidePosition: 'center',
     highlight: null,
     nextTip: null,
-    pauseGame: true,  // FIXED: was false
+    pauseGame: true,
     showOnce: true,
     priority: 3
   },
@@ -290,7 +283,7 @@ const TUTORIAL_TIPS = {
     title: "Mauri Running Low",
     content: [
       "Your Mauri is getting low!",
-      "complete goals for bonus Mauri."
+      "Complete goals for a boost."
     ],
     guidePosition: 'topLeft',
     highlight: { type: 'element', target: 'mauriDisplay' },
@@ -307,11 +300,7 @@ const TUTORIAL_TIPS = {
       condition: (game) => game._cachedMoaCount >= 12 
     },
     title: "The Population Grows!",
-    content: [
-      "The Moa population is starting to thrive! But be wary..",
-      "Haast's Eagle evolved gigantism with Moa, to eat 'em!",
-      "Knowing these sorts of relationships between flora and fauna is what makes a true eco-steward."
-    ],
+    content: _PREDATOR_PREY_CONTENT,
     guidePosition: 'center',
     highlight: null,
     nextTip: null,
@@ -350,10 +339,7 @@ const TUTORIAL_TIPS = {
   // ===== TIMED TIPS =====
   migration_reminder: {
     id: 'migration_reminder',
-    trigger: { 
-      type: TRIGGER_TYPE.TIME, 
-      delay: 2400
-    },
+    trigger: { type: TRIGGER_TYPE.TIME, delay: 2400 },
     title: "Migration Patterns",
     content: [
       "These moa will migrate to find food.",
@@ -363,20 +349,17 @@ const TUTORIAL_TIPS = {
     guidePosition: 'bottomLeft',
     highlight: { type: 'element', target: 'migrationHint' },
     nextTip: null,
-    pauseGame: true,  // FIXED: was false
+    pauseGame: true,
     showOnce: true,
     priority: 4
   },
   
   waterhole_tip: {
     id: 'waterhole_tip',
-    trigger: { 
-      type: TRIGGER_TYPE.TIME, 
-      delay: 3600
-    },
+    trigger: { type: TRIGGER_TYPE.TIME, delay: 3600 },
     title: "Waterholes",
     content: [
-      "Waterholes (💧) slow down hunger",
+      "Waterholes [💧] slow down hunger",
       "and attract moa to rest.",
       "Great for keeping moa in safe areas!"
     ],
@@ -423,65 +406,45 @@ class TutorialUIMapper {
     const config = this.config;
     const layout = ui.layout;
     
+    // Tool buttons by name
+    const toolButtons = {
+      kawakawaButton: 0, shelterButton: 1, nestButton: 2,
+      StormButton: 3, waterholeButton: 4, harakekeButton: 5
+    };
+    if (target in toolButtons) return this._getToolButtonBounds(toolButtons[target]);
+    
     switch (target) {
       case 'topBar':
         return { x: ui.topBar.x, y: ui.topBar.y, w: ui.topBar.width, h: ui.topBar.height };
-        
       case 'topBarContent':
         return { x: layout.mauriX - 10, y: 15, w: layout.timerX + 130 - layout.mauriX + 20, h: 80 };
-        
       case 'sidebar':
         return { x: ui.sidebar.x, y: ui.sidebar.y, w: ui.sidebar.width, h: ui.sidebar.height };
-        
       case 'gameArea':
         return { x: config.gameAreaX, y: config.gameAreaY, w: config.gameAreaWidth, h: config.gameAreaHeight };
-        
       case 'bottomBar':
         return { x: ui.bottomBar.x, y: ui.bottomBar.y, w: ui.bottomBar.width, h: ui.bottomBar.height };
-      
       case 'mauriDisplay':
         return { x: layout.mauriX, y: 20, w: 180, h: 70 };
-        
       case 'seasonDisplay':
         return { x: layout.seasonX, y: 20, w: 280, h: 70 };
-        
       case 'timerDisplay':
         return { x: layout.timerX, y: 20, w: 120, h: 70 };
-        
       case 'pauseButton':
         return { x: layout.pauseBtnX, y: layout.pauseBtnY, w: layout.pauseBtnSize, h: layout.pauseBtnSize };
-        
       case 'migrationHint':
         return { x: layout.migrationHintX, y: 110, w: layout.migrationHintWidth, h: 50 };
-      
       case 'toolbar':
         const toolbarW = (layout.toolbarBtnCount - 1) * layout.toolbarSpacing + layout.toolbarBtnSize;
         return { x: layout.toolbarStartX - 10, y: ui.toolbarY - 10, w: toolbarW + 20, h: layout.toolbarBtnSize + 30 };
-      
-      case 'kawakawaButton':
-        return this._getToolButtonBounds(0);
-      case 'shelterButton':
-        return this._getToolButtonBounds(1);
-      case 'nestButton':
-        return this._getToolButtonBounds(2);
-      case 'StormButton':
-        return this._getToolButtonBounds(3);
-      case 'waterholeButton':
-        return this._getToolButtonBounds(4);
-      case 'harakekeButton':
-        return this._getToolButtonBounds(5);
-      
       case 'goalsPanel':
-        return { x: ui.sidebar.x + 20, y: 20, w: ui.sidebar.width - 40, h: 30 + this.ui.game.goals.length * 28 };
-        
+        return { x: ui.sidebar.x + 20, y: 20, w: ui.sidebar.width - 40, h: 30 + ui.game.goals.length * 28 };
       case 'eventLog':
-        const goalsHeight = 30 + this.ui.game.goals.length * 28;
+        const goalsHeight = 30 + ui.game.goals.length * 28;
         return { x: ui.sidebar.x + 20, y: goalsHeight + 35, w: ui.sidebar.width - 40, h: 320 };
-        
       case 'populationPanel':
-        const eventLogY = 30 + this.ui.game.goals.length * 28 + 35 + 320;
+        const eventLogY = 30 + ui.game.goals.length * 28 + 35 + 320;
         return { x: ui.sidebar.x + 20, y: eventLogY + 15, w: ui.sidebar.width - 40, h: 220 };
-        
       default:
         console.warn(`TutorialUIMapper: Unknown target "${target}"`);
         return null;
@@ -511,15 +474,12 @@ class TutorialManager {
     this.shownTips = new Set();
     this.pendingTips = [];
     this.gameTimeAtStart = 0;
-    
     this.eventQueue = [];
     
     // Timing
     this.tipDisplayTime = 0;
     this.minTimeBetweenTips = 180;
     this.lastTipTime = -this.minTimeBetweenTips;
-    
-    // Cooldowns
     this.tipCooldowns = {};
     
     // UI mapping
@@ -536,30 +496,16 @@ class TutorialManager {
     
     // Pause tracking
     this._pausedByTutorial = false;
-    this._previousGameState = null;
     
     // Guide sprite
     this.guideSprite = null;
     this._guideWobble = 0;
   }
   
-  /**
-   * Load the mantis sprite - call this in preload()
-   */
-  static loadSprite() {
-    return loadImage('sprites/mantis_talk.png');
-  }
-  
-  /**
-   * Set the guide sprite after loading
-   */
   setGuideSprite(sprite) {
     this.guideSprite = sprite;
   }
   
-  /**
-   * Initialize tutorial system
-   */
   init() {
     this.shownTips.clear();
     this.pendingTips = [];
@@ -569,41 +515,31 @@ class TutorialManager {
     this.lastTipTime = -this.minTimeBetweenTips;
     this.tipCooldowns = {};
     this._pausedByTutorial = false;
-    this._previousGameState = null;
     
     if (this.game.ui) {
-      this.uiMapper = new TutorialUIMapper(this.game.ui, this.game.config || CONFIG);
+      this.uiMapper = new TutorialUIMapper(this.game.ui, CONFIG);
     }
     
-    if (this.enabled) {
-      this.fireEvent(TUTORIAL_EVENTS.GAME_START);
-    }
+    if (this.enabled) this.fireEvent(TUTORIAL_EVENTS.GAME_START);
   }
   
-  setEnabled(enabled) {
-    this.enabled = enabled;
-    if (!enabled) {
-      this.dismissCurrentTip();
-    }
+  toggle() {
+    this.enabled = !this.enabled;
+    if (!this.enabled) this.dismissCurrentTip();
     this.game.addNotification(
-      enabled ? "Tutorial enabled" : "Tutorial disabled (press T to re-enable)", 
+      this.enabled ? "Tutorial enabled" : "Tutorial disabled (press T to re-enable)", 
       'info'
     );
   }
   
-  toggle() {
-    this.setEnabled(!this.enabled);
-  }
-  
   skipTutorial() {
     this.enabled = false;
-    this.pendingTips = [];  // ADD: Clear pending tips queue
-    this.eventQueue = [];   // ADD: Clear event queue
+    this.pendingTips = [];
+    this.eventQueue = [];
     this.dismissCurrentTip();
     this.game.addNotification("Tutorial skipped. Press T anytime for tips!", 'info');
   }
 
-  
   // ============================================
   // EVENT SYSTEM
   // ============================================
@@ -612,27 +548,27 @@ class TutorialManager {
     if (!this.enabled) return;
     
     if (this.active) {
-      this.eventQueue.push({ type: eventType, data: data, time: this.game.playTime });
+      this.eventQueue.push({ type: eventType, data, time: this.game.playTime });
       return;
     }
     
     this._checkEventTriggers(eventType, data);
   }
   
+  // Unified guard: returns true if this tip should be skipped
+  _shouldSkipTip(tipId, tip) {
+    if (tip.showOnce && this.shownTips.has(tipId)) return true;
+    if (this.tipCooldowns[tipId] && this.game.playTime < this.tipCooldowns[tipId]) return true;
+    return false;
+  }
+  
   _checkEventTriggers(eventType, data) {
     for (const tipId in TUTORIAL_TIPS) {
       const tip = TUTORIAL_TIPS[tipId];
-      
-      if (tip.showOnce && this.shownTips.has(tipId)) continue;
-      
-      if (this.tipCooldowns[tipId] && this.game.playTime < this.tipCooldowns[tipId]) {
-        continue;
-      }
-      
-      if (tip.trigger.type === TRIGGER_TYPE.EVENT && tip.trigger.event === eventType) {
-        if (tip.trigger.minGameTime && this.game.playTime < tip.trigger.minGameTime) continue;
-        this._queueTip(tipId, data);
-      }
+      if (this._shouldSkipTip(tipId, tip)) continue;
+      if (tip.trigger.type !== TRIGGER_TYPE.EVENT || tip.trigger.event !== eventType) continue;
+      if (tip.trigger.minGameTime && this.game.playTime < tip.trigger.minGameTime) continue;
+      this._queueTip(tipId, data);
     }
   }
   
@@ -643,7 +579,7 @@ class TutorialManager {
   update(dt = 1) {
     if (!this.enabled && !this.active) return;
     
-    // Update animations
+    // Animations always update
     this.highlightPulse += 0.02 * dt;
     this._guideWobble += 0.04 * dt;
     this._updateFade(dt);
@@ -655,59 +591,41 @@ class TutorialManager {
     
     if (!this.enabled) return;
     
-    this._processEventQueue();
-    this._checkTimeTriggers();
-    
-    if (frameCount % 30 === 0) {
-      this._checkConditionTriggers();
-    }
-    
-    if (this.pendingTips.length > 0 && 
-        this.game.playTime - this.lastTipTime >= this.minTimeBetweenTips) {
-      this._showNextTip();
-    }
-  }
-  
-  _processEventQueue() {
+    // Process queued events
     while (this.eventQueue.length > 0) {
       const event = this.eventQueue.shift();
       this._checkEventTriggers(event.type, event.data);
     }
-  }
-  
-  _checkTimeTriggers() {
-    const gameTime = this.game.playTime - this.gameTimeAtStart;
     
+    // Check time-based triggers
+    const gameTime = this.game.playTime - this.gameTimeAtStart;
     for (const tipId in TUTORIAL_TIPS) {
       const tip = TUTORIAL_TIPS[tipId];
-      
-      if (tip.showOnce && this.shownTips.has(tipId)) continue;
-      
+      if (this._shouldSkipTip(tipId, tip)) continue;
       if (tip.trigger.type === TRIGGER_TYPE.TIME && gameTime >= tip.trigger.delay) {
         this._queueTip(tipId);
       }
     }
-  }
-  
-  _checkConditionTriggers() {
-    for (const tipId in TUTORIAL_TIPS) {
-      const tip = TUTORIAL_TIPS[tipId];
-      
-      if (tip.showOnce && this.shownTips.has(tipId)) continue;
-      
-      if (this.tipCooldowns[tipId] && this.game.playTime < this.tipCooldowns[tipId]) {
-        continue;
-      }
-      
-      if (tip.trigger.type === TRIGGER_TYPE.CONDITION) {
+    
+    // Check condition triggers (throttled)
+    if (frameCount % 30 === 0) {
+      for (const tipId in TUTORIAL_TIPS) {
+        const tip = TUTORIAL_TIPS[tipId];
+        if (this._shouldSkipTip(tipId, tip)) continue;
+        if (tip.trigger.type !== TRIGGER_TYPE.CONDITION) continue;
         try {
-          if (tip.trigger.condition(this.game)) {
-            this._queueTip(tipId);
-          }
+          if (tip.trigger.condition(this.game)) this._queueTip(tipId);
         } catch (e) {
           console.warn(`Tutorial condition error for ${tipId}:`, e);
         }
       }
+    }
+    
+    // Show next queued tip if enough time has passed
+    if (this.pendingTips.length > 0 && 
+        this.game.playTime - this.lastTipTime >= this.minTimeBetweenTips) {
+      const queued = this.pendingTips.shift();
+      this._showTip(queued.id, queued.data);
     }
   }
   
@@ -723,8 +641,8 @@ class TutorialManager {
     
     this.pendingTips.push({
       id: tipId,
-      tip: tip,
-      data: data,
+      tip,
+      data,
       priority: tip.priority || 5,
       queuedAt: this.game.playTime
     });
@@ -732,41 +650,27 @@ class TutorialManager {
     this.pendingTips.sort((a, b) => a.priority - b.priority);
   }
   
-  _showNextTip() {
-    if (this.pendingTips.length === 0) return;
-    
-    const queued = this.pendingTips.shift();
-    this._showTip(queued.id, queued.data);
-  }
-  
   _showTip(tipId, data = {}) {
     const tip = TUTORIAL_TIPS[tipId];
     if (!tip) return;
     
-    this.currentTip = { ...tip, data: data };
+    this.currentTip = { ...tip, data };
     this.active = true;
     this.tipDisplayTime = 0;
     this.shownTips.add(tipId);
     this.lastTipTime = this.game.playTime;
     
     if (tip.trigger.cooldown) {
-        this.tipCooldowns[tipId] = this.game.playTime + tip.trigger.cooldown;
+      this.tipCooldowns[tipId] = this.game.playTime + tip.trigger.cooldown;
     }
     
     this.targetFadeAlpha = 255;
     
-    // Play tutorial tip sound
-    if (typeof audioManager !== 'undefined' && audioManager) {
-        audioManager.playTutorialTip();
-    }
+    if (audioManager) audioManager.playTutorialTip();
     
-    // Pause handling
-    if (tip.pauseGame) {
-        this._previousGameState = this.game.state;
-        if (this.game.state === GAME_STATE.PLAYING) {
-        this.game.state = GAME_STATE.PAUSED;
-        this._pausedByTutorial = true;
-        }
+    if (tip.pauseGame && this.game.state === GAME_STATE.PLAYING) {
+      this.game.state = GAME_STATE.PAUSED;
+      this._pausedByTutorial = true;
     }
   }
   
@@ -779,33 +683,25 @@ class TutorialManager {
     
     const tip = this.currentTip;
     
-    // Proper unpause handling
-    if (this._pausedByTutorial) {
-        if (this.game.state === GAME_STATE.PAUSED) {
-        this.game.state = GAME_STATE.PLAYING;
-        }
-        this._pausedByTutorial = false;
+    if (this._pausedByTutorial && this.game.state === GAME_STATE.PAUSED) {
+      this.game.state = GAME_STATE.PLAYING;
     }
-    this._previousGameState = null;
+    this._pausedByTutorial = false;
     
-    // Check for chained next tip - ONLY IF STILL ENABLED
-    if (this.enabled && tip.nextTip) {  // <-- ADD this.enabled check
-        const nextTip = TUTORIAL_TIPS[tip.nextTip];
-        if (nextTip && nextTip.trigger.type === TRIGGER_TYPE.IMMEDIATE) {
+    // Chain to next tip if still enabled
+    if (this.enabled && tip.nextTip) {
+      const nextTip = TUTORIAL_TIPS[tip.nextTip];
+      if (nextTip && nextTip.trigger.type === TRIGGER_TYPE.IMMEDIATE) {
         this.currentTip = null;
         this.active = false;
         this._showTip(tip.nextTip);
         return;
-        }
+      }
     }
     
     this.targetFadeAlpha = 0;
     this.currentTip = null;
     this.active = false;
-  }
-  
-  advanceToNextTip() {
-    this.dismissCurrentTip();
   }
   
   _updateFade(dt) {
@@ -824,45 +720,22 @@ class TutorialManager {
   handleClick(mx, my) {
     if (!this.active) return false;
     
-    if (this.nextButtonBounds) {
-      const btn = this.nextButtonBounds;
-      if (mx >= btn.x && mx <= btn.x + btn.w && my >= btn.y && my <= btn.y + btn.h) {
-        this.advanceToNextTip();
-        return true;
-      }
-    }
-    
-    if (this.skipButtonBounds) {
-      const btn = this.skipButtonBounds;
-      if (mx >= btn.x && mx <= btn.x + btn.w && my >= btn.y && my <= btn.y + btn.h) {
-        this.skipTutorial();
-        return true;
-      }
-    }
-    
-    return true;
-  }
-  
-  handleKey(key) {
-    if (!this.active) {
-      if (key === 't' || key === 'T') {
-        this.toggle();
-        return true;
-      }
-      return false;
-    }
-    
-    if (key === 'Enter' || key === ' ') {
-      this.advanceToNextTip();
+    if (this._hitTest(this.nextButtonBounds, mx, my)) {
+      this.dismissCurrentTip();
       return true;
     }
     
-    if (key === 'Escape') {
+    if (this._hitTest(this.skipButtonBounds, mx, my)) {
       this.skipTutorial();
       return true;
     }
     
-    return true;
+    return true; // Consume click when tutorial active
+  }
+  
+  _hitTest(bounds, mx, my) {
+    return bounds && mx >= bounds.x && mx <= bounds.x + bounds.w && 
+           my >= bounds.y && my <= bounds.y + bounds.h;
   }
   
   // ============================================
@@ -871,42 +744,31 @@ class TutorialManager {
   
   render() {
     if (this.fadeAlpha < 1 && !this.active) return;
+    if (!this.active || !this.currentTip) return;
     
     const alpha = this.fadeAlpha;
     
-    if (this.active && this.currentTip) {
-      this._renderOverlay(alpha);
-      this._renderHighlights(alpha);
-      this._renderTipPanel(alpha);
-    }
-  }
-  
-  _renderOverlay(alpha) {
+    // Overlay
     noStroke();
     fill(0, 0, 0, alpha * 0.5);
     rect(0, 0, CONFIG.canvasWidth, CONFIG.canvasHeight);
-  }
-  
-  _renderHighlights(alpha) {
+    
+    // Highlights
     const tip = this.currentTip;
+    if (tip.highlight) this._renderHighlightBox(tip.highlight, alpha);
+    if (tip.highlightAlt) this._renderHighlightBox(tip.highlightAlt, alpha * 0.7);
     
-    if (tip.highlight) {
-      this._renderHighlightBox(tip.highlight, alpha);
-    }
-    
-    if (tip.highlightAlt) {
-      this._renderHighlightBox(tip.highlightAlt, alpha * 0.7);
-    }
+    // Tip panel
+    this._renderTipPanel(alpha);
   }
   
   _renderHighlightBox(highlight, alpha) {
     if (!this.uiMapper) return;
-    
     const bounds = this.uiMapper.getBounds(highlight.target);
     if (!bounds) return;
     
     const pulse = sin(this.highlightPulse) * 0.3 + 0.7;
-    const expand =  sin(this.highlightPulse * 2) * 2;
+    const expand = sin(this.highlightPulse * 2) * 2;
     
     push();
     
@@ -917,24 +779,27 @@ class TutorialManager {
     rect(bounds.x - 4, bounds.y - 4, bounds.w + 8, bounds.h + 8, 8);
     blendMode(BLEND);
     
-    // Glowing border
+    // Glowing borders (inner + outer)
     noFill();
-    stroke(180, 215, 190, alpha * pulse);
-    strokeWeight(3);
-    rect(bounds.x - expand, bounds.y - expand, bounds.w + expand * 2, bounds.h + expand * 2, 10);
-    
-    // Outer glow
-    stroke(255, 255, 200, alpha * 0.4 * pulse);
-    strokeWeight(6);
-    rect(bounds.x - expand - 4, bounds.y - expand - 4, bounds.w + expand * 2 + 8, bounds.h + expand * 2 + 8, 12);
+    const glowLayers = [
+      { color: [180, 215, 190, alpha * pulse], weight: 3, pad: 0, radius: 10 },
+      { color: [255, 255, 200, alpha * 0.4 * pulse], weight: 6, pad: 4, radius: 12 }
+    ];
+    for (const layer of glowLayers) {
+      stroke(...layer.color);
+      strokeWeight(layer.weight);
+      rect(
+        bounds.x - expand - layer.pad, bounds.y - expand - layer.pad,
+        bounds.w + expand * 2 + layer.pad * 2, bounds.h + expand * 2 + layer.pad * 2,
+        layer.radius
+      );
+    }
     
     pop();
   }
   
   _renderTipPanel(alpha) {
     const tip = this.currentTip;
-    
-    // Calculate panel dimensions
     const panelWidth = 500;
     const content = Array.isArray(tip.content) ? tip.content : [tip.content];
     const lineHeight = 24;
@@ -942,14 +807,12 @@ class TutorialManager {
     
     const pos = this._getTipPanelPosition(tip.guidePosition, panelWidth, panelHeight);
     
-    // Sprite dimensions
-    const spriteSize = 180;
+    // Guide sprite
+    const spriteSize = 200;
     const spriteX = pos.x - spriteSize * 0.3;
     const spriteY = pos.y + panelHeight * 0.5 - spriteSize * 0.5;
     
     push();
-    
-
     
     // Panel background
     fill(25, 40, 32, alpha * 0.95);
@@ -966,9 +829,7 @@ class TutorialManager {
     fill(200, 245, 210, alpha);
     textSize(20);
     textAlign(LEFT, CENTER);
-    if (typeof GroceryRounded !== 'undefined') {
-      textFont(GroceryRounded);
-    }
+    if (typeof GroceryRounded !== 'undefined') textFont(GroceryRounded);
     text(tip.title, pos.x + 25, pos.y + 25);
     textFont('OpenDyslexic');
     
@@ -988,102 +849,65 @@ class TutorialManager {
     
     pop();
     
-    // Render guide sprite OUTSIDE the panel push/pop
+    // Guide sprite (outside push/pop)
     this._renderGuide(spriteX, spriteY, alpha, spriteSize);
   }
   
   _renderGuide(x, y, alpha, size) {
-    if (!this.guideSprite) {
-      // Fallback: draw a simple placeholder
-      this._renderGuidePlaceholder(x, y, alpha, size);
-      return;
-    }
-    
     push();
-    
-    // Gentle wobble animation
-    const wobbleY = sin(this._guideWobble) * 3;
-    const wobbleRotation = sin(this._guideWobble * 0.7) * 0.03;
-    
     imageMode(CENTER);
-    tint(255, alpha);
     
-    translate((x + size * 0.5)-132, y + size * 0.5 );
-    //rotate(wobbleRotation);
-    
-    image(this.guideSprite, 0, 0, size, size);
-    
-    pop();
-  }
-  
-  _renderGuidePlaceholder(x, y, alpha, size) {
-    // Simple colored circle as fallback if sprite not loaded
-    push();
-    
-    const wobbleY = sin(this._guideWobble) * 3;
-    
-    fill(80, 150, 80, alpha);
-    stroke(60, 120, 60, alpha);
-    strokeWeight(2);
-    ellipse(x + size * 0.5, y + size * 0.5 + wobbleY, size * 0.7, size * 0.8);
-    
-    // Simple eyes
-    fill(20, 20, 20, alpha);
-    noStroke();
-    ellipse(x + size * 0.35, y + size * 0.35 + wobbleY, size * 0.12, size * 0.15);
-    ellipse(x + size * 0.65, y + size * 0.35 + wobbleY, size * 0.12, size * 0.15);
-    
-    // Eye highlights
-    fill(255, 255, 255, alpha * 0.7);
-    ellipse(x + size * 0.33, y + size * 0.32 + wobbleY, size * 0.05, size * 0.06);
-    ellipse(x + size * 0.63, y + size * 0.32 + wobbleY, size * 0.05, size * 0.06);
+    if (this.guideSprite) {
+      tint(255, alpha);
+      image(this.guideSprite, (x + size * 0.5) - 150, y + size * 0.5, size, size);
+    } else {
+      // Minimal fallback
+      fill(80, 150, 80, alpha);
+      stroke(60, 120, 60, alpha);
+      strokeWeight(2);
+      ellipse(x + size * 0.5, y + size * 0.5, size * 0.7, size * 0.8);
+    }
     
     pop();
   }
   
   _renderTipButtons(x, y, panelWidth, alpha, tip) {
-    const btnWidth = 110;
     const btnHeight = 36;
     const btnY = y + 12;
     
     // "Next" / "Got it" button
-    const nextBtnX = x + panelWidth - btnWidth - 25;
+    const nextBtnW = 110;
+    const nextBtnX = x + panelWidth - nextBtnW - 25;
     const nextLabel = tip.nextTip ? "Next →" : "Got it!";
-    
-    const hoverNext = mouseX >= nextBtnX && mouseX <= nextBtnX + btnWidth &&
-                      mouseY >= btnY && mouseY <= btnY + btnHeight;
+    const hoverNext = this._hitTest({ x: nextBtnX, y: btnY, w: nextBtnW, h: btnHeight }, mouseX, mouseY);
     
     fill(hoverNext ? [70, 135, 80, alpha] : [50, 110, 60, alpha]);
     stroke(100, 170, 110, alpha);
     strokeWeight(hoverNext ? 2 : 1);
-    rect(nextBtnX, btnY, btnWidth, btnHeight, 8);
+    rect(nextBtnX, btnY, nextBtnW, btnHeight, 8);
     
     fill(255, 255, 255, alpha);
     textSize(16);
     textAlign(CENTER, CENTER);
-    text(nextLabel, nextBtnX + btnWidth / 2, btnY + btnHeight / 2);
+    text(nextLabel, nextBtnX + nextBtnW / 2, btnY + btnHeight / 2);
     
-    this.nextButtonBounds = { x: nextBtnX, y: btnY, w: btnWidth, h: btnHeight };
+    this.nextButtonBounds = { x: nextBtnX, y: btnY, w: nextBtnW, h: btnHeight };
     
     // "Skip Tutorial" button
     const skipBtnX = x + 25;
-    const skipBtnWidth = 100;
-    
-    const hoverSkip = mouseX >= skipBtnX && mouseX <= skipBtnX + skipBtnWidth &&
-                      mouseY >= btnY && mouseY <= btnY + btnHeight;
+    const skipBtnW = 100;
+    const hoverSkip = this._hitTest({ x: skipBtnX, y: btnY, w: skipBtnW, h: btnHeight }, mouseX, mouseY);
     
     fill(hoverSkip ? [55, 45, 45, alpha] : [35, 35, 35, alpha * 0.8]);
     stroke(70, 60, 60, alpha * 0.8);
     strokeWeight(1);
-    rect(skipBtnX, btnY, skipBtnWidth, btnHeight, 8);
+    rect(skipBtnX, btnY, skipBtnW, btnHeight, 8);
     
     fill(140, 130, 130, alpha);
     textSize(12);
-    text("Skip Tutorial", skipBtnX + skipBtnWidth / 2, btnY + btnHeight / 2);
+    text("Skip Tutorial", skipBtnX + skipBtnW / 2, btnY + btnHeight / 2);
     
-    this.skipButtonBounds = { x: skipBtnX, y: btnY, w: skipBtnWidth, h: btnHeight };
-    
-    
+    this.skipButtonBounds = { x: skipBtnX, y: btnY, w: skipBtnW, h: btnHeight };
   }
   
   _getTipPanelPosition(guidePosition, panelWidth, panelHeight) {
@@ -1093,39 +917,19 @@ class TutorialManager {
     const topMargin = CONFIG.topBarHeight + 40;
     const bottomMargin = CONFIG.bottomBarHeight + 40;
     
-    switch (guidePosition) {
-      case 'center':
-        return { x: (cw - panelWidth) / 3, y: (ch - panelHeight) / 2 };
-      case 'left':
-        return { x: (CONFIG.gameAreaWidth - panelWidth*1.2), y: (ch - panelHeight) / 2 };
-      case 'right':
-        return { x: CONFIG.rightSidebarX - panelWidth - margin, y: (ch - panelHeight) / 2 };
-      case 'top':
-        return { x: (CONFIG.gameAreaWidth - panelWidth) / 2, y: topMargin };
-      case 'bottom':
-        return { x: (CONFIG.gameAreaWidth - panelWidth) / 2, y: ch - panelHeight - bottomMargin };
-      case 'topLeft':
-        return { x: (CONFIG.gameAreaWidth - panelWidth*1.2), y: topMargin };
-      case 'topRight':
-        return { x: CONFIG.rightSidebarX - panelWidth - margin, y: topMargin };
-      case 'bottomLeft':
-        return { x: (CONFIG.gameAreaWidth - panelWidth*1.2), y: ch - panelHeight - bottomMargin };
-      case 'bottomRight':
-        return { x: CONFIG.rightSidebarX - panelWidth - margin, y: ch - panelHeight - bottomMargin };
-      default:
-        return { x: (cw - panelWidth) / 2, y: (ch - panelHeight) / 2 };
-    }
-  }
-  
-  // ============================================
-  // UTILITY METHODS
-  // ============================================
-  
-  triggerTip(tipId) {
-    if (TUTORIAL_TIPS[tipId]) {
-      this.shownTips.delete(tipId);
-      this._showTip(tipId);
-    }
+    const positions = {
+      center:      { x: (cw - panelWidth) / 3, y: (ch - panelHeight) / 2 },
+      left:        { x: CONFIG.gameAreaWidth - panelWidth * 1.2, y: (ch - panelHeight) / 2 },
+      right:       { x: CONFIG.rightSidebarX - panelWidth - margin, y: (ch - panelHeight) / 2 },
+      top:         { x: (CONFIG.gameAreaWidth - panelWidth) / 2, y: topMargin },
+      bottom:      { x: (CONFIG.gameAreaWidth - panelWidth) / 2, y: ch - panelHeight - bottomMargin },
+      topLeft:     { x: CONFIG.gameAreaWidth - panelWidth * 1.2, y: topMargin },
+      topRight:    { x: CONFIG.rightSidebarX - panelWidth - margin, y: topMargin },
+      bottomLeft:  { x: CONFIG.gameAreaWidth - panelWidth * 1.2, y: ch - panelHeight - bottomMargin },
+      bottomRight: { x: CONFIG.rightSidebarX - panelWidth - margin, y: ch - panelHeight - bottomMargin }
+    };
+    
+    return positions[guidePosition] || positions.center;
   }
   
   reset() {
@@ -1136,16 +940,5 @@ class TutorialManager {
     this.enabled = true;
     this.tipCooldowns = {};
     this._pausedByTutorial = false;
-    this._previousGameState = null;
-  }
-  
-  getProgress() {
-    const total = Object.keys(TUTORIAL_TIPS).length;
-    const shown = this.shownTips.size;
-    return { shown, total, percentage: Math.round((shown / total) * 100) };
-  }
-  
-  hasShown(tipId) {
-    return this.shownTips.has(tipId);
   }
 }

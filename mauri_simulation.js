@@ -234,7 +234,7 @@ class Simulation {
     if (audioManager) audioManager.playEagleCatch();
     
     eagle.kills++;
-    eagle.hunger = Math.max(0, eagle.hunger - 60);
+    eagle.hunger = Math.max(0, eagle.hunger - 90);
     eagle.vel.mult(0.1);
     eagle.hunting = false;
     eagle.target = null;

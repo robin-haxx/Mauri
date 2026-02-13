@@ -41,7 +41,7 @@ function preload(){
 // CONFIGURATION
 // ============================================
 const CONFIG = {
-  version: '0.8.6',
+  version: 'alpha 0.9.0',
   canvasWidth: 1920,
   canvasHeight: 1080,
   
@@ -82,25 +82,25 @@ const CONFIG = {
   showDebug: false,
   showHungerBars: true,
   
-  initialMoaCount: 6,
+  initialMoaCount: 7,
   maxMoaPopulation: 60,
   eagleCount: 2,
   startingSpecies: 'upland_moa',
   
   plantDensity: 0.006,
   
-  startingMauri: 50,
+  startingMauri: 60,
   targetPopulation: 30,
   survivalTimeGoal: 3600,
   
   eggIncubationTime: 500,
-  securityTimeToLay: 900,
-  securityTimeVariation: 400, 
+  securityTimeToLay: 800,
+  securityTimeVariation: 200, 
   layingHungerThreshold: 28,
   
-  seasonDuration: 1800, 
+  seasonDuration: 2100, 
   
-  eagleSpawnMilestones: [10, 15, 20, 25, 35, 45, 55]
+  eagleSpawnMilestones: [12, 18, 25, 35, 45, 55]
 };
 
 // ============================================
@@ -602,7 +602,7 @@ class Game {
     
     if (this._cachedMoaCount === 0 && this._cachedEggCount === 0) {
       this.state = GAME_STATE.LOST;
-      this.gameOverReason = "All moa have perished!";
+      this.gameOverReason = "All moa here were hunted...";
       if (audioManager) audioManager.playLoss();
     }
     
@@ -1290,7 +1290,7 @@ function draw() {
     game.render();
   }
   
-  renderFPSCounter();
+  //renderFPSCounter();
 }
 
 function updateFPS() {

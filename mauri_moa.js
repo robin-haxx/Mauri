@@ -14,10 +14,10 @@ const MOA_STATE = {
 
 const MOA_AGE = {
   JUVENILE_MAX: 600,
-  ADULT_MIN: 1200,
-  MATING_AGE: 1200,
+  ADULT_MIN: 900,
+  MATING_AGE: 900,
   SIZE_JUVENILE: 0.6,
-  SIZE_ADOLESCENT: 0.8,
+  SIZE_ADOLESCENT: 0.9,
   SIZE_ADULT: 1.0
 };
 
@@ -33,7 +33,7 @@ class Moa extends Boid {
     foragingBonus: 1.0,
     camouflage: 0,
     maxHunger: 100,
-    baseHungerRate: 0.03,
+    baseHungerRate: 0.02,
     hungerThreshold: 35,
     criticalHunger: 80,
     eggCooldownTime: 600,
@@ -42,7 +42,7 @@ class Moa extends Boid {
     matingRange: 15,
     matingDuration: 60,
     pregnancyDuration: 90,
-    matingSearchRadius: 80
+    matingSearchRadius: 100
   };
 
   constructor(x, y, terrain, config, speciesData = null) {

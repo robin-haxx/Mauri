@@ -25,13 +25,13 @@ const MOA_SPECIES = {
     
     // Survival
     maxHunger: 100,
-    baseHungerRate: 0.03,
+    baseHungerRate: 0.02,
     hungerThreshold: 35,
     criticalHunger: 80,
     
     // Reproduction
-    eggCooldownTime: 800,
-    securityTimeBase: 600,
+    eggCooldownTime: 700,
+    securityTimeBase: 500,
     securityTimeVariation: 300,
     
     // Habitat preferences

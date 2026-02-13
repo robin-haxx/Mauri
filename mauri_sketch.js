@@ -89,7 +89,7 @@ const CONFIG = {
   
   plantDensity: 0.006,
   
-  startingMauri: 30,
+  startingMauri: 50,
   targetPopulation: 30,
   survivalTimeGoal: 3600,
   

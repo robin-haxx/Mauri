@@ -13,37 +13,45 @@
   <body>
     <main>
     </main>
-    <!-- Ambience and effects -->
-    <script src="mauri_audio.js"></script>
-    
-    <!-- Core systems -->
-    <script src="mauri_registry.js"></script>
-    <script src="mauri_spatial.js"></script>
-    <script src="mauri_simulation.js"></script>
+<!-- Ambience and effects -->
+<script src="mauri_audio.js"></script>
 
-    <!-- Data definitions -->
-    <script src="mauri_species_data.js"></script>
-    <script src="mauri_entity_sprites.js"></script>
+<!-- Core systems -->
+<script src="mauri_registry.js"></script>
+<script src="mauri_spatial.js"></script>
+<script src="mauri_simulation.js"></script>
 
-    <!-- Terrain and seasons -->
-    <script src="mauri_terrain.js"></script>
-    <script src="mauri_seasons.js"></script>
+<!-- Data definitions -->
+<script src="mauri_species_data.js"></script>
+<script src="mauri_entity_sprites.js"></script>
 
-    <!-- Base classes -->
-    <script src="mauri_boid.js"></script>
+<!-- Terrain and seasons -->
+<script src="mauri_terrain.js"></script>
+<script src="mauri_seasons.js"></script>
 
-    <!-- Entities -->
-    <script src="mauri_moa.js"></script>
-    <script src="mauri_eagle.js"></script>
-    <script src="mauri_egg.js"></script>
-    <script src="mauri_plant.js"></script>
-    <script src="mauri_placeable.js"></script>
+<!-- Base classes -->
+<script src="mauri_boid.js"></script>
 
-    <!-- UI -->
-    <script src="mauri_UI.js"></script>
-    <script src="mauri_tutorial.js"></script>
+<!-- Entities -->
+<script src="mauri_moa.js"></script>
+<script src="mauri_eagle.js"></script>
+<script src="mauri_egg.js"></script>
+<script src="mauri_plant.js"></script>
+<script src="mauri_placeable.js"></script>
 
-    <!-- Main game -->
-    <script src="mauri_sketch.js"></script>
+<!-- UI -->
+<script src="mauri_UI.js"></script>
+<script src="mauri_tutorial.js"></script>
+
+<!-- Level system (NEW — must come after all entity/data scripts) -->
+<script src="mauri_level_format.js"></script>
+<script src="mauri_progress.js"></script>
+
+<!-- Level definitions (NEW — must come after level_format) -->
+<script src="levels/level_01_kahurangi.js"></script>
+<script src="levels/level_02_alpine_lakes.js"></script>
+
+<!-- Main game (last — reads from everything above) -->
+<script src="mauri_sketch.js"></script>
   </body>
 </html>

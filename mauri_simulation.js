@@ -13,12 +13,27 @@ class Simulation {
     this.plants = [];
     this.eggs = [];
     this.placeables = [];
+
+    this.activeSpecies = {moa: {}, eagle: []};
+    this.otherEntities = {};
     
     this.stats = {
       births: 0,
       deaths: 0,
-      starvations: 0
+      starvations: 0,
+      birthsBySpecies: {},
+      deathsBySpecies: {},
+      anySpeciesExtinct: false
+
     };
+
+    this.activeSpecies = { moa: [], eagle: [] };
+    this.otherEntities = {};
+    this._speciesStableTimes = {};
+    this._speciesLastAlive = {};
+
+    this._speciesStableTimes = {};
+    this.speciesLastAlive = {};
 
     const worldWidth = terrain.mapWidth;
     const worldHeight = terrain.mapHeight;
@@ -40,6 +55,8 @@ class Simulation {
       { grid: this.placeableGrid, list: this.placeables },
       { grid: this.eggGrid, list: this.eggs }
     ];
+
+    this.dynamicGrids = {};
 
     // Population cache
     this._cachedAliveMoas = 0;
@@ -84,12 +101,74 @@ class Simulation {
     this._nestCache = [];
     this._nestCacheValid = false;
   }
-  
+
   init() {
     this._tempPos = createVector(0, 0);
     this.spawnPlants();
-    this.spawnMoas(this.config.initialMoaCount, this.config.startingSpecies || null);
+    
+    // Check if the level defines a species distribution
+    const level = this.game.currentLevel;
+    
+    if (level && level.initialSpeciesDistribution) {
+      // Multi-species spawn: distribute according to weights
+      this._spawnDistributedMoas(level.initialSpeciesDistribution);
+    } else {
+      // Single-species spawn (level 1 style)
+      this.spawnMoas(this.config.initialMoaCount, this.config.startingSpecies || null);
+    }
+    
     this.spawnEagles(this.config.eagleCount);
+    
+    // Spawn other entity types if the level defines them
+    if (level && level.initialEntityCounts) {
+      for (const [type, count] of Object.entries(level.initialEntityCounts)) {
+        if (type === 'moa' || type === 'eagle') continue; // Already handled
+        this._spawnOtherEntities(type, count);
+      }
+    }
+  }
+
+  _spawnDistributedMoas(distribution) {
+    const pref = this.seasonManager.getPreferredElevation();
+    
+    for (const [speciesKey, count] of Object.entries(distribution)) {
+      const species = MOA_SPECIES[speciesKey];
+      if (!species) {
+        console.warn(`Unknown moa species in distribution: ${speciesKey}`);
+        continue;
+      }
+      
+      // Use the species' preferred elevation if available, 
+      // otherwise fall back to season default
+      const minElev = species.preferredElevation?.min || pref.min;
+      const maxElev = species.preferredElevation?.max || pref.max;
+      
+      for (let i = 0; i < count; i++) {
+        const pos = this.findWalkablePosition(minElev, maxElev);
+        const moa = this._createFromRegistry('moa', speciesKey, pos.x, pos.y, Moa);
+        if (moa) this.moas.push(moa);
+      }
+    }
+  }
+
+  _spawnOtherEntities(type, count) {
+    // This is a hook for weka, kea, etc.
+    // For now, create the list and spawn using registry
+    if (!this.otherEntities[type]) {
+      this.otherEntities[type] = [];
+    }
+    
+    for (let i = 0; i < count; i++) {
+      const pos = this.findWalkablePosition(0.15, 0.65);
+      const entity = this._createFromRegistry(type, type, pos.x, pos.y, null);
+      
+      if (entity) {
+        this.otherEntities[type].push(entity);
+      } else {
+        console.warn(`Could not create entity of type: ${type}. ` +
+          `Register it in REGISTRY before the level loads.`);
+      }
+    }
   }
   
   // ============================================
@@ -123,6 +202,33 @@ class Simulation {
   // ============================================
   // SPAWNING
   // ============================================
+  
+  setActiveSpecies(species) {
+    this.activeSpecies = species;
+  
+    // Initialize entity lists for non-moa/eagle types
+    if (species.other) {
+      for (const type of species.other) {
+        if (!this.otherEntities[type]) {
+          this.otherEntities[type] = [];
+        }
+      }
+    }
+    
+    // Initialize per-species stats
+    for (const key of (species.moa || [])) {
+      this.stats.birthsBySpecies[key] = 0;
+      this.stats.deathsBySpecies[key] = 0;
+      this._speciesStableTimes[key] = 0;
+      this._speciesLastAlive[key] = false;
+    }
+    if (species.other) {
+      for (const key of species.other) {
+        this._speciesStableTimes[key] = 0;
+        this._speciesLastAlive[key] = false;
+      }
+    }
+  }
   
   spawnPlants() {
     const spawnScale = 2;
@@ -174,7 +280,7 @@ class Simulation {
   spawnEagle(speciesKey = null) {
     let pos = this.findWalkablePosition(0.25, 0.7);
     const eagles = this.eagles;
-    const minDistSq = 6400; // 80^2
+    const minDistSq = 6400;
     
     for (let attempts = 0; attempts < 20; attempts++) {
       let tooClose = false;
@@ -185,6 +291,12 @@ class Simulation {
       }
       if (!tooClose) break;
       pos = this.findWalkablePosition(0.25, 0.7);
+    }
+    
+    // Pick from active eagle species if no specific key given
+    if (!speciesKey && this.activeSpecies.eagle.length > 0) {
+      const eagleSpecies = this.activeSpecies.eagle;
+      speciesKey = eagleSpecies[Math.floor(Math.random() * eagleSpecies.length)];
     }
     
     const eagle = this._createFromRegistry('eagle', speciesKey, pos.x, pos.y, HaastsEagle);
@@ -243,6 +355,12 @@ class Simulation {
     eagle.restTimer = eagle.restDuration;
     eagle.patrolCenter.set(eagle.pos.x, eagle.pos.y);
     
+    // Track per-species death
+    const speciesKey = moa.speciesKey || 'unknown';
+    if (this.stats.deathsBySpecies[speciesKey] !== undefined) {
+      this.stats.deathsBySpecies[speciesKey]++;
+    }
+    
     const moaCount = this.getMoaPopulation();
     
     if (moaCount > this.eagles.length * 2) {
@@ -260,7 +378,6 @@ class Simulation {
     this.stats.deaths++;
     this._invalidateCache();
   }
-  
   // ============================================
   // ENTITY CREATION
   // ============================================
@@ -299,6 +416,30 @@ class Simulation {
     this._cachedAliveEggs = eggCount;
     this._cacheFrame = frameCount;
   }
+
+  // Convenience getters for level 2 goal conditions
+  get wekaStableTime() {
+    return this._speciesStableTimes['weka'] || 0;
+  }
+
+  get keaStableTime() {
+    return this._speciesStableTimes['kea'] || 0;
+  }
+
+  getSpeciesCount(speciesKey) {
+    let count = 0;
+    // Check moas
+    for (let i = 0; i < this.moas.length; i++) {
+      if (this.moas[i].alive && this.moas[i].speciesKey === speciesKey) count++;
+    }
+    // Check other entities
+    if (this.otherEntities[speciesKey]) {
+      for (let i = 0; i < this.otherEntities[speciesKey].length; i++) {
+        if (this.otherEntities[speciesKey][i].alive) count++;
+      }
+    }
+    return count;
+  }
   
   getMoaPopulation() {
     this._ensurePopulationCache();
@@ -316,11 +457,11 @@ class Simulation {
   }
 
   // ============================================
-  // SPATIAL GRID UPDATES (unified)
+  // SPATIAL GRID UPDATES 
   // ============================================
   
   updateSpatialGrids() {
-    // Eagles are always alive (no alive check), others need filtering
+    // Existing grid updates
     for (const pair of this._gridEntityPairs) {
       pair.grid.clear();
       const list = pair.list;
@@ -330,6 +471,20 @@ class Simulation {
         if (!needsAliveCheck || entity.alive) {
           pair.grid.insert(entity);
         }
+      }
+    }
+    
+    // Dynamic grids for other entity types
+    for (const [type, list] of Object.entries(this.otherEntities)) {
+      if (!this._dynamicGrids[type]) {
+        this._dynamicGrids[type] = new SpatialGrid(
+          this.worldWidth, this.worldHeight, 60
+        );
+      }
+      const grid = this._dynamicGrids[type];
+      grid.clear();
+      for (let i = 0; i < list.length; i++) {
+        if (list[i].alive) grid.insert(list[i]);
       }
     }
   }
@@ -346,7 +501,12 @@ class Simulation {
   getClosestPlant(x, y, radius, filter = null) { return this.plantGrid.getClosest(x, y, radius, filter); }
   getClosestMoa(x, y, radius, filter = null) { return this.moaGrid.getClosest(x, y, radius, filter); }
   getClosestPlaceable(x, y, radius, filter = null) { return this.placeableGrid.getClosest(x, y, radius, filter); }
-  
+  // Query method for any entity type
+  getNearbyOfType(type, x, y, radius) {
+    const grid = this._dynamicGrids[type];
+    if (!grid) return [];
+    return grid.getInRadius(x, y, radius);
+  }
   // ============================================
   // NEST CACHE
   // ============================================
@@ -386,7 +546,6 @@ class Simulation {
     
     if (this.seasonManager.justChanged) this.onSeasonChange();
     
-    // Throttled placeable update
     this._placeableTimer += dt;
     if (this._placeableTimer >= 2) {
       this._placeableTimer -= 2;
@@ -408,11 +567,79 @@ class Simulation {
     
     this.updateEagles(mauri, dt);
     
+    // Update other entity types
+    this._updateOtherEntities(mauri, dt);
+    
+    this._updateSpeciesStability(dt);
+    
     this._cleanupTimer += dt;
     if (this._cleanupTimer >= 512) {
       this._cleanupTimer -= 512;
       this.cleanup();
     }
+  }
+
+  _updateOtherEntities(mauri, dt) {
+    for (const [type, list] of Object.entries(this.otherEntities)) {
+      for (let i = 0; i < list.length; i++) {
+        const entity = list[i];
+        if (!entity.alive) continue;
+        
+        // Each entity type must implement behave() and update()
+        // just like moa and eagle do
+        if (entity.behave) entity.behave(this, mauri, this.seasonManager, dt);
+        if (entity.update) entity.update(dt);
+        this.constrainToBounds(entity.pos);
+      }
+    }
+  }
+
+  _updateSpeciesStability(dt) {
+    // Only needed if the level tracks species stability
+    if (Object.keys(this._speciesStableTimes).length === 0) return;
+    
+    // Count alive moa by species
+    const speciesCounts = {};
+    const moas = this.moas;
+    for (let i = 0, len = moas.length; i < len; i++) {
+      const m = moas[i];
+      if (!m.alive) continue;
+      const key = m.speciesKey || 'unknown';
+      speciesCounts[key] = (speciesCounts[key] || 0) + 1;
+    }
+    
+    // Count other entities
+    for (const [type, list] of Object.entries(this.otherEntities)) {
+      let count = 0;
+      for (let i = 0; i < list.length; i++) {
+        if (list[i].alive) count++;
+      }
+      speciesCounts[type] = count;
+    }
+    
+    // Update stability timers
+    let anyExtinct = false;
+    for (const key of Object.keys(this._speciesStableTimes)) {
+      const count = speciesCounts[key] || 0;
+      const wasAlive = this._speciesLastAlive[key];
+      
+      if (count >= 2) {
+        // Species is stable (2+ individuals)
+        this._speciesStableTimes[key] += dt;
+        this._speciesLastAlive[key] = true;
+      } else if (count === 0) {
+        // Species extinct
+        this._speciesStableTimes[key] = 0;
+        this._speciesLastAlive[key] = false;
+        if (wasAlive) anyExtinct = true;
+      } else {
+        // Only 1 — not stable but not extinct
+        this._speciesLastAlive[key] = true;
+        // Don't increment stability timer
+      }
+    }
+    
+    this.stats.anySpeciesExtinct = anyExtinct || this.stats.anySpeciesExtinct;
   }
 
   updatePlantsBatched(dt = 1) {
@@ -488,6 +715,11 @@ class Simulation {
             newMoa.homeRange.set(egg.pos.x, egg.pos.y);
             this.moas.push(newMoa);
             this.stats.births++;
+            // Track per-species birth
+            const offspringKey = newMoa.speciesKey || offspringSpecies || 'unknown';
+            if (this.stats.birthsBySpecies[offspringKey] !== undefined) {
+              this.stats.birthsBySpecies[offspringKey]++;
+            }
             this._invalidateCache();
             mauri.earn(mauri.onEggHatch, egg.pos.x, egg.pos.y, 'hatch');
 
@@ -534,6 +766,7 @@ class Simulation {
   }
   
   cleanup() {
+    
     const moas = this.moas;
     let writeIdx = 0;
     for (let i = 0, len = moas.length; i < len; i++) {
@@ -542,6 +775,15 @@ class Simulation {
     if (writeIdx !== moas.length) {
       moas.length = writeIdx;
       this._invalidateCache();
+    }
+    
+    // Other entity cleanup
+    for (const [type, list] of Object.entries(this.otherEntities)) {
+      let wi = 0;
+      for (let i = 0; i < list.length; i++) {
+        if (list[i].alive) list[wi++] = list[i];
+      }
+      list.length = wi;
     }
   }
 
@@ -598,6 +840,8 @@ class Simulation {
     const eggs = this.eggs;
     const moas = this.moas;
     const eagles = this.eagles;
+
+    // DRAW ORDER Z INDEX
     
     // Layer 1: Ground plants (not trees — fern is now a tree)
     this._renderFiltered(plants, 0, p => p.type !== 'rimu' && p.type !== 'beech' && p.type !== 'fern', true, inView);
@@ -611,12 +855,22 @@ class Simulation {
     // Layer 4: Moas (body)
     this._renderFiltered(moas, 0, null, true, inView, 'render');
     
+    for (const [type, list] of Object.entries(this.otherEntities)) {
+      this._renderFiltered(list, 0, null, true, inView, 'render');
+    }
+
     // Layer 5: Trees (rimu, beech, fern)
     this._renderFiltered(plants, 30, p => p.type === 'rimu' || p.type === 'beech' || p.type === 'fern', true, inView);
     
     // Layer 6: Eagles
     this._renderFiltered(eagles, 30, null, false, inView);
     
+    // Layer 6b: Flying other entities (kea)
+    // Kea should render above trees like eagles
+    if (this.otherEntities.kea) {
+      this._renderFiltered(this.otherEntities.kea, 30, null, true, inView);
+    }
+
     // Layer 7: Storms
     this._renderFiltered(placeables, 80, p => p.type === 'Storm', true, inView);
     
@@ -712,6 +966,28 @@ class Simulation {
     summary.eagleCount = this.eagles.length;
     summary.births = this.stats.births;
     summary.deaths = this.stats.deaths;
+    
+    // Other entity counts
+    if (!summary.otherCounts) summary.otherCounts = {};
+    for (const [type, list] of Object.entries(this.otherEntities)) {
+      let count = 0;
+      for (let i = 0; i < list.length; i++) {
+        if (list[i].alive) count++;
+      }
+      summary.otherCounts[type] = count;
+    }
+    
+    // Per-species moa breakdown
+    if (!summary.moaBySpecies) summary.moaBySpecies = {};
+    for (const key of (this.activeSpecies.moa || [])) {
+      summary.moaBySpecies[key] = 0;
+    }
+    for (let i = 0; i < summary.aliveMoas.length; i++) {
+      const key = summary.aliveMoas[i].speciesKey;
+      if (key && summary.moaBySpecies[key] !== undefined) {
+        summary.moaBySpecies[key]++;
+      }
+    }
     
     this._summaryFrame = frameCount;
     return summary;

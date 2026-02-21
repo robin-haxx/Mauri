@@ -29,7 +29,12 @@ class TerrainGenerator {
       winter: 0.77,
       spring: 0.82
     };
-    
+
+    // Allow level-specific snow lines
+    if (config.seasonSnowLines) {
+      Object.assign(this.seasonSnowLines, config.seasonSnowLines);
+    }
+      
     // Season manager reference
     this.seasonManager = null;
     
@@ -63,6 +68,40 @@ class TerrainGenerator {
     for (let i = 0; i < this.biomeArray.length; i++) {
       this.biomeIndexByKey[this.biomeArray[i].key] = i;
     }
+    
+    // Cache commonly-needed biome roles by scanning properties
+    // instead of assuming fixed keys exist
+    this._waterBiome = null;
+    this._snowBiome = null;
+    this._fallbackBiome = null;
+    
+    for (const biome of this.biomeList) {
+      // Water: the lowest non-walkable biome, or anything flagged isWater
+      if (biome.isWater || (!biome.walkable && biome.maxElevation <= 0.15)) {
+        if (!this._waterBiome || biome.minElevation < this._waterBiome.minElevation) {
+          this._waterBiome = biome;
+        }
+      }
+      // Snow: highest biome
+      if (biome.key === 'snow' || biome.minElevation >= 0.85) {
+        this._snowBiome = biome;
+      }
+      // Fallback: first walkable biome with plants
+      if (!this._fallbackBiome && biome.walkable && biome.canHavePlants) {
+        this._fallbackBiome = biome;
+      }
+    }
+    
+    // If no water biome found, use the lowest biome
+    if (!this._waterBiome) {
+      this._waterBiome = this.biomeList[0];
+    }
+    // If no snow biome, disable snow features
+    // _snowBiome can stay null — we'll check before using
+    // If no fallback, use the middle biome
+    if (!this._fallbackBiome) {
+      this._fallbackBiome = this.biomeList[Math.floor(this.biomeList.length / 2)];
+    }
   }
   
   setSeasonManager(manager) {
@@ -70,17 +109,17 @@ class TerrainGenerator {
   }
   
   _initSnowColors() {
-    if (!this.biomes.snow) return;
-    this._snowColorsRGB = this.biomes.snow.colors.map(hex => {
+    if (!this._snowBiome) return;
+    this._snowColorsRGB = this._snowBiome.colors.map(hex => {
       const c = this._getCachedColor(hex);
       return [red(c), green(c), blue(c)];
     });
   }
   
-  // Current snow line based on season + transition
   getSnowLineElevation() {
+    if (!this._snowBiome) return 1.0; // No snow in this level
     if (!this.seasonManager) {
-      return this.biomes.snow?.minElevation || 0.9;
+      return this._snowBiome.minElevation;
     }
     
     const currentLine = this.seasonSnowLines[this.seasonManager.currentKey];
@@ -99,8 +138,9 @@ class TerrainGenerator {
   }
   
   getSnowCoverage(elevation) {
+    if (!this._snowBiome) return 0;
     const snowLine = this.getSnowLineElevation();
-    const permanentSnowLine = this.biomes.snow?.minElevation || 0.9;
+    const permanentSnowLine = this._snowBiome.minElevation;
     
     if (elevation >= permanentSnowLine) return 1.0;
     if (elevation >= snowLine) {
@@ -199,13 +239,58 @@ class TerrainGenerator {
   }
   
   getElevation(x, y) {
+
+    // changing falloff
     const base = this.fractalNoise(x, y);
     const ridge = this.ridgeNoise(x, y);
     let elevation = base * (1 - this.config.ridgeInfluence) + ridge * this.config.ridgeInfluence;
     elevation = Math.pow(elevation, this.config.elevationPower);
-    const falloff = this.getIslandFalloff(x, y);
-    elevation *= falloff;
+      
+    if (this.config.useLakes) {
+      // Inland terrain: no coastal falloff
+      // Instead, create lake basins by depressing low areas further
+      elevation = this._applyLakeBasins(x, y, elevation);
+    } else {
+      // Original coastal island behavior
+      const falloff = this.getIslandFalloff(x, y);
+      elevation *= falloff;
+    }
     return Math.max(0, Math.min(1, elevation));
+  }
+
+  _applyLakeBasins(x, y, elevation) {
+    const lakeNoiseScale = this.config.lakeNoiseScale || 0.008;
+    const lakeThreshold = this.config.lakeThreshold || 0.12;
+    
+    // Secondary noise determines where lakes form
+    const lakeNoise = noise(
+      x * lakeNoiseScale + this.seed * 3,
+      y * lakeNoiseScale + this.seed * 3.7
+    );
+    
+    // Lakes form where both the terrain is low AND lake noise is high
+    // This creates distinct basins rather than flooding all low ground
+    if (elevation < 0.25 && lakeNoise > 0.5) {
+      // How deep into the lake zone
+      const basinStrength = (0.25 - elevation) * (lakeNoise - 0.5) * 4;
+      elevation -= basinStrength * 0.3;
+      
+      // Clamp to create flat lake floors
+      if (elevation < lakeThreshold * 0.5) {
+        elevation = lakeThreshold * 0.3 + 
+          noise(x * 0.05, y * 0.05) * lakeThreshold * 0.15;
+      }
+    }
+    
+    // Soft edge falloff at map borders (not ocean, just prevents
+    // entities walking off the edge)
+    const nx = x / this.mapWidth;
+    const ny = y / this.mapHeight;
+    const edgeDist = Math.min(nx, 1 - nx, ny, 1 - ny);
+    const edgeFalloff = Math.min(1, edgeDist * 12);
+    elevation *= 0.3 + edgeFalloff * 0.7;
+    
+    return elevation;
   }
   
   // ============================================
@@ -229,18 +314,21 @@ class TerrainGenerator {
     return this.biomeList[this.biomeList.length - 1];
   }
   
+
   getBiomeAt(x, y) {
     const col = (x * this.invScale) | 0;
     const row = (y * this.invScale) | 0;
     if (col < 0 || row < 0 || col >= this.gridCols || row >= this.gridRows) {
-      return this.biomes.grassland;
+      return this._fallbackBiome;
     }
     return this.biomeArray[this.biomeIndexMap[row * this.gridCols + col]];
   }
   
   getEffectiveBiomeAt(x, y) {
-    const elevation = this.getElevationAt(x, y);
-    if (this.isSeasonalSnow(elevation)) return this.biomes.snow;
+    if (this._snowBiome) {
+      const elevation = this.getElevationAt(x, y);
+      if (this.isSeasonalSnow(elevation)) return this._snowBiome;
+    }
     return this.getBiomeAt(x, y);
   }
   
@@ -283,10 +371,11 @@ class TerrainGenerator {
     );
   }
   
-  hasAdjacentSea(row, col) {
+  hasAdjacentWater(row, col) {
+    if (!this._waterBiome) return false;
     const gridCols = this.gridCols;
     const gridRows = this.gridRows;
-    const seaMax = this.biomes.sea.maxElevation;
+    const waterMax = this._waterBiome.maxElevation;
     
     for (let dr = -1; dr <= 1; dr++) {
       for (let dc = -1; dc <= 1; dc++) {
@@ -294,7 +383,7 @@ class TerrainGenerator {
         const nr = row + dr;
         const nc = col + dc;
         if (nr >= 0 && nr < gridRows && nc >= 0 && nc < gridCols) {
-          if (this.heightMap[nr * gridCols + nc] < seaMax) return true;
+          if (this.heightMap[nr * gridCols + nc] < waterMax) return true;
         }
       }
     }
@@ -330,9 +419,13 @@ class TerrainGenerator {
       for (let col = 0; col < gridCols; col++) {
         const elevation = this.heightMap[idx];
         let biome = this.getBiomeFromElevation(elevation);
-        if (biome.key === 'coastal' && !this.hasAdjacentSea(row, col)) {
-          biome = this.biomes.grassland;
+        // water type handling (lake or sea)
+        if (biome === this.biomeList[1] && this._waterBiome) {
+          if (!this.hasAdjacentWater(row, col)) {
+            biome = this._fallbackBiome;
+          }
         }
+        
         this.biomeIndexMap[idx] = this.biomeIndexByKey[biome.key];
         idx++;
       }
@@ -415,11 +508,16 @@ class TerrainGenerator {
     const heightMap = this.heightMap;
     const baseCellColors = this._baseCellColors;
     const snowColorsRGB = this._snowColorsRGB;
+    const hasSnow = this._snowBiome && snowColorsRGB;
     
     const snowLine = this.seasonSnowLines[seasonKey];
-    const permanentSnowLine = this.biomes.snow?.minElevation || 0.9;
-    const snowContourColor = this._getCachedColor(this.biomes.snow.contourColor);
-    const snowContourRGB = [red(snowContourColor), green(snowContourColor), blue(snowContourColor)];
+    const permanentSnowLine = hasSnow ? this._snowBiome.minElevation : 1.0;
+    
+    let snowContourRGB = [176, 176, 176]; // default grey
+    if (hasSnow) {
+      const snowContourColor = this._getCachedColor(this._snowBiome.contourColor);
+      snowContourRGB = [red(snowContourColor), green(snowContourColor), blue(snowContourColor)];
+    }
     
     // Pre-compute cell colors with snow for this season
     const cellColors = new Uint8Array(gridCols * gridRows * 3);
@@ -434,7 +532,7 @@ class TerrainGenerator {
         const isContour = baseCellColors[baseIdx + 3] === 1;
         
         // Check if this cell has snow in this season
-        if (elevation >= snowLine) {
+        if (hasSnow && elevation >= snowLine) {
           // Calculate snow coverage
           let snowCoverage;
           if (elevation >= permanentSnowLine) {

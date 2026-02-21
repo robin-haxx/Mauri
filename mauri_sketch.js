@@ -41,6 +41,7 @@ function preload(){
 // CONFIGURATION
 // ============================================
 const CONFIG = {
+  // ===== ENGINE CONSTANTS (never change between levels) =====
   version: 'alpha 0.9.0',
   canvasWidth: 1920,
   canvasHeight: 1080,
@@ -67,44 +68,83 @@ const CONFIG = {
   col_panelBorder: [60, 90, 70],
   col_panelHeader: [45, 75, 55],
   
-  noiseScale: 0.005,
-  octaves: 3,
-  persistence: 0.3,
-  lacunarity: 3.0,
-  
-  ridgeInfluence: 1.3,
-  elevationPower: 1.5,
-  islandFalloff: .6, 
-  
   showContours: true,
   contourInterval: 0.045,
   showLabels: false,
   showDebug: false,
   showHungerBars: true,
+
+  // ===== LEVEL-VARIABLE PARAMS (written by loadLevel) =====
+  // Terrain
+  noiseScale: 0.005,
+  octaves: 3,
+  persistence: 0.3,
+  lacunarity: 3.0,
+  ridgeInfluence: 1.3,
+  elevationPower: 1.5,
+  islandFalloff: 0.6,
+  plantDensity: 0.006,
   
+  // Entities
   initialMoaCount: 7,
   maxMoaPopulation: 60,
   eagleCount: 2,
   startingSpecies: 'upland_moa',
   
-  plantDensity: 0.006,
-  
+  // Economy
   startingMauri: 60,
-  targetPopulation: 30,
-  survivalTimeGoal: 3600,
-  
   eggIncubationTime: 500,
   securityTimeToLay: 800,
-  securityTimeVariation: 200, 
+  securityTimeVariation: 200,
   layingHungerThreshold: 28,
-  
-  seasonDuration: 2100, 
-  
-  eagleSpawnMilestones: [12, 18, 25, 35, 45, 55]
+  seasonDuration: 2100,
+  eagleSpawnMilestones: [12, 18, 25, 35, 45, 55],
+  targetPopulation: 30,
+  survivalTimeGoal: 3600
 };
 
+// Applies level parameters onto CONFIG
+function applyLevelToConfig(levelDef) {
+  const t = levelDef.terrain;
+  CONFIG.noiseScale = t.noiseScale;
+  CONFIG.octaves = t.octaves;
+  CONFIG.persistence = t.persistence;
+  CONFIG.lacunarity = t.lacunarity;
+  CONFIG.ridgeInfluence = t.ridgeInfluence;
+  CONFIG.elevationPower = t.elevationPower;
+  CONFIG.islandFalloff = t.islandFalloff;
+
+  // Optional terrain features
+  CONFIG.useLakes = levelDef.terrain.useLakes || false;
+  CONFIG.lakeThreshold = levelDef.terrain.lakeThreshold || 0.12;
+  CONFIG.lakeNoiseScale = levelDef.terrain.lakeNoiseScale || 0.008;
+  
+  if (levelDef.terrain.seasonSnowLines) {
+    CONFIG.seasonSnowLines = levelDef.terrain.seasonSnowLines;
+  } else {
+    delete CONFIG.seasonSnowLines; // Use TerrainGenerator defaults
+  }
+
+  CONFIG.plantDensity = t.plantDensity;
+  
+  const e = levelDef.economy;
+  CONFIG.startingMauri = e.startingMauri;
+  CONFIG.seasonDuration = e.seasonDuration;
+  CONFIG.eggIncubationTime = e.eggIncubationTime;
+  CONFIG.securityTimeToLay = e.securityTimeToLay;
+  CONFIG.securityTimeVariation = e.securityTimeVariation;
+  CONFIG.layingHungerThreshold = e.layingHungerThreshold;
+  CONFIG.eagleSpawnMilestones = [...e.eagleSpawnMilestones];
+  CONFIG.maxMoaPopulation = e.maxPopulation;
+  
+  const c = levelDef.initialEntityCounts;
+  CONFIG.initialMoaCount = c.moa;
+  CONFIG.eagleCount = c.eagle;
+  CONFIG.startingSpecies = levelDef.startingSpecies;
+}
+
 // ============================================
-// COLOR UTILITIES (simplified)
+// COLOR UTILITIES 
 // ============================================
 function fillColor(colorArray, alphaOverride = null) {
   if (!colorArray) { fill(128); return; }
@@ -152,7 +192,6 @@ function initCachedColors() {
     notifErrorText: [255, 180, 180],
     notifInfo: [60, 80, 100],
     notifInfoText: [200, 220, 240],
-    // Panel colors (single source — removed duplicate initPanelColors)
     panelBg: CONFIG.col_panelBg,
     panelBorder: CONFIG.col_panelBorder,
     panelHeader: CONFIG.col_panelHeader,
@@ -165,6 +204,7 @@ function initCachedColors() {
 // GAME STATE
 // ============================================
 const GAME_STATE = {
+  LEVEL_SELECT: 'level_select',
   MENU: 'menu',
   PLAYING: 'playing',
   PAUSED: 'paused',
@@ -480,7 +520,14 @@ class MauriManager {
 // ============================================
 class Game {
   constructor() {
-    this.state = GAME_STATE.MENU;
+    this.state = GAME_STATE.LEVEL_SELECT;
+
+    // now we allow biome, placeable, species redef. per level
+    this.currentLevel = null;
+    this.activeBiomes = null;
+    this.activePlaceables = null;
+    this.activeSpecies = null;
+
     this.terrain = null;
     this.simulation = null;
     this.mauri = null;
@@ -494,17 +541,8 @@ class Game {
     this.playTime = 0;
     this.maxPlayTime = 0;
     this._menuBtnBounds = null;
-    
-    this.goals = [
-      { name: "Hatch 5 eggs", condition: () => this.simulation?.stats.births >= 5, reward: 50, achieved: false },
-      { name: "Hatch 10 eggs", condition: () => this.simulation?.stats.births >= 10, reward: 100, achieved: false }, 
-      { name: "Raise Moa population to 15", condition: () => this._cachedMoaCount >= 15, reward: 50, achieved: false },
-      { name: "Raise Moa population to 20", condition: () => this._cachedMoaCount >= 20, reward: 50, achieved: false },
-      { name: "Raise Moa population to 30", condition: () => this._cachedMoaCount >= 30, reward: 100, achieved: false },
-      { name: "Reach 1 minute", condition: () => this.playTime >= 3600, reward: 50, achieved: false },
-      { name: "Reach 3 minutes", condition: () => this.playTime >= 10800, reward: 100, achieved: false },
-      { name: "Reach 4 minutes", condition: () => this.playTime >= 14400, reward: 100, achieved: false }
-    ];
+
+    this.goals = [];
     
     this.notifications = [];
     this.gameOverReason = '';
@@ -515,14 +553,55 @@ class Game {
     this._tempVec = null;
     this._incomeAccumulator = 0;
   }
+
+    loadLevel(levelId) {
+    const rawDef = LEVEL_REGISTRY.get(levelId);
+    if (!rawDef) {
+      console.error(`Level not found: ${levelId}`);
+      return;
+    }
+    
+    // Resolve defaults and placeable overrides
+    const levelDef = resolveLevelDef(rawDef);
+    this.currentLevel = levelDef;
+    
+    // Apply terrain/economy params to CONFIG
+    applyLevelToConfig(levelDef);
+    
+    // Set active biomes (terrain generator will read these)
+    this.activeBiomes = levelDef.biomes;
+    
+    // Set active placeables
+    this.activePlaceables = levelDef._resolvedPlaceables;
+    
+    // Set active species
+    this.activeSpecies = levelDef.species;
+    
+    // Build goals with closures referencing this game instance
+    this.goals = levelDef.goals.map(goalDef => ({
+      name: goalDef.name,
+      condition: () => goalDef.condition(this.simulation, this),
+      reward: goalDef.reward,
+      achieved: false
+    }));
+    
+    // Now run init which generates terrain, spawns entities, etc.
+    this.init();
+  }
   
   init() {
-    this.terrain = new TerrainGenerator(CONFIG, BIOMES);
+
+    if (!this.currentLevel) return;
+
+    this.terrain = new TerrainGenerator(CONFIG, this.activeBiomes);
     this.seasonManager = new SeasonManager(CONFIG);
     this.terrain.setSeasonManager(this.seasonManager);
     this.terrain.generate();
     
-    this.simulation = new Simulation(this.terrain, CONFIG, this, this.seasonManager);
+    this.simulation = new Simulation(
+      this.terrain, CONFIG, this, this.seasonManager
+    );
+    this.simulation.setActiveSpecies(this.activeSpecies);
     this.simulation.init();
     
     this.mauri = new MauriManager(CONFIG.startingMauri);
@@ -535,11 +614,18 @@ class Game {
     for (const goal of this.goals) goal.achieved = false;
 
     this.tutorial = new TutorialManager(this);
-    this.tutorial.setGuideSprite(tutorialMantisSprite);
+    this.tutorial.setGuideSprite(
+      this._getGuideSprite(this.currentLevel.tutorial?.guideSprite)
+    );
+    if (this.currentLevel.tutorial?.tips){
+      this.tutorial.setLevelTips(this.currentLevel.tutorial.tips);
+    }
     this.tutorial.init();
 
     if (audioManager) audioManager.playBackground();
   }
+
+  
 
   isInGameArea(mx, my) {
     return mx >= CONFIG.gameAreaX && 
@@ -635,6 +721,14 @@ class Game {
     if (allAchieved) {
       this.state = GAME_STATE.WON;
       if (audioManager) audioManager.playWin();
+
+      // Calculate score: may be buggy with new levels
+      const score = Math.round(
+      ((this._cachedMoaCount) * (this.mauri.totalEarned * 0.001))
+      - ((this.playTime / 60) - 240) + 60
+      );
+
+      PROGRESS.completeLevel(this.currentLevel.id, score);
     }
   }
   
@@ -671,8 +765,12 @@ class Game {
   }
   
   selectPlaceable(type) {
-    if (PLACEABLES[type] && this.mauri.canAfford(PLACEABLES[type].cost)) {
+    // Check against level's active placeables, not global PLACEABLES
+    const def = this.activePlaceables[type];
+    if (def && this.mauri.canAfford(def.cost)) {
       this.selectedPlaceable = type;
+    } else if (!def) {
+      this.addNotification("Not available in this area!", 'error');
     } else {
       this.addNotification("Not enough mauri!", 'error');
     }
@@ -683,7 +781,7 @@ class Game {
   }
   
   canPlaceWithSpacing(x, y, type) {
-    const def = PLACEABLES[type];
+    const def = this.activePlaceables[type];
     if (def.ignoresSpacing) return { allowed: true };
     
     const mySpacing = def.minSpacing || 40;
@@ -714,7 +812,8 @@ class Game {
   tryPlace(x, y) {
     if (!this.selectedPlaceable) return false;
     
-    const def = PLACEABLES[this.selectedPlaceable];
+    const def = this.activePlaceables[this.selectedPlaceable];
+    if (!def) return false;
     
     if (!this.terrain.canPlace(x, y)) {
       this.addNotification("Cannot place here!", 'error');
@@ -745,6 +844,11 @@ class Game {
   
   render() {
     background(20, 30, 25);
+
+    if (this.state === GAME_STATE.LEVEL_SELECT){
+      this.renderLevelSelect();
+      return;
+    }
     
     if (this.state === GAME_STATE.MENU) {
       this.renderMenu();
@@ -822,6 +926,14 @@ class Game {
     if (this.tutorial) this.tutorial.render();
   }
 
+  _getGuideSprite(spriteKey){
+    const spriteMap = {
+      'mantis_talk': tutorialMantisSprite
+      //add others here
+    };
+    return spriteMap[spriteKey] || tutorialMantisSprite;
+  }
+
   // Unified overlay renderer (replaces renderPauseOverlay, renderWinOverlay, renderLoseOverlay)
   _renderOverlay(r, g, b, a, opts) {
     const cw = CONFIG.gameAreaWidth;
@@ -869,18 +981,127 @@ class Game {
     
     pop();
   }
+
+  renderLevelSelect() {
+    const cw = CONFIG.canvasWidth;
+    const ch = CONFIG.canvasHeight;
+    const centerX = cw * 0.5;
+    
+    fill(CACHED_COLORS.menuBg);
+    noStroke();
+    rect(0, 0, cw, ch);
+    
+    textAlign(CENTER, CENTER);
+    fill(CACHED_COLORS.menuTitle);
+    textSize(52);
+    push(); textFont(GroceryRounded);
+    text("Avian Age: Select Area", centerX, 100);
+    pop();
+    
+    fill(CACHED_COLORS.menuSubtitle);
+    textSize(18);
+    text("Choose an ecosystem to protect", centerX, 150);
+    
+    // Render level cards
+    const levels = LEVEL_REGISTRY.getAll();
+    const cardW = 320;
+    const cardH = 200;
+    const cardSpacing = 40;
+    const totalW = levels.length * cardW + (levels.length - 1) * cardSpacing;
+    const startX = centerX - totalW / 2;
+    const cardY = ch / 2 - cardH / 2;
+    
+    this._levelCardBounds = [];
+    
+    for (let i = 0; i < levels.length; i++) {
+      const level = levels[i];
+      const x = startX + i * (cardW + cardSpacing);
+      const unlocked = PROGRESS.isUnlocked(level.id);
+      const completed = PROGRESS.isCompleted(level.id);
+      const hover = unlocked && mouseX > x && mouseX < x + cardW
+                             && mouseY > cardY && mouseY < cardY + cardH;
+      
+      // Card background
+      if (!unlocked) {
+        fill(30, 30, 35, 200);
+        stroke(50, 50, 55);
+      } else if (hover) {
+        fill(40, 65, 45, 240);
+        stroke(100, 160, 110);
+      } else {
+        fill(30, 50, 35, 240);
+        stroke(70, 110, 80);
+      }
+      strokeWeight(completed ? 3 : 2);
+      rect(x, cardY, cardW, cardH, 12);
+      
+      // Completion badge
+      if (completed) {
+        fill(80, 180, 100);
+        noStroke();
+        ellipse(x + cardW - 20, cardY + 20, 24, 24);
+        fill(255);
+        textSize(14);
+        text("✓", x + cardW - 20, cardY + 20);
+      }
+      
+      // Level name
+      fill(unlocked ? [200, 240, 210] : [80, 80, 85]);
+      textSize(22);
+      push(); textFont(GroceryRounded);
+      text(level.name, x + cardW / 2, cardY + 40);
+      pop();
+      
+      // Region
+      fill(unlocked ? [140, 180, 150] : [60, 60, 65]);
+      textSize(14);
+      text(level.menu?.areaLabel || '', x + cardW / 2, cardY + 70);
+      
+      // Description preview
+      fill(unlocked ? [120, 160, 130] : [50, 50, 55]);
+      textSize(12);
+      const desc = (level.menu?.flavorText || []).slice(0, 2);
+      for (let j = 0; j < desc.length; j++) {
+        text(desc[j], x + cardW / 2, cardY + 100 + j * 18);
+      }
+      
+      // Lock icon
+      if (!unlocked) {
+        fill(100, 100, 110);
+        textSize(32);
+        text("🔒", x + cardW / 2, cardY + 160);
+      }
+      
+      // Best score
+      if (PROGRESS.bestScores[level.id]) {
+        fill(180, 200, 180);
+        textSize(12);
+        text(`Best: ${PROGRESS.bestScores[level.id]} pts`,
+             x + cardW / 2, cardY + cardH - 20);
+      }
+      
+      this._levelCardBounds.push({
+        x, y: cardY, w: cardW, h: cardH,
+        levelId: level.id, unlocked
+      });
+    }
+    
+    fill(CACHED_COLORS.menuFooter);
+    textSize(11);
+    text(`Version: ${CONFIG.version}`, centerX, ch - 40);
+  }
   
   renderMenu() {
     const cw = CONFIG.canvasWidth;
     const ch = CONFIG.canvasHeight;
     const centerX = cw * 0.5;
     const centerY = ch * 0.5;
+    const menu = this.currentLevel.menu;
     
     fill(CACHED_COLORS.menuBg);
     noStroke();
     rect(0, 0, cw, ch);
     
-    // Subtle vignette
     for (let i = 0; i < 5; i++) {
       fill(0, 0, 0, 3 - i * 0.5);
       rect(i * 20, i * 20, cw - i * 40, ch - i * 40);
@@ -888,72 +1109,83 @@ class Game {
     
     textAlign(CENTER, CENTER);
     
-    // Title
+    // Title — from level def
     fill(CACHED_COLORS.menuTitle);
     textSize(64);
     push(); textFont(GroceryRounded);
-    text("Avian Age:  MAURI Demo", centerX, centerY - 300);
+    text(menu.title || "Avian Age", centerX, centerY - 300);
     pop();
     
     fill(CACHED_COLORS.menuSubtitle);
     textSize(20);
-    text("A New Zealand Ecosystem Strategy Game", centerX, centerY - 240);
+    text(menu.subtitle || "A New Zealand Ecosystem Strategy Game",
+         centerX, centerY - 240);
     
-    // Plants flanking the moa
-    const plantKeys = Object.keys(PLANT_TYPES);
+    // Plants — from level def
+    const displayPlants = menu.displayPlants || [];
     const plantY = centerY - 80;
     const plantSpacing = 180;
     const spriteSize = 64;
     
-    const leftPlants = plantKeys.slice(0, 3);
-    const rightPlants = plantKeys.slice(3);
+    const midpoint = Math.ceil(displayPlants.length / 2);
+    const leftPlants = displayPlants.slice(0, midpoint - 1);
+    const rightPlants = displayPlants.slice(midpoint);
     
     for (let i = 0; i < leftPlants.length; i++) {
-      this._renderMenuPlant(centerX - 250 - (leftPlants.length - 1 - i) * plantSpacing, plantY, leftPlants[i], spriteSize);
+      this._renderMenuPlant(
+        centerX - 250 - (leftPlants.length - 1 - i) * plantSpacing,
+        plantY, leftPlants[i], spriteSize
+      );
     }
     for (let i = 0; i < rightPlants.length; i++) {
-      this._renderMenuPlant(centerX + 250 + i * plantSpacing, plantY, rightPlants[i], spriteSize);
+      this._renderMenuPlant(
+        centerX + 250 + i * plantSpacing,
+        plantY, rightPlants[i], spriteSize
+      );
     }
     
-    // Moa sprite
-    push();
-    imageMode(CENTER);
-    translate(centerX, plantY);
-    scale(2);
-    image(splashScreenMoa, 0, 0);
-    pop();
+    // Featured species — from level def
+    const featured = menu.featuredSpecies;
+    if (featured) {
+      push();
+      imageMode(CENTER);
+      translate(centerX, plantY);
+      scale(featured.spriteScale || 2);
+      const sprite = this._getMenuSprite(featured.spriteKey);
+      if (sprite) image(sprite, 0, 0);
+      pop();
+      
+      fill(CACHED_COLORS.menuSubtitle);
+      textSize(16);
+      textStyle(BOLD);
+      text(featured.displayName, centerX, plantY + 80);
+      textStyle(NORMAL);
+      fill(CACHED_COLORS.menuText);
+      textSize(14);
+      text(featured.localName || '', centerX, plantY + 98);
+    }
     
-    fill(CACHED_COLORS.menuSubtitle);
-    textSize(16);
-    textStyle(BOLD);
-    text("Upland Moa", centerX, plantY + 80);
-    textStyle(NORMAL);
-    fill(CACHED_COLORS.menuText);
-    textSize(14);
-    text("Moa Koukou", centerX, plantY + 98);
-    
-    // Instructions
+    // Flavor text — from level def
     fill(CACHED_COLORS.menuText);
     textSize(16);
-    const instructions = [
-      "Area #1: Kahurangi, Te Waipounamu",
-      "(Upper West Coast, South Island)",
-      " ",
-      "Guide the Upland Moa through the seasons;",
-      "Nurture the ecosystem to gain Mauri...",
-      "And beware the giant Haast's eagle, Pouākai!"
+    const flavorLines = [
+      menu.areaLabel || '',
+      menu.areaSubtitle || '',
+      ' ',
+      ...(menu.flavorText || [])
     ];
     
     const instructionsY = centerY + 60;
-    for (let i = 0; i < instructions.length; i++) {
-      text(instructions[i], centerX, instructionsY + i * 22);
+    for (let i = 0; i < flavorLines.length; i++) {
+      text(flavorLines[i], centerX, instructionsY + i * 22);
     }
     
     // Start button
     const btnW = 200, btnH = 60;
     const btnX = centerX - btnW / 2;
     const btnY = centerY + 230;
-    const hover = mouseX > btnX && mouseX < btnX + btnW && mouseY > btnY && mouseY < btnY + btnH;
+    const hover = mouseX > btnX && mouseX < btnX + btnW
+               && mouseY > btnY && mouseY < btnY + btnH;
     
     fill(0, 0, 0, 30);
     noStroke();
@@ -971,16 +1203,37 @@ class Game {
     text("Start Level", centerX, btnY + btnH * 0.5);
     pop();
     
-    fill(CACHED_COLORS.menuHint);
+    // Back button (to level select)
+    const backW = 120, backH = 40;
+    const backX = centerX - backW / 2;
+    const backY = btnY + btnH + 20;
+    const backHover = mouseX > backX && mouseX < backX + backW
+                   && mouseY > backY && mouseY < backY + backH;
+    
+    fill(backHover ? [60, 60, 70] : [40, 40, 50]);
+    stroke(80, 80, 90);
+    strokeWeight(1);
+    rect(backX, backY, backW, backH, 8);
+    
+    fill(160, 170, 160);
+    noStroke();
     textSize(14);
-    text("Press P or spacebar to pause", centerX, btnY + btnH + 30);
-    text("F11 resets full-screen scale", centerX, btnY + btnH + 50);
+    text("← Back", centerX, backY + backH * 0.5);
     
     fill(CACHED_COLORS.menuFooter);
     textSize(11);
-    text(`Version: ${CONFIG.version} • Inspired by Equilinox • Robbie K 2026`, centerX, ch - 40);
+    text(`Version: ${CONFIG.version}`, centerX, ch - 40);
     
     this._menuBtnBounds = { x: btnX, y: btnY, w: btnW, h: btnH };
+    this._backBtnBounds = { x: backX, y: backY, w: backW, h: backH };
+  }
+  
+  _getMenuSprite(spriteKey) {
+    const map = {
+      'moa_idle': splashScreenMoa,
+      // Add more as you create them
+    };
+    return map[spriteKey] || splashScreenMoa;
   }
 
   _renderMenuPlant(x, y, plantKey, size) {
@@ -1138,11 +1391,38 @@ class Game {
   }
   
   handleClick(mx, my) {
+    // Level select screen
+    if (this.state === GAME_STATE.LEVEL_SELECT) {
+      if (this._levelCardBounds) {
+        for (const card of this._levelCardBounds) {
+          if (card.unlocked &&
+              mx > card.x && mx < card.x + card.w &&
+              my > card.y && my < card.y + card.h) {
+            this.loadLevel(card.levelId);
+            this.state = GAME_STATE.MENU;  // Go to level splash
+            return;
+          }
+        }
+      }
+      return;
+    }
+    
+    // Level splash menu
     if (this.state === GAME_STATE.MENU) {
       if (this._menuBtnBounds) {
         const btn = this._menuBtnBounds;
-        if (mx > btn.x && mx < btn.x + btn.w && my > btn.y && my < btn.y + btn.h) {
-          this.init();
+        if (mx > btn.x && mx < btn.x + btn.w &&
+            my > btn.y && my < btn.y + btn.h) {
+          this.init();  // Start playing
+          return;
+        }
+      }
+      if (this._backBtnBounds) {
+        const btn = this._backBtnBounds;
+        if (mx > btn.x && mx < btn.x + btn.w &&
+            my > btn.y && my < btn.y + btn.h) {
+          this.state = GAME_STATE.LEVEL_SELECT;
+          return;
         }
       }
       return;
@@ -1163,7 +1443,16 @@ class Game {
   }
   
   handleKey(key) {
-    if (key === 'r' || key === 'R') { this.init(); return; }
+
+      if (key === 'r' || key === 'R') {
+      if (this.state === GAME_STATE.WON || this.state === GAME_STATE.LOST) {
+        this.state = GAME_STATE.LEVEL_SELECT;
+      } else if (this.currentLevel) {
+        this.loadLevel(this.currentLevel.id);  // Restart current level
+      }
+      return;
+    }
+
     if (key === 'd' || key === 'D') { CONFIG.debugMode = !CONFIG.debugMode; return; }
     
     if (this.state === GAME_STATE.PLAYING) {
@@ -1228,6 +1517,8 @@ function setup() {
   initPlaceableColors();
   initPlantSprites(plantSprites);
   initializeRegistry();
+
+  PROGRESS.init();
   
   game = new Game();
 

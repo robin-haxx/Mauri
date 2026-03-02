@@ -19,6 +19,7 @@ class HaastsEagle extends Boid {
     this.wanderStrength = 1.0;
     
     // Hunting
+    // UPDATE SQUARED VALUES WITH RADIUS VALUES
     this.huntRadius = 130;
     this.huntRadiusSq = 16900;
     this.catchRadius = 12;

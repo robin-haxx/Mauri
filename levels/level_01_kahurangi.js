@@ -124,7 +124,26 @@ const LEVEL_KAHURANGI = {
       "Nurture the ecosystem to gain Mauri...",
       "And beware the giant Haast's eagle, Pouākai!"
     ],
-    displayPlants: ['tussock', 'flax', 'fern', 'rimu', 'beech', 'kawakawa', 'patotara']
+    displayPlants: ['tussock', 'flax', 'fern', 'rimu', 'beech', 'kawakawa', 'patotara'],
+
+    // The system renders a plain background if paths are missing or images fail to load.
+    art: {
+      // Dimensions of the core illustration in pixels (the "safe zone" visible at all ratios)
+      coreWidth: 1600,
+      coreHeight: 1080,
+
+      // Background colour to fade into at illustration edges
+      bgColor: [25, 35, 30],
+
+      // Asset paths — uncomment and set when artwork is ready
+      // paths: {
+      //   core:        'assets/art/kahurangi_core.png',       // 1600×1080, full detail
+      //   leftWing:    'assets/art/kahurangi_left.png',       // ~580×1080, atmospheric extension
+      //   rightWing:   'assets/art/kahurangi_right.png',      // ~580×1080, atmospheric extension
+      //   topBleed:    'assets/art/kahurangi_top.png',        // 1600×~200, sky/atmosphere
+      //   bottomBleed: 'assets/art/kahurangi_bottom.png'      // 1600×~200, ground/foliage
+      // }
+    }
   },
 
   tutorial: {

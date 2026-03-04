@@ -40,34 +40,56 @@ function preload(){
 // ============================================
 // CONFIGURATION
 // ============================================
+// ============================================
+// CONFIGURATION
+// ============================================
 const CONFIG = {
   // ===== ENGINE CONSTANTS (never change between levels) =====
   version: 'alpha 0.9.0',
+
+  // Reference height is always 1080; width is computed from window aspect ratio
+  referenceHeight: 1080,
+
+  // Canvas dimensions (set by recalculateLayout, defaults to 16:9)
   canvasWidth: 1920,
   canvasHeight: 1080,
-  
+
+  // Game area (set by recalculateLayout)
   gameAreaX: 0,
   gameAreaY: 180,
   gameAreaWidth: 1360,
   gameAreaHeight: 760,
-  
+
+  // Panel heights (fixed)
   topBarHeight: 180,
   bottomBarHeight: 140,
+
+  // Sidebar (set by recalculateLayout)
   rightSidebarWidth: 560,
   rightSidebarX: 1360,
-  
+
+  // Sidebar sizing constraints
+  minSidebarWidth: 400,
+  maxSidebarWidth: 600,
+  sidebarWidthRatio: 0.2917,   // ≈560/1920, the 16:9 baseline proportion
+
+  // Supported aspect ratio range
+  minAspectRatio: 4 / 3,       // 1.333  (e.g. 1440×1080)
+  maxAspectRatio: 21 / 9,      // 2.333  (e.g. 2520×1080)
+
+  // Convenience getters (used throughout simulation code)
   get width() { return this.gameAreaWidth; },
   get height() { return this.gameAreaHeight; },
-  
+
   pixelScale: 1,
   zoom: 2.5,
   debugMode: false,
-  
+
   col_UI: [40, 70, 30, 180],
   col_panelBg: [25, 35, 30, 240],
   col_panelBorder: [60, 90, 70],
   col_panelHeader: [45, 75, 55],
-  
+
   showContours: true,
   contourInterval: 0.045,
   showLabels: false,
@@ -75,7 +97,6 @@ const CONFIG = {
   showHungerBars: true,
 
   // ===== LEVEL-VARIABLE PARAMS (written by loadLevel) =====
-  // Terrain
   noiseScale: 0.005,
   octaves: 3,
   persistence: 0.3,
@@ -84,14 +105,12 @@ const CONFIG = {
   elevationPower: 1.5,
   islandFalloff: 0.6,
   plantDensity: 0.006,
-  
-  // Entities
+
   initialMoaCount: 7,
   maxMoaPopulation: 60,
   eagleCount: 2,
   startingSpecies: 'upland_moa',
-  
-  // Economy
+
   startingMauri: 60,
   eggIncubationTime: 500,
   securityTimeToLay: 800,
@@ -100,7 +119,45 @@ const CONFIG = {
   seasonDuration: 2100,
   eagleSpawnMilestones: [12, 18, 25, 35, 45, 55],
   targetPopulation: 30,
-  survivalTimeGoal: 3600
+  survivalTimeGoal: 3600,
+
+  // ===== RESPONSIVE LAYOUT =====
+  /**
+   * Recomputes all layout dimensions from the current window size.
+   * Canvas height is always referenceHeight (1080).
+   * Canvas width varies with the window's aspect ratio, clamped to supported range.
+   * Sidebar width is proportional to canvas width, clamped to min/max.
+   * Game area fills the remaining horizontal space.
+   *
+   * Call once in setup() and again whenever the window dimensions change
+   * (though during gameplay the canvas dimensions are locked and CSS-scaled).
+   */
+  recalculateLayout(windowW, windowH) {
+    const h = this.referenceHeight;
+
+    // Determine aspect ratio from window, clamped to supported range
+    let aspect = windowW / windowH;
+    aspect = Math.max(this.minAspectRatio, Math.min(this.maxAspectRatio, aspect));
+
+    // Canvas width derived from clamped aspect ratio
+    const w = Math.round(h * aspect);
+
+    this.canvasWidth = w;
+    this.canvasHeight = h;
+
+    // Sidebar width: proportional to canvas width, clamped
+    let sidebarW = Math.round(w * this.sidebarWidthRatio);
+    sidebarW = Math.max(this.minSidebarWidth, Math.min(this.maxSidebarWidth, sidebarW));
+
+    this.rightSidebarWidth = sidebarW;
+    this.rightSidebarX = w - sidebarW;
+
+    // Game area fills remaining space
+    this.gameAreaX = 0;
+    this.gameAreaY = this.topBarHeight;
+    this.gameAreaWidth = w - sidebarW;
+    this.gameAreaHeight = h - this.topBarHeight - this.bottomBarHeight;
+  }
 };
 
 // Applies level parameters onto CONFIG
@@ -534,6 +591,7 @@ class Game {
     this.ui = null;
     this.seasonManager = null;
     this.tutorial = null;
+    this.menuArt = new MenuArtManager();
     
     this.selectedPlaceable = null;
     this.placePreview = null;
@@ -554,38 +612,32 @@ class Game {
     this._incomeAccumulator = 0;
   }
 
-    loadLevel(levelId) {
+  loadLevel(levelId) {
     const rawDef = LEVEL_REGISTRY.get(levelId);
     if (!rawDef) {
       console.error(`Level not found: ${levelId}`);
       return;
     }
-    
-    // Resolve defaults and placeable overrides
+
     const levelDef = resolveLevelDef(rawDef);
     this.currentLevel = levelDef;
-    
-    // Apply terrain/economy params to CONFIG
+
     applyLevelToConfig(levelDef);
-    
-    // Set active biomes (terrain generator will read these)
+
     this.activeBiomes = levelDef.biomes;
-    
-    // Set active placeables
     this.activePlaceables = levelDef._resolvedPlaceables;
-    
-    // Set active species
     this.activeSpecies = levelDef.species;
-    
-    // Build goals with closures referencing this game instance
+
     this.goals = levelDef.goals.map(goalDef => ({
       name: goalDef.name,
       condition: () => goalDef.condition(this.simulation, this),
       reward: goalDef.reward,
       achieved: false
     }));
-    
-    // Now run init which generates terrain, spawns entities, etc.
+
+    // NEW: Load illustration assets for this level's start screen
+    this.menuArt.loadForLevel(levelDef);
+
     this.init();
   }
   
@@ -624,8 +676,6 @@ class Game {
 
     if (audioManager) audioManager.playBackground();
   }
-
-  
 
   isInGameArea(mx, my) {
     return mx >= CONFIG.gameAreaX && 
@@ -982,37 +1032,49 @@ class Game {
     pop();
   }
 
-  renderLevelSelect() {
+    renderLevelSelect() {
     const cw = CONFIG.canvasWidth;
     const ch = CONFIG.canvasHeight;
     const centerX = cw * 0.5;
-    
+
     fill(CACHED_COLORS.menuBg);
     noStroke();
     rect(0, 0, cw, ch);
-    
+
     textAlign(CENTER, CENTER);
     fill(CACHED_COLORS.menuTitle);
     textSize(52);
     push(); textFont(GroceryRounded);
     text("Avian Age: Select Area", centerX, 100);
     pop();
-    
+
     fill(CACHED_COLORS.menuSubtitle);
     textSize(18);
     text("Choose an ecosystem to protect", centerX, 150);
-    
-    // Render level cards
+
+    // Responsive card layout
     const levels = LEVEL_REGISTRY.getAll();
-    const cardW = 320;
+    const maxCardW = 320;
+    const minCardW = 200;
     const cardH = 200;
     const cardSpacing = 40;
-    const totalW = levels.length * cardW + (levels.length - 1) * cardSpacing;
+    const availableW = cw - 120;  // 60px padding each side
+
+    // Calculate card width that fits all cards
+    let cardW = maxCardW;
+    let totalW = levels.length * cardW + (levels.length - 1) * cardSpacing;
+    if (totalW > availableW && levels.length > 1) {
+      cardW = Math.max(minCardW,
+        (availableW - (levels.length - 1) * cardSpacing) / levels.length
+      );
+      totalW = levels.length * cardW + (levels.length - 1) * cardSpacing;
+    }
+
     const startX = centerX - totalW / 2;
     const cardY = ch / 2 - cardH / 2;
-    
+
     this._levelCardBounds = [];
-    
+
     for (let i = 0; i < levels.length; i++) {
       const level = levels[i];
       const x = startX + i * (cardW + cardSpacing);
@@ -1020,7 +1082,7 @@ class Game {
       const completed = PROGRESS.isCompleted(level.id);
       const hover = unlocked && mouseX > x && mouseX < x + cardW
                              && mouseY > cardY && mouseY < cardY + cardH;
-      
+
       // Card background
       if (!unlocked) {
         fill(30, 30, 35, 200);
@@ -1034,7 +1096,7 @@ class Game {
       }
       strokeWeight(completed ? 3 : 2);
       rect(x, cardY, cardW, cardH, 12);
-      
+
       // Completion badge
       if (completed) {
         fill(80, 180, 100);
@@ -1044,19 +1106,19 @@ class Game {
         textSize(14);
         text("✓", x + cardW - 20, cardY + 20);
       }
-      
+
       // Level name
       fill(unlocked ? [200, 240, 210] : [80, 80, 85]);
       textSize(22);
       push(); textFont(GroceryRounded);
       text(level.name, x + cardW / 2, cardY + 40);
       pop();
-      
+
       // Region
       fill(unlocked ? [140, 180, 150] : [60, 60, 65]);
       textSize(14);
       text(level.menu?.areaLabel || '', x + cardW / 2, cardY + 70);
-      
+
       // Description preview
       fill(unlocked ? [120, 160, 130] : [50, 50, 55]);
       textSize(12);
@@ -1064,14 +1126,14 @@ class Game {
       for (let j = 0; j < desc.length; j++) {
         text(desc[j], x + cardW / 2, cardY + 100 + j * 18);
       }
-      
+
       // Lock icon
       if (!unlocked) {
         fill(100, 100, 110);
         textSize(32);
         text("🔒", x + cardW / 2, cardY + 160);
       }
-      
+
       // Best score
       if (PROGRESS.bestScores[level.id]) {
         fill(180, 200, 180);
@@ -1079,58 +1141,58 @@ class Game {
         text(`Best: ${PROGRESS.bestScores[level.id]} pts`,
              x + cardW / 2, cardY + cardH - 20);
       }
-      
+
       this._levelCardBounds.push({
         x, y: cardY, w: cardW, h: cardH,
         levelId: level.id, unlocked
       });
     }
-    
+
     fill(CACHED_COLORS.menuFooter);
     textSize(11);
     text(`Version: ${CONFIG.version}`, centerX, ch - 40);
   }
   
-  renderMenu() {
+    renderMenu() {
     const cw = CONFIG.canvasWidth;
     const ch = CONFIG.canvasHeight;
     const centerX = cw * 0.5;
     const centerY = ch * 0.5;
     const menu = this.currentLevel.menu;
-    
-    fill(CACHED_COLORS.menuBg);
-    noStroke();
-    rect(0, 0, cw, ch);
-    
-    for (let i = 0; i < 5; i++) {
-      fill(0, 0, 0, 3 - i * 0.5);
-      rect(i * 20, i * 20, cw - i * 40, ch - i * 40);
-    }
-    
+
+    // NEW: Render illustration layers (or plain background if no art)
+    // This replaces the old manual background fill + vignette
+    this.menuArt.render(cw, ch);
+
     textAlign(CENTER, CENTER);
-    
+
     // Title — from level def
     fill(CACHED_COLORS.menuTitle);
     textSize(64);
     push(); textFont(GroceryRounded);
     text(menu.title || "Avian Age", centerX, centerY - 300);
     pop();
-    
+
     fill(CACHED_COLORS.menuSubtitle);
     textSize(20);
     text(menu.subtitle || "A New Zealand Ecosystem Strategy Game",
          centerX, centerY - 240);
-    
-    // Plants — from level def
+
+    // Plants — from level def (responsive spacing)
     const displayPlants = menu.displayPlants || [];
     const plantY = centerY - 80;
-    const plantSpacing = 180;
     const spriteSize = 64;
-    
+
+    // Calculate plant spacing that adapts to canvas width
+    const maxPlantAreaWidth = cw - 200;  // padding on each side
+    const plantCount = displayPlants.length - 1; // minus featured species in center
+    const baseSpacing = 180;
+    const plantSpacing = Math.min(baseSpacing, maxPlantAreaWidth / (plantCount + 2));
+
     const midpoint = Math.ceil(displayPlants.length / 2);
     const leftPlants = displayPlants.slice(0, midpoint - 1);
     const rightPlants = displayPlants.slice(midpoint);
-    
+
     for (let i = 0; i < leftPlants.length; i++) {
       this._renderMenuPlant(
         centerX - 250 - (leftPlants.length - 1 - i) * plantSpacing,
@@ -1143,7 +1205,7 @@ class Game {
         plantY, rightPlants[i], spriteSize
       );
     }
-    
+
     // Featured species — from level def
     const featured = menu.featuredSpecies;
     if (featured) {
@@ -1154,7 +1216,7 @@ class Game {
       const sprite = this._getMenuSprite(featured.spriteKey);
       if (sprite) image(sprite, 0, 0);
       pop();
-      
+
       fill(CACHED_COLORS.menuSubtitle);
       textSize(16);
       textStyle(BOLD);
@@ -1164,7 +1226,7 @@ class Game {
       textSize(14);
       text(featured.localName || '', centerX, plantY + 98);
     }
-    
+
     // Flavor text — from level def
     fill(CACHED_COLORS.menuText);
     textSize(16);
@@ -1174,56 +1236,56 @@ class Game {
       ' ',
       ...(menu.flavorText || [])
     ];
-    
+
     const instructionsY = centerY + 60;
     for (let i = 0; i < flavorLines.length; i++) {
       text(flavorLines[i], centerX, instructionsY + i * 22);
     }
-    
+
     // Start button
     const btnW = 200, btnH = 60;
     const btnX = centerX - btnW / 2;
     const btnY = centerY + 230;
     const hover = mouseX > btnX && mouseX < btnX + btnW
                && mouseY > btnY && mouseY < btnY + btnH;
-    
+
     fill(0, 0, 0, 30);
     noStroke();
     rect(btnX + 3, btnY + 3, btnW, btnH, 12);
-    
+
     fill(hover ? CACHED_COLORS.btnHover : CACHED_COLORS.btnNormal);
     stroke(CACHED_COLORS.btnStroke);
     strokeWeight(2);
     rect(btnX, btnY, btnW, btnH, 12);
-    
+
     fill(255);
     noStroke();
     textSize(28);
     push(); textFont(GroceryRounded);
     text("Start Level", centerX, btnY + btnH * 0.5);
     pop();
-    
-    // Back button (to level select)
+
+    // Back button
     const backW = 120, backH = 40;
     const backX = centerX - backW / 2;
     const backY = btnY + btnH + 20;
     const backHover = mouseX > backX && mouseX < backX + backW
                    && mouseY > backY && mouseY < backY + backH;
-    
+
     fill(backHover ? [60, 60, 70] : [40, 40, 50]);
     stroke(80, 80, 90);
     strokeWeight(1);
     rect(backX, backY, backW, backH, 8);
-    
+
     fill(160, 170, 160);
     noStroke();
     textSize(14);
     text("← Back", centerX, backY + backH * 0.5);
-    
+
     fill(CACHED_COLORS.menuFooter);
     textSize(11);
     text(`Version: ${CONFIG.version}`, centerX, ch - 40);
-    
+
     this._menuBtnBounds = { x: btnX, y: btnY, w: btnW, h: btnH };
     this._backBtnBounds = { x: backX, y: backY, w: backW, h: backH };
   }
@@ -1494,32 +1556,38 @@ class Game {
   }
 }
 
+
+
 // ============================================
 // MAIN SKETCH
 // ============================================
 let game;
 
+let _needsInitialResize = true;
+
 function setup() {
   if (!audioManager) audioManager = initAudioManager();
+
+  CONFIG.recalculateLayout(windowWidth, windowHeight);
 
   let cnv = createCanvas(CONFIG.canvasWidth, CONFIG.canvasHeight);
   cnv.style('display', 'block');
   document.body.style.margin = '0';
   document.body.style.overflow = 'hidden';
   document.body.style.background = '#19231e';
-  
+
   scaleCanvasToFit();
   pixelDensity(1);
   frameRate(60);
   textFont('OpenDyslexic');
-  
+
   initCachedColors();
   initPlaceableColors();
   initPlantSprites(plantSprites);
   initializeRegistry();
 
   PROGRESS.init();
-  
+
   game = new Game();
 
   document.addEventListener('visibilitychange', () => {
@@ -1528,17 +1596,38 @@ function setup() {
 }
 
 function windowResized() {
+  // Recalculate layout for actual window dimensions
+  CONFIG.recalculateLayout(windowWidth, windowHeight);
+
+  // Resize the p5 canvas to the new computed dimensions
+  resizeCanvas(CONFIG.canvasWidth, CONFIG.canvasHeight);
+
+  // Apply CSS scaling to fill the window
   scaleCanvasToFit();
+
+  // Update UI panel positions if game is running
+  if (game && game.ui) {
+    game.ui.recalculate();
+  }
 }
 
 function scaleCanvasToFit() {
   const cnv = document.querySelector('canvas');
-  const scale = Math.min(windowWidth / 1920, windowHeight / 1080);
-  cnv.style.width = (1920 * scale) + 'px';
-  cnv.style.height = (1080 * scale) + 'px';
+  if (!cnv) return;
+
+  const cw = CONFIG.canvasWidth;
+  const ch = CONFIG.canvasHeight;
+
+  // Because we resize the canvas to match the window's aspect ratio,
+  // the scale factor should be very close to uniform.
+  // We use min() as a safety net against rounding.
+  const scale = Math.min(windowWidth / cw, windowHeight / ch);
+
+  cnv.style.width = (cw * scale) + 'px';
+  cnv.style.height = (ch * scale) + 'px';
   cnv.style.position = 'absolute';
-  cnv.style.left = ((windowWidth - 1920 * scale) / 2) + 'px';
-  cnv.style.top = ((windowHeight - 1080 * scale) / 2) + 'px';
+  cnv.style.left = ((windowWidth - cw * scale) / 2) + 'px';
+  cnv.style.top = ((windowHeight - ch * scale) / 2) + 'px';
 }
 
 function initializeRegistry() {
@@ -1557,31 +1646,43 @@ function initializeRegistry() {
 }
 
 function draw() {
+  // On first frame, re-check dimensions in case setup() got stale values
+  if (_needsInitialResize) {
+    _needsInitialResize = false;
+    const expectedW = Math.round(
+      CONFIG.referenceHeight *
+      Math.max(CONFIG.minAspectRatio,
+        Math.min(CONFIG.maxAspectRatio, windowWidth / windowHeight))
+    );
+    if (expectedW !== CONFIG.canvasWidth) {
+      windowResized(); // forces recalculate + resizeCanvas
+    }
+  }
+
   const currentTime = millis();
   deltaTime = constrain(currentTime - lastFrameTime, 1, 100);
   lastFrameTime = currentTime;
   deltaMultiplier = deltaTime / TARGET_FRAME_TIME;
-  
+
   updateFPS();
-  
+
   if (CONFIG.debugMode) {
     let t0 = performance.now();
     game.update(deltaMultiplier);
     let t1 = performance.now();
     game.render();
     let t2 = performance.now();
-    
+
     fill(255);
     textSize(10);
     text(`Update: ${(t1-t0).toFixed(1)}ms`, 85, 38);
     text(`Render: ${(t2-t1).toFixed(1)}ms`, 85, 52);
-    text(`Version: ${CONFIG.version}`, 85, 70);
+    text(`Canvas: ${CONFIG.canvasWidth}×${CONFIG.canvasHeight}`, 85, 70);
+    text(`Version: ${CONFIG.version}`, 85, 84);
   } else {
     game.update(deltaMultiplier);
     game.render();
   }
-  
-  //renderFPSCounter();
 }
 
 function updateFPS() {

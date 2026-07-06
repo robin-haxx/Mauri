@@ -119,6 +119,21 @@ class Moa extends Boid {
     this.canMate = true;
     this.mateCooldown = 0;
     this.mateCooldownTime = s.eggCooldownTime;
+
+    // Focal (the level's protected founders) vs non-focal (competitors). When a
+    // level names its focalSpecies, the OTHER moa sustain themselves better: they
+    // breed a bit faster and favour their own kind more strongly. With no focal
+    // list set, every moa behaves as focal (unchanged).
+    const _focal = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.focalSpecies) || null;
+    this.isFocal = _focal ? _focal.indexOf(this.speciesKey) !== -1 : true;
+    this.mateCrossPenalty = this.isFocal ? 40 : 80;
+    this.reproCooldownMult = this.isFocal ? 1 : 0.7;
+
+    // Vulnerable-founder highlight: while this species sits at/below its threshold
+    // it pulses in a highlight colour so the player can find and protect it.
+    this._vhl = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.vulnerableHighlight &&
+                 LEVEL_MECHANICS.vulnerableHighlight[this.speciesKey]) || null;
+    this._highlightActive = false;
     this.matingHungerThreshold = s.matingHungerThreshold;
     this.matingRangeSq = s.matingRange * s.matingRange;
     this.matingDuration = s.matingDuration;
@@ -227,6 +242,30 @@ class Moa extends Boid {
     const hungerMod = this.speciesConfig.seasonalModifiers?.[sc.key]?.hungerRate || 1;
     this.hungerRate = this.baseHungerRate * sc.hungerMod * hungerMod * (this.isJuvenile() ? 1.3 : 1);
     this.hunger = Math.min(this.hunger + this.hungerRate * dt, this.maxHunger);
+
+    // Vulnerable-founder highlight flag (drawn in render): active while the
+    // species is still at or below its threshold.
+    if (this._vhl) {
+      this._highlightActive = simulation.getCachedSpeciesCount(this.speciesKey) <= this._vhl.until;
+    }
+
+    // Habitat stress (opt-in per level): a moa sitting far outside its
+    // species' preferred elevation band burns extra energy. This keeps each
+    // species genuinely tethered to its habitat rather than roaming freely.
+    if (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.habitatStress) {
+      const niche = this.speciesConfig.preferredElevation;
+      if (niche) {
+        const elev = this.terrain.getElevationAt(this.pos.x, this.pos.y);
+        const margin = LEVEL_MECHANICS.habitatStressMargin ?? 0.10;
+        const lo = niche.min - margin, hi = niche.max + margin;
+        const err = elev < lo ? lo - elev : (elev > hi ? elev - hi : 0);
+        if (err > 0) {
+          let penalty = LEVEL_MECHANICS.habitatStressPenalty ?? 0.45;
+          if (sc.key === 'winter') penalty *= (LEVEL_MECHANICS.winterStressMult ?? 1.4);
+          this.hunger = Math.min(this.hunger + err * penalty * dt, this.maxHunger);
+        }
+      }
+    }
     
     // Cooldowns
     if (this.mateCooldown > 0) {
@@ -279,7 +318,14 @@ class Moa extends Boid {
     this.edges();
     this.updateSecurity(eagles, dt);
     
-    if (this.hunger >= this.maxHunger) this.alive = false;
+    if (this.hunger >= this.maxHunger) {
+      // Protected floor species (e.g. the last Dinornis) don't starve to death.
+      if (simulation.isSpeciesProtected && simulation.isSpeciesProtected(this.speciesKey)) {
+        this.hunger = this.maxHunger * 0.9;
+      } else {
+        this.alive = false;
+      }
+    }
     
     const terrainMult = this.getTerrainSpeedMultiplier();
     this.maxSpeed *= terrainMult;
@@ -449,6 +495,7 @@ class Moa extends Boid {
       if (distSq > maxDistSq) continue;
       
       let score = distSq;
+      if (o.speciesKey !== this.speciesKey) score *= this.mateCrossPenalty; // same-species preferred; non-focal favour own kind more
       if (o.targetMate === this) score *= 0.1;
       else if (o.currentState === MOA_STATE.SEEKING_MATE && !o.targetMate) score *= 0.5;
       else if (o.isReadyToMate()) score *= 0.7;
@@ -539,7 +586,12 @@ class Moa extends Boid {
 
   _resetAfterMating(moa) {
     moa.canMate = false;
-    moa.mateCooldown = moa.mateCooldownTime;
+    let _cd = moa.mateCooldownTime;
+    if (typeof LEVEL_MECHANICS !== 'undefined' && moa._seasonCache && moa._seasonCache.key === 'winter') {
+      _cd *= (LEVEL_MECHANICS.winterBreedingCooldownMult ?? 1);
+    }
+    _cd *= (moa.reproCooldownMult || 1);   // non-focal competitors breed a little faster
+    moa.mateCooldown = _cd;
     moa.matingPartner = null;
     moa.matingTimer = 0;
     moa.currentState = MOA_STATE.IDLE;
@@ -561,7 +613,9 @@ class Moa extends Boid {
   }
 
   layEgg(simulation, mauri) {
-    if (simulation.getMoaPopulation() >= this.config.maxMoaPopulation) {
+    const _cap = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.maxPerSpecies) || Infinity;
+    if (simulation.getMoaPopulation() >= this.config.maxMoaPopulation ||
+        (this.speciesKey && simulation.getSpeciesCount(this.speciesKey) >= _cap)) {
       this.isPregnant = false;
       this.pregnancyTimer = 0;
       return;
@@ -726,7 +780,37 @@ class Moa extends Boid {
       const dSq = dx * dx + dy * dy;
       
       if (dSq < this.eatRadiusSq) {
-        this.hunger = Math.max(0, this.hunger - this.targetPlant.consume());
+        let gain = this.targetPlant.consume();
+
+        // Forest competition (opt-in per level): when the forest is crowded,
+        // each moa wins less from a given plant (interference competition).
+        // Combined with a glacially-scarce forest this makes habitat contested.
+        if (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.forestCompetition
+            && FOREST_BIOMES.has(this.targetPlant.biomeKey)) {
+          const radius = LEVEL_MECHANICS.forestCompetitionRadius ?? 45;
+          const neighbours = simulation.getNearbyMoas(this.pos.x, this.pos.y, radius);
+          let competitors = 0;
+          for (let n = 0; n < neighbours.length; n++) {
+            const m = neighbours[n];
+            if (m !== this && m.alive) competitors++;
+          }
+          const tolerance = LEVEL_MECHANICS.forestCompetitionTolerance ?? 2;
+          if (competitors > tolerance) {
+            const over = competitors - tolerance;
+            let per = LEVEL_MECHANICS.forestCompetitionPenalty ?? 0.18;
+            if (this._seasonCache.key === 'winter') per *= (LEVEL_MECHANICS.winterCompetitionMult ?? 1.6);
+            gain *= Math.max(0.25, 1 - over * per);
+          }
+        }
+
+        // Favoured-plant selectivity: a species-specific planted resource yields
+        // little to species it isn't favoured by, so it safely provisions the
+        // target population (aggregation model of coexistence).
+        if (this.targetPlant.favouredSpecies && this.targetPlant.favouredSpecies !== this.speciesKey) {
+          gain *= (typeof LEVEL_MECHANICS !== 'undefined' ? (LEVEL_MECHANICS.unfavouredBrowsePenalty ?? 0.25) : 0.25);
+        }
+
+        this.hunger = Math.max(0, this.hunger - gain);
         mauri.earnFromEating(mauri.onMoaEat, this.pos.x, this.pos.y);
         this.targetPlant = null;
         this.vel.mult(0.3);
@@ -753,6 +837,10 @@ class Moa extends Boid {
       const hx = this.homeRange.x - p.pos.x, hy = this.homeRange.y - p.pos.y;
       if (hx * hx + hy * hy < this.homeRangeRadiusSq) score *= 0.7;
       if (p.isSpawned) score *= 0.6;
+      if (p.favouredSpecies) {
+        if (p.favouredSpecies === this.speciesKey) score *= 0.6;  // prefer own resource
+        else score *= 4.0;                                        // largely ignore others'
+      }
       
       if (score < bestScore) { bestScore = score; best = p; }
     }
@@ -868,7 +956,17 @@ class Moa extends Boid {
     
     push();
     translate(this.pos.x, this.pos.y);
-    
+
+    // Vulnerable-founder highlight: a soft pulsing halo under the moa so the
+    // player can spot the species that still needs protecting.
+    if (this._highlightActive && this._vhl) {
+      const _hc = this._vhl.color;
+      const _pulse = 0.5 + 0.5 * Math.sin(frameCount * 0.12);
+      noStroke();
+      fill(_hc[0], _hc[1], _hc[2], 55 + _pulse * 95);
+      ellipse(0, 0, this.size * (2.8 + _pulse * 1.4), this.size * (2.8 + _pulse * 1.4));
+    }
+
     // Shadow
     noStroke();
     fill(0, 0, 0, 25);
@@ -880,6 +978,9 @@ class Moa extends Boid {
     
     if (SpriteAngle.shouldMirror(this._displayAngle)) scale(1, -1);
     
+    // Per-species tint (by genus). Restored automatically by the pop() below.
+    const _tint = this.speciesConfig.tint;
+    if (_tint) tint(_tint[0], _tint[1], _tint[2]);
     imageMode(CENTER);
     image(sprite, 0, 0, this.size * 2.5, this.size * 2.5);
     pop();

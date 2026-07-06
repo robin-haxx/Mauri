@@ -195,6 +195,7 @@ class PlaceableObject {
         const plant = new Plant(px, py, plantType, this.terrain, biome.key);
         plant.isSpawned = true;
         plant.parentPlaceable = this;
+        plant.favouredSpecies = this.def.favouredSpecies || null;
         plant.growth = 0.8;
         
         this.spawnedPlants.push(plant);
@@ -304,7 +305,12 @@ class PlaceableObject {
     if (this.def.attractsMoa) {
       strength = max(strength, (this.def.attractionStrength || 1.0) * 0.5);
     }
-    
+
+    // Species-selective plants mostly draw only the species they favour
+    if (this.def.favouredSpecies && moa.speciesKey !== this.def.favouredSpecies) {
+      strength *= 0.2;
+    }
+
     return strength;
   }
   
@@ -374,7 +380,11 @@ class PlaceableObject {
   
   _renderStandard(lifeRatio, pulse) {
     const isFeeding = this.feedingMoaCount > 0;
-    const radiusAlpha = (30 + sin(frameCount * 0.03 + this.pulsePhase) * 15 + (isFeeding ? 15 : 0)) * lifeRatio;
+    // Placeables that spawn real plant sprites (lancewood, speargrass, etc.) are
+    // their own visual, so hide their pulsing radius ring unless debug mode is on.
+    const _plantPlaceable = this.type === 'kawakawa' || this.type === 'harakeke' || this.type === 'lancewood' || this.type === 'speargrass';
+    const _showRing = !_plantPlaceable || (typeof CONFIG !== 'undefined' && CONFIG.debugMode);
+    const radiusAlpha = _showRing ? (30 + sin(frameCount * 0.03 + this.pulsePhase) * 15 + (isFeeding ? 15 : 0)) * lifeRatio : 0;
     
     // Seasonal ring color
     noFill();
@@ -390,7 +400,7 @@ class PlaceableObject {
     ellipse(0, 0, this.radius * 2 * pulse, this.radius * 2 * pulse);
     
     // Inner glow when feeding
-    if (isFeeding) {
+    if (isFeeding && _showRing) {
       const col = this.def._parsedColor;
       fill(red(col), green(col), blue(col), (sin(frameCount * 0.1) * 0.3 + 0.5) * 80);
       noStroke();
@@ -398,7 +408,7 @@ class PlaceableObject {
     }
     
     // Types with spawned plants skip the central icon dot
-    const hasSpawnedPlants = this.type === 'kawakawa' || this.type === 'harakeke';
+    const hasSpawnedPlants = this.type === 'kawakawa' || this.type === 'harakeke' || this.type === 'lancewood' || this.type === 'speargrass';
     
     if (!hasSpawnedPlants) {
       // Main icon background

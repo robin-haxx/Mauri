@@ -11,6 +11,7 @@ const MOA_SPECIES = {
   upland_moa: {
     displayName: "Upland Moa",
     scientificName: "Megalapteryx didinus",
+    tint: null,                // Megalapteryx — rendered as-is
     description: "Small, hardy moa adapted to high-altitude forests",
     rarity: 'common',
     
@@ -59,6 +60,7 @@ const MOA_SPECIES = {
   south_island_giant_moa: {
     displayName: "South Island Giant Moa",
     scientificName: "Dinornis robustus",
+    tint: [170, 150, 130],     // Dinornis — desaturated brown
     description: "Massive moa of the lowland plains, up to 3.6m tall",
     rarity: 'uncommon',
     
@@ -102,6 +104,7 @@ const MOA_SPECIES = {
   north_island_giant_moa: {
     displayName: "North Island Giant Moa",
     scientificName: "Dinornis novaezealandiae",
+    tint: [170, 150, 130],     // Dinornis — desaturated brown
     description: "Large moa of northern forests",
     rarity: 'uncommon',
     
@@ -141,6 +144,7 @@ const MOA_SPECIES = {
   eastern_moa: {
     displayName: "Eastern Moa",
     scientificName: "Emeus crassus",
+    tint: [190, 120, 60],      // emeid — saturated brown
     description: "Adaptable medium-sized moa of varied habitats",
     rarity: 'common',
     
@@ -180,6 +184,7 @@ const MOA_SPECIES = {
   stout_legged_moa: {
     displayName: "Stout-legged Moa",
     scientificName: "Euryapteryx curtus",
+    tint: [205, 170, 80],      // yellow-brown — distinct from the rust bush moa
     description: "Stocky moa with powerful legs, coastal to lowland",
     rarity: 'common',
     
@@ -216,6 +221,7 @@ const MOA_SPECIES = {
   heavy_footed_moa: {
     displayName: "Heavy-footed Moa",
     scientificName: "Pachyornis elephantopus",
+    tint: [165, 168, 172],     // Pachyornis — grey
     description: "Robust moa with massive legs, lowland specialist",
     rarity: 'uncommon',
     
@@ -227,24 +233,24 @@ const MOA_SPECIES = {
     maxForce: 0.018,
     
     maxHunger: 130,
-    baseHungerRate: 0.048,
+    baseHungerRate: 0.05,
     hungerThreshold: 42,
     criticalHunger: 100,
     
-    preferredElevation: { min: 0.15, max: 0.35 },
+    preferredElevation: { min: 0.30, max: 0.44 },  // forest-edge competitor (lower forest band + top of flats)
     temperatureTolerance: { cold: 0.45, heat: 0.65 },
     
     flockTendency: 0.55,
     curiosity: 0.35,
     flightiness: 0.45,
     
-    eagleResistance: 0.25,
+    eagleResistance: 0.15,
     
     seasonalModifiers: {
-      summer: { hungerRate: 0.95, speed: 1.0 },
-      autumn: { hungerRate: 1.0, speed: 1.0 },
-      winter: { hungerRate: 1.15, speed: 0.85 },
-      spring: { hungerRate: 1.0, speed: 0.95 }
+      summer: { hungerRate: 0.95, speed: 0.9 },
+      autumn: { hungerRate: 1.2, speed: 0.8 },
+      winter: { hungerRate: 1.15, speed: 0.75 },
+      spring: { hungerRate: 1.1, speed: 0.85 }
     }
   },
   
@@ -254,6 +260,7 @@ const MOA_SPECIES = {
   crested_moa: {
     displayName: "Crested Moa",
     scientificName: "Pachyornis australis",
+    tint: [165, 168, 172],     // Pachyornis — grey
     description: "Southern moa with distinctive head crest",
     rarity: 'rare',
     
@@ -292,6 +299,7 @@ const MOA_SPECIES = {
   mantells_moa: {
     displayName: "Mantell's Moa",
     scientificName: "Pachyornis geranoides",
+    tint: [165, 168, 172],     // Pachyornis — grey
     description: "North Island relative of the heavy-footed moa",
     rarity: 'uncommon',
     
@@ -328,6 +336,7 @@ const MOA_SPECIES = {
   little_bush_moa: {
     displayName: "Little Bush Moa",
     scientificName: "Anomalopteryx didiformis",
+    tint: [190, 120, 60],      // emeid — saturated brown
     description: "Smallest moa, nimble forest dweller",
     rarity: 'common',
     

@@ -49,7 +49,12 @@ class Egg {
     this.speedBonus = 1;
     
     // Species inheritance
-    this.parentSpecies = null;  // Set by parent moa
+    this.parentSpecies = null;  // Set by parent moa (or eagle)
+
+    // What this egg hatches into: 'moa' (default) or 'eagle'. Emergent eagles
+    // lay eggs in their nest with offspringType='eagle'; the simulation branches
+    // on this in updateEggs so the same egg lifecycle serves both.
+    this.offspringType = 'moa';
     
     // Visual - pre-calculate speckle positions
     this.wobblePhase = random(TWO_PI);
@@ -82,8 +87,11 @@ class Egg {
   getOffspringSpecies() {
     // If parent species is set, usually inherit it
     if (this.parentSpecies) {
-      // Small chance of mutation to related species
-      if (random() < 0.05) {  // 5% mutation chance
+      // Small chance of mutation to a related species — unless the level turns
+      // speciation off (LEVEL_MECHANICS.noSpeciation), in which case offspring
+      // always inherit the parent's species (fixed cast, no off-level moa).
+      const _noSpeciation = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS && LEVEL_MECHANICS.noSpeciation);
+      if (!_noSpeciation && random() < 0.05) {  // 5% mutation chance
         return this.getMutatedSpecies();
       }
       return this.parentSpecies;
@@ -222,7 +230,7 @@ class Egg {
     
     fill(r, g, b);
     rect(barX, barY, barWidth * progress, barHeight, 1);
-    
+
     // Species indicator (debug only)
     if (CONFIG.debugMode && this.parentSpecies) {
       fill(200, 200, 200, 120);

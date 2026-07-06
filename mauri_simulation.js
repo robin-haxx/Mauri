@@ -23,7 +23,9 @@ class Simulation {
       starvations: 0,
       birthsBySpecies: {},
       deathsBySpecies: {},
-      anySpeciesExtinct: false
+      anySpeciesExtinct: false,
+      eagleBirths: 0,
+      eagleDeaths: 0
 
     };
 
@@ -96,6 +98,7 @@ class Simulation {
     // Timers for throttled updates
     this._placeableTimer = 0;
     this._cleanupTimer = 0;
+    this._eagleRegTimer = 0;
     
     // Nest lookup cache
     this._nestCache = [];
@@ -300,9 +303,70 @@ class Simulation {
     }
     
     const eagle = this._createFromRegistry('eagle', speciesKey, pos.x, pos.y, HaastsEagle);
-    if (eagle) this.eagles.push(eagle);
+    if (eagle) {
+      if (eagle.emergent) this._assignEagleNest(eagle, pos.x, pos.y);
+      this.eagles.push(eagle);
+    }
   }
-  
+
+  // Choose a fixed nest site for an emergent eagle: the highest, rockiest walkable
+  // spot in a small neighbourhood (a crag eyrie) near the given point. Falls back
+  // to the point itself. Also seeds patrolCenter so the bird orbits its nest.
+  _assignEagleNest(eagle, x, y) {
+    // Home near prey rather than on the barren high crags, so winter glaciation
+    // doesn't strand eagles in the empty alps with nothing to hunt. Falls back to
+    // the spawn point when no moa are nearby.
+    let cx = x, cy = y;
+    const prey = this.getClosestMoa(x, y, 600);
+    if (prey) {
+      const near = this.findWalkablePositionNear(prey.pos.x, prey.pos.y, 70);
+      cx = near.x; cy = near.y;
+    }
+    eagle.nest.set(cx, cy);
+    eagle.patrolCenter.set(cx, cy);
+  }
+
+  countAliveEagles() {
+    const eagles = this.eagles;
+    let n = 0;
+    for (let i = 0, len = eagles.length; i < len; i++) {
+      if (eagles[i].alive) n++;
+    }
+    return n;
+  }
+
+  // Called by an emergent eagle when it starves. Keeps bookkeeping and player
+  // feedback in one place; the dead bird is compacted out in cleanup().
+  onEagleDeath(eagle) {
+    if (this.stats && this.stats.eagleDeaths !== undefined) this.stats.eagleDeaths++;
+    this._invalidateCache();
+    if (this.game) {
+      this.game.addNotification('A Pouākai starves as prey grows scarce.', 'info');
+    }
+  }
+
+  // Hatch an eagle egg into a juvenile eagle at the nest (emergent reproduction).
+  _hatchEagleEgg(egg) {
+    const M = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS) ? LEVEL_MECHANICS : {};
+    const cap = M.eagleMaxPopulation ?? 12;
+    if (this.countAliveEagles() >= cap) return;
+
+    const eaglet = this._createFromRegistry('eagle', egg.parentSpecies, egg.pos.x, egg.pos.y, HaastsEagle);
+    if (!eaglet) return;
+
+    eaglet.emergent = true;
+    eaglet.age = 0;
+    eaglet.mature = false;
+    eaglet.hunger = 30;
+    eaglet.wingspan *= 0.6;              // juveniles are smaller until they mature
+    eaglet.bodyLength = eaglet.wingspan * 0.45;
+    this._assignEagleNest(eaglet, egg.pos.x, egg.pos.y);
+    this.eagles.push(eaglet);
+
+    if (this.stats && this.stats.eagleBirths !== undefined) this.stats.eagleBirths++;
+    if (this.game) this.game.addNotification('A Pouākai eaglet hatches.', 'success');
+  }
+
   findWalkablePosition(minElev, maxElev) {
     const terrain = this.terrain;
     const padding = this.spawnPadding;
@@ -342,6 +406,14 @@ class Simulation {
   }
 
   handleEagleCatch(eagle, moa, mauri) {
+    // Protected floor species (e.g. the last Dinornis) can't be taken — the
+    // eagle's strike fails and it breaks off.
+    if (this.isSpeciesProtected(moa.speciesKey)) {
+      eagle.hunting = false;
+      eagle.target = null;
+      eagle.huntSearchTimer = 0;
+      return;
+    }
     moa.alive = false;
     if (audioManager) audioManager.playEagleCatch();
     
@@ -353,7 +425,13 @@ class Simulation {
     eagle.huntSearchTimer = 0;
     eagle.state = 'resting';
     eagle.restTimer = eagle.restDuration;
-    eagle.patrolCenter.set(eagle.pos.x, eagle.pos.y);
+    // Emergent birds keep their fixed nest and drift home to digest; the classic
+    // controller-driven eagles recentre on the kill so they follow the prey.
+    if (!eagle.emergent) {
+      eagle.patrolCenter.set(eagle.pos.x, eagle.pos.y);
+    } else {
+      eagle.patrolCenter.set(eagle.nest.x, eagle.nest.y);
+    }
     
     // Track per-species death
     const speciesKey = moa.speciesKey || 'unknown';
@@ -403,18 +481,41 @@ class Simulation {
     if (this._cacheFrame === frameCount) return;
     
     let moaCount = 0, eggCount = 0;
+    const sc = this._speciesCountCache || (this._speciesCountCache = {});
+    for (const key in sc) sc[key] = 0;   // reset counts (keep the object)
     const moas = this.moas;
     for (let i = 0, len = moas.length; i < len; i++) {
-      if (moas[i].alive) moaCount++;
+      const m = moas[i];
+      if (m.alive) {
+        moaCount++;
+        const k = m.speciesKey;
+        if (k) sc[k] = (sc[k] || 0) + 1;
+      }
     }
     const eggs = this.eggs;
     for (let i = 0, len = eggs.length; i < len; i++) {
       if (eggs[i].alive && !eggs[i].hatched) eggCount++;
     }
-    
+
     this._cachedAliveMoas = moaCount;
     this._cachedAliveEggs = eggCount;
     this._cacheFrame = frameCount;
+  }
+
+  // Per-species alive moa count, cached once per frame (cheap for hot paths like
+  // eagle prey selection). Accurate to the last cache rebuild.
+  getCachedSpeciesCount(speciesKey) {
+    this._ensurePopulationCache();
+    return (this._speciesCountCache && this._speciesCountCache[speciesKey]) || 0;
+  }
+
+  // A species is "protected" once it has fallen to its configured population floor
+  // (LEVEL_MECHANICS.populationFloors) — its remaining members can't be hunted or
+  // starved, so the species can never be wiped out below that floor.
+  isSpeciesProtected(speciesKey) {
+    const floors = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.populationFloors) || null;
+    if (!floors || floors[speciesKey] === undefined) return false;
+    return this.getCachedSpeciesCount(speciesKey) <= floors[speciesKey];
   }
 
   // Convenience getters for level 2 goal conditions
@@ -465,10 +566,11 @@ class Simulation {
     for (const pair of this._gridEntityPairs) {
       pair.grid.clear();
       const list = pair.list;
-      const needsAliveCheck = (list !== this.eagles);
       for (let i = 0, len = list.length; i < len; i++) {
         const entity = list[i];
-        if (!needsAliveCheck || entity.alive) {
+        // Every entity now carries `.alive` (emergent eagles included), so a
+        // starved eagle awaiting cleanup is never inserted as a phantom threat.
+        if (entity.alive) {
           pair.grid.insert(entity);
         }
       }
@@ -571,7 +673,21 @@ class Simulation {
     this._updateOtherEntities(mauri, dt);
     
     this._updateSpeciesStability(dt);
-    
+
+    // Predator-prey coupling: eagle numbers track the moa population, thinning
+    // in the cold seasons and rebuilding in the warm ones. This is the top-down
+    // controller — skipped entirely when emergentEagles is on, because then the
+    // population arises from individual births (nests) and deaths (starvation).
+    if (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.eaglePreyCoupling
+        && !LEVEL_MECHANICS.emergentEagles) {
+      this._eagleRegTimer += dt;
+      const interval = LEVEL_MECHANICS.eagleAdjustInterval ?? 240;
+      if (this._eagleRegTimer >= interval) {
+        this._eagleRegTimer -= interval;
+        this.regulateEagles();
+      }
+    }
+
     this._cleanupTimer += dt;
     if (this._cleanupTimer >= 512) {
       this._cleanupTimer -= 512;
@@ -704,8 +820,18 @@ class Simulation {
       egg.update(dt);
       
       if (egg.hatched && egg.alive) {
-        if (this.getMoaPopulation() < config.maxMoaPopulation) {
+        if (egg.offspringType === 'eagle') {
+          // Emergent eagle reproduction: hatch a juvenile Pouākai, then consume
+          // the egg (over-cap eggs are simply lost rather than lingering).
+          this._hatchEagleEgg(egg);
+          egg.alive = false;
+        } else if (this.getMoaPopulation() < config.maxMoaPopulation) {
           const offspringSpecies = egg.getOffspringSpecies();
+          const _perSpeciesCap = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.maxPerSpecies) || Infinity;
+          if (this.getSpeciesCount(offspringSpecies) >= _perSpeciesCap) {
+            eggs[writeIdx++] = egg;   // species at its hard cap — hold this egg until there's room
+            continue;
+          }
           const newMoa = this._createFromRegistry('moa', offspringSpecies, egg.pos.x, egg.pos.y, Moa);
           
           if (newMoa) {
@@ -759,6 +885,7 @@ class Simulation {
     const eagles = this.eagles;
     for (let i = 0, len = eagles.length; i < len; i++) {
       const eagle = eagles[i];
+      if (!eagle.alive) continue;   // starved emergent birds await cleanup()
       eagle.behave(this, mauri, dt);
       eagle.update(dt);
       this.constrainToBounds(eagle.pos);
@@ -776,7 +903,19 @@ class Simulation {
       moas.length = writeIdx;
       this._invalidateCache();
     }
-    
+
+    // Emergent eagles can starve — compact the list just like the moa list so
+    // dead birds stop being drawn, queried, and counted.
+    const eagles = this.eagles;
+    let eWrite = 0;
+    for (let i = 0, len = eagles.length; i < len; i++) {
+      if (eagles[i].alive) eagles[eWrite++] = eagles[i];
+    }
+    if (eWrite !== eagles.length) {
+      eagles.length = eWrite;
+      this._invalidateCache();
+    }
+
     // Other entity cleanup
     for (const [type, list] of Object.entries(this.otherEntities)) {
       let wi = 0;
@@ -784,6 +923,52 @@ class Simulation {
         if (list[i].alive) list[wi++] = list[i];
       }
       list.length = wi;
+    }
+  }
+
+  // ============================================
+  // PREDATOR-PREY COUPLING (opt-in per level)
+  // ============================================
+
+  regulateEagles() {
+    const M = LEVEL_MECHANICS;
+    const moa = this.getMoaPopulation();
+    const perMoa = M.eaglesPerMoa ?? 0.09;
+    const minE = M.minEagles ?? 1, maxE = M.maxEagles ?? 6;
+    let target = Math.round(moa * perMoa);
+    if (target < minE) target = minE;
+    if (target > maxE) target = maxE;
+
+    const season = this.seasonManager.currentKey;
+    const n = this.eagles.length;
+    // Prey scarce + cold season -> an eagle starves or leaves.
+    if (n > target && (season === 'winter' || season === 'autumn')) {
+      this._removeWeakestEagle();
+    // Prey plentiful + warm season -> an eagle establishes / breeds.
+    } else if (n < target && (season === 'spring' || season === 'summer')) {
+      this.spawnEagle();
+    }
+  }
+
+  _removeWeakestEagle() {
+    const eagles = this.eagles;
+    if (eagles.length <= 1) return;
+    // Prefer a resting / non-hunting eagle so we never cut off a live swoop.
+    let idx = -1;
+    for (let i = 0; i < eagles.length; i++) {
+      const e = eagles[i];
+      if (!e.hunting && e.state !== 'hunting') { idx = i; break; }
+    }
+    if (idx < 0) {
+      let worst = -Infinity;
+      for (let i = 0; i < eagles.length; i++) {
+        const h = eagles[i].hunger || 0;
+        if (h > worst) { worst = h; idx = i; }
+      }
+    }
+    if (idx >= 0) {
+      eagles.splice(idx, 1);
+      if (this.game) this.game.addNotification("An eagle leaves as prey grows scarce.", 'info');
     }
   }
 
@@ -862,8 +1047,9 @@ class Simulation {
     // Layer 5: Trees (rimu, beech, fern)
     this._renderFiltered(plants, 30, p => p.type === 'rimu' || p.type === 'beech' || p.type === 'fern', true, inView);
     
-    // Layer 6: Eagles
-    this._renderFiltered(eagles, 30, null, false, inView);
+    // Layer 6: Eagles (aliveCheck true so a just-starved bird stops drawing
+    // immediately instead of lingering until the next cleanup pass)
+    this._renderFiltered(eagles, 30, null, true, inView);
     
     // Layer 6b: Flying other entities (kea)
     // Kea should render above trees like eagles
@@ -963,7 +1149,7 @@ class Simulation {
     summary.plantCount = activePlants;
     summary.dormantPlantCount = dormantPlants;
     summary.eggCount = this.getAliveEggsCount();
-    summary.eagleCount = this.eagles.length;
+    summary.eagleCount = this.countAliveEagles();
     summary.births = this.stats.births;
     summary.deaths = this.stats.deaths;
     

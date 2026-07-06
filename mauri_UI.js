@@ -133,7 +133,7 @@ class GameUI {
     // Wider sidebar = can show more; narrower = show less
     const sidebarScale = this.sidebar.width / 560; // 560 is the 16:9 baseline
     this.layout.eventLogHeight = Math.round(280 * sidebarScale);
-    this.layout.speciesPanelHeight = Math.round(200 * sidebarScale);
+    this.layout.speciesPanelHeight = Math.round(240 * sidebarScale);
     this.layout.eventLogMaxMessages = sidebarScale >= 1 ? 7 : 5;
   }
 
@@ -192,8 +192,9 @@ class GameUI {
     const btnSize = this.layout.toolbarBtnSize;
     const spacing = this.layout.toolbarSpacing;
 
+    const palette = this.game.activePlaceables || PLACEABLES;
     let i = 0;
-    for (let type in PLACEABLES) {
+    for (let type in palette) {
       let x = btnX + i * spacing;
       if (mx > x && mx < x + btnSize && my > btnY && my < btnY + btnSize) {
         this.game.selectPlaceable(type);
@@ -632,9 +633,10 @@ class GameUI {
     const btnSize = this.layout.toolbarBtnSize;
     const spacing = this.layout.toolbarSpacing;
 
+    const palette = this.game.activePlaceables || PLACEABLES;
     let i = 0;
-    for (let type in PLACEABLES) {
-      const def = PLACEABLES[type];
+    for (let type in palette) {
+      const def = palette[type];
       const x = btnX + i * spacing;
 
       const isSelected = this.game.selectedPlaceable === type;
@@ -729,7 +731,7 @@ class GameUI {
   }
 
   renderSelectedToolInfo() {
-    const def = PLACEABLES[this.game.selectedPlaceable];
+    const def = (this.game.activePlaceables && this.game.activePlaceables[this.game.selectedPlaceable]) || PLACEABLES[this.game.selectedPlaceable];
     const x = this.layout.selectedToolX;
     const y = this.bottomBar.y + 20;
 
@@ -954,7 +956,11 @@ class GameUI {
 
   renderSpeciesInfo(x, y) {
     const panelWidth = this.layout.sidebarPanelWidth;
-    const panelHeight = this.layout.speciesPanelHeight;
+    // Panel grows a row taller for each moa species beyond four, so a 5th/6th
+    // species row never overflows the box (driven by the level's species list).
+    const _nMoaSpecies = ((this.simulation.activeSpecies && this.simulation.activeSpecies.moa) || []).length;
+    const _speciesRowCount = Math.max(1, Math.ceil(_nMoaSpecies / 2));
+    const panelHeight = this.layout.speciesPanelHeight + Math.max(0, _speciesRowCount - 2) * 28;
 
     // Panel header
     const header = this._getPanelHeader();
@@ -975,30 +981,72 @@ class GameUI {
     const stats = this.getStats();
     const aliveMoas = this.simulation.moas.filter(m => m.alive);
 
-    // Population Stats Row
-    let statY = y + 45;
+    // Per-species counts — data-driven from the level's OWN species list so no
+    // species is ever silently uncounted. (The old hardcoded genus buckets had no
+    // slot for stout_legged_moa, so its whole population was invisible while still
+    // counting toward the total — the source of the "counts look low" mismatch.)
+    const _speciesKeys = (this.simulation.activeSpecies && this.simulation.activeSpecies.moa) || [];
+    const _counts = {};
+    for (let i = 0; i < _speciesKeys.length; i++) _counts[_speciesKeys[i]] = 0;
+    let _otherMoa = 0;
+    for (let i = 0; i < aliveMoas.length; i++) {
+      const k = aliveMoas[i].speciesKey;
+      if (_counts[k] !== undefined) _counts[k]++;
+      else _otherMoa++;   // e.g. an off-level species introduced by egg mutation
+    }
 
-    // Stats grid - 2 columns (adapt to panel width)
+    // Compact labels + icons (fall back to the species' displayName / tint).
+    const _MOA_LABEL = {
+      upland_moa: 'Megalapteryx', little_bush_moa: 'Bush moa',
+      stout_legged_moa: 'Stout-legged', eastern_moa: 'Eastern moa',
+      south_island_giant_moa: 'Dinornis', north_island_giant_moa: 'Dinornis',
+      heavy_footed_moa: 'Heavy-footed', crested_moa: 'Crested', mantells_moa: "Mantell's"
+    };
+    const _MOA_ICON = {
+      upland_moa: '🏔️', little_bush_moa: '🌲', stout_legged_moa: '🦵',
+      eastern_moa: '🌾', south_island_giant_moa: '🦤', north_island_giant_moa: '🦤',
+      heavy_footed_moa: '🐾', crested_moa: '🪨', mantells_moa: '🪨'
+    };
+    const _speciesRows = [];
+    for (let i = 0; i < _speciesKeys.length && _speciesRows.length < 6; i++) {
+      const key = _speciesKeys[i];
+      const data = (typeof MOA_SPECIES !== 'undefined' && MOA_SPECIES[key]) || {};
+      _speciesRows.push({
+        icon: _MOA_ICON[key] || '🥝',
+        label: _MOA_LABEL[key] || data.displayName || key,
+        value: _counts[key],
+        color: data.tint || [205, 195, 165]
+      });
+    }
+    if (_otherMoa > 0 && _speciesRows.length < 6) {
+      _speciesRows.push({ icon: '❔', label: 'Other moa', value: _otherMoa, color: [150, 150, 150] });
+    }
+
+    // Population stats — 5 rows x 2 columns, row-major
+    let statY = y + 42;
+    const rowH = 28;
     const col1X = x + 15;
     const col2X = x + panelWidth / 2 + 5;
 
-    // Row 1: Moa and Eggs
-    this.renderStatItem(col1X, statY, '🦤', 'Moa', `${stats.moas}/${this.config.maxMoaPopulation}`, [180, 150, 120]);
-    this.renderStatItem(col2X, statY, '🥚', 'Eggs', stats.eggs, [245, 240, 220]);
-
-    statY += 36;
-
-    // Row 2: Eagles and Hatched
-    this.renderStatItem(col1X, statY, '🦅', 'Eagles', stats.eagles, [180, 130, 130]);
+    // Species rows (2 per row), driven by the level's species list. Render enough
+    // rows for every species (plus any "Other moa"), matching the reserved height.
+    const _rows = Math.max(_speciesRowCount, Math.ceil(_speciesRows.length / 2));
+    for (let r = 0; r < _rows; r++) {
+      const a = _speciesRows[r * 2], b = _speciesRows[r * 2 + 1];
+      if (a) this.renderStatItem(col1X, statY, a.icon, a.label, a.value, a.color);
+      if (b) this.renderStatItem(col2X, statY, b.icon, b.label, b.value, b.color);
+      statY += rowH;
+    }
+    this.renderStatItem(col1X, statY, '👣', 'Total moa', `${stats.moas}/${this.config.maxMoaPopulation}`, [180, 210, 150]);
+    this.renderStatItem(col2X, statY, '🦅', 'Total eagles', stats.eagles, [180, 130, 130]);
+    statY += rowH;
+    this.renderStatItem(col1X, statY, '🥚', 'Eggs', stats.eggs, [245, 240, 220]);
     this.renderStatItem(col2X, statY, '🐣', 'Hatched', stats.births, [255, 230, 180]);
-
-    statY += 36;
-
-    // Row 3: Plants (active and dormant)
+    statY += rowH;
     this.renderStatItem(col1X, statY, '🌿', 'Plants', stats.activePlants, [130, 200, 130]);
     this.renderStatItem(col2X, statY, '❄️', 'Dormant', stats.dormantPlants, [150, 150, 170]);
 
-    statY += 40;
+    statY += rowH + 6;
 
     // Average Hunger Bar
     if (aliveMoas.length > 0) {

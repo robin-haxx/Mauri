@@ -32,7 +32,7 @@ class HaastsEagle extends Boid {
     this._huntEventFired = false;
     
     // Hunger
-    this.hunger = random(25, 35);
+    this.hunger = random(20, 25);
     this.maxHunger = 100;
     this.hungerRate = 0.015;
     this.huntThreshold = 40;
@@ -66,6 +66,49 @@ class HaastsEagle extends Boid {
     this._edgeForce = createVector();
     this._separationForce = createVector();
     this._relocateTargetVec = createVector();
+
+    // Alive flag — emergent eagles can die of starvation and be cleaned up
+    // like moa (the classic controller never needed this).
+    this.alive = true;
+
+    // ---- Emergent population model (opt-in via LEVEL_MECHANICS.emergentEagles) ----
+    // When on, an eagle's numbers are NOT set by a top-down controller: each bird
+    // holds a fixed nest, feeds or starves on its own energy budget, and breeds
+    // with a varied drive scaled to prey abundance. Population ebbs and flows from
+    // these individual births and deaths.
+    const M = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS) ? LEVEL_MECHANICS : {};
+    this.emergent = !!M.emergentEagles;
+
+    // Nest: a fixed home site (a crag eyrie, or a large tree) the bird patrols
+    // around and returns to after feeding. Placed precisely by the simulation
+    // (Simulation._assignEagleNest); defaults to the spawn point until then.
+    this.nest = createVector(x, y);
+
+    // Age & maturity — hatchlings must mature before they can breed.
+    this.age = 0;
+    this.mature = true;                 // spawned founders are already adults
+    this.maturityAge = M.eagleMaturityAge ?? 1500;
+    this.adultWingspan = this.wingspan; // restored when a juvenile matures
+
+    // Starvation budget. Hunger already climbs each frame; when it stays above
+    // starveThreshold for starveTimeout ticks with no catch, the bird dies.
+    this.starveTimer = 0;
+    this.starveThreshold = M.eagleStarveThreshold ?? 85;
+    this.starveTimeout = M.eagleStarveTimeout ?? 900;
+
+    // Reproduction: a *varied* per-bird drive, gated on being well-fed, mature,
+    // and off cooldown, with a rate that scales by how far below the target
+    // eagle:moa ratio the population currently sits (see _tryReproduce).
+    this.reproDrive = random(0.6, 1.4);
+    this.reproCooldown = 0;
+    this.reproCheckInterval = M.eagleReproCheckInterval ?? 220;
+    this.reproCheckTimer = random(0, this.reproCheckInterval);
+
+    if (this.emergent) {
+      // Emergent birds metabolise a little faster so the population visibly ebbs
+      // across a season instead of coasting indefinitely.
+      this.hungerRate = M.eagleHungerRate ?? 0.03;
+    }
   }
   
   isHunting() { 
@@ -79,7 +122,39 @@ class HaastsEagle extends Boid {
   behave(simulation, mauri, dt = 1) {
     this.animTime += dt;
     this.hunger = Math.min(this.hunger + this.hungerRate * dt, this.maxHunger);
-    
+
+    // Emergent population model: age, maybe starve, and (when calm) maybe breed.
+    if (this.emergent) {
+      this.age += dt;
+      if (!this.mature && this.age >= this.maturityAge) {
+        this.mature = true;
+        this.wingspan = this.adultWingspan;
+        this.bodyLength = this.wingspan * 0.45;
+      }
+
+      // Starvation: sustained high hunger kills; a recent feed pays the debt back.
+      if (this.hunger >= this.starveThreshold) {
+        this.starveTimer += dt;
+        if (this.starveTimer >= this.starveTimeout) {
+          this.alive = false;
+          if (simulation.onEagleDeath) simulation.onEagleDeath(this);
+          return;
+        }
+      } else if (this.starveTimer > 0) {
+        this.starveTimer = Math.max(0, this.starveTimer - dt * 2);
+      }
+
+      // Reproduction check (throttled). Only when calm — never mid-hunt.
+      this.reproCooldown = Math.max(0, this.reproCooldown - dt);
+      this.reproCheckTimer -= dt;
+      if (this.reproCheckTimer <= 0) {
+        this.reproCheckTimer = this.reproCheckInterval;
+        if (this.state !== 'hunting' && this.state !== 'distracted') {
+          this._tryReproduce(simulation);
+        }
+      }
+    }
+
     const nearbyPlaceables = simulation.getNearbyPlaceables(this.pos.x, this.pos.y, 100);
     this.checkStorms(nearbyPlaceables);
     
@@ -280,21 +355,37 @@ class HaastsEagle extends Boid {
     const nearbyMoas = simulation.getNearbyMoas(this.pos.x, this.pos.y, this.huntRadius);
     
     let nearestDistSq = Infinity;
+    let nearestEff = Infinity;
     let nearestMoa = null;
     const px = this.pos.x, py = this.pos.y;
-    
+
+    const _M = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS) ? LEVEL_MECHANICS : {};
+    const _preyThreshold = _M.eaglePreyPopThreshold ?? 12;
+    const _scarcePenalty = _M.eagleScarcePreyPenalty ?? 6;
+
     for (let i = 0; i < nearbyMoas.length; i++) {
       const moa = nearbyMoas[i];
       if (!moa.alive) continue;
+      if (simulation.isSpeciesProtected && simulation.isSpeciesProtected(moa.speciesKey)) continue; // never target a protected floor species
       if (moa.inShelter && this.target !== moa) continue;
       if (moa.eagleResistance > 0 && random() < moa.eagleResistance) continue;
-      
+
       const dx = moa.pos.x - px;
       const dy = moa.pos.y - py;
       const dSq = dx * dx + dy * dy;
-      
-      if (dSq < nearestDistSq) {
-        nearestDistSq = dSq;
+
+      // Prefer abundant prey: a species at/below the threshold is "protected" —
+      // its members feel much farther away, so eagles crop common species and
+      // spare rare ones (this breaks the moa death-spiral when things turn cold).
+      let eff = dSq;
+      if (this.emergent && simulation.getCachedSpeciesCount &&
+          simulation.getCachedSpeciesCount(moa.speciesKey) <= _preyThreshold) {
+        eff *= _scarcePenalty;
+      }
+
+      if (eff < nearestEff) {
+        nearestEff = eff;
+        nearestDistSq = dSq;   // keep the TRUE distance for the catch check
         nearestMoa = moa;
       }
     }
@@ -331,10 +422,29 @@ class HaastsEagle extends Boid {
       this._huntEventFired = false;
       
       if (this.huntSearchTimer >= this.huntSearchTimeout) {
+        if (this.emergent) {
+          // Follow the prey: if a moa exists anywhere in a wide radius, shift the
+          // territory toward it — eagles trail the herds downhill in winter rather
+          // than roaming the barren alps. Only when NO moa can be found does the
+          // bird stay put and let hunger take its course (a real local ebb).
+          const followR = _M.eagleFollowRadius ?? 900;
+          const prey = simulation.getClosestMoa
+            ? simulation.getClosestMoa(this.pos.x, this.pos.y, followR)
+            : null;
+          if (prey) {
+            this.nest.set(prey.pos.x, prey.pos.y);
+            this.patrolCenter.set(prey.pos.x, prey.pos.y);
+          }
+          this.state = 'patrol';
+          this.hunting = false;
+          this.target = null;
+          this.huntSearchTimer = 0;
+          return;
+        }
         this.startRelocation();
         return;
       }
-      
+
       this.searchForPrey();
     }
     
@@ -422,7 +532,64 @@ class HaastsEagle extends Boid {
     this.patrolCenter.x = constrain(this.patrolCenter.x + random(-amount, amount), 80, mapW - 80);
     this.patrolCenter.y = constrain(this.patrolCenter.y + random(-amount, amount), 80, mapH - 80);
   }
-  
+
+  // ============================================
+  // REPRODUCTION (emergent population)
+  // ============================================
+
+  // Lay an egg in the nest when prey is plentiful. Emergent, not scripted: the
+  // decision is per-bird (a varied drive, a fed state, a cooldown) and the rate
+  // is pulled toward a target eagle:moa RATIO — the tuning knob the designer sets
+  // instead of a fixed eagle count. Pressure is 0 at/above target and rises to 1
+  // as the population falls below it, so numbers self-regulate around the ratio
+  // without ever being forced there.
+  _tryReproduce(simulation) {
+    if (!this.mature || this.reproCooldown > 0) return;
+
+    // Must be well-fed to invest in an egg.
+    const wellFed = this.maxHunger * 0.45;
+    if (this.hunger > wellFed) return;
+
+    const M = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS) ? LEVEL_MECHANICS : {};
+
+    const cap = M.eagleMaxPopulation ?? 12;
+    const eagleN = simulation.countAliveEagles
+      ? simulation.countAliveEagles()
+      : simulation.eagles.length;
+    if (eagleN >= cap) return;
+
+    const moaN = simulation.getMoaPopulation();
+    if (moaN <= 0) return;
+
+    // The tuning knob: ~one eagle per six moa by default.
+    const ratio = M.eagleTargetRatio ?? (1 / 6);
+    const targetEagles = moaN * ratio;
+    if (targetEagles <= 0) return;
+
+    // Pressure: 0 when at/over the target, → 1 when well below it.
+    let pressure = 1 - (eagleN / targetEagles);
+    if (pressure <= 0) return;
+    if (pressure > 1) pressure = 1;
+
+    // Better-fed birds are likelier to breed.
+    const fed = 1 - (this.hunger / wellFed); // 0..1
+    const base = M.eagleReproChance ?? 0.5;
+    const p = base * pressure * this.reproDrive * (0.5 + 0.5 * fed);
+
+    if (random() < p) {
+      const egg = simulation.addEgg(this.nest.x, this.nest.y);
+      egg.offspringType = 'eagle';
+      egg.parentSpecies = this.speciesKey || egg.parentSpecies || null;
+      egg.incubationTime *= 1.6; // eagles brood a little longer than moa
+      this.reproCooldown = M.eagleReproCooldown ?? 2600;
+      // Laying is costly — the parent must hunt again soon.
+      this.hunger = Math.min(this.maxHunger, this.hunger + 25);
+      if (simulation.game) {
+        simulation.game.addNotification('A Pouākai nests — an egg is laid.', 'info');
+      }
+    }
+  }
+
   // ============================================
   // RENDERING
   // ============================================

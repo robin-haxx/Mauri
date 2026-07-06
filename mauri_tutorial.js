@@ -406,7 +406,14 @@ class TutorialUIMapper {
     const config = this.config;
     const layout = ui.layout;
     
-    // Tool buttons by name
+    // Tool buttons by placeable key (level-scoped): 'tool:<key>'
+    if (typeof target === 'string' && target.startsWith('tool:')) {
+      const key = target.slice(5);
+      const keys = Object.keys((ui.game && ui.game.activePlaceables) || {});
+      const idx = keys.indexOf(key);
+      return idx >= 0 ? this._getToolButtonBounds(idx) : null;
+    }
+    // Tool buttons by name (classic global order)
     const toolButtons = {
       kawakawaButton: 0, shelterButton: 1, nestButton: 2,
       StormButton: 3, waterholeButton: 4, harakekeButton: 5
@@ -468,6 +475,7 @@ class TutorialUIMapper {
 class TutorialManager {
   constructor(game) {
     this.game = game;
+    this.tips = TUTORIAL_TIPS;   // default tip set; levels can override via setLevelTips()
     this.enabled = true;
     this.active = false;
     this.currentTip = null;
@@ -504,6 +512,10 @@ class TutorialManager {
   
   setGuideSprite(sprite) {
     this.guideSprite = sprite;
+  }
+
+  setLevelTips(tips) {
+    this.tips = tips || TUTORIAL_TIPS;
   }
   
   init() {
@@ -563,11 +575,12 @@ class TutorialManager {
   }
   
   _checkEventTriggers(eventType, data) {
-    for (const tipId in TUTORIAL_TIPS) {
-      const tip = TUTORIAL_TIPS[tipId];
+    for (const tipId in this.tips) {
+      const tip = this.tips[tipId];
       if (this._shouldSkipTip(tipId, tip)) continue;
       if (tip.trigger.type !== TRIGGER_TYPE.EVENT || tip.trigger.event !== eventType) continue;
       if (tip.trigger.minGameTime && this.game.playTime < tip.trigger.minGameTime) continue;
+      if (tip.trigger.condition && !tip.trigger.condition(this.game, data)) continue;
       this._queueTip(tipId, data);
     }
   }
@@ -599,8 +612,8 @@ class TutorialManager {
     
     // Check time-based triggers
     const gameTime = this.game.playTime - this.gameTimeAtStart;
-    for (const tipId in TUTORIAL_TIPS) {
-      const tip = TUTORIAL_TIPS[tipId];
+    for (const tipId in this.tips) {
+      const tip = this.tips[tipId];
       if (this._shouldSkipTip(tipId, tip)) continue;
       if (tip.trigger.type === TRIGGER_TYPE.TIME && gameTime >= tip.trigger.delay) {
         this._queueTip(tipId);
@@ -609,8 +622,8 @@ class TutorialManager {
     
     // Check condition triggers (throttled)
     if (frameCount % 30 === 0) {
-      for (const tipId in TUTORIAL_TIPS) {
-        const tip = TUTORIAL_TIPS[tipId];
+      for (const tipId in this.tips) {
+        const tip = this.tips[tipId];
         if (this._shouldSkipTip(tipId, tip)) continue;
         if (tip.trigger.type !== TRIGGER_TYPE.CONDITION) continue;
         try {
@@ -636,7 +649,7 @@ class TutorialManager {
   _queueTip(tipId, data = {}) {
     if (this.pendingTips.some(t => t.id === tipId)) return;
     
-    const tip = TUTORIAL_TIPS[tipId];
+    const tip = this.tips[tipId];
     if (!tip) return;
     
     this.pendingTips.push({
@@ -651,7 +664,7 @@ class TutorialManager {
   }
   
   _showTip(tipId, data = {}) {
-    const tip = TUTORIAL_TIPS[tipId];
+    const tip = this.tips[tipId];
     if (!tip) return;
     
     this.currentTip = { ...tip, data };
@@ -690,7 +703,7 @@ class TutorialManager {
     
     // Chain to next tip if still enabled
     if (this.enabled && tip.nextTip) {
-      const nextTip = TUTORIAL_TIPS[tip.nextTip];
+      const nextTip = this.tips[tip.nextTip];
       if (nextTip && nextTip.trigger.type === TRIGGER_TYPE.IMMEDIATE) {
         this.currentTip = null;
         this.active = false;

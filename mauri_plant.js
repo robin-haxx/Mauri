@@ -10,11 +10,19 @@ const PLANT_TYPE_ID = {
   kawakawa: 3,
   rimu: 4,
   beech: 5,
-  patotara: 6
+  patotara: 6,
+  coprosma: 7,
+  dracophyllum: 8,
+  matagouri: 9,
+  lancewood: 10,
+  speargrass: 11
 };
 
 // Plants that use sprite rendering
-const SPRITE_PLANTS = new Set(['tussock', 'flax', 'fern', 'rimu', 'beech', 'patotara']);
+const SPRITE_PLANTS = new Set(['tussock', 'flax', 'fern', 'rimu', 'beech', 'patotara', 'lancewood']);
+
+// Forest canopy trees subject to seasonal forest-band contraction
+const FOREST_TREES = new Set(['beech', 'rimu', 'fern']);
 
 // Sprite reference - initialized from mauri_sketch.js
 let PLANT_SPRITES = null;
@@ -210,6 +218,8 @@ class Plant {
     
     this.isSpawned = false;
     this.parentPlaceable = null;
+    this.favouredSpecies = null;   // set by a placeable that plants a species-specific resource
+    this.suppressed = false;       // true when a forest tree is outside the contracted forest band
     
     // Pre-calculate visual variation
     this.visualOffset = random(-1, 1);
@@ -231,6 +241,21 @@ class Plant {
       return;
     }
     
+    // Forest contraction: canopy trees outside the (seasonally shrinking) forest
+    // band become unproductive/wilted. O(1) per plant against a per-frame lerped
+    // band — no biome reclassification, so no stutter.
+    if (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.forestContraction
+        && FOREST_TREES.has(this.type)) {
+      const band = seasonManager.getForestBand();
+      if (band && (this.elevation < band.min || this.elevation > band.max)) {
+        this.suppressed = true;
+        this.dormant = false;
+        this.nutrition = 0;
+        return;
+      }
+      this.suppressed = false;
+    }
+
     const newModifier = seasonManager.getPlantModifier(this.biomeKey);
     if (Math.abs(newModifier - this.seasonalModifier) > 0.01) {
       this.seasonalModifier = newModifier;
@@ -331,6 +356,10 @@ class Plant {
   // ============================================
   
   _getSpriteState() {
+    // Trees suppressed by forest contraction show as wilted
+    if (this.suppressed) {
+      return 'wilting';
+    }
     // Dormant plants use wilting sprite
     if (this.dormant) {
       return 'dormant';

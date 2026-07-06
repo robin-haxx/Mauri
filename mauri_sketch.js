@@ -18,7 +18,7 @@ function preload(){
   OpenDyslexic = loadFont('typefaces/OpenDyslexic.ttf');
   GroceryRounded = loadFont('typefaces/GroceryRounded.ttf');
   
-  const spritePlants = ['Tussock', 'Flax', 'Fern', 'Rimu', 'Beech', 'Patotara'];
+  const spritePlants = ['Tussock', 'Flax', 'Fern', 'Rimu', 'Beech', 'Patotara', 'Lancewood'];
   const states = ['Mature', 'Thriving', 'Wilting', 'Dormant'];
   
   for (const plant of spritePlants) {
@@ -45,7 +45,7 @@ function preload(){
 // ============================================
 const CONFIG = {
   // ===== ENGINE CONSTANTS (never change between levels) =====
-  version: 'alpha 0.9.0',
+  version: 'alpha 1.0.2 (TEST_BUILD_2)',
 
   // Reference height is always 1080; width is computed from window aspect ratio
   referenceHeight: 1080,
@@ -160,8 +160,25 @@ const CONFIG = {
   }
 };
 
+// ============================================
+// LEVEL MECHANICS (optional, per-level, opt-in)
+// Read by mauri_moa.js / mauri_simulation.js. Empty = disabled,
+// so levels that don't set `mechanics` behave exactly as before.
+// ============================================
+let LEVEL_MECHANICS = {};
+let FOREST_BIOMES = new Set();
+
 // Applies level parameters onto CONFIG
 function applyLevelToConfig(levelDef) {
+  // Opt-in gameplay mechanics (habitat stress, forest competition, ...)
+  LEVEL_MECHANICS = levelDef.mechanics || {};
+  FOREST_BIOMES = new Set(LEVEL_MECHANICS.forestBiomes || []);
+
+  // View & calendar (per-level, with engine defaults for levels that omit them)
+  CONFIG.zoom = (levelDef.zoom != null) ? levelDef.zoom : 2.5;
+  const _seasonOrder = ['summer', 'autumn', 'winter', 'spring'];
+  CONFIG.startSeasonIndex = levelDef.startSeason ? Math.max(0, _seasonOrder.indexOf(levelDef.startSeason)) : 0;
+
   const t = levelDef.terrain;
   CONFIG.noiseScale = t.noiseScale;
   CONFIG.octaves = t.octaves;
@@ -314,7 +331,7 @@ const PLACEABLES = {
   nest: {
     name: "Nesting Site",
     description: "Safe place to lay eggs",
-    cost: 50,
+    cost: 55,
     icon: '🪺',
     color: '#8b7355',
     effect: 'nesting',
@@ -332,7 +349,7 @@ const PLACEABLES = {
   Storm: {
     name: "Storm",
     description: "Distracts hunting eagles",
-    cost: 35,
+    cost: 40,
     icon: '🌩️',
     color: '#c4a35a',
     effect: 'Storm',
@@ -383,6 +400,53 @@ const PLACEABLES = {
     seasonalBonus: { summer: 1.3, autumn: 1.5, winter: 0.7, spring: 1.0 },
     attractsHungryMoa: true,
     attractionStrength: 1.2
+  },
+
+  lancewood: {
+    name: "Lancewood Stand",
+    description: "Tough browse the bush moa favour",
+    cost: 30,
+    icon: '🌲',
+    color: '#6a7a3a',
+    effect: 'feeding',
+    radius: 40,
+    duration: 2400,
+    minSpacing: 30,
+    ignoresSpacing: false,
+    feedingRate: 0.15,
+    baseFeedingRate: 0.15,
+    plantSpawnCount: 4,
+    plantType: 'lancewood',
+    favouredSpecies: 'little_bush_moa',
+    // Placeable in the tussock bands too (subalpine + glacial flats), so the player
+    // can lay a downhill lancewood corridor to draw wandering bush moa back to the
+    // forest refuge — the "corridor" the spring tutorial talks about.
+    allowedBiomes: ['forestRefuge', 'shrubland', 'subalpine', 'glacialFlats'],
+    seasonalBonus: { summer: 1.0, autumn: 1.2, winter: 1.1, spring: 1.0 },
+    attractsHungryMoa: true,
+    attractionStrength: 1.4
+  },
+
+  speargrass: {
+    name: "Speargrass Patch",
+    description: "Spiny herb the upland moa favour",
+    cost: 30,
+    icon: '🌵',
+    color: '#8f9a55',
+    effect: 'feeding',
+    radius: 40,
+    duration: 2400,
+    minSpacing: 30,
+    ignoresSpacing: false,
+    feedingRate: 0.15,
+    baseFeedingRate: 0.15,
+    plantSpawnCount: 4,
+    plantType: 'speargrass',
+    favouredSpecies: 'upland_moa',
+    allowedBiomes: ['subalpine', 'shrubland', 'glacialFlats'],
+    seasonalBonus: { summer: 1.2, autumn: 1.0, winter: 0.9, spring: 1.1 },
+    attractsHungryMoa: true,
+    attractionStrength: 1.4
   }
 };
 
@@ -459,7 +523,21 @@ const PLANT_TYPES = {
   kawakawa: { name: "Kawakawa", nutrition: 40, color: '#3d9a5e', size: 22, growthTime: 150,
     description: "Heart-shaped leaves with peppery fruit" },
   patotara: { name: "Patotara", nutrition: 35, color: '#c94c5a', size: 28, growthTime: 160,
-    description: "Alpine shrub with summer berries" }
+    description: "Alpine shrub with summer berries" },
+
+  // --- Glacial-flora (LGM) additions. Procedural blob-rendered (no sprites yet). ---
+  coprosma: { name: "Coprosma", nutrition: 30, color: '#5c7d3e', size: 22, growthTime: 190,
+    description: "Divaricating shrub; hardy glacial browse with orange berries" },
+  dracophyllum: { name: "Dracophyllum", nutrition: 28, color: '#9a7b4f', size: 30, growthTime: 250,
+    description: "Inaka grass-tree of the cold subalpine tops" },
+  matagouri: { name: "Matagouri", nutrition: 26, color: '#7a6f4a', size: 24, growthTime: 210,
+    description: "Tūmatakuru: thorny shrub of the glacial outwash flats" },
+
+  // --- Favoured, browse-resistant plants (planted via the palette) ---
+  lancewood: { name: "Juvenile Lancewood", nutrition: 34, color: '#6a5a33', size: 30, growthTime: 300,
+    description: "Horoeka: tough and spiky when growing." },
+  speargrass: { name: "Speargrass", nutrition: 30, color: '#8f9a55', size: 26, growthTime: 260,
+    description: "Taramea: spiny herb of the hills" }
 };
 
 // ============================================
@@ -595,12 +673,15 @@ class Game {
     
     this.selectedPlaceable = null;
     this.placePreview = null;
+    this._stormCooldownUntil = 0;
     
     this.playTime = 0;
     this.maxPlayTime = 0;
     this._menuBtnBounds = null;
 
     this.goals = [];
+    this.phases = null;
+    this._phaseIndex = -1;
     
     this.notifications = [];
     this.gameOverReason = '';
@@ -628,12 +709,21 @@ class Game {
     this.activePlaceables = levelDef._resolvedPlaceables;
     this.activeSpecies = levelDef.species;
 
-    this.goals = levelDef.goals.map(goalDef => ({
-      name: goalDef.name,
-      condition: () => goalDef.condition(this.simulation, this),
-      reward: goalDef.reward,
-      achieved: false
-    }));
+    // Phased levels build their goal list dynamically per phase; classic
+    // levels use the static goals array exactly as before.
+    if (levelDef.phases) {
+      this.phases = levelDef.phases;
+      this._phaseIndex = -1;
+      this.goals = [];
+    } else {
+      this.phases = null;
+      this.goals = (levelDef.goals || []).map(goalDef => ({
+        name: goalDef.name,
+        condition: () => goalDef.condition(this.simulation, this),
+        reward: goalDef.reward,
+        achieved: false
+      }));
+    }
 
     // NEW: Load illustration assets for this level's start screen
     this.menuArt.loadForLevel(levelDef);
@@ -660,10 +750,13 @@ class Game {
     this.ui = new GameUI(CONFIG, this.terrain, this.simulation, this.mauri, this, this.seasonManager);
     
     this.playTime = 0;
+    this._stormCooldownUntil = 0;   // reset per level load, else a restart starts mid-cooldown
     this.state = GAME_STATE.PLAYING;
     this._tempVec = createVector(0, 0);
     
     for (const goal of this.goals) goal.achieved = false;
+    this._goalsCompleted = 0;
+    this._goalsTotal = null;   // computed lazily for the end-of-level tally
 
     this.tutorial = new TutorialManager(this);
     this.tutorial.setGuideSprite(
@@ -724,12 +817,21 @@ class Game {
     this.simulation.update(this.mauri, dt);
     this.updateCachedCounts();
     
-    // Passive mauri income
+    // Passive mauri income, with smooth diminishing returns at higher populations.
+    // The "effective" earning population tapers above tStart: each extra moa is
+    // worth a little less, so by population 25 income is worth ~15 moa at the base
+    // rate, flattening beyond (discourages hoarding a huge flock).
     this._incomeAccumulator += dt;
     if (this._incomeAccumulator >= 64) {
       this._incomeAccumulator -= 64;
-      const income = this._cachedMoaCount * this.mauri.perMoaPerSecond + 
-                    this._cachedThrivingCount * this.mauri.onMoaThriving;
+      const pop = this._cachedMoaCount;
+      let income = pop * this.mauri.perMoaPerSecond +
+                   this._cachedThrivingCount * this.mauri.onMoaThriving;
+      const tStart = 10, tScale = 5.3;   // asymptote ≈ tStart+tScale; tuned so pop 25 → ~15
+      if (pop > tStart && income > 0) {
+        const effPop = tStart + tScale * (1 - Math.exp(-(pop - tStart) / tScale));
+        income *= effPop / pop;   // scale the whole passive income by the taper
+      }
       if (income > 0) this.mauri.earn(income, undefined, undefined, 'passive');
     }
     
@@ -755,6 +857,7 @@ class Game {
   }
   
   checkGoals() {
+    if (this.phases) { this._checkPhases(); return; }
     const goals = this.goals;
     const halfWidth = CONFIG.width / 2 / CONFIG.zoom;
     let allAchieved = true;
@@ -762,6 +865,7 @@ class Game {
     for (const goal of goals) {
       if (!goal.achieved && goal.condition()) {
         goal.achieved = true;
+        this._goalsCompleted = (this._goalsCompleted || 0) + 1;
         this.mauri.earn(goal.reward, halfWidth, 80, 'goal');
         this.addNotification(`Goal achieved: ${goal.name}! +${goal.reward} mauri`, 'success');
       }
@@ -778,6 +882,80 @@ class Game {
       - ((this.playTime / 60) - 240) + 60
       );
 
+      PROGRESS.completeLevel(this.currentLevel.id, score);
+    }
+  }
+
+  _buildPhaseGoals(idx) {
+    const ph = this.phases[idx] || { goals: [] };
+    const fresh = (ph.goals || []).map(g => ({
+      name: g.name,
+      condition: g.condition ? (() => g.condition(this.simulation, this)) : (() => false),
+      reward: g.reward || 0,
+      survive: !!g.survive,
+      achieved: false
+    }));
+    // Persist the previous spring/summer growth goals into this phase when it is a
+    // survival (autumn/winter) phase, so those achievements don't vanish the moment
+    // autumn arrives. They keep their achieved state (and an unmet one can still be
+    // finished during autumn); they're cleared again when the next growth phase begins.
+    const isSurvivePhase = fresh.some(g => g.survive);
+    let carried = [];
+    if (isSurvivePhase && idx > 0 && Array.isArray(this.goals)) {
+      carried = this.goals.filter(g => !g.survive);
+    }
+    this.goals = carried.concat(fresh);
+  }
+
+  _checkPhases() {
+    const phaseDur = 2 * CONFIG.seasonDuration;
+    const total = this.phases.length * phaseDur;
+    const halfWidth = CONFIG.width / 2 / CONFIG.zoom;
+    const idx = Math.min(Math.floor(this.playTime / phaseDur), this.phases.length - 1);
+
+    // Entering a new phase
+    if (idx !== this._phaseIndex) {
+      // Completing a survival phase means you endured it — mark its goals met.
+      if (this._phaseIndex >= 0) {
+        for (const g of this.goals) {
+          if (g.survive && !g.achieved) {
+            g.achieved = true;
+            this._goalsCompleted = (this._goalsCompleted || 0) + 1;
+            if (g.reward) this.mauri.earn(g.reward, halfWidth, 80, 'goal');
+            this.addNotification(`Endured: ${g.name}! +${g.reward} mauri`, 'success');
+          }
+        }
+      }
+      this._phaseIndex = idx;
+      this._buildPhaseGoals(idx);
+      this.addNotification(`Phase ${idx + 1}: ${this.phases[idx].name}`, 'success');
+    }
+
+    // Growth objectives reward the moment they are met (soft — no penalty if missed)
+    for (const goal of this.goals) {
+      if (!goal.survive && !goal.achieved && goal.condition()) {
+        goal.achieved = true;
+        this._goalsCompleted = (this._goalsCompleted || 0) + 1;
+        if (goal.reward) this.mauri.earn(goal.reward, halfWidth, 80, 'goal');
+        this.addNotification(`Objective met: ${goal.name}! +${goal.reward} mauri`, 'success');
+      }
+    }
+
+    // Phase fail condition (e.g. a focal population going extinct in winter)
+    const ph = this.phases[idx];
+    if (ph.fail && ph.fail(this.simulation, this)) {
+      this.state = GAME_STATE.LOST;
+      this.gameOverReason = ph.failReason || "A population you were protecting died out.";
+      if (audioManager) audioManager.playLoss();
+      return;
+    }
+
+    // Win: survived to the end of the final phase
+    if (this.playTime >= total) {
+      for (const g of this.goals) { if (!g.achieved) { g.achieved = true; this._goalsCompleted = (this._goalsCompleted || 0) + 1; } }
+      this.state = GAME_STATE.WON;
+      if (audioManager) audioManager.playWin();
+      const score = Math.round((this._cachedMoaCount) * (this.mauri.totalEarned * 0.001) + 60);
       PROGRESS.completeLevel(this.currentLevel.id, score);
     }
   }
@@ -799,6 +977,12 @@ class Game {
 
     this.addNotification(`Season changed to ${season.name} ${season.icon}`, 'info');
     if (audioManager) audioManager.playSeasonChange(seasonKey);
+
+    // Glacial predation: winter drives an extra hungry eagle to hunt.
+    if (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.winterPredation && seasonKey === 'winter') {
+      this.simulation.spawnEagle();
+      this.addNotification("The glacial winter drives a hungry eagle to hunt.", 'error');
+    }
     if (this.tutorial) {
       this.tutorial.fireEvent(TUTORIAL_EVENTS.SEASON_CHANGE, { season, seasonKey });
     }
@@ -864,10 +1048,24 @@ class Game {
     
     const def = this.activePlaceables[this.selectedPlaceable];
     if (!def) return false;
+
+    if (this.selectedPlaceable === 'Storm' && this.playTime < this._stormCooldownUntil) {
+      const secs = Math.ceil((this._stormCooldownUntil - this.playTime) / 60);
+      this.addNotification(`Storm is recharging (${secs}s)`, 'error');
+      return false;
+    }
     
     if (!this.terrain.canPlace(x, y)) {
       this.addNotification("Cannot place here!", 'error');
       return false;
+    }
+
+    if (def.allowedBiomes) {
+      const biome = this.terrain.getBiomeAt(x, y);
+      if (!def.allowedBiomes.includes(biome.key)) {
+        this.addNotification(`${def.name} can't take root in ${biome.name}`, 'error');
+        return false;
+      }
     }
     
     const spacingCheck = this.canPlaceWithSpacing(x, y, this.selectedPlaceable);
@@ -882,6 +1080,7 @@ class Game {
     }
     
     this.simulation.addPlaceable(x, y, this.selectedPlaceable);
+    if (this.selectedPlaceable === 'Storm') this._stormCooldownUntil = this.playTime + 600; // 10s @60fps
     this.addNotification(`Placed ${def.name}`, 'info');
     
     if (audioManager) {
@@ -917,6 +1116,19 @@ class Game {
     scale(CONFIG.zoom);
     
     this.terrain.render();
+
+    // Winter frost: a single cool haze laid over the ground (under the animals),
+    // fading in through late autumn and out into spring. One rect — no perf cost.
+    const _frost = this.seasonManager.getWinterness ? this.seasonManager.getWinterness() : 0;
+    if (_frost > 0.001) {
+      push();
+      noStroke();
+      rectMode(CORNER);
+      fill(216, 232, 245, 72 * _frost);
+      rect(0, 0, this.terrain.mapWidth, this.terrain.mapHeight);
+      pop();
+    }
+
     this.simulation.render();
     this.mauri.renderFloatingTexts();
     
@@ -946,10 +1158,11 @@ class Game {
         titleColor: [180, 255, 180],
         lines: [
           { text: "All goals achieved!", color: [150, 220, 150], size: 18 },
+          { text: this._goalsTally(), color: [150, 220, 150], size: 14 },
           { text: `Final population: ${this._cachedMoaCount} moa`, color: [120, 180, 120], size: 14 },
           { text: `Total mauri earned: ${this.mauri.totalEarned | 0}`, color: [120, 180, 120], size: 14 },
           { text: `Time elapsed: ${(this.playTime / 60) | 0} seconds`, color: [120, 180, 120], size: 14 },
-          { text: `Final Score: ${Math.round(((this._cachedMoaCount)*(this.mauri.totalEarned*.001))-((this.playTime / 60)-240)+60)} points`, color: [200, 240, 200], size: 16 },
+          { text: `Final Score: ${Math.round(((this._cachedMoaCount)*(this.mauri.totalEarned*.001))-((this.playTime / 60)-120)+60)} points`, color: [200, 240, 200], size: 16 },
           { text: "", color: [200, 240, 200], size: 18 },
           { text: "Press R to play again", color: [200, 240, 200], size: 18 }
         ],
@@ -962,6 +1175,7 @@ class Game {
         titleColor: [255, 180, 180],
         lines: [
           { text: this.gameOverReason, color: [220, 150, 150], size: 16 },
+          { text: this._goalsTally(), color: [200, 180, 140], size: 14 },
           { text: `Time survived: ${(this.playTime / 60) | 0} seconds`, color: [180, 120, 120], size: 14 },
           { text: `Moa hatched: ${this.simulation.stats.births}`, color: [180, 120, 120], size: 14 },
           { text: `Total mauri earned: ${this.mauri.totalEarned | 0}`, color: [180, 120, 120], size: 14 },
@@ -982,6 +1196,18 @@ class Game {
       //add others here
     };
     return spriteMap[spriteKey] || tutorialMantisSprite;
+  }
+
+  // "Goals completed: X / Y" for the end screen. Total spans every phase's
+  // objectives (for phased levels) or the classic goal list; completed is the
+  // cumulative count tracked as objectives are met.
+  _goalsTally() {
+    if (this._goalsTotal == null) {
+      this._goalsTotal = this.phases
+        ? this.phases.reduce((n, ph) => n + ((ph.goals && ph.goals.length) || 0), 0)
+        : (this.goals ? this.goals.length : 0);
+    }
+    return `Goals completed: ${this._goalsCompleted || 0} / ${this._goalsTotal}`;
   }
 
   // Unified overlay renderer (replaces renderPauseOverlay, renderWinOverlay, renderLoseOverlay)
@@ -1214,6 +1440,7 @@ class Game {
       translate(centerX, plantY);
       scale(featured.spriteScale || 2);
       const sprite = this._getMenuSprite(featured.spriteKey);
+      if (featured.tint) tint(featured.tint[0], featured.tint[1], featured.tint[2]);
       if (sprite) image(sprite, 0, 0);
       pop();
 
@@ -1408,10 +1635,15 @@ class Game {
     
     if (tx < 0 || tx > this.terrain.mapWidth || ty < 0 || ty > this.terrain.mapHeight) return;
     
-    const def = PLACEABLES[this.selectedPlaceable];
+    const def = (this.activePlaceables && this.activePlaceables[this.selectedPlaceable]) || PLACEABLES[this.selectedPlaceable];
     const canPlaceTerrain = this.terrain.canPlace(tx, ty);
     const spacingCheck = this.canPlaceWithSpacing(tx, ty, this.selectedPlaceable);
-    const canPlace = canPlaceTerrain && spacingCheck.allowed;
+    let biomeOk = true;
+    if (def.allowedBiomes) {
+      const b = this.terrain.getBiomeAt(tx, ty);
+      biomeOk = def.allowedBiomes.includes(b.key);
+    }
+    const canPlace = canPlaceTerrain && spacingCheck.allowed && biomeOk;
     
     push();
     translate(tx, ty);
@@ -1518,9 +1750,11 @@ class Game {
     if (key === 'd' || key === 'D') { CONFIG.debugMode = !CONFIG.debugMode; return; }
     
     if (this.state === GAME_STATE.PLAYING) {
-      const placeableKeys = { '1': 'kawakawa', '2': 'shelter', '3': 'nest', '4': 'Storm', '5': 'waterhole', '6': 'harakeke' };
-      if (placeableKeys[key]) {
-        this.selectPlaceable(placeableKeys[key]);
+      const palette = this.activePlaceables || PLACEABLES;
+      const paletteKeys = Object.keys(palette);
+      const digit = (key >= '1' && key <= '9') ? parseInt(key, 10) - 1 : -1;
+      if (digit >= 0 && digit < paletteKeys.length) {
+        this.selectPlaceable(paletteKeys[digit]);
       } else switch (key) {
         case 'p': case 'P': case ' ':
           this.state = GAME_STATE.PAUSED; break;
@@ -1570,6 +1804,7 @@ function setup() {
 
   CONFIG.recalculateLayout(windowWidth, windowHeight);
 
+  pixelDensity(1); // must run BEFORE scaleCanvasToFit: it resets the canvas's inline CSS size
   let cnv = createCanvas(CONFIG.canvasWidth, CONFIG.canvasHeight);
   cnv.style('display', 'block');
   document.body.style.margin = '0';
@@ -1577,7 +1812,6 @@ function setup() {
   document.body.style.background = '#19231e';
 
   scaleCanvasToFit();
-  pixelDensity(1);
   frameRate(60);
   textFont('OpenDyslexic');
 
@@ -1656,6 +1890,8 @@ function draw() {
     );
     if (expectedW !== CONFIG.canvasWidth) {
       windowResized(); // forces recalculate + resizeCanvas
+    } else {
+      scaleCanvasToFit(); // dimensions fine, but CSS scaling may have been reset
     }
   }
 

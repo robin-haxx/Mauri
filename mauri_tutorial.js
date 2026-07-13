@@ -308,7 +308,39 @@ const TUTORIAL_TIPS = {
     showOnce: true,
     priority: 3
   },
-  
+
+  // Fires the first time ANY moa species reaches 10 — points at the population
+  // panel and teaches the click-to-highlight feature.
+  species_thriving: {
+    id: 'species_thriving',
+    trigger: {
+      type: TRIGGER_TYPE.CONDITION,
+      condition: (game) => {
+        const moas = game.simulation && game.simulation.moas;
+        if (!moas) return false;
+        const counts = {};
+        for (let i = 0; i < moas.length; i++) {
+          const m = moas[i];
+          if (!m.alive) continue;
+          const k = m.speciesKey || 'unknown';
+          counts[k] = (counts[k] || 0) + 1;
+          if (counts[k] >= 10) return true;
+        }
+        return false;
+      }
+    },
+    title: "Your Moa are doing well!",
+    content: [
+      "Click a species name to toggle their highlight on screen."
+    ],
+    guidePosition: 'left',
+    highlight: { type: 'element', target: 'populationPanel' },
+    nextTip: null,
+    pauseGame: true,
+    showOnce: true,
+    priority: 2
+  },
+
   hungry_population: {
     id: 'hungry_population',
     trigger: { 

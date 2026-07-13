@@ -157,6 +157,35 @@ const GK_TUTORIAL_TIPS = {
     nextTip: null, pauseGame: true, showOnce: true, priority: 2
   },
 
+  // ---------- Fires when any moa species first reaches 10 ----------
+  gk_species_thriving: {
+    id: 'gk_species_thriving',
+    trigger: {
+      type: TRIGGER_TYPE.CONDITION,
+      condition: (game) => {
+        const moas = game.simulation && game.simulation.moas;
+        if (!moas) return false;
+        const counts = {};
+        for (let i = 0; i < moas.length; i++) {
+          const m = moas[i];
+          if (!m.alive) continue;
+          const k = m.speciesKey || 'unknown';
+          counts[k] = (counts[k] || 0) + 1;
+          if (counts[k] >= 10) return true;
+        }
+        return false;
+      }
+    },
+    title: "Your Moa are doing well!",
+    content: [
+      "Click a species name to toggle their highlight on screen.",
+      "",
+      "Keep watching over Bush Moa and Upland Moa."
+    ],
+    guidePosition: 'left', highlight: { type: 'element', target: 'populationPanel' },
+    nextTip: null, pauseGame: true, showOnce: true, priority: 2
+  },
+
   // ---------- AUTUMN ----------
   gk_autumn_1: {
     id: 'gk_autumn_1',
@@ -380,10 +409,31 @@ const LEVEL_GLACIAL_KAHURANGI = {
     forestCompetitionPenalty: 0.18,
     winterCompetitionMult: 1.7,
 
-    // Favoured plants: non-favoured species gain only 25% and mostly ignore them.
-    unfavouredBrowsePenalty: 0.25,
+    // Favoured plants are FULLY exclusive to the species they belong to: a
+    // non-favoured moa gains NOTHING from them. Speargrass feeds only the upland
+    // moa, lancewood only the bush moa — the two founders never cross-feed, and
+    // competitors can't nibble the plots either. 0 = no benefit at all.
+    unfavouredBrowsePenalty: 0,
 
-    // Reproduction slows in the deep cold.
+    // Non-focal competitors are generalists: they get a bonus on the WILD
+    // background flora (any plant with no favouredSpecies) so they sustain
+    // themselves off the landscape instead of raiding the founders' plots. This
+    // is their niche edge. 1.0 = off; raise for hardier competitors.
+    nonFocalGeneralistBonus: 1.2,
+
+    // ---- Measured reproduction ----------------------------------------------
+    // Soft carrying capacity: breeding readiness is full at/below breedingSoftCap
+    // total moa, then tapers toward breedingSuppressFloor as the population climbs
+    // to breedingCarryingCap. Flattens the unprompted spring boom; because it
+    // keys off live population it eases back off after a winter crash so the
+    // founders can still rebound. TUNE THESE against a benchmark run.
+    breedingSoftCap: 10,          // no suppression at/below this many moa
+    breedingCarryingCap: 30,      // suppression bottoms out here
+    breedingSuppressFloor: 0.12,  // min breeding rate at/above the carrying cap
+    breedingCooldownMult: 1.3,    // flat lengthening of every breeding cooldown
+    matingAge: 1200,              // later maturity (global MOA_AGE.MATING_AGE is 900)
+
+    // Reproduction slows in the deep cold (ramped by winterness, not a cliff).
     winterBreedingCooldownMult: 2,
 
     // Fixed cast: offspring always inherit the parent species (no random
@@ -427,6 +477,19 @@ const LEVEL_GLACIAL_KAHURANGI = {
     eagleMaturityAge: 1500,       // ticks before a hatchling can breed
     eaglePreyPopThreshold: 12,    // eagles prioritise moa species with MORE than this many members (spares rare species)
 
+    // ---- Sexual eagle reproduction + Lotka-Volterra restraint ----
+    // The run starts as a breeding PAIR: the spawned founder plus one opposite-sex
+    // egg at a crag eyrie, hatching after startingEagleEggHatchTime ticks (~30s).
+    // A female only lays with a mature male within eagleMateRadius; if a sex is
+    // lost the line dies out (and the game is lost — see mauri_sketch.js).
+    startingEagleEggHatchTime: 1800,  // ~30s at 60fps
+    eagleMateRadius: 250,             // a female needs a mature male this close to lay
+    // Anti-overhunt: when eagles exceed the target eagle:moa ratio (e.g. after a
+    // sudden moa die-off), each bird tolerates this much extra hunger before
+    // hunting, so the surplus starves off instead of cropping the last herd.
+    eagleOverhuntRestraint: 30,       // hunger added per unit of over-ratio surplus
+    eagleRestraintCap: 45,            // max extra hunger tolerance (keeps them hunting eventually)
+
     // Forest contraction: the productive tree band retreats (treeline drops) in
     // the cold seasons; canopy trees above the band go unproductive/wilted.
     // Lerped smoothly per frame like the snow line (no reclassification, no stutter).
@@ -443,6 +506,12 @@ const LEVEL_GLACIAL_KAHURANGI = {
   // Classic static-goal field kept empty so validation passes; the level is
   // actually driven by `phases` below.
   goals: [],
+
+  // Per-level final score. This phase level runs a fixed ~8 minutes, so it omits
+  // the default formula's time penalty and just rewards the surviving flock and
+  // total mauri earned. Tune freely — ctx = {moaCount, totalEarned, playTime,
+  // goalsCompleted, level}.
+  scoreFormula: (ctx) => (ctx.moaCount * (ctx.totalEarned * 0.001)) + 60,
 
   // Four 2-season phases. Growth objectives are soft (reward only). Winter
   // phases are lost if either founder population is wiped out.
@@ -462,7 +531,7 @@ const LEVEL_GLACIAL_KAHURANGI = {
         { name: "Keep both focus species alive through winter", reward: 100, survive: true }
       ],
       fail: (sim) => gkFocalExtinct(sim),
-      failReason: "A founding population died out over the first winter."
+      failReason: "One of your moa species was lost to the cold!"
     },
     {
       name: "Spring & Summer: Grow the community",
@@ -479,7 +548,7 @@ const LEVEL_GLACIAL_KAHURANGI = {
         { name: "Keep both focus species alive", reward: 200, survive: true }
       ],
       fail: (sim) => gkFocalExtinct(sim),
-      failReason: "A founding population died out in the second winter."
+      failReason: "One of your moa species was lost to the cold!"
     }
   ],
 

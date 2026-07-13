@@ -91,6 +91,27 @@ const LEVEL_REGISTRY = {
   }
 };
 
+// ============================================
+// FINAL SCORE (detached from the sketch, tunable per level)
+// ============================================
+// A level may define `scoreFormula(ctx)` to compute its own final score. When it
+// doesn't, defaultLevelScore is used. ctx = {
+//   moaCount, totalEarned, playTime (frames), goalsCompleted, level }
+// Keep formulas pure (no side effects) so the WON screen and the recorded score
+// always agree.
+function defaultLevelScore(ctx) {
+  // Rewards a healthy final flock and total mauri earned; a mild penalty for
+  // taking a long time. (Matches the legacy static-goal formula.)
+  return (ctx.moaCount * (ctx.totalEarned * 0.001)) - ((ctx.playTime / 60) - 240) + 60;
+}
+
+function computeLevelScore(level, ctx) {
+  const fn = (level && typeof level.scoreFormula === 'function') ? level.scoreFormula : defaultLevelScore;
+  let s = fn(ctx);
+  if (typeof s !== 'number' || !isFinite(s)) s = 0;
+  return Math.round(s);
+}
+
 // Default values that levels can omit to use these
 const LEVEL_DEFAULTS = {
   terrain: {

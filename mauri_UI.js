@@ -1229,7 +1229,7 @@ class GameUI {
 
     // Compact labels + icons (fall back to the species' displayName / tint).
     const _MOA_LABEL = {
-      upland_moa: 'Megalapteryx', little_bush_moa: 'Bush moa',
+      upland_moa: 'Upland', little_bush_moa: 'Bush moa',
       stout_legged_moa: 'Stout-legged', eastern_moa: 'Eastern moa',
       south_island_giant_moa: 'Dinornis', north_island_giant_moa: 'Dinornis',
       heavy_footed_moa: 'Heavy-footed', crested_moa: 'Crested', mantells_moa: "Mantell's"

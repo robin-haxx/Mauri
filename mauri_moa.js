@@ -129,6 +129,16 @@ class Moa extends Boid {
     this.mateCrossPenalty = this.isFocal ? 40 : 80;
     this.reproCooldownMult = this.isFocal ? 1 : 0.7;
 
+    // When the level forbids speciation, same-species pairing is mandatory:
+    // cross-species is not a fallback but forbidden (see findPotentialMate).
+    this._noSpeciation = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.noSpeciation) || false;
+    // Later maturity (measured reproduction): a level may raise the age at which
+    // a moa can first breed. Defaults to the global MOA_AGE.MATING_AGE.
+    this._matingAge = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.matingAge) || MOA_AGE.MATING_AGE;
+    // Soft carrying-capacity breeding gate, recomputed each tick in behave().
+    // 1 = unsuppressed; <1 = probability the moa initiates courtship this tick.
+    this._breedDensityFactor = 1;
+
     // Vulnerable-founder highlight: while this species sits at/below its threshold
     // it pulses in a highlight colour so the player can find and protect it.
     this._vhl = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.vulnerableHighlight &&
@@ -164,7 +174,7 @@ class Moa extends Boid {
     this._threateningEagles = [];
     
     // Season cache
-    this._seasonCache = { key: null, hungerMod: 1, migrationStrength: 0, preferredElevation: { min: 0.25, max: 0.70 } };
+    this._seasonCache = { key: null, hungerMod: 1, migrationStrength: 0, winterness: 0, preferredElevation: { min: 0.25, max: 0.70 } };
   }
 
   // Called from simulation's updateEggs when hatching new moa
@@ -175,6 +185,10 @@ class Moa extends Boid {
     c.key = sm.currentKey;
     c.hungerMod = sm.getHungerModifier();
     c.migrationStrength = sm.getMigrationStrength();
+    // Smooth 0..1 "winterness": ramps up across late autumn, holds at 1 through
+    // winter, fades across the winter->spring thaw. Winter penalties scale by
+    // this instead of snapping on at the hard season boundary.
+    c.winterness = sm.getWinterness ? sm.getWinterness() : (c.key === 'winter' ? 1 : 0);
     const sp = sm.getPreferredElevation();
     const pp = this.speciesConfig.preferredElevation || sp;
     c.preferredElevation.min = (pp.min + sp.min) * 0.5;
@@ -208,7 +222,7 @@ class Moa extends Boid {
   }
 
   isJuvenile() { return this.age < MOA_AGE.JUVENILE_MAX; }
-  canMateByAge() { return this.age >= MOA_AGE.MATING_AGE; }
+  canMateByAge() { return this.age >= this._matingAge; }
 
   // ============================================
   // MATING READINESS
@@ -223,8 +237,27 @@ class Moa extends Boid {
 
   canBeMate() {
     return this.alive && this.canMate && this.mateCooldown <= 0 && this.canMateByAge() &&
-      !this.isPregnant && !this.matingPartner && 
+      !this.isPregnant && !this.matingPartner &&
       this.hunger < this.matingHungerThreshold * 1.5;
+  }
+
+  // Soft carrying-capacity taper (opt-in via LEVEL_MECHANICS.breedingSoftCap).
+  // Returns 1 while the total moa population is at/below the soft cap, then
+  // falls linearly to breedingSuppressFloor as it climbs toward the carrying
+  // cap. Used as a per-tick probability that a ready moa starts courtship, so
+  // the unprompted spring boom flattens into a measured climb, and — because it
+  // keys off live population — breeding rebounds automatically after a crash.
+  _computeBreedDensityFactor(simulation) {
+    const M = (typeof LEVEL_MECHANICS !== 'undefined') ? LEVEL_MECHANICS : null;
+    const soft = M ? M.breedingSoftCap : undefined;
+    if (soft == null) return 1;                       // feature off — no change
+    const carry = M.breedingCarryingCap ?? (soft * 3);
+    const floor = M.breedingSuppressFloor ?? 0.15;
+    const P = simulation.getMoaPopulation();
+    if (P <= soft) return 1;
+    if (P >= carry) return floor;
+    const t = (P - soft) / (carry - soft);            // 0..1 across the band
+    return 1 - t * (1 - floor);
   }
 
   // ============================================
@@ -261,7 +294,8 @@ class Moa extends Boid {
         const err = elev < lo ? lo - elev : (elev > hi ? elev - hi : 0);
         if (err > 0) {
           let penalty = LEVEL_MECHANICS.habitatStressPenalty ?? 0.45;
-          if (sc.key === 'winter') penalty *= (LEVEL_MECHANICS.winterStressMult ?? 1.4);
+          // Ramp the cold-season surcharge in smoothly rather than at the winter boundary.
+          penalty *= 1 + ((LEVEL_MECHANICS.winterStressMult ?? 1.4) - 1) * sc.winterness;
           this.hunger = Math.min(this.hunger + err * penalty * dt, this.maxHunger);
         }
       }
@@ -305,7 +339,11 @@ class Moa extends Boid {
     }
     
     if (this.isPregnant) this.executePregnancy(simulation, mauri, placeables, dt);
-    
+
+    // Density-dependent breeding gate (recomputed here so determineState can
+    // read it without threading simulation through its signature).
+    this._breedDensityFactor = this._computeBreedDensityFactor(simulation);
+
     // Determine and execute state
     this.currentState = this.determineState(placeables, sc, moas);
     this.executeState(simulation, mauri, sc, moas, placeables, dt);
@@ -374,7 +412,8 @@ class Moa extends Boid {
     if (this.targetMate?.alive && this.canBeMate() && this.hunger < this.hungerThreshold) 
       return MOA_STATE.SEEKING_MATE;
     
-    if (this.isReadyToMate() && this.hunger < this.hungerThreshold) {
+    if (this.isReadyToMate() && this.hunger < this.hungerThreshold &&
+        (this._breedDensityFactor >= 1 || random() < this._breedDensityFactor)) {
       const mate = this.findPotentialMate(moas);
       if (mate) { this.targetMate = mate; return MOA_STATE.SEEKING_MATE; }
     }
@@ -500,30 +539,41 @@ class Moa extends Boid {
   // ============================================
 
   findPotentialMate(moas) {
-    let best = null, bestScore = Infinity;
+    // Two buckets: any same-species mate always beats a cross-species one, so a
+    // small founder population reliably pairs within itself instead of being
+    // forced to hybridise when both members happen to share a sex nearby.
+    let best = null, bestScore = Infinity;            // same species
+    let bestCross = null, bestCrossScore = Infinity;  // other species
     const maxDistSq = this.matingSearchRadius * this.matingSearchRadius;
     const px = this.pos.x, py = this.pos.y;
-    
+
     for (let i = 0; i < moas.length; i++) {
       const o = moas[i];
       if (o === this || !o.canBeMate()) continue;
       if (o.isFemale === this.isFemale) continue; // Must be opposite sex
       if (o.matingPartner && o.matingPartner !== this) continue;
-      
+
       const dx = o.pos.x - px, dy = o.pos.y - py;
       const distSq = dx * dx + dy * dy;
       if (distSq > maxDistSq) continue;
-      
+
       let score = distSq;
-      if (o.speciesKey !== this.speciesKey) score *= this.mateCrossPenalty; // same-species preferred; non-focal favour own kind more
       if (o.targetMate === this) score *= 0.1;
       else if (o.currentState === MOA_STATE.SEEKING_MATE && !o.targetMate) score *= 0.5;
       else if (o.isReadyToMate()) score *= 0.7;
       else if (o.currentState === MOA_STATE.FORAGING) score *= 1.5;
-      
-      if (score < bestScore) { bestScore = score; best = o; }
+
+      if (o.speciesKey === this.speciesKey) {
+        if (score < bestScore) { bestScore = score; best = o; }
+      } else {
+        const cs = score * this.mateCrossPenalty; // cross-species is heavily discouraged
+        if (cs < bestCrossScore) { bestCrossScore = cs; bestCross = o; }
+      }
     }
-    return best;
+
+    if (best) return best;              // prefer own kind whenever one is available
+    if (this._noSpeciation) return null; // level forbids hybridising — pause instead
+    return bestCross;                   // otherwise cross-species is a last resort
   }
 
   seekMate(moas, dt) {
@@ -607,8 +657,13 @@ class Moa extends Boid {
   _resetAfterMating(moa) {
     moa.canMate = false;
     let _cd = moa.mateCooldownTime;
-    if (typeof LEVEL_MECHANICS !== 'undefined' && moa._seasonCache && moa._seasonCache.key === 'winter') {
-      _cd *= (LEVEL_MECHANICS.winterBreedingCooldownMult ?? 1);
+    if (typeof LEVEL_MECHANICS !== 'undefined') {
+      // Cold-season breeding slowdown ramps in with winterness instead of snapping
+      // on at the winter boundary.
+      const _wm = LEVEL_MECHANICS.winterBreedingCooldownMult ?? 1;
+      _cd *= 1 + (_wm - 1) * ((moa._seasonCache && moa._seasonCache.winterness) || 0);
+      // Global "more measured" breeding: a flat lengthening of every cooldown.
+      _cd *= (LEVEL_MECHANICS.breedingCooldownMult ?? 1);
     }
     _cd *= (moa.reproCooldownMult || 1);   // non-focal competitors breed a little faster
     moa.mateCooldown = _cd;
@@ -754,9 +809,12 @@ class Moa extends Boid {
       if (d.eggSpeedBonus) this.eggSpeedBonus = Math.max(this.eggSpeedBonus, d.eggSpeedBonus * p.seasonalMultiplier);
       if (d.hungerSlowdown) hungerMod = Math.min(hungerMod, d.hungerSlowdown);
       if (d.feedingRate) {
-        feedTotal += p.feedMoa(this, dt);
-        this.isFeeding = true;
-        this.feedingAt = p;
+        const fed = p.feedMoa(this, dt);
+        if (fed > 0) {          // a species-exclusive feeder returns 0 to the wrong moa
+          feedTotal += fed;
+          this.isFeeding = true;
+          this.feedingAt = p;
+        }
       }
     }
     
@@ -823,16 +881,25 @@ class Moa extends Boid {
           if (competitors > tolerance) {
             const over = competitors - tolerance;
             let per = LEVEL_MECHANICS.forestCompetitionPenalty ?? 0.18;
-            if (this._seasonCache.key === 'winter') per *= (LEVEL_MECHANICS.winterCompetitionMult ?? 1.6);
+            // Cold-season competition ramps in with winterness (smooth, not a cliff).
+            per *= 1 + ((LEVEL_MECHANICS.winterCompetitionMult ?? 1.6) - 1) * this._seasonCache.winterness;
             gain *= Math.max(0.25, 1 - over * per);
           }
         }
 
-        // Favoured-plant selectivity: a species-specific planted resource yields
-        // little to species it isn't favoured by, so it safely provisions the
-        // target population (aggregation model of coexistence).
-        if (this.targetPlant.favouredSpecies && this.targetPlant.favouredSpecies !== this.speciesKey) {
-          gain *= (typeof LEVEL_MECHANICS !== 'undefined' ? (LEVEL_MECHANICS.unfavouredBrowsePenalty ?? 0.25) : 0.25);
+        // Diet breadth. A species-specific planted resource (lancewood, speargrass)
+        // yields little to species it isn't favoured by, so it stays a targeted
+        // founder subsidy (aggregation model of coexistence). Meanwhile the
+        // non-focal competitors are dietary generalists: they win MORE from the
+        // wild background flora than the specialist founders do, which is their
+        // niche edge rather than nibbling the founders' planted food.
+        if (this.targetPlant.favouredSpecies) {
+          if (this.targetPlant.favouredSpecies !== this.speciesKey) {
+            gain *= (typeof LEVEL_MECHANICS !== 'undefined' ? (LEVEL_MECHANICS.unfavouredBrowsePenalty ?? 0.25) : 0.25);
+          }
+          // else: browsing its own favoured plant — full gain.
+        } else if (!this.isFocal && typeof LEVEL_MECHANICS !== 'undefined') {
+          gain *= (LEVEL_MECHANICS.nonFocalGeneralistBonus ?? 1); // wild plant + generalist
         }
 
         this.hunger = Math.max(0, this.hunger - gain);

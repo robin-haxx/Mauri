@@ -121,7 +121,13 @@ class Simulation {
     }
     
     this.spawnEagles(this.config.eagleCount);
-    
+
+    // Emergent eagles start as a breeding PAIR: the spawned founder plus one egg
+    // of the opposite sex, laid at a crag eyrie and hatching after ~30s.
+    if (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.emergentEagles) {
+      this._spawnFounderEagleEgg();
+    }
+
     // Spawn other entity types if the level defines them
     if (level && level.initialEntityCounts) {
       for (const [type, count] of Object.entries(level.initialEntityCounts)) {
@@ -149,7 +155,12 @@ class Simulation {
       for (let i = 0; i < count; i++) {
         const pos = this.findWalkablePosition(minElev, maxElev);
         const moa = this._createFromRegistry('moa', speciesKey, pos.x, pos.y, Moa);
-        if (moa) this.moas.push(moa);
+        if (moa) {
+          // Deterministic founder sexing: alternate F/M within each species so a
+          // 2-count seeds 1+1 (not a 50% same-sex pair that forces outcrossing).
+          moa.isFemale = (i % 2 === 0);
+          this.moas.push(moa);
+        }
       }
     }
   }
@@ -326,6 +337,33 @@ class Simulation {
     eagle.patrolCenter.set(cx, cy);
   }
 
+  // Highest, rockiest walkable spot near (x,y): a crag/cliff-edge eyrie. Samples
+  // several walkable candidates and keeps the one with the greatest elevation, so
+  // the site sits at the alpine edge without stranding an egg on impassable ice.
+  _findCragEyrie(x, y, radius = 240) {
+    let bx = x, by = y, bestE = this.terrain.getElevationAt(x, y);
+    for (let i = 0; i < 12; i++) {
+      const p = this.findWalkablePositionNear(x, y, radius);
+      const e = this.terrain.getElevationAt(p.x, p.y);
+      if (e > bestE) { bestE = e; bx = p.x; by = p.y; }
+    }
+    return { x: bx, y: by };
+  }
+
+  // Seed the founding eagle pair: one egg of the opposite sex to the spawned
+  // founder, at a crag eyrie near it, hatching after ~30s.
+  _spawnFounderEagleEgg() {
+    const founder = this.eagles.find(e => e.alive);
+    if (!founder) return;
+    const site = this._findCragEyrie(founder.nest.x, founder.nest.y);
+    const egg = this.addEgg(site.x, site.y);
+    egg.offspringType = 'eagle';
+    egg.parentSpecies = founder.speciesKey || null;
+    egg.forcedSex = !founder.isFemale;            // opposite sex to the founder
+    const M = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS) ? LEVEL_MECHANICS : {};
+    egg.incubationTime = M.startingEagleEggHatchTime ?? 1800;   // ~30s at 60fps
+  }
+
   countAliveEagles() {
     const eagles = this.eagles;
     let n = 0;
@@ -360,6 +398,20 @@ class Simulation {
     eaglet.hunger = 30;
     eaglet.wingspan *= 0.6;              // juveniles are smaller until they mature
     eaglet.bodyLength = eaglet.wingspan * 0.45;
+
+    // Sex: honour a forced sex (founding pair), else take the minority sex among
+    // living eagles so the population keeps both sexes and stays able to breed.
+    if (egg.forcedSex === true || egg.forcedSex === false) {
+      eaglet.isFemale = egg.forcedSex;
+    } else {
+      let _f = 0, _m = 0;
+      for (let i = 0; i < this.eagles.length; i++) {
+        const e = this.eagles[i];
+        if (e.alive) { e.isFemale ? _f++ : _m++; }
+      }
+      eaglet.isFemale = (_f < _m) ? true : (_m < _f ? false : random() < 0.5);
+    }
+
     this._assignEagleNest(eaglet, egg.pos.x, egg.pos.y);
     this.eagles.push(eaglet);
 
@@ -833,8 +885,20 @@ class Simulation {
             continue;
           }
           const newMoa = this._createFromRegistry('moa', offspringSpecies, egg.pos.x, egg.pos.y, Moa);
-          
+
           if (newMoa) {
+            // Sex-balance the hatchling: take the minority sex of its own living
+            // species so small populations keep both sexes and stay able to pair
+            // within themselves (only fall back to the constructor's coin flip
+            // when the species is already balanced).
+            let _sf = 0, _sm = 0;
+            for (let mi = 0; mi < this.moas.length; mi++) {
+              const _m = this.moas[mi];
+              if (_m.alive && _m.speciesKey === newMoa.speciesKey) { _m.isFemale ? _sf++ : _sm++; }
+            }
+            if (_sf < _sm) newMoa.isFemale = true;
+            else if (_sm < _sf) newMoa.isFemale = false;
+
             newMoa.hunger = 35;
             newMoa.size *= 0.6;
             newMoa._cacheSizeMultipliers();

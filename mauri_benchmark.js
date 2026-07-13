@@ -15,6 +15,14 @@ const BENCHMARK = {
   active: false,
   finished: false,
 
+  // Batch mode: run N benchmark playthroughs back-to-back, unattended. Each
+  // ends on its own win/loss, saves its CSV, then the level auto-restarts for
+  // the next run until the batch is done.
+  batchTotal: 0,
+  batchIndex: 0,
+  _restartAtFrame: null,
+  _game: null,
+
   SAMPLE_INTERVAL: 600,   // frames — 10 seconds of game time at 60fps
 
   _rows: [],
@@ -25,13 +33,22 @@ const BENCHMARK = {
   _nextSampleAt: 0,
   _levelId: '',
 
-  arm() { this.pending = true; },
+  arm() { this.armBatch(1); },
+
+  // Arm a batch of n back-to-back runs
+  armBatch(n) {
+    this.batchTotal = n;
+    this.batchIndex = 0;
+    this.pending = true;
+  },
 
   // Called from Game.init() when a run was armed from the menu
   start(game) {
     this.pending = false;
     this.active = true;
     this.finished = false;
+    this._game = game;
+    this.batchIndex++;
     this._rows = [];
     this._nextSampleAt = this.SAMPLE_INTERVAL;
     this._levelId = (game.currentLevel && game.currentLevel.id) || 'level';
@@ -44,7 +61,10 @@ const BENCHMARK = {
     this._resetPlacedCounts();
 
     this.sample(game, 'start');
-    game.addNotification('Benchmark recording — 10s samples, CSV on win/loss', 'info');
+    const label = this.batchTotal > 1
+      ? `Benchmark run ${this.batchIndex}/${this.batchTotal} recording…`
+      : 'Benchmark recording — 10s samples, CSV on win/loss';
+    game.addNotification(label, 'info');
   },
 
   _resetPlacedCounts() {
@@ -115,13 +135,36 @@ const BENCHMARK = {
     this.finished = true;
     this.sample(game, event);
     this._save();
-    game.addNotification('Benchmark CSV downloaded', 'success');
+
+    if (this.batchIndex < this.batchTotal) {
+      // More runs queued — schedule an auto-restart (short delay lets the
+      // win/loss banner show and the download flush before re-init).
+      this._restartAtFrame = frameCount + 90;
+      game.addNotification(`Benchmark ${this.batchIndex}/${this.batchTotal} done — next run starting…`, 'success');
+    } else {
+      const n = this.batchTotal;
+      this.batchTotal = 0;
+      this.batchIndex = 0;
+      game.addNotification(n > 1 ? `Benchmark batch complete (${n} CSVs)` : 'Benchmark CSV downloaded', 'success');
+    }
+  },
+
+  // Called every frame from the main draw() loop; performs a queued restart
+  tick() {
+    if (this._restartAtFrame !== null && frameCount >= this._restartAtFrame) {
+      this._restartAtFrame = null;
+      this.pending = true;          // re-arm the next run
+      if (this._game) this._game.init();
+    }
   },
 
   // Abandon without saving (e.g. level restarted mid-run)
   cancel() {
     this.active = false;
     this.finished = false;
+    this.batchTotal = 0;
+    this.batchIndex = 0;
+    this._restartAtFrame = null;
     this._rows = [];
   },
 
@@ -133,6 +176,7 @@ const BENCHMARK = {
       lines.push(cols.map(c => (r[c] !== undefined ? r[c] : '')).join(','));
     }
     const stamp = new Date().toISOString().replace(/[:T]/g, '-').slice(0, 19);
-    saveStrings(lines, `benchmark_${this._levelId}_${stamp}.csv`);
+    const runTag = this.batchTotal > 1 ? `run${this.batchIndex}of${this.batchTotal}_` : '';
+    saveStrings(lines, `benchmark_${this._levelId}_${runTag}${stamp}.csv`);
   }
 };

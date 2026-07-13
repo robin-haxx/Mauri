@@ -71,6 +71,11 @@ class HaastsEagle extends Boid {
     // like moa (the classic controller never needed this).
     this.alive = true;
 
+    // Sex. Emergent reproduction is sexual: a female only lays with a mature male
+    // nearby, so the founding pair matters and losing a sex means eventual
+    // extinction. Founder/starting-egg sexes are set explicitly by the simulation.
+    this.isFemale = random() < 0.5;
+
     // ---- Emergent population model (opt-in via LEVEL_MECHANICS.emergentEagles) ----
     // When on, an eagle's numbers are NOT set by a top-down controller: each bird
     // holds a fixed nest, feeds or starves on its own energy budget, and breeds
@@ -184,7 +189,25 @@ class HaastsEagle extends Boid {
     this.applyForce(sep);
     this.applyForce(this.avoidEdges());
     
-    if (this.hunger > this.huntThreshold) {
+    // Lotka-Volterra predation restraint: when the flock already sits at or
+    // above the target eagle:moa ratio (i.e. there are more predators than the
+    // prey base supports), each bird tolerates more hunger before hunting. So a
+    // sudden moa die-off — which makes the population instantly "over target" —
+    // is met with restraint rather than the last herd being cropped to zero; the
+    // surplus predators thin out by starvation instead, tracking prey with a lag.
+    let _huntThresh = this.huntThreshold;
+    if (this.emergent) {
+      const _M = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS) ? LEVEL_MECHANICS : {};
+      const _moaN = simulation.getMoaPopulation();
+      const _target = _moaN * (_M.eagleTargetRatio ?? (1 / 6));
+      const _eagleN = simulation.countAliveEagles ? simulation.countAliveEagles() : this.eagles?.length ?? 1;
+      if (_target > 0 && _eagleN > _target) {
+        const _over = _eagleN / _target;   // >1 → predators above prey capacity
+        _huntThresh += Math.min((_over - 1) * (_M.eagleOverhuntRestraint ?? 30), _M.eagleRestraintCap ?? 45);
+      }
+    }
+
+    if (this.hunger > _huntThresh) {
       this.hunt(simulation, mauri, dt);
     } else {
       this.state = 'patrol';
@@ -546,6 +569,11 @@ class HaastsEagle extends Boid {
   _tryReproduce(simulation) {
     if (!this.mature || this.reproCooldown > 0) return;
 
+    // Sexual reproduction: the female lays. A lone male, or a female with no
+    // mate, does not — so the founding pair matters and a lost sex leads to
+    // extinction.
+    if (!this.isFemale) return;
+
     // Must be well-fed to invest in an egg.
     const wellFed = this.maxHunger * 0.45;
     if (this.hunger > wellFed) return;
@@ -560,6 +588,19 @@ class HaastsEagle extends Boid {
 
     const moaN = simulation.getMoaPopulation();
     if (moaN <= 0) return;
+
+    // Need a mature male within mating range to pair with.
+    const mateR = M.eagleMateRadius ?? 250;
+    const mateRSq = mateR * mateR;
+    let hasMate = false;
+    const eagles = simulation.eagles;
+    for (let i = 0; i < eagles.length; i++) {
+      const o = eagles[i];
+      if (o === this || !o.alive || o.isFemale || !o.mature) continue;
+      const dx = o.pos.x - this.pos.x, dy = o.pos.y - this.pos.y;
+      if (dx * dx + dy * dy <= mateRSq) { hasMate = true; break; }
+    }
+    if (!hasMate) return;
 
     // The tuning knob: ~one eagle per six moa by default.
     const ratio = M.eagleTargetRatio ?? (1 / 6);
@@ -581,11 +622,12 @@ class HaastsEagle extends Boid {
       egg.offspringType = 'eagle';
       egg.parentSpecies = this.speciesKey || egg.parentSpecies || null;
       egg.incubationTime *= 1.6; // eagles brood a little longer than moa
+      egg.forcedSex = null;      // hatchling sex is auto-balanced in _hatchEagleEgg
       this.reproCooldown = M.eagleReproCooldown ?? 2600;
       // Laying is costly — the parent must hunt again soon.
       this.hunger = Math.min(this.maxHunger, this.hunger + 25);
       if (simulation.game) {
-        simulation.game.addNotification('A Pouākai nests — an egg is laid.', 'info');
+        simulation.game.addNotification('A Pouākai pair nests — an egg is laid.', 'info');
       }
     }
   }

@@ -568,10 +568,24 @@ class MauriManager {
     this.onMoaThriving = 0.1;
     this.populationMilestoneBonus = 50;
 
-    this.eatMauriThreshold = 50; 
+    // Scales the passive income you earn just for having moa (population-based
+    // stream in Game.update). Halved so a large flock is worth less per second.
+    this.passiveIncomeScale = 0.5;
+
+    this.eatMauriThreshold = 50;
     this.floatingTexts = [];
+    this.populationMilestones = [10, 15, 20, 25, 30, 40, 50];
     this.lastMilestone = 0;
     this.eagleSpawnedAt = new Set();
+  }
+
+  // Seed the milestone tracker to the starting population so milestones already
+  // satisfied at level start (e.g. a level that opens with 16 moa clears the 10
+  // and 15 marks) don't retroactively pay out — only genuine growth is rewarded.
+  primeMilestones(startPop) {
+    let m = 0;
+    for (const t of this.populationMilestones) if (startPop >= t) m = t;
+    this.lastMilestone = m;
   }
   
   earn(amount, x, y, reason) {
@@ -610,7 +624,7 @@ class MauriManager {
   }
   
   checkMilestones(moaCount, simulation, game) {
-    const mauriMilestones = [10, 15, 20, 25, 30, 40, 50];
+    const mauriMilestones = this.populationMilestones;
     for (const m of mauriMilestones) {
       if (moaCount >= m && this.lastMilestone < m) {
         this.lastMilestone = m;
@@ -760,6 +774,9 @@ class Game {
     this.simulation.init();
     
     this.mauri = new MauriManager(CONFIG.startingMauri);
+    // Don't pay population milestones the starting flock already satisfies
+    // (removes the ~+100 mauri jump when a level opens above the 10/15 marks).
+    this.mauri.primeMilestones(this.simulation.getMoaPopulation());
     this.ui = new GameUI(CONFIG, this.terrain, this.simulation, this.mauri, this, this.seasonManager);
     
     this.playTime = 0;
@@ -878,8 +895,9 @@ class Game {
     if (this._incomeAccumulator >= 64) {
       this._incomeAccumulator -= 64;
       const pop = this._cachedMoaCount;
-      let income = pop * this.mauri.perMoaPerSecond +
-                   this._cachedThrivingCount * this.mauri.onMoaThriving;
+      let income = (pop * this.mauri.perMoaPerSecond +
+                    this._cachedThrivingCount * this.mauri.onMoaThriving)
+                   * this.mauri.passiveIncomeScale;   // halved: mauri for having moa
       const tStart = 10, tScale = 5.3;   // asymptote ≈ tStart+tScale; tuned so pop 25 → ~15
       if (pop > tStart && income > 0) {
         const effPop = tStart + tScale * (1 - Math.exp(-(pop - tStart) / tScale));
@@ -896,6 +914,23 @@ class Game {
       this.gameOverReason = "All moa here were hunted...";
       if (audioManager) audioManager.playLoss();
     }
+
+    // Eagle extinction (emergent-eagle levels): the apex predator dying out is a
+    // loss. A grace period holds while an eagle egg is still incubating.
+    if (this.state === GAME_STATE.PLAYING &&
+        typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.emergentEagles &&
+        this.simulation.countAliveEagles() === 0) {
+      let eagleEggs = 0;
+      const eggs = this.simulation.eggs;
+      for (let i = 0; i < eggs.length; i++) {
+        if (eggs[i].alive && !eggs[i].hatched && eggs[i].offspringType === 'eagle') { eagleEggs++; break; }
+      }
+      if (eagleEggs === 0) {
+        this.state = GAME_STATE.LOST;
+        this.gameOverReason = "The Pouākai vanished from these ranges — an ecosystem loses its apex predator.";
+        if (audioManager) audioManager.playLoss();
+      }
+    }
     
     this.mauri.updateFloatingTexts(dt);
     this.updateNotifications(dt);
@@ -909,6 +944,18 @@ class Game {
     }
   }
   
+  // Snapshot passed to the (per-level tunable) score formula. See
+  // computeLevelScore / defaultLevelScore in mauri_level_format.js.
+  _scoreContext() {
+    return {
+      moaCount: this._cachedMoaCount,
+      totalEarned: this.mauri.totalEarned,
+      playTime: this.playTime,
+      goalsCompleted: this._goalsCompleted || 0,
+      level: this.currentLevel
+    };
+  }
+
   checkGoals() {
     if (this.phases) { this._checkPhases(); return; }
     const goals = this.goals;
@@ -929,12 +976,7 @@ class Game {
       this.state = GAME_STATE.WON;
       if (audioManager) audioManager.playWin();
 
-      // Calculate score: may be buggy with new levels
-      const score = Math.round(
-      ((this._cachedMoaCount) * (this.mauri.totalEarned * 0.001))
-      - ((this.playTime / 60) - 240) + 60
-      );
-
+      const score = computeLevelScore(this.currentLevel, this._scoreContext());
       PROGRESS.completeLevel(this.currentLevel.id, score);
     }
   }
@@ -1008,7 +1050,7 @@ class Game {
       for (const g of this.goals) { if (!g.achieved) { g.achieved = true; this._goalsCompleted = (this._goalsCompleted || 0) + 1; } }
       this.state = GAME_STATE.WON;
       if (audioManager) audioManager.playWin();
-      const score = Math.round((this._cachedMoaCount) * (this.mauri.totalEarned * 0.001) + 60);
+      const score = computeLevelScore(this.currentLevel, this._scoreContext());
       PROGRESS.completeLevel(this.currentLevel.id, score);
     }
   }
@@ -1223,7 +1265,7 @@ class Game {
           { text: `Final population: ${this._cachedMoaCount} moa`, color: [120, 180, 120], size: 14 },
           { text: `Total mauri earned: ${this.mauri.totalEarned | 0}`, color: [120, 180, 120], size: 14 },
           { text: `Time elapsed: ${(this.playTime / 60) | 0} seconds`, color: [120, 180, 120], size: 14 },
-          { text: `Final Score: ${Math.round(((this._cachedMoaCount)*(this.mauri.totalEarned*.001))-((this.playTime / 60)-120)+60)} points`, color: [200, 240, 200], size: 16 },
+          { text: `Final Score: ${computeLevelScore(this.currentLevel, this._scoreContext())} points`, color: [200, 240, 200], size: 16 },
           { text: "", color: [200, 240, 200], size: 18 },
           { text: "Press R to play again", color: [200, 240, 200], size: 18 }
         ],
@@ -1598,6 +1640,20 @@ class Game {
       text("no tutorial · 10s samples · CSV", bx + bw / 2, by + bh + 12);
 
       this._benchBtnBounds = { x: bx, y: by, w: bw, h: bh };
+
+      // ×5 batch: five unattended runs back-to-back
+      const b5y = by + bh + 26;
+      const b5h = 34;
+      const b5Hover = mouseX > bx && mouseX < bx + bw && mouseY > b5y && mouseY < b5y + b5h;
+      fill(b5Hover ? 70 : 50, b5Hover ? 60 : 45, b5Hover ? 95 : 70);
+      stroke(120, 110, 160);
+      strokeWeight(1);
+      rect(bx, b5y, bw, b5h, 8);
+      fill(205, 195, 235);
+      noStroke();
+      textSize(14);
+      text("📊 Benchmark ×5", bx + bw / 2, b5y + b5h / 2);
+      this._bench5BtnBounds = { x: bx, y: b5y, w: bw, h: b5h };
     }
 
     fill(CACHED_COLORS.menuFooter);
@@ -1801,6 +1857,15 @@ class Game {
             my > btn.y && my < btn.y + btn.h) {
           BENCHMARK.arm();
           this.init();  // Start playing with the benchmark recording
+          return;
+        }
+      }
+      if (CONFIG.debugMode && this._bench5BtnBounds) {
+        const btn = this._bench5BtnBounds;
+        if (mx > btn.x && mx < btn.x + btn.w &&
+            my > btn.y && my < btn.y + btn.h) {
+          BENCHMARK.armBatch(5);   // five unattended runs, one CSV each
+          this.init();
           return;
         }
       }
@@ -2009,6 +2074,8 @@ function draw() {
   deltaMultiplier = deltaTime / TARGET_FRAME_TIME;
 
   updateFPS();
+
+  if (typeof BENCHMARK !== 'undefined') BENCHMARK.tick();
 
   if (CONFIG.debugMode) {
     let t0 = performance.now();

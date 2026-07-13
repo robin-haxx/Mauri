@@ -55,6 +55,10 @@ class Egg {
     // lay eggs in their nest with offspringType='eagle'; the simulation branches
     // on this in updateEggs so the same egg lifecycle serves both.
     this.offspringType = 'moa';
+
+    // Optional forced sex for the hatchling (true=female, false=male, null=auto).
+    // Used to seed the founding eagle pair with an egg opposite the spawned bird.
+    this.forcedSex = null;
     
     // Visual - pre-calculate speckle positions
     this.wobblePhase = random(TWO_PI);

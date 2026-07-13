@@ -21,9 +21,9 @@ const MOA_SPECIES = {
     bodyColor: { r: [90, 110], g: [60, 75], b: [28, 40] },
     
     // Movement
-    baseSpeed: 0.2,
+    baseSpeed: 0.16,
     fleeSpeed: 0.3,
-    maxForce: 0.025,
+    maxForce: 0.02,
     
     // Survival
     maxHunger: 100,
@@ -32,7 +32,7 @@ const MOA_SPECIES = {
     criticalHunger: 80,
     
     // Reproduction
-    eggCooldownTime: 700,
+    eggCooldownTime: 900,
     securityTimeBase: 500,
     securityTimeVariation: 300,
     
@@ -114,9 +114,9 @@ const MOA_SPECIES = {
     size: { min: 11, max: 14 },
     bodyColor: { r: [95, 115], g: [70, 85], b: [40, 55] },
     
-    baseSpeed: 0.2,
-    fleeSpeed: 0.5,
-    maxForce: 0.022,
+    baseSpeed: 0.14,
+    fleeSpeed: 0.45,
+    maxForce: 0.02,
     
     maxHunger: 120,
     baseHungerRate: 0.05,
@@ -155,9 +155,9 @@ const MOA_SPECIES = {
     size: { min: 8, max: 11 },
     bodyColor: { r: [85, 105], g: [65, 80], b: [35, 50] },
     
-    baseSpeed: 0.24,
-    fleeSpeed: 0.58,
-    maxForce: 0.024,
+    baseSpeed: 0.2,
+    fleeSpeed: 0.5,
+    maxForce: 0.02,
     
     maxHunger: 95,
     baseHungerRate: 0.038,
@@ -196,9 +196,9 @@ const MOA_SPECIES = {
     size: { min: 7, max: 10 },
     bodyColor: { r: [88, 108], g: [58, 73], b: [32, 45] },
     
-    baseSpeed: 0.22,
-    fleeSpeed: 0.65,  // Fast runner despite stocky build
-    maxForce: 0.028,  // More agile
+    baseSpeed: 0.18,
+    fleeSpeed: 0.6,  // Fast runner despite stocky build
+    maxForce: 0.024,  // More agile
     
     maxHunger: 90,
     baseHungerRate: 0.042,
@@ -234,7 +234,7 @@ const MOA_SPECIES = {
     size: { min: 10, max: 13 },
     bodyColor: { r: [105, 125], g: [78, 93], b: [50, 65] },
     
-    baseSpeed: 0.17,
+    baseSpeed: 0.14,
     fleeSpeed: 0.4,
     maxForce: 0.018,
     
@@ -278,7 +278,7 @@ const MOA_SPECIES = {
     
     baseSpeed: 0.21,
     fleeSpeed: 0.52,
-    maxForce: 0.023,
+    maxForce: 0.02,
     
     maxHunger: 105,
     baseHungerRate: 0.044,
@@ -354,16 +354,16 @@ const MOA_SPECIES = {
     size: { min: 5, max: 7 },
     bodyColor: { r: [82, 100], g: [55, 68], b: [25, 38] },
     
-    baseSpeed: 0.2,       // Fastest moa
+    baseSpeed: 0.15,       // Fastest moa
     fleeSpeed: 0.6,
-    maxForce: 0.032,
+    maxForce: 0.028,
     
     maxHunger: 70,        // Smallest needs least food
-    baseHungerRate: 0.035,
+    baseHungerRate: 0.04,
     hungerThreshold: 28,
     criticalHunger: 58,
     
-    eggCooldownTime: 600,  // Breeds faster
+    eggCooldownTime: 690,  // Breeds faster
     securityTimeBase: 700,
     securityTimeVariation: 300,
     
@@ -372,10 +372,10 @@ const MOA_SPECIES = {
     
     flockTendency: 0.9,    // Very social
     curiosity: 0.75,
-    flightiness: 0.85,     // Very skittish
+    flightiness: 0.8,     // Very skittish
     
     // Special: harder to spot by eagles
-    camouflage: 0.2,       // 20% chance eagle doesn't see
+    camouflage: 0.25,       // 25% chance eagle doesn't see
     
     seasonalModifiers: {
       summer: { hungerRate: 1.0, speed: 1.05 },

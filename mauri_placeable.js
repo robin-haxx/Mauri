@@ -250,14 +250,25 @@ class PlaceableObject {
   
   feedMoa(moa, dt = 1) {
     if (!this.def.feedingRate) return 0;
-    
+
+    // Species-selective feeders (lancewood, speargrass) nourish ONLY the species
+    // they favour. Any other moa is scaled by the same knob as browsing a
+    // favoured plant (LEVEL_MECHANICS.unfavouredBrowsePenalty). At 0 they get no
+    // nourishment at all, so the two founders never cross-feed from each other's
+    // plots (this is the direct-feed counterpart to the browse-gain penalty).
+    let sel = 1;
+    if (this.def.favouredSpecies && moa.speciesKey !== this.def.favouredSpecies) {
+      sel = (typeof LEVEL_MECHANICS !== 'undefined' ? (LEVEL_MECHANICS.unfavouredBrowsePenalty ?? 0.25) : 0.25);
+    }
+    if (sel <= 0) return 0;   // fully exclusive — no food, and not counted as feeding
+
     this.feedingMoaCount++;
-    
+
     if (frameCount % 15 === 0) {
       this.spawnFeedingParticle(moa.pos.x, moa.pos.y);
     }
-    
-    return this.def.baseFeedingRate * this.seasonalMultiplier * dt;
+
+    return this.def.baseFeedingRate * this.seasonalMultiplier * dt * sel;
   }
   
   spawnFeedingParticle(x, y) {

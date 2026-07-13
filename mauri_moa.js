@@ -493,8 +493,14 @@ class Moa extends Boid {
         this.maxSpeed = this.baseSpeed * 0.7;
         if (this.feedingAt) {
           const dx = this.feedingAt.pos.x - this.pos.x, dy = this.feedingAt.pos.y - this.pos.y;
-          if (dx * dx + dy * dy > this.feedingAt.radius * this.feedingAt.radius * 0.25) {
-            this.applyForce(this.seek(this.feedingAt.pos, 0.3, this.feedingAt.radius * 0.5));
+          const r = this.feedingAt.radius;
+          // Graze across the stand rather than sliding to its centre: only steer
+          // back when near the outer edge (and gently, with arrival so it eases
+          // in instead of oscillating across the middle). Inside that band the
+          // moa just wanders/grazes, so a herd spreads over the patch and can
+          // still drift on through a corridor of feeders.
+          if (dx * dx + dy * dy > r * r * 0.64) {
+            this.applyForce(this.seek(this.feedingAt.pos, 0.3, r * 0.8));
           } else {
             const w = this.wander(); w.mult(0.2); this.applyForce(w);
           }
@@ -841,12 +847,32 @@ class Moa extends Boid {
     }
     
     if (best) {
-      if (best.isInRange(this.pos)) {
-        // Arrived: settle instead of endlessly seeking the centre point —
-        // the old seek-vs-damping fight made moa jitter around placeables.
-        this.vel.mult(0.9);
+      const r = best.radius || 15;
+      const dx = best.pos.x - this.pos.x, dy = best.pos.y - this.pos.y;
+      const distSq = dx * dx + dy * dy;
+      if (distSq > r * r) {
+        // GUIDE phase: steer toward the patch at cruising speed with NO arrival
+        // braking, so the moa reaches it carrying momentum instead of
+        // decelerating onto the centre point. The old arrive-vs-attract tug (and
+        // the vel*0.9 brake once in range) is what rubber-banded big, fast movers
+        // like the giant moa as they hit a stand.
+        this.applyForce(this.seek(best.pos, 0.8));
       } else {
-        this.applyForce(this.seek(best.pos, 0.8, best.radius || 15));
+        // ACROSS phase: once inside the patch, stop pulling the moa to the
+        // centre. Preserve its heading so it grazes straight across and out the
+        // far side — a *line* of favoured plants then behaves like a corridor
+        // that conveys the herd along, letting the player steer where moa go
+        // rather than trapping each one sliding to a centre point.
+        const vMagSq = this.vel.x * this.vel.x + this.vel.y * this.vel.y;
+        if (vMagSq > 0.0001) {
+          const s = (this.maxForce * 0.6) / Math.sqrt(vMagSq);
+          this._tempForce.set(this.vel.x * s, this.vel.y * s);
+          this.applyForce(this._tempForce);
+        } else {
+          // Stalled dead inside a patch — nudge it back into motion through the
+          // stand instead of letting it park on the centre.
+          this.applyForce(this.seek(best.pos, 0.5));
+        }
       }
       return true;
     }

@@ -109,6 +109,12 @@ class HaastsEagle extends Boid {
     this.reproCheckInterval = M.eagleReproCheckInterval ?? 220;
     this.reproCheckTimer = random(0, this.reproCheckInterval);
 
+    // Pair bond: emergent birds hold a partner so a mated pair keeps a *shared*
+    // territory. Without this each bird chases prey and relocates its own nest
+    // independently, the two drift beyond eagleMateRadius, and the female can
+    // never find a mate to lay with — so reproduction silently stalls.
+    this.partner = null;
+
     if (this.emergent) {
       // Emergent birds metabolise a little faster so the population visibly ebbs
       // across a season instead of coasting indefinitely.
@@ -154,6 +160,7 @@ class HaastsEagle extends Boid {
       this.reproCheckTimer -= dt;
       if (this.reproCheckTimer <= 0) {
         this.reproCheckTimer = this.reproCheckInterval;
+        this._refreshPartner(simulation);
         if (this.state !== 'hunting' && this.state !== 'distracted') {
           this._tryReproduce(simulation);
         }
@@ -359,12 +366,16 @@ class HaastsEagle extends Boid {
     this.maxSpeed = this.baseSpeed * 0.5;
     this.hunting = false;
     this.target = null;
-    
+
     const wander = this.wander();
     wander.mult(0.15);
     this.applyForce(wander);
-    this.applyForce(this.seek(this.patrolCenter, 0.2));
-    
+    // Arrival radius here is what stops the post-kill "spin": without it the
+    // seek has no target-speed ramp, so once the bird reaches its nest it
+    // overshoots and whips back and forth across the point (a tight spin) for
+    // the rest of the rest timer. Easing down inside 45px lets it settle.
+    this.applyForce(this.seek(this.patrolCenter, 0.2, 45));
+
     this.edges();
   }
   
@@ -455,8 +466,9 @@ class HaastsEagle extends Boid {
             ? simulation.getClosestMoa(this.pos.x, this.pos.y, followR)
             : null;
           if (prey) {
-            this.nest.set(prey.pos.x, prey.pos.y);
-            this.patrolCenter.set(prey.pos.x, prey.pos.y);
+            // Drag a bonded partner along so the pair tracks prey together and
+            // stays inside mate range instead of splitting up.
+            this._relocateTerritory(prey.pos.x, prey.pos.y);
           }
           this.state = 'patrol';
           this.hunting = false;
@@ -559,6 +571,43 @@ class HaastsEagle extends Boid {
   // ============================================
   // REPRODUCTION (emergent population)
   // ============================================
+
+  // Keep a live pair bond. Drops a dead/stale partner and, when single, adopts
+  // the nearest mature opposite-sex emergent bird (bonding both ways). Cheap and
+  // throttled by the caller so it isn't run every frame.
+  _refreshPartner(simulation) {
+    if (this.partner && (!this.partner.alive || this.partner.isFemale === this.isFemale)) {
+      this.partner = null;
+    }
+    if (this.partner && this.partner.alive) return;
+
+    const eagles = simulation.eagles;
+    let best = null, bestSq = Infinity;
+    for (let i = 0; i < eagles.length; i++) {
+      const o = eagles[i];
+      if (o === this || !o.alive || !o.emergent || !o.mature) continue;
+      if (o.isFemale === this.isFemale) continue;
+      if (o.partner && o.partner !== this && o.partner.alive) continue; // already paired
+      const dx = o.pos.x - this.pos.x, dy = o.pos.y - this.pos.y;
+      const dSq = dx * dx + dy * dy;
+      if (dSq < bestSq) { bestSq = dSq; best = o; }
+    }
+    if (best) { this.partner = best; best.partner = this; }
+  }
+
+  // Move this bird's territory onto (x, y) and drag a bonded partner along to a
+  // nearby offset, so a following/relocating pair stays inside mate range and
+  // keeps breeding instead of splitting up over the map.
+  _relocateTerritory(x, y) {
+    this.nest.set(x, y);
+    this.patrolCenter.set(x, y);
+    const mate = this.partner;
+    if (mate && mate.alive) {
+      const ox = x + random(-40, 40), oy = y + random(-40, 40);
+      mate.nest.set(ox, oy);
+      mate.patrolCenter.set(ox, oy);
+    }
+  }
 
   // Lay an egg in the nest when prey is plentiful. Emergent, not scripted: the
   // decision is per-bird (a varied drive, a fed state, a cooldown) and the rate

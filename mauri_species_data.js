@@ -403,8 +403,8 @@ const EAGLE_SPECIES = {
     maxForce: 0.05,
     
     maxHunger: 100,
-    hungerRate: 0.022,
-    huntThreshold: 45,
+    hungerRate: 0.02,
+    huntThreshold: 5,
     
     huntRadius: 130,
     catchRadius: 12,
@@ -432,8 +432,8 @@ const EAGLE_SPECIES = {
     maxForce: 0.045,
     
     maxHunger: 90,
-    hungerRate: 0.028, // Higher metabolism
-    huntThreshold: 40, // Hunts when less hungry
+    hungerRate: 0.024, // Higher metabolism
+    huntThreshold: 45, // Hunts when less hungry
     
     huntRadius: 100,   // Less experienced at spotting
     catchRadius: 10,   // Less accurate

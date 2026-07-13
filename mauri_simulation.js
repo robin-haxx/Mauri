@@ -911,7 +911,13 @@ class Simulation {
               this.stats.birthsBySpecies[offspringKey]++;
             }
             this._invalidateCache();
-            mauri.earn(mauri.onEggHatch, egg.pos.x, egg.pos.y, 'hatch');
+            // Diminishing hatch reward: based on the parent species' population
+            // (excluding the new hatchling) — 0.5x above 10, nothing above 15.
+            const _parentPop = this.getSpeciesCount(newMoa.speciesKey) - 1;
+            const _hatchReward = _parentPop > 15 ? 0
+                               : _parentPop > 10 ? mauri.onEggHatch * 0.5
+                               : mauri.onEggHatch;
+            if (_hatchReward > 0) mauri.earn(_hatchReward, egg.pos.x, egg.pos.y, 'hatch');
 
             if (this.game.tutorial) {
               this.game.tutorial.fireEvent(TUTORIAL_EVENTS.EGG_HATCHED, { egg, moa: newMoa });

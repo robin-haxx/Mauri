@@ -79,9 +79,9 @@ const LEVEL_KAHURANGI = {
   economy: {
     startingMauri: 60,
     seasonDuration: 2100,
-    eggIncubationTime: 500,
-    securityTimeToLay: 800,
-    securityTimeVariation: 200,
+    eggIncubationTime: 700,
+    securityTimeToLay: 1200,
+    securityTimeVariation: 600,
     layingHungerThreshold: 28,
     eagleSpawnMilestones: [12, 18, 25, 35, 45, 55],
     maxPopulation: 60

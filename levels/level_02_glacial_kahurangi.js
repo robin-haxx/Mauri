@@ -291,7 +291,7 @@ const LEVEL_GLACIAL_KAHURANGI = {
     ridgeInfluence: 1.6,
     elevationPower: 1.4,
     islandFalloff: 0.2,
-    plantDensity: 0.007,
+    plantDensity: 0.008,
     useLakes: false
   },
 
@@ -531,7 +531,7 @@ const LEVEL_GLACIAL_KAHURANGI = {
         { name: "Keep both focus species alive through winter", reward: 100, survive: true }
       ],
       fail: (sim) => gkFocalExtinct(sim),
-      failReason: "One of your moa species was lost to the cold!"
+      failReason: "One of your moa species was lost!"
     },
     {
       name: "Spring & Summer: Grow the community",
@@ -548,7 +548,7 @@ const LEVEL_GLACIAL_KAHURANGI = {
         { name: "Keep both focus species alive", reward: 200, survive: true }
       ],
       fail: (sim) => gkFocalExtinct(sim),
-      failReason: "One of your moa species was lost to the cold!"
+      failReason: "One of your moa species was lost!"
     }
   ],
 

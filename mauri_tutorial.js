@@ -405,7 +405,10 @@ class TutorialUIMapper {
     const ui = this.ui;
     const config = this.config;
     const layout = ui.layout;
-    
+    // In fullscreen the HUD lives at the overlay positions, so highlights
+    // must follow it there instead of the full-UI placements.
+    const fs = (config.fullscreen && layout.fs) ? layout.fs : null;
+
     // Tool buttons by placeable key (level-scoped): 'tool:<key>'
     if (typeof target === 'string' && target.startsWith('tool:')) {
       const key = target.slice(5);
@@ -420,36 +423,59 @@ class TutorialUIMapper {
     };
     if (target in toolButtons) return this._getToolButtonBounds(toolButtons[target]);
     
+    // Fullscreen goals panel bounds (also stands in for the sidebar panels
+    // that aren't drawn in fullscreen).
+    const _fsGoals = fs ? {
+      x: fs.goalsX - 12, y: fs.goalsY - 12,
+      w: layout.sidebarPanelWidth + 24,
+      h: 30 + ui.game.goals.length * 26 + 24
+    } : null;
+
     switch (target) {
       case 'topBar':
-        return { x: ui.topBar.x, y: ui.topBar.y, w: ui.topBar.width, h: ui.topBar.height };
       case 'topBarContent':
+        if (fs) return { x: fs.mauriX - 10, y: fs.stripY - 5,
+                         w: (fs.pauseBtnX + fs.btnSize) - fs.mauriX + 20, h: 80 };
+        if (target === 'topBar')
+          return { x: ui.topBar.x, y: ui.topBar.y, w: ui.topBar.width, h: ui.topBar.height };
         return { x: layout.mauriX - 10, y: 15, w: layout.timerX + 130 - layout.mauriX + 20, h: 80 };
       case 'sidebar':
+        if (fs) return _fsGoals;
         return { x: ui.sidebar.x, y: ui.sidebar.y, w: ui.sidebar.width, h: ui.sidebar.height };
       case 'gameArea':
+        if (fs) return { x: 0, y: 0, w: config.canvasWidth, h: config.canvasHeight };
         return { x: config.gameAreaX, y: config.gameAreaY, w: config.gameAreaWidth, h: config.gameAreaHeight };
       case 'bottomBar':
+        if (fs) return { x: fs.toolbarStartX - 10, y: fs.toolbarY - 10,
+                         w: layout.toolbarTotalWidth + 20, h: layout.toolbarBtnSize + 30 };
         return { x: ui.bottomBar.x, y: ui.bottomBar.y, w: ui.bottomBar.width, h: ui.bottomBar.height };
       case 'mauriDisplay':
-        return { x: layout.mauriX, y: 20, w: 180, h: 70 };
+        return { x: fs ? fs.mauriX : layout.mauriX, y: fs ? fs.stripY : 20, w: 180, h: 70 };
       case 'seasonDisplay':
-        return { x: layout.seasonX, y: 20, w: 280, h: 70 };
+        return { x: fs ? fs.seasonX : layout.seasonX, y: fs ? fs.stripY : 20, w: 280, h: 70 };
       case 'timerDisplay':
-        return { x: layout.timerX, y: 20, w: 120, h: 70 };
+        return { x: fs ? fs.timerX : layout.timerX, y: fs ? fs.stripY : 20, w: 120, h: 70 };
       case 'pauseButton':
+        if (fs) return { x: fs.pauseBtnX, y: fs.btnY, w: fs.btnSize, h: fs.btnSize };
         return { x: layout.pauseBtnX, y: layout.pauseBtnY, w: layout.pauseBtnSize, h: layout.pauseBtnSize };
       case 'migrationHint':
+        // Not shown in fullscreen — anchor to the HUD strip instead
+        if (fs) return { x: fs.mauriX, y: fs.stripY, w: 590, h: 70 };
         return { x: layout.migrationHintX, y: 110, w: layout.migrationHintWidth, h: 50 };
       case 'toolbar':
+        const _tbX = fs ? fs.toolbarStartX : layout.toolbarStartX;
+        const _tbY = fs ? fs.toolbarY : ui.toolbarY;
         const toolbarW = (layout.toolbarBtnCount - 1) * layout.toolbarSpacing + layout.toolbarBtnSize;
-        return { x: layout.toolbarStartX - 10, y: ui.toolbarY - 10, w: toolbarW + 20, h: layout.toolbarBtnSize + 30 };
+        return { x: _tbX - 10, y: _tbY - 10, w: toolbarW + 20, h: layout.toolbarBtnSize + 30 };
       case 'goalsPanel':
+        if (fs) return _fsGoals;
         return { x: ui.sidebar.x + 20, y: 20, w: ui.sidebar.width - 40, h: 30 + ui.game.goals.length * 28 };
       case 'eventLog':
+        if (fs) return _fsGoals;
         const goalsHeight = 30 + ui.game.goals.length * 28;
         return { x: ui.sidebar.x + 20, y: goalsHeight + 35, w: ui.sidebar.width - 40, h: 320 };
       case 'populationPanel':
+        if (fs) return _fsGoals;
         const eventLogY = 30 + ui.game.goals.length * 28 + 35 + 320;
         return { x: ui.sidebar.x + 20, y: eventLogY + 15, w: ui.sidebar.width - 40, h: 220 };
       default:
@@ -457,12 +483,13 @@ class TutorialUIMapper {
         return null;
     }
   }
-  
+
   _getToolButtonBounds(index) {
     const layout = this.ui.layout;
+    const fs = (this.config.fullscreen && layout.fs) ? layout.fs : null;
     return {
-      x: layout.toolbarStartX + index * layout.toolbarSpacing,
-      y: this.ui.toolbarY,
+      x: (fs ? fs.toolbarStartX : layout.toolbarStartX) + index * layout.toolbarSpacing,
+      y: fs ? fs.toolbarY : this.ui.toolbarY,
       w: layout.toolbarBtnSize,
       h: layout.toolbarBtnSize
     };

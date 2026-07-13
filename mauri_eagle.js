@@ -10,13 +10,13 @@ class HaastsEagle extends Boid {
     
     // Movement
     this.baseSpeed = 0.4;
-    this.huntSpeed = 0.8;
+    this.huntSpeed = 0.6;
     this.maxSpeed = this.baseSpeed;
     this.maxForce = 0.05;
     this.perceptionRadius = 160;
     this.separationDist = 100;
     this.separationDistSq = 10000;
-    this.wanderStrength = 1.0;
+    this.wanderStrength = 1.2;
     
     // Hunting
     // UPDATE SQUARED VALUES WITH RADIUS VALUES

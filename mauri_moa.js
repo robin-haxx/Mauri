@@ -24,8 +24,8 @@ const MOA_AGE = {
 class Moa extends Boid {
   static DEFAULTS = {
     size: { min: 8, max: 11 },
-    baseSpeed: 0.2,
-    fleeSpeed: 0.4,
+    baseSpeed: 0.1,
+    fleeSpeed: 0.3,
     maxForce: 0.025,
     flockTendency: 0.8,
     flightiness: 0.7,
@@ -383,7 +383,14 @@ class Moa extends Boid {
     
     if (this.isMigrating || this.shouldMigrate(seasonCache)) return MOA_STATE.MIGRATING;
     if (this.isFeeding) return MOA_STATE.FEEDING;
-    if (this.hunger > this.hungerThreshold) return MOA_STATE.FORAGING;
+
+    // Hunger deadband: start foraging above the threshold but keep foraging
+    // until comfortably below it. Without it, one bite dropped hunger just
+    // under the threshold → IDLE → home-range spring yanked the moa back →
+    // hunger re-crossed → out again (rubber-banding).
+    const _wasForaging = this.currentState === MOA_STATE.FORAGING || this.currentState === MOA_STATE.FEEDING;
+    const _forageExit = Math.max(this.hungerThreshold - 10, 5);
+    if (this.hunger > (_wasForaging ? _forageExit : this.hungerThreshold)) return MOA_STATE.FORAGING;
     
     for (let i = 0; i < placeables.length; i++) {
       if (placeables[i].alive && placeables[i].getAttractionStrength(this) > 0) return MOA_STATE.FORAGING;
@@ -435,7 +442,7 @@ class Moa extends Boid {
         if (this.feedingAt) {
           const dx = this.feedingAt.pos.x - this.pos.x, dy = this.feedingAt.pos.y - this.pos.y;
           if (dx * dx + dy * dy > this.feedingAt.radius * this.feedingAt.radius * 0.25) {
-            this.applyForce(this.seek(this.feedingAt.pos, 0.3));
+            this.applyForce(this.seek(this.feedingAt.pos, 0.3, this.feedingAt.radius * 0.5));
           } else {
             const w = this.wander(); w.mult(0.2); this.applyForce(w);
           }
@@ -524,7 +531,7 @@ class Moa extends Boid {
     const dist = Math.sqrt(distSq);
     const predictTime = constrain(dist / max(this.maxSpeed - t.vel.mag() * 0.5, 0.1), 0, 40);
     this._tempForce.set(t.pos.x + t.vel.x * predictTime, t.pos.y + t.vel.y * predictTime);
-    this.applyForce(this.seek(this._tempForce, map(dist, 0, this.matingSearchRadius, 1.5, 0.8)));
+    this.applyForce(this.seek(this._tempForce, map(dist, 0, this.matingSearchRadius, 1.5, 0.8), 12));
     
     if (distSq < this.matingSearchRadius * this.matingSearchRadius * 0.25) this.heartTimer = 20;
   }
@@ -763,8 +770,13 @@ class Moa extends Boid {
     }
     
     if (best) {
-      this.applyForce(this.seek(best.pos, 0.8));
-      if (best.isInRange(this.pos)) this.vel.mult(0.7);
+      if (best.isInRange(this.pos)) {
+        // Arrived: settle instead of endlessly seeking the centre point —
+        // the old seek-vs-damping fight made moa jitter around placeables.
+        this.vel.mult(0.9);
+      } else {
+        this.applyForce(this.seek(best.pos, 0.8, best.radius || 15));
+      }
       return true;
     }
     return false;
@@ -815,7 +827,7 @@ class Moa extends Boid {
         this.targetPlant = null;
         this.vel.mult(0.3);
       } else {
-        this.applyForce(this.seek(this.targetPlant.pos, map(this.hunger, this.hungerThreshold, this.maxHunger, 0.5, 0.9)));
+        this.applyForce(this.seek(this.targetPlant.pos, map(this.hunger, this.hungerThreshold, this.maxHunger, 0.5, 0.9), 10));
       }
     } else {
       const w = this.wander(); w.mult(0.6); this.applyForce(w);
@@ -918,7 +930,7 @@ class Moa extends Boid {
     let urgency = 0.5 + sc.migrationStrength * 0.5;
     if (this.hunger > 50 && this.localFoodScore < 0.3) urgency *= 1.5;
     
-    const seek = this.seek(this.migrationTarget, urgency);
+    const seek = this.seek(this.migrationTarget, urgency, 25);
     seek.mult(sc.migrationStrength);
     this.applyForce(seek);
   }
@@ -951,16 +963,20 @@ class Moa extends Boid {
   render() {
     if (!this.alive) return;
 
-    const sprite = EntitySprites.getMoaSprite(this.animTime, this.vel.magSq() > 0.01, this.isJuvenile());
+    const variant = this.speciesConfig.spriteSet;
+    const sprite = EntitySprites.getMoaSprite(this.animTime, this.vel.magSq() > 0.01, this.isJuvenile(), variant);
     if (!sprite) return;
     
     push();
     translate(this.pos.x, this.pos.y);
 
-    // Vulnerable-founder highlight: a soft pulsing halo under the moa so the
-    // player can spot the species that still needs protecting.
-    if (this._highlightActive && this._vhl) {
-      const _hc = this._vhl.color;
+    // Species highlight: a soft pulsing halo under the moa, driven purely by
+    // the player toggle (population panel / fullscreen focus buttons; focus
+    // species start toggled on). The low-population warning is a separate red
+    // ring drawn in renderIndicators so it sits above trees.
+    if (typeof SPECIES_HIGHLIGHT !== 'undefined' && SPECIES_HIGHLIGHT.has(this.speciesKey)) {
+      const _hc = this.speciesConfig.highlightColor ||
+                  (this._vhl && this._vhl.color) || [255, 235, 120];
       const _pulse = 0.5 + 0.5 * Math.sin(frameCount * 0.12);
       noStroke();
       fill(_hc[0], _hc[1], _hc[2], 55 + _pulse * 95);
@@ -972,23 +988,42 @@ class Moa extends Boid {
     fill(0, 0, 0, 25);
     ellipse(1.5, 1.5, this.size * 1.0, this.size * 0.5);
     
-    const targetAngle = this.vel.heading();
-    this._displayAngle = SpriteAngle.snapWithHysteresis(this._displayAngle, targetAngle);
+    // Only update facing while actually moving: heading() of a near-zero
+    // velocity is pure noise and made stationary moa spin on the spot
+    // (mating, feeding, uphill crawls). Below the gate, keep the last facing.
+    if (this.vel.magSq() > 0.0025) {
+      this._displayAngle = SpriteAngle.snapWithHysteresis(this._displayAngle, this.vel.heading());
+    }
+    if (this._displayAngle === undefined) this._displayAngle = SpriteAngle.snap(this.vel.heading());
     rotate(this._displayAngle);
     
     if (SpriteAngle.shouldMirror(this._displayAngle)) scale(1, -1);
     
-    // Per-species tint (by genus). Restored automatically by the pop() below.
-    const _tint = this.speciesConfig.tint;
+    // Per-species tint (by genus), but skip it for species with their own
+    // dedicated sprite set (e.g. bush moa) so their art shows unaltered.
+    const _tint = variant ? null : this.speciesConfig.tint;
     if (_tint) tint(_tint[0], _tint[1], _tint[2]);
     imageMode(CENTER);
-    image(sprite, 0, 0, this.size * 2.5, this.size * 2.5);
+    const _drawSize = this.size * 2.5 * (this.speciesConfig.spriteScale || 1);
+    image(sprite, 0, 0, _drawSize, _drawSize);
     pop();
   }
 
   renderIndicators() {
     const px = this.pos.x, py = this.pos.y, s = this.size;
     const yOff = -s * 0.8 - 4;
+
+    // Low-population warning: a pulsing red ring. Drawn here (the indicator
+    // pass, top render layer) rather than under the body, so it stays visible
+    // over trees and other plants.
+    if (this._highlightActive) {
+      const _pulse = 0.5 + 0.5 * Math.sin(frameCount * 0.12);
+      const _d = s * (2.8 + _pulse * 1.4);
+      noFill();
+      stroke(255, 70, 60, 120 + _pulse * 120);
+      strokeWeight(1.5);
+      ellipse(px, py, _d, _d);
+    }
     
     // Heart indicator
     if (this.heartTimer > 0) {
@@ -1046,6 +1081,7 @@ class Moa extends Boid {
     }
   }
 
+  // Small two-tone progress bar used by the indicators above.
   _drawBar(x, y, w, h, pct, col) {
     fill(40, 40, 40, 150);
     rect(x - w/2, y, w, h, 1);

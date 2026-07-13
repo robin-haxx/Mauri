@@ -57,6 +57,11 @@ const EntitySprites = {
     idle: null,
     juvenile: null
   },
+  // Dedicated per-species sprite sets. A species whose registry config sets
+  // e.g. `spriteSet: 'bush'` renders from here instead of the generic moa art.
+  moaVariants: {
+    bush: { walk: [], idle: null }
+  },
   eagle: {
     fly: [],
     dive: null,
@@ -98,6 +103,21 @@ const EntitySprites = {
       () => {}
     );
     
+    // Bush moa (Anomalopteryx) — its own art, 5-frame walk + idle
+    for (let i = 1; i <= 5; i++) {
+      const n = String(i).padStart(2, '0');
+      this.moaVariants.bush.walk.push(loadImage(
+        `${spritePath}LB_moa_walk_${n}.png`,
+        () => console.log(`Loaded LB_moa_walk_${n}.png`),
+        () => console.warn(`Could not load LB_moa_walk_${n}.png`)
+      ));
+    }
+    this.moaVariants.bush.idle = loadImage(
+      `${spritePath}LB_moa_idle.png`,
+      () => console.log('Loaded LB_moa_idle.png'),
+      () => console.warn('Could not load LB_moa_idle.png')
+    );
+
     // Eagle fly cycle (3 frames)
     for (let i = 1; i <= 7; i++) {
       this.eagle.fly.push(loadImage(
@@ -126,21 +146,19 @@ const EntitySprites = {
     return sprite && sprite.width > 0 && sprite.height > 0;
   },
 
-  getMoaSprite(animTime, isMoving, isJuvenile = false) {
-    // if (isJuvenile && this.isValid(this.moa.juvenile)) {
-    //   return this.moa.juvenile;
-    // }
-    
-    if (isMoving && this.moa.walk.length > 0) {
-      const frameIndex = Math.floor(animTime * this.animation.moaWalkSpeed) % this.moa.walk.length;
-      const sprite = this.moa.walk[frameIndex];
-      if (this.isValid(sprite)) return sprite;
+  getMoaSprite(animTime, isMoving, isJuvenile = false, variant = null) {
+    const set = (variant && this.moaVariants[variant]) || this.moa;
+
+    if (isMoving && set.walk.length > 0) {
+      const frameIndex = Math.floor(animTime * this.animation.moaWalkSpeed) % set.walk.length;
+      if (this.isValid(set.walk[frameIndex])) return set.walk[frameIndex];
     }
-    
-    if (this.isValid(this.moa.idle)) {
-      return this.moa.idle;
-    }
-    
+
+    if (this.isValid(set.idle)) return set.idle;
+
+    // Variant art missing/not loaded yet → fall back to the generic moa set.
+    if (set !== this.moa) return this.getMoaSprite(animTime, isMoving, isJuvenile);
+
     return null;
   },
 

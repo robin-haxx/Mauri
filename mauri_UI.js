@@ -135,6 +135,35 @@ class GameUI {
     this.layout.eventLogHeight = Math.round(280 * sidebarScale);
     this.layout.speciesPanelHeight = Math.round(240 * sidebarScale);
     this.layout.eventLogMaxMessages = sidebarScale >= 1 ? 7 : 5;
+
+    this.layout.toolbarTotalWidth = toolbarTotalWidth;
+
+    // Fullscreen (max-view) button sits just left of the pause button
+    this.layout.fsBtnX = this.layout.pauseBtnX - 80;
+
+    // Fullscreen overlay HUD layout: compact strip of mauri/season/time +
+    // fullscreen/pause buttons along the top, goals at top-right, placeables
+    // toolbar along the bottom — all drawn over the maximised play area.
+    const cw = this.config.canvasWidth;
+    const chFull = this.config.canvasHeight;
+    const fsGap = 12;
+    const fsBtn = this.layout.pauseBtnSize;
+    const stripW = 180 + 280 + 120 + fsBtn * 2 + fsGap * 4;
+    const stripX = (cw - stripW) / 2;
+    this.layout.fs = {
+      stripY: 10,
+      btnY: 10,
+      btnSize: fsBtn,
+      mauriX: stripX,
+      seasonX: stripX + 180 + fsGap,
+      timerX: stripX + 180 + 280 + fsGap * 2,
+      fsBtnX: stripX + 180 + 280 + 120 + fsGap * 3,
+      pauseBtnX: stripX + 180 + 280 + 120 + fsBtn + fsGap * 4,
+      goalsX: cw - this.layout.sidebarPanelWidth - 30,
+      goalsY: 102,
+      toolbarStartX: (cw - toolbarTotalWidth) / 2,
+      toolbarY: chFull - this.layout.toolbarBtnSize - 35
+    };
   }
 
   // Safe color getters
@@ -168,9 +197,15 @@ class GameUI {
   // ==========================================
 
   handleClick(mx, my) {
-    // Check pause button click first (top bar area)
+    // Fullscreen overlay HUD gets its own hit-testing
+    if (this.config.fullscreen) {
+      return this.handleFullscreenClick(mx, my);
+    }
+
+    // Check pause / fullscreen button clicks first (top bar area)
     if (my >= this.topBar.y && my < this.topBar.y + this.topBar.height) {
       if (this.handlePauseButtonClick(mx, my)) return true;
+      if (this.handleFullscreenButtonClick(mx, my)) return true;
     }
 
     // Check bottom toolbar clicks
@@ -186,9 +221,54 @@ class GameUI {
     return false;
   }
 
-  handleToolbarClick(mx, my) {
-    const btnX = this.layout.toolbarStartX;
-    const btnY = this.toolbarY;
+  _inRect(mx, my, x, y, w, h) {
+    return mx > x && mx < x + w && my > y && my < y + h;
+  }
+
+  handleFullscreenClick(mx, my) {
+    const fs = this.layout.fs;
+    const bs = fs.btnSize;
+
+    if (this._inRect(mx, my, fs.fsBtnX, fs.btnY, bs, bs)) {
+      this.game.toggleFullscreen();
+      return true;
+    }
+    if (this._inRect(mx, my, fs.pauseBtnX, fs.btnY, bs, bs)) {
+      this._togglePause();
+      return true;
+    }
+
+    // Focus-species highlight toggles (top-right)
+    if (this._fsFocusBtnBounds) {
+      for (const b of this._fsFocusBtnBounds) {
+        if (this._inRect(mx, my, b.x, b.y, b.size, b.size)) {
+          this._toggleSpeciesHighlight(b.key);
+          return true;
+        }
+      }
+    }
+
+    // Toolbar row
+    if (this._inRect(mx, my, fs.toolbarStartX, fs.toolbarY,
+                     this.layout.toolbarTotalWidth, this.layout.toolbarBtnSize)) {
+      this.handleToolbarClick(mx, my, fs.toolbarStartX, fs.toolbarY);
+      return true;
+    }
+
+    // Consume clicks landing on the HUD strip / goals panel so they don't
+    // fall through and place items on the map underneath.
+    if (this._inRect(mx, my, fs.mauriX, fs.stripY,
+                     (fs.pauseBtnX + bs) - fs.mauriX, 70)) return true;
+    const goalsH = 30 + this.game.goals.length * 26;
+    if (this._inRect(mx, my, fs.goalsX, fs.goalsY,
+                     this.layout.sidebarPanelWidth, goalsH)) return true;
+
+    return false;
+  }
+
+  handleToolbarClick(mx, my, startX = this.layout.toolbarStartX, toolbarY = this.toolbarY) {
+    const btnX = startX;
+    const btnY = toolbarY;
     const btnSize = this.layout.toolbarBtnSize;
     const spacing = this.layout.toolbarSpacing;
 
@@ -207,8 +287,24 @@ class GameUI {
   }
 
   handleSidebarClick(mx, my) {
-    // Placeholder for future sidebar interactivity
+    // Population rows toggle their species' in-world highlight
+    if (this._speciesRowBounds) {
+      for (const b of this._speciesRowBounds) {
+        if (this._inRect(mx, my, b.x, b.y, b.w, b.h)) {
+          this._toggleSpeciesHighlight(b.key);
+          return true;
+        }
+      }
+    }
     return false;
+  }
+
+  _togglePause() {
+    if (this.game.state === GAME_STATE.PLAYING) {
+      this.game.state = GAME_STATE.PAUSED;
+    } else if (this.game.state === GAME_STATE.PAUSED) {
+      this.game.state = GAME_STATE.PLAYING;
+    }
   }
 
   handlePauseButtonClick(mx, my) {
@@ -217,11 +313,19 @@ class GameUI {
     const size = this.layout.pauseBtnSize;
 
     if (mx > x && mx < x + size && my > y && my < y + size) {
-      if (this.game.state === GAME_STATE.PLAYING) {
-        this.game.state = GAME_STATE.PAUSED;
-      } else if (this.game.state === GAME_STATE.PAUSED) {
-        this.game.state = GAME_STATE.PLAYING;
-      }
+      this._togglePause();
+      return true;
+    }
+    return false;
+  }
+
+  handleFullscreenButtonClick(mx, my) {
+    const x = this.layout.fsBtnX;
+    const y = this.layout.pauseBtnY;
+    const size = this.layout.pauseBtnSize;
+
+    if (mx > x && mx < x + size && my > y && my < y + size) {
+      this.game.toggleFullscreen();
       return true;
     }
     return false;
@@ -322,11 +426,101 @@ class GameUI {
     // Timer (centered right)
     this.renderTimer(this.layout.timerX, contentY);
 
-    // Pause button (right edge, before sidebar)
+    // Fullscreen + pause buttons (right edge, before sidebar)
+    this.renderFullscreenButton(this.layout.fsBtnX, this.layout.pauseBtnY);
     this.renderPauseButton(this.layout.pauseBtnX, this.layout.pauseBtnY);
 
     // Migration hint row (bottom of top bar, centered)
     this.renderMigrationHint(this.layout.migrationHintX, 110);
+  }
+
+  // ==========================================
+  // FULLSCREEN OVERLAY HUD
+  // Drawn over the maximised play area: the top-bar essentials (no hint row),
+  // the goals panel, and the placeables toolbar. Panels are translucent.
+  // ==========================================
+
+  renderFullscreenOverlay() {
+    const fs = this.layout.fs;
+
+    this.renderMauriCounter(fs.mauriX, fs.stripY);
+    this.renderSeasonPanel(fs.seasonX, fs.stripY);
+    this.renderTimer(fs.timerX, fs.stripY);
+    this.renderFullscreenButton(fs.fsBtnX, fs.btnY);
+    this.renderPauseButton(fs.pauseBtnX, fs.btnY);
+
+    this.renderFocusSpeciesButtons();
+
+    // Extend the goals panel's own green backing 12px past the content on
+    // every side (same colour as the panel body, so it reads as one panel).
+    const goalsH = 30 + this.game.goals.length * 26;
+    fill(30, 45, 38, 220);
+    noStroke();
+    rect(fs.goalsX - 12, fs.goalsY - 12,
+         this.layout.sidebarPanelWidth + 24, goalsH + 24, 10);
+
+    this.renderGoalsPanel(fs.goalsX, fs.goalsY);
+
+    this.renderToolbar(fs.toolbarStartX, fs.toolbarY);
+  }
+
+  // Fullscreen-only quick toggles for the level's focus species (top-right,
+  // above the goals panel): idle sprite + live population. Clicking toggles
+  // the in-world highlight; while active the button is framed and softly
+  // filled in the species' highlight colour.
+  renderFocusSpeciesButtons() {
+    this._fsFocusBtnBounds = [];
+    const focal = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.focalSpecies) || null;
+    if (!focal || !focal.length) return;
+
+    const size = 70, gap = 10;
+    let x = this.config.canvasWidth - 15 - focal.length * size - (focal.length - 1) * gap;
+    const y = 10;
+
+    for (const key of focal) {
+      const cfg = (typeof MOA_SPECIES !== 'undefined' && MOA_SPECIES[key]) || {};
+      const active = typeof SPECIES_HIGHLIGHT !== 'undefined' && SPECIES_HIGHLIGHT.has(key);
+      const hc = cfg.highlightColor || [255, 235, 120];
+
+      if (active) {
+        fill(hc[0] * 0.25, hc[1] * 0.25, hc[2] * 0.25, 225);
+        stroke(hc[0], hc[1], hc[2]);
+        strokeWeight(3);
+      } else {
+        fill(35, 55, 40, 200);
+        stroke(70, 110, 80);
+        strokeWeight(1);
+      }
+      rect(x, y, size, size, 10);
+
+      // Idle sprite — the species' own art; generic art gets the species tint
+      const set = (cfg.spriteSet && EntitySprites.moaVariants[cfg.spriteSet]) || EntitySprites.moa;
+      const sprite = EntitySprites.isValid(set.idle) ? set.idle : EntitySprites.moa.idle;
+      if (EntitySprites.isValid(sprite)) {
+        push();
+        imageMode(CENTER);
+        const s = Math.min(40 / sprite.width, 40 / sprite.height);
+        if (!cfg.spriteSet && cfg.tint) tint(cfg.tint[0], cfg.tint[1], cfg.tint[2]);
+        image(sprite, x + size / 2, y + size / 2 - 8, sprite.width * s, sprite.height * s);
+        pop();
+      }
+
+      // Live population count
+      const count = this.simulation.getCachedSpeciesCount
+        ? this.simulation.getCachedSpeciesCount(key)
+        : 0;
+      fill(230, 245, 235);
+      noStroke();
+      textSize(16);
+      textAlign(CENTER, BOTTOM);
+      push();
+      textFont(GroceryRounded);
+      text(count, x + size / 2, y + size - 2);
+      pop();
+
+      this._fsFocusBtnBounds.push({ key, x, y, size });
+      x += size + gap;
+    }
   }
 
   renderMauriCounter(x, y) {
@@ -502,6 +696,43 @@ class GameUI {
     }
   }
 
+  renderFullscreenButton(x, y) {
+    const size = this.layout.pauseBtnSize;
+    const isHovered = mouseX > x && mouseX < x + size &&
+                      mouseY > y && mouseY < y + size;
+
+    // Button background (matches pause button styling)
+    if (isHovered) {
+      fill(50, 85, 60);
+      stroke(100, 160, 120);
+      strokeWeight(2);
+    } else {
+      fill(35, 55, 40, 200);
+      stroke(70, 110, 80);
+      strokeWeight(1);
+    }
+    rect(x, y, size, size, 10);
+
+    // Corner-bracket icon: opens outward to enter fullscreen,
+    // inward to exit.
+    const cx = x + size / 2;
+    const cy = y + size / 2;
+    const fsOn = this.config.fullscreen;
+    const o = fsOn ? 5 : 13;    // bracket corner offset from centre
+    const len = 8;              // bracket arm length
+    const dir = fsOn ? 1 : -1;  // arms point outward when exiting, inward when entering
+
+    stroke(180, 200, 190);
+    strokeWeight(3);
+    noFill();
+    for (const [sx, sy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+      const px = cx + sx * o;
+      const py = cy + sy * o;
+      line(px, py, px + sx * dir * len, py);
+      line(px, py, px, py + sy * dir * len);
+    }
+  }
+
   // ==========================================
   // SEASONAL MESSAGES
   // ==========================================
@@ -627,9 +858,9 @@ class GameUI {
     }
   }
 
-  renderToolbar() {
-    const btnX = this.layout.toolbarStartX;
-    const btnY = this.toolbarY;
+  renderToolbar(startX = this.layout.toolbarStartX, toolbarY = this.toolbarY) {
+    const btnX = startX;
+    const btnY = toolbarY;
     const btnSize = this.layout.toolbarBtnSize;
     const spacing = this.layout.toolbarSpacing;
 
@@ -702,7 +933,8 @@ class GameUI {
     const tw = 180;
     const th = 80;
 
-    x = constrain(x - tw / 2, 10, CONFIG.gameAreaWidth - tw - 10);
+    const _maxW = CONFIG.fullscreen ? CONFIG.canvasWidth : CONFIG.gameAreaWidth;
+    x = constrain(x - tw / 2, 10, _maxW - tw - 10);
     y = y - th - 5;
 
     // Background
@@ -1012,10 +1244,12 @@ class GameUI {
       const key = _speciesKeys[i];
       const data = (typeof MOA_SPECIES !== 'undefined' && MOA_SPECIES[key]) || {};
       _speciesRows.push({
+        key,
         icon: _MOA_ICON[key] || '🥝',
         label: _MOA_LABEL[key] || data.displayName || key,
         value: _counts[key],
-        color: data.tint || [205, 195, 165]
+        color: data.tint || [205, 195, 165],
+        highlightColor: data.highlightColor
       });
     }
     if (_otherMoa > 0 && _speciesRows.length < 6) {
@@ -1030,11 +1264,15 @@ class GameUI {
 
     // Species rows (2 per row), driven by the level's species list. Render enough
     // rows for every species (plus any "Other moa"), matching the reserved height.
+    // Each row is clickable: it toggles that species' in-world highlight and
+    // gets a border in the species' highlight colour while active.
     const _rows = Math.max(_speciesRowCount, Math.ceil(_speciesRows.length / 2));
+    const _rowW = panelWidth / 2 - 14;
+    this._speciesRowBounds = [];
     for (let r = 0; r < _rows; r++) {
       const a = _speciesRows[r * 2], b = _speciesRows[r * 2 + 1];
-      if (a) this.renderStatItem(col1X, statY, a.icon, a.label, a.value, a.color);
-      if (b) this.renderStatItem(col2X, statY, b.icon, b.label, b.value, b.color);
+      if (a) this._renderSpeciesRow(col1X, statY, _rowW, a);
+      if (b) this._renderSpeciesRow(col2X, statY, _rowW, b);
       statY += rowH;
     }
     this.renderStatItem(col1X, statY, '👣', 'Total moa', `${stats.moas}/${this.config.maxMoaPopulation}`, [180, 210, 150]);
@@ -1086,6 +1324,30 @@ class GameUI {
     }
 
     return y + panelHeight;
+  }
+
+  // One clickable species population row. Clicking it (handleSidebarClick)
+  // toggles the in-world species highlight; while active the row is framed
+  // in the species' highlight colour.
+  _renderSpeciesRow(x, y, w, row) {
+    if (row.key) {
+      this._speciesRowBounds.push({ key: row.key, x: x - 8, y: y - 4, w: w, h: 32 });
+
+      if (typeof SPECIES_HIGHLIGHT !== 'undefined' && SPECIES_HIGHLIGHT.has(row.key)) {
+        const hc = row.highlightColor || [255, 235, 120];
+        noFill();
+        stroke(hc[0], hc[1], hc[2], 230);
+        strokeWeight(2);
+        rect(x - 8, y - 4, w, 32, 8);
+      }
+    }
+    this.renderStatItem(x, y, row.icon, row.label, row.value, row.color);
+  }
+
+  _toggleSpeciesHighlight(key) {
+    if (typeof SPECIES_HIGHLIGHT === 'undefined') return;
+    if (SPECIES_HIGHLIGHT.has(key)) SPECIES_HIGHLIGHT.delete(key);
+    else SPECIES_HIGHLIGHT.add(key);
   }
 
   renderStatItem(x, y, icon, label, value, col) {

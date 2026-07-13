@@ -330,7 +330,7 @@ const LEVEL_GLACIAL_KAHURANGI = {
 
   // Seeded at each species' own preferred elevation, so they start in-habitat.
   initialSpeciesDistribution: {
-    'little_bush_moa': 3,
+    'little_bush_moa': 4,
     'upland_moa': 5,
     'stout_legged_moa': 2,
     'south_island_giant_moa': 3,
@@ -492,9 +492,8 @@ const LEVEL_GLACIAL_KAHURANGI = {
       key: 'little_bush_moa',
       displayName: 'Little Bush Moa',
       localName: 'Anomalopteryx didiformis',
-      spriteKey: 'moa_idle',
-      spriteScale: 2,
-      tint: [190, 120, 60]   // rust emeid tint so the hero reads as the bush moa
+      spriteKey: 'LB_moa_walk_01',
+      spriteScale: 2           // dedicated bush moa art — no tint needed
     },
     flavorText: [
       "Glaciation advances...","",

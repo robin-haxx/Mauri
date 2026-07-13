@@ -45,7 +45,7 @@ function preload(){
 // ============================================
 const CONFIG = {
   // ===== ENGINE CONSTANTS (never change between levels) =====
-  version: 'alpha 1.0.2 (TEST_BUILD_2)',
+  version: 'alpha 1.0.5 (TEST_BUILD_2)',
 
   // Reference height is always 1080; width is computed from window aspect ratio
   referenceHeight: 1080,
@@ -84,6 +84,15 @@ const CONFIG = {
   pixelScale: 1,
   zoom: 2.5,
   debugMode: false,
+
+  // ===== VIEW TRANSFORM =====
+  // The transform the world actually renders through. Normal mode mirrors
+  // gameAreaX/Y + zoom; fullscreen mode scales the map to fill the canvas.
+  // Written by Game._updateViewTransform() — read, never set, elsewhere.
+  fullscreen: false,
+  viewX: 0,
+  viewY: 180,
+  viewZoom: 2.5,
 
   col_UI: [40, 70, 30, 180],
   col_panelBg: [25, 35, 30, 240],
@@ -167,6 +176,11 @@ const CONFIG = {
 // ============================================
 let LEVEL_MECHANICS = {};
 let FOREST_BIOMES = new Set();
+
+// Player-toggled species highlights: speciesKeys whose moa pulse a halo in
+// their species highlightColor. Toggled from the population panel (full UI)
+// and the focus-species buttons (fullscreen). Cleared on level load.
+let SPECIES_HIGHLIGHT = new Set();
 
 // Applies level parameters onto CONFIG
 function applyLevelToConfig(levelDef) {
@@ -418,9 +432,7 @@ const PLACEABLES = {
     plantSpawnCount: 4,
     plantType: 'lancewood',
     favouredSpecies: 'little_bush_moa',
-    // Placeable in the tussock bands too (subalpine + glacial flats), so the player
-    // can lay a downhill lancewood corridor to draw wandering bush moa back to the
-    // forest refuge — the "corridor" the spring tutorial talks about.
+    // Plantable in tussock region too, to help if bush moa wander too far upslope.
     allowedBiomes: ['forestRefuge', 'shrubland', 'subalpine', 'glacialFlats'],
     seasonalBonus: { summer: 1.0, autumn: 1.2, winter: 1.1, spring: 1.0 },
     attractsHungryMoa: true,
@@ -739,6 +751,7 @@ class Game {
     this.seasonManager = new SeasonManager(CONFIG);
     this.terrain.setSeasonManager(this.seasonManager);
     this.terrain.generate();
+    this._updateViewTransform();
     
     this.simulation = new Simulation(
       this.terrain, CONFIG, this, this.seasonManager
@@ -751,6 +764,12 @@ class Game {
     
     this.playTime = 0;
     this._stormCooldownUntil = 0;   // reset per level load, else a restart starts mid-cooldown
+    // Species highlights: reset, then enable by default for the level's focus
+    // species (fall back to its vulnerable-highlight list if no focal list).
+    SPECIES_HIGHLIGHT.clear();
+    const _hlDefaults = LEVEL_MECHANICS.focalSpecies ||
+      (LEVEL_MECHANICS.vulnerableHighlight ? Object.keys(LEVEL_MECHANICS.vulnerableHighlight) : []);
+    for (const _k of _hlDefaults) SPECIES_HIGHLIGHT.add(_k);
     this.state = GAME_STATE.PLAYING;
     this._tempVec = createVector(0, 0);
     
@@ -771,10 +790,38 @@ class Game {
   }
 
   isInGameArea(mx, my) {
-    return mx >= CONFIG.gameAreaX && 
+    if (CONFIG.fullscreen && this.terrain) {
+      return mx >= CONFIG.viewX &&
+             mx < CONFIG.viewX + this.terrain.mapWidth * CONFIG.viewZoom &&
+             my >= CONFIG.viewY &&
+             my < CONFIG.viewY + this.terrain.mapHeight * CONFIG.viewZoom;
+    }
+    return mx >= CONFIG.gameAreaX &&
            mx < CONFIG.gameAreaX + CONFIG.gameAreaWidth &&
-           my >= CONFIG.gameAreaY && 
+           my >= CONFIG.gameAreaY &&
            my < CONFIG.gameAreaY + CONFIG.gameAreaHeight;
+  }
+
+  toggleFullscreen() {
+    CONFIG.fullscreen = !CONFIG.fullscreen;
+    this._updateViewTransform();
+  }
+
+  // Recomputes the active render transform. Normal mode: the classic
+  // game-area placement. Fullscreen: the map scaled to the largest size that
+  // fits the whole canvas, centred, with the HUD drawn as an overlay.
+  _updateViewTransform() {
+    if (CONFIG.fullscreen && this.terrain) {
+      const z = Math.min(CONFIG.canvasWidth / this.terrain.mapWidth,
+                         CONFIG.canvasHeight / this.terrain.mapHeight);
+      CONFIG.viewZoom = z;
+      CONFIG.viewX = Math.round((CONFIG.canvasWidth - this.terrain.mapWidth * z) / 2);
+      CONFIG.viewY = Math.round((CONFIG.canvasHeight - this.terrain.mapHeight * z) / 2);
+    } else {
+      CONFIG.viewZoom = CONFIG.zoom;
+      CONFIG.viewX = CONFIG.gameAreaX;
+      CONFIG.viewY = CONFIG.gameAreaY;
+    }
   }
   
   updateCachedCounts() {
@@ -1104,16 +1151,18 @@ class Game {
       return;
     }
     
-    this.ui.renderPanels();
-    
+    if (!CONFIG.fullscreen) this.ui.renderPanels();
+
     push();
     drawingContext.save();
     drawingContext.beginPath();
-    drawingContext.rect(CONFIG.gameAreaX, CONFIG.gameAreaY, CONFIG.gameAreaWidth, CONFIG.gameAreaHeight);
+    const _clipW = CONFIG.fullscreen ? this.terrain.mapWidth * CONFIG.viewZoom : CONFIG.gameAreaWidth;
+    const _clipH = CONFIG.fullscreen ? this.terrain.mapHeight * CONFIG.viewZoom : CONFIG.gameAreaHeight;
+    drawingContext.rect(CONFIG.viewX, CONFIG.viewY, _clipW, _clipH);
     drawingContext.clip();
-    
-    translate(CONFIG.gameAreaX, CONFIG.gameAreaY);
-    scale(CONFIG.zoom);
+
+    translate(CONFIG.viewX, CONFIG.viewY);
+    scale(CONFIG.viewZoom);
     
     this.terrain.render();
 
@@ -1138,9 +1187,7 @@ class Game {
     
     drawingContext.restore();
     pop();
-    
-    this.ui.render();
-    
+
     if (this.state === GAME_STATE.PAUSED) {
       this._renderOverlay(...CONFIG.col_UI.slice(0,3), 100, {
         title: "PAUSED",
@@ -1187,6 +1234,11 @@ class Game {
       });
     }
 
+    // HUD drawn after the paused/won/lost overlay so its panels and buttons
+    // stay bright and readable above the tint.
+    if (CONFIG.fullscreen) this.ui.renderFullscreenOverlay();
+    else this.ui.render();
+
     if (this.tutorial) this.tutorial.render();
   }
 
@@ -1212,9 +1264,9 @@ class Game {
 
   // Unified overlay renderer (replaces renderPauseOverlay, renderWinOverlay, renderLoseOverlay)
   _renderOverlay(r, g, b, a, opts) {
-    const cw = CONFIG.gameAreaWidth;
-    const ch = CONFIG.gameAreaHeight;
-    const cy = CONFIG.gameAreaY;
+    const cw = CONFIG.fullscreen ? CONFIG.canvasWidth : CONFIG.gameAreaWidth;
+    const ch = CONFIG.fullscreen ? CONFIG.canvasHeight : CONFIG.gameAreaHeight;
+    const cy = CONFIG.fullscreen ? 0 : CONFIG.gameAreaY;
     const centerX = cw * 0.5;
     const centerY = ch * 0.5;
     
@@ -1520,6 +1572,7 @@ class Game {
   _getMenuSprite(spriteKey) {
     const map = {
       'moa_idle': splashScreenMoa,
+      'LB_moa_walk_01': EntitySprites.moaVariants?.bush?.walk?.[0],
       // Add more as you create them
     };
     return map[spriteKey] || splashScreenMoa;
@@ -1629,9 +1682,9 @@ class Game {
   renderPlacementPreview() {
     if (!this.isInGameArea(mouseX, mouseY)) return;
     
-    const invZoom = 1 / CONFIG.zoom;
-    const tx = (mouseX - CONFIG.gameAreaX) * invZoom;
-    const ty = (mouseY - CONFIG.gameAreaY) * invZoom;
+    const invZoom = 1 / CONFIG.viewZoom;
+    const tx = (mouseX - CONFIG.viewX) * invZoom;
+    const ty = (mouseY - CONFIG.viewY) * invZoom;
     
     if (tx < 0 || tx > this.terrain.mapWidth || ty < 0 || ty > this.terrain.mapHeight) return;
     
@@ -1731,8 +1784,8 @@ class Game {
     if (this.state !== GAME_STATE.PLAYING) return;
     
     if (this.isInGameArea(mx, my) && this.selectedPlaceable) {
-      const invZoom = 1 / CONFIG.zoom;
-      this.tryPlace((mx - CONFIG.gameAreaX) * invZoom, (my - CONFIG.gameAreaY) * invZoom);
+      const invZoom = 1 / CONFIG.viewZoom;
+      this.tryPlace((mx - CONFIG.viewX) * invZoom, (my - CONFIG.viewY) * invZoom);
     }
   }
   
@@ -1748,6 +1801,12 @@ class Game {
     }
 
     if (key === 'd' || key === 'D') { CONFIG.debugMode = !CONFIG.debugMode; return; }
+
+    if ((key === 'f' || key === 'F') &&
+        (this.state === GAME_STATE.PLAYING || this.state === GAME_STATE.PAUSED)) {
+      this.toggleFullscreen();
+      return;
+    }
     
     if (this.state === GAME_STATE.PLAYING) {
       const palette = this.activePlaceables || PLACEABLES;
@@ -1842,6 +1901,7 @@ function windowResized() {
   // Update UI panel positions if game is running
   if (game && game.ui) {
     game.ui.recalculate();
+    game._updateViewTransform();
   }
 }
 

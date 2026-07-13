@@ -12,6 +12,7 @@ const MOA_SPECIES = {
     displayName: "Upland Moa",
     scientificName: "Megalapteryx didinus",
     tint: null,                // Megalapteryx — rendered as-is
+    highlightColor: [235, 238, 242],  // white — player highlight (pulse + UI border)
     description: "Small, hardy moa adapted to high-altitude forests",
     rarity: 'common',
     
@@ -21,7 +22,7 @@ const MOA_SPECIES = {
     
     // Movement
     baseSpeed: 0.2,
-    fleeSpeed: 0.35,
+    fleeSpeed: 0.3,
     maxForce: 0.025,
     
     // Survival
@@ -61,18 +62,19 @@ const MOA_SPECIES = {
     displayName: "South Island Giant Moa",
     scientificName: "Dinornis robustus",
     tint: [170, 150, 130],     // Dinornis — desaturated brown
+    highlightColor: [190, 140, 90],   // brown — player highlight (pulse + UI border)
     description: "Massive moa of the lowland plains, up to 3.6m tall",
     rarity: 'uncommon',
     
     size: { min: 12, max: 16 },
     bodyColor: { r: [100, 120], g: [75, 90], b: [45, 60] },
     
-    baseSpeed: 0.18,      // Slower due to size
-    fleeSpeed: 0.45,
+    baseSpeed: 0.15,      // Slower due to size
+    fleeSpeed: 0.3,
     maxForce: 0.02,
     
     maxHunger: 140,       // Needs more food
-    baseHungerRate: 0.055,
+    baseHungerRate: 0.03,
     hungerThreshold: 45,
     criticalHunger: 110,
     
@@ -105,6 +107,7 @@ const MOA_SPECIES = {
     displayName: "North Island Giant Moa",
     scientificName: "Dinornis novaezealandiae",
     tint: [170, 150, 130],     // Dinornis — desaturated brown
+    highlightColor: [190, 140, 90],   // brown — player highlight (pulse + UI border)
     description: "Large moa of northern forests",
     rarity: 'uncommon',
     
@@ -145,6 +148,7 @@ const MOA_SPECIES = {
     displayName: "Eastern Moa",
     scientificName: "Emeus crassus",
     tint: [190, 120, 60],      // emeid — saturated brown
+    highlightColor: [205, 195, 120],  // wheat — player highlight (pulse + UI border)
     description: "Adaptable medium-sized moa of varied habitats",
     rarity: 'common',
     
@@ -185,6 +189,7 @@ const MOA_SPECIES = {
     displayName: "Stout-legged Moa",
     scientificName: "Euryapteryx curtus",
     tint: [205, 170, 80],      // yellow-brown — distinct from the rust bush moa
+    highlightColor: [235, 165, 70],   // orange — player highlight (pulse + UI border)
     description: "Stocky moa with powerful legs, coastal to lowland",
     rarity: 'common',
     
@@ -222,6 +227,7 @@ const MOA_SPECIES = {
     displayName: "Heavy-footed Moa",
     scientificName: "Pachyornis elephantopus",
     tint: [165, 168, 172],     // Pachyornis — grey
+    highlightColor: [178, 184, 194],  // grey — player highlight (pulse + UI border)
     description: "Robust moa with massive legs, lowland specialist",
     rarity: 'uncommon',
     
@@ -261,6 +267,7 @@ const MOA_SPECIES = {
     displayName: "Crested Moa",
     scientificName: "Pachyornis australis",
     tint: [165, 168, 172],     // Pachyornis — grey
+    highlightColor: [178, 184, 194],  // grey — player highlight (pulse + UI border)
     description: "Southern moa with distinctive head crest",
     rarity: 'rare',
     
@@ -300,6 +307,7 @@ const MOA_SPECIES = {
     displayName: "Mantell's Moa",
     scientificName: "Pachyornis geranoides",
     tint: [165, 168, 172],     // Pachyornis — grey
+    highlightColor: [178, 184, 194],  // grey — player highlight (pulse + UI border)
     description: "North Island relative of the heavy-footed moa",
     rarity: 'uncommon',
     
@@ -336,15 +344,18 @@ const MOA_SPECIES = {
   little_bush_moa: {
     displayName: "Little Bush Moa",
     scientificName: "Anomalopteryx didiformis",
-    tint: [190, 120, 60],      // emeid — saturated brown
+    spriteSet: 'bush',         // dedicated LB_moa art — renders untinted
+    spriteScale: 1.5,          // LB art drawn small — render at 1.5x
+    tint: [190, 120, 60],      // emeid — saturated brown (unused while spriteSet is set)
+    highlightColor: [255, 215, 70],   // yellow — player highlight (pulse + UI border)
     description: "Smallest moa, nimble forest dweller",
     rarity: 'common',
     
     size: { min: 5, max: 7 },
     bodyColor: { r: [82, 100], g: [55, 68], b: [25, 38] },
     
-    baseSpeed: 0.3,       // Fastest moa
-    fleeSpeed: 0.75,
+    baseSpeed: 0.2,       // Fastest moa
+    fleeSpeed: 0.6,
     maxForce: 0.032,
     
     maxHunger: 70,        // Smallest needs least food
@@ -387,13 +398,13 @@ const EAGLE_SPECIES = {
     
     wingspan: { min: 20, max: 26 },
     
-    baseSpeed: 0.6,
-    huntSpeed: 1.4,
+    baseSpeed: 0.4,
+    huntSpeed: 1.2,
     maxForce: 0.05,
     
     maxHunger: 100,
     hungerRate: 0.022,
-    huntThreshold: 40,
+    huntThreshold: 45,
     
     huntRadius: 130,
     catchRadius: 12,
@@ -416,13 +427,13 @@ const EAGLE_SPECIES = {
     
     wingspan: { min: 16, max: 20 },
     
-    baseSpeed: 0.55,
-    huntSpeed: 1.5,    // Faster but less accurate
+    baseSpeed: 0.5,
+    huntSpeed: 1.3,    // Faster but less accurate
     maxForce: 0.045,
     
     maxHunger: 90,
     hungerRate: 0.028, // Higher metabolism
-    huntThreshold: 35, // Hunts when less hungry
+    huntThreshold: 40, // Hunts when less hungry
     
     huntRadius: 100,   // Less experienced at spotting
     catchRadius: 10,   // Less accurate

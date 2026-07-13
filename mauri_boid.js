@@ -23,6 +23,8 @@ class Boid {
     };
     this.noiseOffset = random() * 1000;
     this.wanderTime = random() * 1000; // For delta-time compatible wander
+    this._wanderHeading = Math.atan2(this.vel.y, this.vel.x); // last real heading, for relative wander
+    this._speedCap = null; // smoothed effective max speed (ramps toward maxSpeed)
     
     // Reusable vectors
     this._steeringVec = createVector();
@@ -148,23 +150,34 @@ class Boid {
     return result;
   }
   
-  // Optimized seek using coordinates
-  seekPoint(tx, ty, urgency = 1) {
+  // Optimized seek using coordinates.
+  // arriveRadius > 0 enables arrival: desired speed ramps down inside the
+  // radius so the boid settles on the target instead of overshooting and
+  // oscillating across it (rubber-banding).
+  seekPoint(tx, ty, urgency = 1, arriveRadius = 0) {
     const result = this._tempVec3;
     const dx = tx - this.pos.x;
     const dy = ty - this.pos.y;
-    
+
+    let speed = this.maxSpeed * urgency;
+    if (arriveRadius > 0) {
+      const distSq = dx * dx + dy * dy;
+      if (distSq < arriveRadius * arriveRadius) {
+        speed *= Math.sqrt(distSq) / arriveRadius;
+      }
+    }
+
     result.set(dx, dy);
-    result.setMag(this.maxSpeed * urgency);
-    result.sub(this.vel);
+    result.setMag(speed);
+    result.sub(this.vel); // at speed 0 this becomes a pure braking force
     result.limit(this.maxForce * urgency);
-    
+
     return result;
   }
-  
+
   // Vector-accepting seek (for compatibility)
-  seek(target, urgency = 1) {
-    return this.seekPoint(target.x, target.y, urgency);
+  seek(target, urgency = 1, arriveRadius = 0) {
+    return this.seekPoint(target.x, target.y, urgency, arriveRadius);
   }
   
   // Optimized flee
@@ -196,20 +209,26 @@ class Boid {
     return this.fleePoint(target.x, target.y, radius);
   }
   
-  // Delta-time compatible wander
+  // Delta-time compatible wander — steers RELATIVE to the current heading
+  // (noise drifts the heading up to ~±100°) and is clamped to maxForce, so it
+  // produces gentle meandering curves instead of overpowering every steered
+  // force with a random absolute direction (which read as spinning in place).
   wander(dt = 1) {
     // Advance wander time based on delta
     this.wanderTime += 0.008 * dt;
-    
+
     const result = this._tempVec1;
-    const noiseVal = noise(
-      this.pos.x * 0.005 + this.noiseOffset,
-      this.pos.y * 0.005 + this.noiseOffset,
-      this.wanderTime
-    );
-    const angle = noiseVal * 12.566370614359172 - 6.283185307179586;
-    const mag = 0.3 * this.personality.wanderStrength;
-    
+
+    // Remember the last real heading so a near-stationary boid resumes in a
+    // sensible direction instead of one derived from velocity noise.
+    if (this.vel.x * this.vel.x + this.vel.y * this.vel.y > 0.0001) {
+      this._wanderHeading = Math.atan2(this.vel.y, this.vel.x);
+    }
+
+    const drift = noise(this.noiseOffset, this.wanderTime) * 2 - 1; // -1..1, smooth
+    const angle = this._wanderHeading + drift * 1.75;
+    const mag = this.maxForce * this.personality.wanderStrength;
+
     result.set(Math.cos(angle) * mag, Math.sin(angle) * mag);
     return result;
   }
@@ -295,9 +314,16 @@ class Boid {
     // Apply acceleration (scaled by dt)
     this.vel.x += this.acc.x * dt;
     this.vel.y += this.acc.y * dt;
-    
+
+    // Speed ramp: the effective cap eases toward the state's maxSpeed instead
+    // of snapping, so state changes (idle→flee, flee→idle, terrain slowdowns)
+    // accelerate/decelerate over ~10-20 frames rather than teleport-clamping.
+    const targetMax = this.maxSpeed * this.personality.speedVariation;
+    if (this._speedCap === null) this._speedCap = targetMax;
+    this._speedCap += (targetMax - this._speedCap) * Math.min(1, 0.12 * dt);
+
     // Limit speed (inline for performance)
-    const maxSpd = this.maxSpeed * this.personality.speedVariation;
+    const maxSpd = this._speedCap;
     const maxSpdSq = maxSpd * maxSpd;
     const spdSq = this.vel.x * this.vel.x + this.vel.y * this.vel.y;
     

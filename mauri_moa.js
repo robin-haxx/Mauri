@@ -381,7 +381,9 @@ class Moa extends Boid {
     
     this.targetMate = null;
     
-    if (this.isMigrating || this.shouldMigrate(seasonCache)) return MOA_STATE.MIGRATING;
+    // Actively eating at a placeable: stay on the food. (This used to rank
+    // below MIGRATING, so a seasonal elevation shift pulled moa off feeders
+    // mid-meal — a classic "starved out of nowhere".)
     if (this.isFeeding) return MOA_STATE.FEEDING;
 
     // Hunger deadband: start foraging above the threshold but keep foraging
@@ -390,7 +392,18 @@ class Moa extends Boid {
     // hunger re-crossed → out again (rubber-banding).
     const _wasForaging = this.currentState === MOA_STATE.FORAGING || this.currentState === MOA_STATE.FEEDING;
     const _forageExit = Math.max(this.hungerThreshold - 10, 5);
-    if (this.hunger > (_wasForaging ? _forageExit : this.hungerThreshold)) return MOA_STATE.FORAGING;
+    const _hungry = this.hunger > (_wasForaging ? _forageExit : this.hungerThreshold);
+
+    // Food outranks migration when urgent or actually available: a starving
+    // moa always eats first; a merely-hungry one eats first unless local food
+    // is scarce (in which case migrating IS the path to food — and it still
+    // forages opportunistically while travelling).
+    if (_hungry && (this.hunger > this.criticalHunger || this.localFoodScore >= 0.3)) {
+      return MOA_STATE.FORAGING;
+    }
+
+    if (this.isMigrating || this.shouldMigrate(seasonCache)) return MOA_STATE.MIGRATING;
+    if (_hungry) return MOA_STATE.FORAGING;
     
     for (let i = 0; i < placeables.length; i++) {
       if (placeables[i].alive && placeables[i].getAttractionStrength(this) > 0) return MOA_STATE.FORAGING;
@@ -835,7 +848,9 @@ class Moa extends Boid {
   }
 
   findPlant(simulation) {
-    const plants = simulation.getNearbyPlants(this.pos.x, this.pos.y, 100 * this.foragingBonus);
+    // Starving moa cast a wider net rather than dying next to just-out-of-range food
+    const _range = (this.hunger > this.criticalHunger ? 150 : 100) * this.foragingBonus;
+    const plants = simulation.getNearbyPlants(this.pos.x, this.pos.y, _range);
     let best = null, bestScore = Infinity;
     
     for (let i = 0; i < plants.length; i++) {

@@ -784,7 +784,12 @@ class Game {
     if (this.currentLevel.tutorial?.tips){
       this.tutorial.setLevelTips(this.currentLevel.tutorial.tips);
     }
+    if (BENCHMARK.pending) this.tutorial.enabled = false;   // benchmark runs clean
     this.tutorial.init();
+
+    // Benchmark: start an armed run; a reload mid-run abandons the old one
+    if (BENCHMARK.pending) BENCHMARK.start(this);
+    else if (BENCHMARK.active) BENCHMARK.cancel();
 
     if (audioManager) audioManager.playBackground();
   }
@@ -863,6 +868,7 @@ class Game {
     
     this.simulation.update(this.mauri, dt);
     this.updateCachedCounts();
+    if (BENCHMARK.active) BENCHMARK.update(this);
     
     // Passive mauri income, with smooth diminishing returns at higher populations.
     // The "effective" earning population tapers above tStart: each extra moa is
@@ -1127,6 +1133,7 @@ class Game {
     }
     
     this.simulation.addPlaceable(x, y, this.selectedPlaceable);
+    BENCHMARK.recordPlacement(this.selectedPlaceable);
     if (this.selectedPlaceable === 'Storm') this._stormCooldownUntil = this.playTime + 600; // 10s @60fps
     this.addNotification(`Placed ${def.name}`, 'info');
     
@@ -1187,6 +1194,13 @@ class Game {
     
     drawingContext.restore();
     pop();
+
+    // Benchmark: the run ends with the level (update() no longer ticks in
+    // WON/LOST states, so the final sample + CSV save happens here)
+    if (BENCHMARK.active && !BENCHMARK.finished &&
+        (this.state === GAME_STATE.WON || this.state === GAME_STATE.LOST)) {
+      BENCHMARK.finish(this, this.state === GAME_STATE.WON ? 'win' : 'loss');
+    }
 
     if (this.state === GAME_STATE.PAUSED) {
       this._renderOverlay(...CONFIG.col_UI.slice(0,3), 100, {
@@ -1561,6 +1575,31 @@ class Game {
     textSize(14);
     text("← Back", centerX, backY + backH * 0.5);
 
+    // Debug-only: benchmark run (starts the level tutorial-free and logs
+    // populations + placements to a CSV every 10s and on win/loss)
+    this._benchBtnBounds = null;
+    if (CONFIG.debugMode) {
+      const bw = 210, bh = 44;
+      const bx = centerX + btnW / 2 + 30;
+      const by = btnY + (btnH - bh) / 2;
+      const bHover = mouseX > bx && mouseX < bx + bw && mouseY > by && mouseY < by + bh;
+
+      fill(bHover ? 70 : 50, bHover ? 60 : 45, bHover ? 95 : 70);
+      stroke(120, 110, 160);
+      strokeWeight(1);
+      rect(bx, by, bw, bh, 8);
+
+      fill(205, 195, 235);
+      noStroke();
+      textSize(15);
+      text("📊 Benchmark Run", bx + bw / 2, by + bh / 2);
+      fill(140, 132, 172);
+      textSize(10);
+      text("no tutorial · 10s samples · CSV", bx + bw / 2, by + bh + 12);
+
+      this._benchBtnBounds = { x: bx, y: by, w: bw, h: bh };
+    }
+
     fill(CACHED_COLORS.menuFooter);
     textSize(11);
     text(`Version: ${CONFIG.version}`, centerX, ch - 40);
@@ -1756,6 +1795,15 @@ class Game {
     
     // Level splash menu
     if (this.state === GAME_STATE.MENU) {
+      if (CONFIG.debugMode && this._benchBtnBounds) {
+        const btn = this._benchBtnBounds;
+        if (mx > btn.x && mx < btn.x + btn.w &&
+            my > btn.y && my < btn.y + btn.h) {
+          BENCHMARK.arm();
+          this.init();  // Start playing with the benchmark recording
+          return;
+        }
+      }
       if (this._menuBtnBounds) {
         const btn = this._menuBtnBounds;
         if (mx > btn.x && mx < btn.x + btn.w &&

@@ -33,7 +33,7 @@ const MOA_SPECIES = {
     
     // Reproduction
     eggCooldownTime: 900,
-    securityTimeBase: 500,
+    securityTimeBase: 450,
     securityTimeVariation: 300,
     
     // Habitat preferences
@@ -359,23 +359,27 @@ const MOA_SPECIES = {
     maxForce: 0.028,
     
     maxHunger: 70,        // Smallest needs least food
-    baseHungerRate: 0.04,
+    baseHungerRate: 0.03,
     hungerThreshold: 28,
     criticalHunger: 58,
     
     eggCooldownTime: 690,  // Breeds faster
-    securityTimeBase: 700,
-    securityTimeVariation: 300,
+    securityTimeBase: 600,
+    securityTimeVariation: 200,
     
     preferredElevation: { min: 0.22, max: 0.48 },
     temperatureTolerance: { cold: 0.65, heat: 0.55 },
     
     flockTendency: 0.9,    // Very social
     curiosity: 0.75,
-    flightiness: 0.8,     // Very skittish
+    flightiness: 0.6,     // skittish
     
-    // Special: harder to spot by eagles
-    camouflage: 0.25,       // 25% chance eagle doesn't see
+    // Fudged: harder to spot by eagles
+    camouflage: 0.5,       // 50% chance eagle doesn't see
+
+    // Unique: when migrating, passively biases toward dense forest
+    // (beech/rimu/fern cover). 0..1 — weight added to migration target scoring.
+    forestAffinity: 0.8,
     
     seasonalModifiers: {
       summer: { hungerRate: 1.0, speed: 1.05 },

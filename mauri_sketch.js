@@ -1230,7 +1230,8 @@ class Game {
     this.simulation.render();
     this.mauri.renderFloatingTexts();
     
-    if (this.selectedPlaceable && this.state === GAME_STATE.PLAYING) {
+    if (this.selectedPlaceable &&
+        (this.state === GAME_STATE.PLAYING || this.state === GAME_STATE.PAUSED)) {
       this.renderPlacementPreview();
     }
     
@@ -1295,7 +1296,45 @@ class Game {
     if (CONFIG.fullscreen) this.ui.renderFullscreenOverlay();
     else this.ui.render();
 
-    if (this.tutorial) this.tutorial.render();
+    if (this.tutorial) {
+      this.tutorial.render();
+      // Tips flagged ringsAboveUI (e.g. "Say hello to the new Moa!") re-draw
+      // the vulnerable-founder rings above the tutorial overlay so the player
+      // can spot the highlighted moa while the tip is up.
+      if (this.tutorial.active && this.tutorial.currentTip &&
+          this.tutorial.currentTip.ringsAboveUI) {
+        this.renderVulnerableRingsAboveUI();
+      }
+    }
+  }
+
+  // Re-draws the pulsing red low-population rings in world space, above the
+  // tutorial overlay (same clip + view transform as the main game-area pass).
+  renderVulnerableRingsAboveUI() {
+    push();
+    drawingContext.save();
+    drawingContext.beginPath();
+    const _clipW = CONFIG.fullscreen ? this.terrain.mapWidth * CONFIG.viewZoom : CONFIG.gameAreaWidth;
+    const _clipH = CONFIG.fullscreen ? this.terrain.mapHeight * CONFIG.viewZoom : CONFIG.gameAreaHeight;
+    drawingContext.rect(CONFIG.viewX, CONFIG.viewY, _clipW, _clipH);
+    drawingContext.clip();
+    translate(CONFIG.viewX, CONFIG.viewY);
+    scale(CONFIG.viewZoom);
+
+    const moas = this.simulation.moas;
+    for (let i = 0; i < moas.length; i++) {
+      const m = moas[i];
+      if (!m.alive || !m._vhl) continue;
+      // Refresh the flag here: moa updates don't run while the tip has the
+      // game paused, so a moa spawned just before the tip (e.g. the bush moa
+      // founders) would otherwise still have its spawn-time value (false).
+      m._highlightActive =
+        this.simulation.getCachedSpeciesCount(m.speciesKey) < m._vhl.until;
+      m.renderLowPopRing();
+    }
+
+    drawingContext.restore();
+    pop();
   }
 
   _getGuideSprite(spriteKey){
@@ -1894,8 +1933,8 @@ class Game {
       if (this.ui.handleClick(mx, my)) return;
     }
     
-    if (this.state !== GAME_STATE.PLAYING) return;
-    
+    if (this.state !== GAME_STATE.PLAYING && this.state !== GAME_STATE.PAUSED) return;
+
     if (this.isInGameArea(mx, my) && this.selectedPlaceable) {
       const invZoom = 1 / CONFIG.viewZoom;
       this.tryPlace((mx - CONFIG.viewX) * invZoom, (my - CONFIG.viewY) * invZoom);
@@ -1921,7 +1960,7 @@ class Game {
       return;
     }
     
-    if (this.state === GAME_STATE.PLAYING) {
+    if (this.state === GAME_STATE.PLAYING || this.state === GAME_STATE.PAUSED) {
       const palette = this.activePlaceables || PLACEABLES;
       const paletteKeys = Object.keys(palette);
       const digit = (key >= '1' && key <= '9') ? parseInt(key, 10) - 1 : -1;
@@ -1929,14 +1968,14 @@ class Game {
         this.selectPlaceable(paletteKeys[digit]);
       } else switch (key) {
         case 'p': case 'P': case ' ':
-          this.state = GAME_STATE.PAUSED; break;
+          this.state = (this.state === GAME_STATE.PAUSED)
+            ? GAME_STATE.PLAYING : GAME_STATE.PAUSED;
+          break;
         case 'Escape':
           this.cancelPlacement(); break;
         case 'h': case 'H':
           CONFIG.showHungerBars = !CONFIG.showHungerBars; break;
       }
-    } else if (this.state === GAME_STATE.PAUSED) {
-      if (key === 'p' || key === 'P' || key === ' ') this.state = GAME_STATE.PLAYING;
     }
     
     if ((key === 't' || key === 'T') && this.state === GAME_STATE.PLAYING) {

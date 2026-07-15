@@ -560,6 +560,7 @@ class TutorialManager {
     // Button bounds
     this.nextButtonBounds = null;
     this.skipButtonBounds = null;
+    this.panelBounds = null;
     
     // Pause tracking
     this._pausedByTutorial = false;
@@ -801,8 +802,11 @@ class TutorialManager {
       this.skipTutorial();
       return true;
     }
-    
-    return true; // Consume click when tutorial active
+
+    // Only consume clicks on the tip panel itself — everything else
+    // (palette, game area) passes through so items can be placed
+    // while a tip is up.
+    return this._hitTest(this.panelBounds, mx, my);
   }
   
   _hitTest(bounds, mx, my) {
@@ -878,7 +882,8 @@ class TutorialManager {
     const panelHeight = 80 + (content.length * lineHeight) + 60;
     
     const pos = this._getTipPanelPosition(tip.guidePosition, panelWidth, panelHeight);
-    
+    this.panelBounds = { x: pos.x, y: pos.y, w: panelWidth, h: panelHeight };
+
     // Guide sprite
     const spriteSize = 200;
     const spriteX = pos.x - spriteSize * 0.3;

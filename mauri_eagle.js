@@ -403,6 +403,10 @@ class HaastsEagle extends Boid {
       if (simulation.isSpeciesProtected && simulation.isSpeciesProtected(moa.speciesKey)) continue; // never target a protected floor species
       if (moa.inShelter && this.target !== moa) continue;
       if (moa.eagleResistance > 0 && random() < moa.eagleResistance) continue;
+      // Camouflage: chance the eagle simply doesn't spot this moa during a
+      // scan. Once a moa IS spotted (current target) camo no longer hides it —
+      // camouflage makes prey harder to find, not harder to chase.
+      if (moa.camouflage > 0 && this.target !== moa && random() < moa.camouflage) continue;
 
       const dx = moa.pos.x - px;
       const dy = moa.pos.y - py;

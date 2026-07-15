@@ -90,7 +90,7 @@ const GK_TUTORIAL_TIPS = {
       "They inhabit dense forest and have a ","special beak for shearing tough plants,",
       "but because of this climate they're particularly vulnerable right now and need your attention."
     ],
-    guidePosition: 'center', highlight: null,
+    guidePosition: 'center', highlight: null, ringsAboveUI: true,
     nextTip: 'gk_spring_lancewood', pauseGame: true, showOnce: true, priority: 0
   },
   gk_spring_lancewood: {
@@ -360,7 +360,7 @@ const LEVEL_GLACIAL_KAHURANGI = {
   // Seeded at each species' own preferred elevation, so they start in-habitat.
   initialSpeciesDistribution: {
     'little_bush_moa': 4,
-    'upland_moa': 5,
+    'upland_moa': 6,
     'stout_legged_moa': 2,
     'south_island_giant_moa': 3,
     'heavy_footed_moa': 2
@@ -450,7 +450,11 @@ const LEVEL_GLACIAL_KAHURANGI = {
 
     // Population floors: the last N of these species can't be hunted or starved,
     // so the species can't be wiped out below the floor.
-    populationFloors: { south_island_giant_moa: 2 },
+    populationFloors: {
+      south_island_giant_moa: 2,
+      stout_legged_moa: 2,
+      heavy_footed_moa: 2
+    },
 
     // Pulsing highlight on still-vulnerable founders until they recover past the
     // threshold — light yellow for the bush moa, light grey for the Megalapteryx.
@@ -466,7 +470,7 @@ const LEVEL_GLACIAL_KAHURANGI = {
     // not a fixed eagle count. 1/6 ≈ one eagle per six moa. Raise it for more
     // predation pressure, lower it for a lighter touch.
     emergentEagles: true,
-    eagleTargetRatio: 1 / 6,      // ← the main knob (one eagle per six moa)
+    eagleTargetRatio: 1 / 8,      // ← the main knob (one eagle per six moa)
     eagleMaxPopulation: 8,       // hard safety cap on total eagles
     eagleHungerRate: 0.02,        // how fast an unfed eagle's hunger climbs
     eagleStarveThreshold: 90,     // hunger above this accrues starvation

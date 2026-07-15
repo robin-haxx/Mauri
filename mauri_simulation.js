@@ -119,7 +119,12 @@ class Simulation {
       // Single-species spawn (level 1 style)
       this.spawnMoas(this.config.initialMoaCount, this.config.startingSpecies || null);
     }
-    
+
+    // Founder sexing bias: the two same-species moa that spawn closest together
+    // get a 50% higher chance of being opposite sex (0.5 → 0.75 under random
+    // sexing), so the most likely first encounter can lead to a breeding pair.
+    this._biasClosestPairSexes();
+
     this.spawnEagles(this.config.eagleCount);
 
     // Emergent eagles start as a breeding PAIR: the spawned founder plus one egg
@@ -161,6 +166,53 @@ class Simulation {
           moa.isFemale = (i % 2 === 0);
           this.moas.push(moa);
         }
+      }
+    }
+  }
+
+  // For each species, find the closest pair of founders; if they're same-sex,
+  // make them opposite-sex with 50% probability. That takes P(opposite) from
+  // p to p + (1-p)/2 — for the random-sexing baseline p = 0.5 that's 0.75,
+  // i.e. a 50% higher chance. Sexes are swapped with another founder where
+  // possible so the species' overall sex balance is unchanged.
+  _biasClosestPairSexes() {
+    const bySpecies = {};
+    for (let i = 0; i < this.moas.length; i++) {
+      const m = this.moas[i];
+      if (!m.alive) continue;
+      (bySpecies[m.speciesKey] || (bySpecies[m.speciesKey] = [])).push(m);
+    }
+
+    for (const key in bySpecies) {
+      const list = bySpecies[key];
+      if (list.length < 2) continue;
+
+      // Closest pair — founder counts are tiny, O(n²) is fine here.
+      let a = null, b = null, bestD2 = Infinity;
+      for (let i = 0; i < list.length; i++) {
+        for (let j = i + 1; j < list.length; j++) {
+          const dx = list[i].pos.x - list[j].pos.x;
+          const dy = list[i].pos.y - list[j].pos.y;
+          const d2 = dx * dx + dy * dy;
+          if (d2 < bestD2) { bestD2 = d2; a = list[i]; b = list[j]; }
+        }
+      }
+
+      if (!a || a.isFemale !== b.isFemale) continue;  // already opposite
+      if (random() >= 0.5) continue;                  // upgrade half the same-sex cases
+
+      // Swap with an opposite-sex founder to keep the balance; flip if none.
+      let donor = null;
+      for (let i = 0; i < list.length; i++) {
+        const m = list[i];
+        if (m !== a && m !== b && m.isFemale !== a.isFemale) { donor = m; break; }
+      }
+      if (donor) {
+        const s = donor.isFemale;
+        donor.isFemale = b.isFemale;
+        b.isFemale = s;
+      } else {
+        b.isFemale = !b.isFemale;
       }
     }
   }

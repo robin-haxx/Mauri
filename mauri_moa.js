@@ -162,6 +162,7 @@ class Moa extends Boid {
     this.migrationCooldown = 0;
     this.localFoodScore = 1.0;
     this.foodCheckTimer = 0;
+    this._nearFavouredPlant = false;  // near a plant favoured by this species
     this.preferredElevation = s.preferredElevation;
     
     // Reusable vectors
@@ -277,9 +278,9 @@ class Moa extends Boid {
     this.hunger = Math.min(this.hunger + this.hungerRate * dt, this.maxHunger);
 
     // Vulnerable-founder highlight flag (drawn in render): active while the
-    // species is still at or below its threshold.
+    // species is still below its threshold.
     if (this._vhl) {
-      this._highlightActive = simulation.getCachedSpeciesCount(this.speciesKey) <= this._vhl.until;
+      this._highlightActive = simulation.getCachedSpeciesCount(this.speciesKey) < this._vhl.until;
     }
 
     // Habitat stress (opt-in per level): a moa sitting far outside its
@@ -313,18 +314,24 @@ class Moa extends Boid {
     if (this.foodCheckTimer >= 60) {
       this.foodCheckTimer -= 60;
       const plants = simulation.getNearbyPlants(this.pos.x, this.pos.y, 60);
-      let edible = 0;
-      for (let i = 0; i < plants.length && edible < 8; i++) {
-        if (plants[i].alive && !plants[i].dormant && plants[i].growth > 0.5) edible++;
+      let edible = 0, nearFav = false;
+      for (let i = 0; i < plants.length; i++) {
+        const p = plants[i];
+        if (!p.alive) continue;
+        if (p.favouredSpecies === this.speciesKey) nearFav = true;
+        if (!p.dormant && p.growth > 0.5 && edible < 8) edible++;
       }
       this.localFoodScore = edible * 0.125;
+      this._nearFavouredPlant = nearFav;
     }
     
     // Get nearby entities
     const px = this.pos.x, py = this.pos.y;
     const placeables = simulation.getNearbyPlaceables(px, py, 80);
     const eagles = simulation.getNearbyEagles(px, py, this.fleeRadius * 1.5);
-    const moas = simulation.getNearbyMoas(px, py, 100);
+    // Widen the neighbour query when the favoured-plant bonus is active, so
+    // the doubled mating radius actually has candidates to search over.
+    const moas = simulation.getNearbyMoas(px, py, Math.max(100, this.effectiveMatingRadius()));
     
     // Cache threatening eagles once (used by both determineState and executeState)
     this._cacheThreateningEagles(eagles);
@@ -377,7 +384,6 @@ class Moa extends Boid {
     
     for (let i = 0; i < eagles.length; i++) {
       const e = eagles[i];
-      if (this.camouflage > 0 && random() < this.camouflage) continue;
       if (this.inShelter && !e.isHunting()) continue;
       if (!e.isHunting()) continue;
       
@@ -480,7 +486,7 @@ class Moa extends Boid {
       case MOA_STATE.MIGRATING:
         this.targetMate = null;
         this.maxSpeed = this.baseSpeed * speedMod;
-        this.executeMigration(seasonCache, dt);
+        this.executeMigration(simulation, seasonCache, dt);
         if (this.hunger > this.hungerThreshold) this.forage(simulation, mauri);
         break;
         
@@ -544,13 +550,20 @@ class Moa extends Boid {
   // MATING
   // ============================================
 
+  // Mating search radius — doubled while standing near a plant favoured by
+  // this species (a well-fed spot is a good place to pair up from).
+  effectiveMatingRadius() {
+    return this._nearFavouredPlant ? this.matingSearchRadius * 2 : this.matingSearchRadius;
+  }
+
   findPotentialMate(moas) {
     // Two buckets: any same-species mate always beats a cross-species one, so a
     // small founder population reliably pairs within itself instead of being
     // forced to hybridise when both members happen to share a sex nearby.
     let best = null, bestScore = Infinity;            // same species
     let bestCross = null, bestCrossScore = Infinity;  // other species
-    const maxDistSq = this.matingSearchRadius * this.matingSearchRadius;
+    const _mateR = this.effectiveMatingRadius();
+    const maxDistSq = _mateR * _mateR;
     const px = this.pos.x, py = this.pos.y;
 
     for (let i = 0; i < moas.length; i++) {
@@ -979,39 +992,55 @@ class Moa extends Boid {
     return err > 0.08 || (this.localFoodScore < 0.3 && this.hunger > 30) || (err > 0.03 && sc.migrationStrength > 0.7);
   }
 
-  executeMigration(sc, dt) {
+  executeMigration(simulation, sc, dt) {
     if (this.migrationCooldown > 0) {
       this.migrationCooldown -= dt;
       if (this.migrationTarget) this.moveToMigrationTarget(sc);
       return;
     }
-    
+
     if (!this.isMigrating && this.shouldMigrate(sc)) {
-      this.migrationTarget = this.findMigrationTarget();
+      this.migrationTarget = this.findMigrationTarget(simulation);
       this.isMigrating = !!this.migrationTarget;
     }
-    
+
     if (this.isMigrating && this.migrationTarget) this.moveToMigrationTarget(sc);
   }
 
-  findMigrationTarget() {
+  findMigrationTarget(simulation) {
     const target = (this.preferredElevation.min + this.preferredElevation.max) * 0.5;
     const current = this.terrain.getElevationAt(this.pos.x, this.pos.y);
     let bestX = 0, bestY = 0, bestScore = -Infinity, found = false;
     const mapW = this.terrain.mapWidth - 20, mapH = this.terrain.mapHeight - 20;
-    
+
+    // Forest-seeking species (e.g. little bush moa) bias candidate scoring
+    // toward dense tree cover (beech/rimu/fern).
+    const forestAffinity =
+      (simulation && typeof FOREST_TREES !== 'undefined' &&
+       this.speciesConfig.forestAffinity) || 0;
+
     for (let i = 0; i < 20; i++) {
       const angle = random(TWO_PI), dist = random(50, 150);
       const x = constrain(this.pos.x + cos(angle) * dist, 20, mapW);
       const y = constrain(this.pos.y + sin(angle) * dist, 20, mapH);
-      
+
       if (!this.terrain.isWalkable(x, y)) continue;
-      
+
       const elev = this.terrain.getElevationAt(x, y);
       let score = 1 - abs(elev - target) * 5;
       if (elev >= this.preferredElevation.min && elev <= this.preferredElevation.max) score += 0.5;
       if ((current < target && elev > current) || (current > target && elev < current)) score += 0.3;
-      
+
+      if (forestAffinity > 0) {
+        const plants = simulation.getNearbyPlants(x, y, 60);
+        let trees = 0;
+        for (let j = 0; j < plants.length && trees < 8; j++) {
+          const p = plants[j];
+          if (p.alive && FOREST_TREES.has(p.type)) trees++;
+        }
+        score += (trees / 8) * forestAffinity;  // up to +forestAffinity at full cover
+      }
+
       if (score > bestScore) { bestScore = score; bestX = x; bestY = y; found = true; }
     }
     
@@ -1117,6 +1146,18 @@ class Moa extends Boid {
     pop();
   }
 
+  // Pulsing red vulnerable-founder ring. Called from renderIndicators, and
+  // re-drawn above the tutorial overlay for tips flagged ringsAboveUI.
+  renderLowPopRing() {
+    if (!this._highlightActive) return;
+    const _pulse = 0.5 + 0.5 * Math.sin(frameCount * 0.12);
+    const _d = this.size * (2.8 + _pulse * 1.4);
+    noFill();
+    stroke(255, 70, 60, 120 + _pulse * 120);
+    strokeWeight(1.5);
+    ellipse(this.pos.x, this.pos.y, _d, _d);
+  }
+
   renderIndicators() {
     const px = this.pos.x, py = this.pos.y, s = this.size;
     const yOff = -s * 0.8 - 4;
@@ -1124,14 +1165,7 @@ class Moa extends Boid {
     // Low-population warning: a pulsing red ring. Drawn here (the indicator
     // pass, top render layer) rather than under the body, so it stays visible
     // over trees and other plants.
-    if (this._highlightActive) {
-      const _pulse = 0.5 + 0.5 * Math.sin(frameCount * 0.12);
-      const _d = s * (2.8 + _pulse * 1.4);
-      noFill();
-      stroke(255, 70, 60, 120 + _pulse * 120);
-      strokeWeight(1.5);
-      ellipse(px, py, _d, _d);
-    }
+    this.renderLowPopRing();
     
     // Heart indicator
     if (this.heartTimer > 0) {

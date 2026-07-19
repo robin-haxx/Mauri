@@ -332,9 +332,21 @@ class PlaceableObject {
   }
   
   // ============================================
-  // DESTROY
+  // MOVE / DESTROY
   // ============================================
-  
+
+  // Re-root this placeable at a new position (player touch-and-hold move).
+  // Spawned plants belong to the old spot, so they're cleared and regrown at
+  // the new one; remaining life carries over unchanged.
+  moveTo(x, y) {
+    this.pos.set(x, y);
+    if (this.def.plantSpawnCount) {
+      for (const plant of this.spawnedPlants) plant.alive = false;
+      this.spawnedPlants = [];
+      this.spawnPlantsInRadius();
+    }
+  }
+
   destroy() {
     this.alive = false;
     for (const plant of this.spawnedPlants) plant.alive = false;

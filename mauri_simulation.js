@@ -412,6 +412,7 @@ class Simulation {
     egg.offspringType = 'eagle';
     egg.parentSpecies = founder.speciesKey || null;
     egg.forcedSex = !founder.isFemale;            // opposite sex to the founder
+    egg.isFounderEgg = true;                      // completes the starting pair — not a "new predator"
     const M = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS) ? LEVEL_MECHANICS : {};
     egg.incubationTime = M.startingEagleEggHatchTime ?? 1800;   // ~30s at 60fps
   }
@@ -469,6 +470,13 @@ class Simulation {
 
     if (this.stats && this.stats.eagleBirths !== undefined) this.stats.eagleBirths++;
     if (this.game) this.game.addNotification('A Pouākai eaglet hatches.', 'success');
+
+    // With emergent eagles there is no milestone spawner, so bred hatches are
+    // what fire the "A New Predator Arrives" tutorial beat. The founder egg is
+    // excluded — it completes the starting pair rather than growing the threat.
+    if (!egg.isFounderEgg && this.game && this.game.tutorial) {
+      this.game.tutorial.fireEvent(TUTORIAL_EVENTS.EAGLE_SPAWNED, { eagle: eaglet });
+    }
   }
 
   findWalkablePosition(minElev, maxElev) {
@@ -963,12 +971,24 @@ class Simulation {
               this.stats.birthsBySpecies[offspringKey]++;
             }
             this._invalidateCache();
-            // Diminishing hatch reward: based on the parent species' population
-            // (excluding the new hatchling) — 0.5x above 10, nothing above 15.
-            const _parentPop = this.getSpeciesCount(newMoa.speciesKey) - 1;
-            const _hatchReward = _parentPop > 15 ? 0
-                               : _parentPop > 10 ? mauri.onEggHatch * 0.5
-                               : mauri.onEggHatch;
+            // Diminishing hatch reward. Levels may define their own tiers via
+            // LEVEL_MECHANICS.hatchReward = { full, reduced, reducedAmount }:
+            // full reward while the TOTAL flock (before this hatch) is at/below
+            // `full`, a flat `reducedAmount` up to `reduced`, nothing beyond.
+            // Default (no knob): per-species taper — 0.5x above 10, 0 above 15.
+            const _hrTiers = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.hatchReward) || null;
+            let _hatchReward;
+            if (_hrTiers) {
+              const _flock = this.getMoaPopulation() - 1;   // excludes the newborn
+              _hatchReward = _flock > _hrTiers.reduced ? 0
+                           : _flock > _hrTiers.full ? (_hrTiers.reducedAmount ?? 5)
+                           : mauri.onEggHatch;
+            } else {
+              const _parentPop = this.getSpeciesCount(newMoa.speciesKey) - 1;
+              _hatchReward = _parentPop > 15 ? 0
+                           : _parentPop > 10 ? mauri.onEggHatch * 0.5
+                           : mauri.onEggHatch;
+            }
             if (_hatchReward > 0) mauri.earn(_hatchReward, egg.pos.x, egg.pos.y, 'hatch');
 
             if (this.game.tutorial) {

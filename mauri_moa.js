@@ -715,12 +715,16 @@ class Moa extends Boid {
       return;
     }
     
-    const aliveEggs = simulation.eggs.filter(e => e.alive && !e.hatched);
+    // First-egg tutorial beat: only MOA eggs count. Eagle eggs (the emergent
+    // founder egg, or a bred clutch) would otherwise suppress the "An Egg!"
+    // tip for the player's actual first moa egg.
+    const aliveMoaEggs = simulation.eggs.filter(
+      e => e.alive && !e.hatched && e.offspringType !== 'eagle');
     const egg = simulation.addEgg(this.pos.x, this.pos.y);
     egg.speedBonus = this.eggSpeedBonus;
     if (this.speciesKey) egg.parentSpecies = this.speciesKey;
-    
-    if (aliveEggs.length === 0 && simulation.game?.tutorial) {
+
+    if (aliveMoaEggs.length === 0 && simulation.game?.tutorial) {
       simulation.game.tutorial.fireEvent(TUTORIAL_EVENTS.FIRST_EGG, { egg });
     }
     

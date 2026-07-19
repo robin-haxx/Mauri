@@ -2,6 +2,10 @@
 // TUTORIAL SYSTEM 
 // ============================================
 
+// Uniform scale for the guide's dialog panels — box, text, buttons, and the
+// mantis sprite all grow together from this one knob. 1.0 = original size.
+const TIP_PANEL_SCALE = 1.25;
+
 const TRIGGER_TYPE = {
   IMMEDIATE: 'immediate',
   TIME: 'time',
@@ -23,14 +27,15 @@ const TUTORIAL_EVENTS = {
   EGG_HATCHED: 'egg_hatched',
   LOW_MAURI: 'low_mauri',
   PLACEABLE_EXPIRED: 'placeable_expired',
-  FIRST_EGG: 'first_egg'
+  FIRST_EGG: 'first_egg',
+  PLACEMENT: 'placement'   // fired on every successful placement, data: { type }
 };
 
-const _PREDATOR_PREY_CONTENT = [
-  "The Moa population is starting to thrive! But be wary..",
-  "Haast's Eagle evolved gigantism with Moa, to eat 'em!",
-  "Knowing these sorts of relationships between flora and fauna is what makes a true eco-steward."
-];
+// True while a "place this" tip's guided window is open (see tip.guidedPlaceable)
+function _guidedWindowActive(game) {
+  const g = game.tutorial && game.tutorial.scratch.guidedPlaceable;
+  return !!(g && game.playTime <= g.until);
+}
 
 const TUTORIAL_TIPS = {
   // ===== INTRODUCTION SEQUENCE =====
@@ -55,43 +60,46 @@ const TUTORIAL_TIPS = {
     trigger: { type: TRIGGER_TYPE.IMMEDIATE },
     title: "The Upland Moa need your help!",
     content: [
-      "Temperatures were far colder 30,000 years ago.",
-      "The moa need a guide to find food each season,",
-      "and protection from the mighty Haast's Eagle!"
+      "They've walked these hills for over 5 million years,",
+      "And this hardy 'clade' adapted well to Kahurangi.",
+      "But, now the glaciations are getting more severe.", 
+      "If we don’t step in to defend them, they'll be lost... ",
+      "to hunger, or over-hunting by the mighty Pouakai!",
+      
     ],
-    guidePosition: 'topLeft',
+    guidePosition: 'center',
     highlight: { type: 'element', target: 'gameArea' },
-    nextTip: 'ui_topbar',
-    pauseGame: true,
-    showOnce: true,
-    priority: 0
-  },
-  
-  ui_topbar: {
-    id: 'ui_topbar',
-    trigger: { type: TRIGGER_TYPE.IMMEDIATE },
-    title: "The Top Bar",
-    content: [
-      "Here you can see your Mauri (spiritual energy),",
-      "the season, and the time taken to reach your goals.",
-      "Mauri is gained when you help the ecosystem thrive!"
-    ],
-    guidePosition: 'topLeft',
-    highlight: { type: 'element', target: 'topBarContent' },
     nextTip: 'ui_mauri',
     pauseGame: true,
     showOnce: true,
     priority: 0
   },
   
+  // ui_topbar: {
+  //   id: 'ui_topbar',
+  //   trigger: { type: TRIGGER_TYPE.IMMEDIATE },
+  //   title: "The Top Bar",
+  //   content: [
+      
+  //     "the season, and the time taken to reach your goals.",
+  //     "Mauri is gained when you help the ecosystem thrive!"
+  //   ],
+  //   guidePosition: 'topLeft',
+  //   highlight: { type: 'element', target: 'topBarContent' },
+  //   nextTip: 'ui_mauri',
+  //   pauseGame: true,
+  //   showOnce: true,
+  //   priority: 0
+  // },
+  
   ui_mauri: {
     id: 'ui_mauri',
     trigger: { type: TRIGGER_TYPE.IMMEDIATE },
-    title: "Mauri Energy",
+    title: "The Mauri level of the forest",
     content: [
-      "Don't be afraid to use the Mauri you gain;",
+      "Mauri is the spiritual energy of this ngahere.",
+      "Don't be afraid to use the Mauri that is earned;",
       "It will let you create a more bountiful forest.",
-      "Spend it wisely and bird populations will flourish!"
     ],
     guidePosition: 'topLeft',
     highlight: { type: 'element', target: 'mauriDisplay' },
@@ -140,8 +148,9 @@ const TUTORIAL_TIPS = {
     trigger: { type: TRIGGER_TYPE.IMMEDIATE },
     title: "You're Ready!",
     content: [
-      "That's the basics! I'll pop up when something",
-      "important happens. Press T anytime to toggle tips.",
+      "That's the basics! Observe the forest for a moment;",
+      "an opportunity might arise to help the Upland Moa!",
+      "I'll be back to help when that happens.",
       "Good luck, budding eco-guardian!"
     ],
     guidePosition: 'center',
@@ -162,18 +171,136 @@ const TUTORIAL_TIPS = {
     },
     title: "Haast's Eagle Attack!",
     content: [
-      "The Pouākai is hunting the upland moa!",
-      "Create a thunderstorm [🌩️] to distract it,",
-      "or a Fern Shelter [🌴] to create cover."
+      "Now's your time: The Pouākai is hunting a moa!",
+      "Select the Storm [🌩️] to call on the atua for a distraction!"
     ],
+    // Arm the grace window on every bird already mid-hunt, so the player has
+    // ~8 seconds of unpaused play to respond before a strike can land.
+    onShow: (game, data) => {
+      const GRACE = 480; // frames @60fps ≈ 8s
+      const eagles = (game.simulation && game.simulation.eagles) || [];
+      for (let i = 0; i < eagles.length; i++) {
+        if (eagles[i].hunting) {
+          eagles[i].tutorialGraceTimer = Math.max(eagles[i].tutorialGraceTimer || 0, GRACE);
+        }
+      }
+      if (data && data.eagle) {
+        data.eagle.tutorialGraceTimer = Math.max(data.eagle.tutorialGraceTimer || 0, GRACE);
+      }
+    },
     guidePosition: 'bottomRight',
     highlight: { type: 'element', target: 'StormButton' },
-    highlightAlt: { type: 'element', target: 'shelterButton' },
+    guidedPlaceable: 'Storm',
+    nextTip: 'storm_place',
+    pauseGame: true,
+    showOnce: true,
+    priority: 1,
+    urgency: 'high'
+  },
+
+  // Step two of the emergency: where to drop the storm. Chained from
+  // eagle_hunting, so the game stays paused between the two.
+  storm_place: {
+    id: 'storm_place',
+    trigger: { type: TRIGGER_TYPE.IMMEDIATE },
+    title: "Drop It on the Eagle!",
+    content: [
+      "Now, while time is paused, click on the hunting eagle.",
+      "You'll have to think fast to prevent the strike of a hungry Pouakai!",
+
+    ],
+    // Timestamp for the follow-up shelter tip ("a few seconds later").
+    // playTime is frozen while paused, so this equals the dismissal time.
+    onShow: (game) => {
+      if (game.tutorial) game.tutorial.scratch.eagleTipsAt = game.playTime;
+    },
+    guidePosition: 'bottomRight',
+    highlight: null,
+    guidedPlaceable: 'Storm',
     nextTip: null,
     pauseGame: true,
     showOnce: true,
     priority: 1,
     urgency: 'high'
+  },
+
+  // The calmer follow-up beat: once the emergency has played out, teach the
+  // preventive tool. Fires ~8s of unpaused play after the storm tips.
+  shelter_secure: {
+    id: 'shelter_secure',
+    trigger: {
+      type: TRIGGER_TYPE.CONDITION,
+      condition: (game) => {
+        const t = game.tutorial;
+        return t && t.scratch && t.scratch.eagleTipsAt != null &&
+               game.playTime > t.scratch.eagleTipsAt + 480;
+      }
+    },
+    title: "The Fern Shelter",
+    content: [
+      "A passing storm won't protect the moa forever!",
+      "A Fern Shelter [🌴] grows a secure patch of forest:",
+      "moa under its fronds are hidden from the Pouākai,",
+      "free to feed and breed in safety."
+    ],
+    guidePosition: 'bottomLeft',
+    highlight: { type: 'element', target: 'shelterButton' },
+    guidedPlaceable: 'shelter',
+    nextTip: null,
+    pauseGame: true,
+    showOnce: true,
+    priority: 2
+  },
+
+  // Player takes initiative: first placement made WITHOUT a "place this"
+  // dialog asking for it. Praises them and teaches the move mechanic.
+  first_free_placement: {
+    id: 'first_free_placement',
+    trigger: {
+      type: TRIGGER_TYPE.EVENT,
+      event: TUTORIAL_EVENTS.PLACEMENT,
+      condition: (game) => !_guidedWindowActive(game)
+    },
+    title: "Giving back the forest's excess Mauri to Tāne!",
+    content: [
+      "That's the sort of natural initiative I like to see!",
+      "If you want to move something you placed,",
+      "touch and hold it for a second.",
+      "It'll cost you half of its Mauri price."
+    ],
+    guidePosition: 'center',
+    highlight: null,
+    nextTip: null,
+    pauseGame: true,
+    showOnce: true,
+    priority: 2
+  },
+
+  // Player goes off-script: a "place this" dialog asked for one thing and
+  // they placed another. Encourage it — and remind them tips are optional.
+  off_script_placement: {
+    id: 'off_script_placement',
+    trigger: {
+      type: TRIGGER_TYPE.EVENT,
+      event: TUTORIAL_EVENTS.PLACEMENT,
+      condition: (game, data) => {
+        const g = game.tutorial && game.tutorial.scratch.guidedPlaceable;
+        return !!(g && game.playTime <= g.until &&
+                  data && data.type && data.type !== g.type);
+      }
+    },
+    title: "Doing It Your Way",
+    content: [
+      "Doing things your own way, eh?",
+      "I trust your instincts, kaitiaki!",
+      "You can press T to disable or enable my guidance."
+    ],
+    guidePosition: 'center',
+    highlight: null,
+    nextTip: null,
+    pauseGame: true,
+    showOnce: true,
+    priority: 2
   },
   
   first_moa_death: {
@@ -190,6 +317,7 @@ const TUTORIAL_TIPS = {
     ],
     guidePosition: 'center',
     highlight: { type: 'element', target: 'kawakawaButton' },
+    guidedPlaceable: 'kawakawa',
     nextTip: null,
     pauseGame: true,
     showOnce: true,
@@ -198,9 +326,13 @@ const TUTORIAL_TIPS = {
   
   season_change_first: {
     id: 'season_change_first',
-    trigger: { 
-      type: TRIGGER_TYPE.EVENT, 
-      event: TUTORIAL_EVENTS.SEASON_CHANGE 
+    trigger: {
+      type: TRIGGER_TYPE.EVENT,
+      event: TUTORIAL_EVENTS.SEASON_CHANGE,
+      // Hold this tip until autumn itself arrives — its Pātōtara fruiting
+      // line only makes sense then. (Level 1 starts in spring, so the
+      // spring→summer turn passes silently.)
+      condition: (game, data) => !!(data && data.seasonKey === 'autumn')
     },
     title: "The Seasons Turn",
     content: [
@@ -223,7 +355,11 @@ const TUTORIAL_TIPS = {
       event: TUTORIAL_EVENTS.EAGLE_SPAWNED 
     },
     title: "A New Predator Arrives",
-    content: _PREDATOR_PREY_CONTENT,
+    content: [
+      "The Moa population is starting to thrive! But be wary..",
+      "Haast's Eagle evolved gigantism with Moa, to eat 'em!",
+      "Knowing these sorts of relationships between flora and fauna is what makes a true eco-steward."
+    ],
     guidePosition: 'center',
     highlight: null,
     nextTip: null,
@@ -258,11 +394,11 @@ const TUTORIAL_TIPS = {
       type: TRIGGER_TYPE.EVENT, 
       event: TUTORIAL_EVENTS.EGG_HATCHED 
     },
-    title: "New Life!",
+    title: "A new upland moa in the flock!",
     content: [
-      "The egg has hatched! A new moa joins the flock.",
-      "Young moa are small and hungry.",
-      "Make sure there's food nearby!"
+      "A baby moa has hatched, and wants something to eat.",
+      "Try making a safe patch of forest, and be wary:",
+      "A growing community of moa also means a growing community of Eagles!"
     ],
     guidePosition: 'center',
     highlight: null,
@@ -293,22 +429,6 @@ const TUTORIAL_TIPS = {
     priority: 2
   },
   
-  population_growing: {
-    id: 'population_growing',
-    trigger: { 
-      type: TRIGGER_TYPE.CONDITION, 
-      condition: (game) => game._cachedMoaCount >= 12 
-    },
-    title: "The Population Grows!",
-    content: _PREDATOR_PREY_CONTENT,
-    guidePosition: 'center',
-    highlight: null,
-    nextTip: null,
-    pauseGame: true,
-    showOnce: true,
-    priority: 3
-  },
-
   // Fires the first time ANY moa species reaches 10 — points at the population
   // panel and teaches the click-to-highlight feature.
   species_thriving: {
@@ -362,6 +482,7 @@ const TUTORIAL_TIPS = {
     ],
     guidePosition: 'bottomLeft',
     highlight: { type: 'element', target: 'kawakawaButton' },
+    guidedPlaceable: 'kawakawa',
     nextTip: null,
     pauseGame: true,
     showOnce: false,
@@ -409,11 +530,11 @@ const TUTORIAL_TIPS = {
       type: TRIGGER_TYPE.CONDITION, 
       condition: (game) => game._cachedMoaCount >= 20 && game.simulation?.stats.births >= 5
     },
-    title: "True Kaitiaki",
+    title: "You're doing wonderfully!",
     content: [
-      "You're doing wonderfully!",
-      "The ecosystem is thriving under your care.",
-      "Keep balancing growth with protection."
+      "The Upland Moa are thriving under your care.",
+      "From now on, Mauri will grow when Eagles hunt,",
+      "Since these two species need to stay in balance."
     ],
     guidePosition: 'center',
     highlight: null,
@@ -542,7 +663,11 @@ class TutorialManager {
     this.pendingTips = [];
     this.gameTimeAtStart = 0;
     this.eventQueue = [];
-    
+
+    // Per-run scratch space for tips (e.g. timestamps set in one tip's onShow
+    // and read by another tip's condition). Cleared on init/reset.
+    this.scratch = {};
+
     // Timing
     this.tipDisplayTime = 0;
     this.minTimeBetweenTips = 180;
@@ -586,8 +711,9 @@ class TutorialManager {
     this.gameTimeAtStart = this.game.playTime;
     this.lastTipTime = -this.minTimeBetweenTips;
     this.tipCooldowns = {};
+    this.scratch = {};
     this._pausedByTutorial = false;
-    
+
     if (this.game.ui) {
       this.uiMapper = new TutorialUIMapper(this.game.ui, CONFIG);
     }
@@ -643,6 +769,14 @@ class TutorialManager {
       if (tip.trigger.condition && !tip.trigger.condition(this.game, data)) continue;
       this._queueTip(tipId, data);
     }
+
+    // A placement matching the open guided window fulfils it. Done AFTER the
+    // trigger checks so off_script/free-placement tips saw the window state
+    // this placement was made under.
+    if (eventType === TUTORIAL_EVENTS.PLACEMENT && data && data.type &&
+        this.scratch.guidedPlaceable && this.scratch.guidedPlaceable.type === data.type) {
+      delete this.scratch.guidedPlaceable;
+    }
   }
   
   // ============================================
@@ -669,6 +803,15 @@ class TutorialManager {
       const event = this.eventQueue.shift();
       this._checkEventTriggers(event.type, event.data);
     }
+
+    // A guided "place this" window only lives while its tip is on screen.
+    // The drain above has just judged any placements made DURING the tip
+    // (queued while it was up), so anything placed from here on is ordinary
+    // play — not going off-script. Clearing here is what keeps a storm
+    // placed minutes later from triggering "Doing It Your Way".
+    if (this.scratch.guidedPlaceable && !this.active) {
+      delete this.scratch.guidedPlaceable;
+    }
     
     // Check time-based triggers
     const gameTime = this.game.playTime - this.gameTimeAtStart;
@@ -694,11 +837,17 @@ class TutorialManager {
       }
     }
     
-    // Show next queued tip if enough time has passed
-    if (this.pendingTips.length > 0 && 
-        this.game.playTime - this.lastTipTime >= this.minTimeBetweenTips) {
-      const queued = this.pendingTips.shift();
-      this._showTip(queued.id, queued.data);
+    // Show next queued tip if enough time has passed. Urgent tips (like the
+    // eagle attack warning) skip the spacing delay — the simulation keeps
+    // running while a tip waits in the queue, so making an urgent one sit out
+    // the gap lets the very thing it warns about resolve unseen.
+    if (this.pendingTips.length > 0) {
+      const head = this.pendingTips[0];
+      const isUrgent = head.tip && head.tip.urgency === 'high';
+      if (isUrgent || this.game.playTime - this.lastTipTime >= this.minTimeBetweenTips) {
+        const queued = this.pendingTips.shift();
+        this._showTip(queued.id, queued.data);
+      }
     }
   }
   
@@ -738,12 +887,34 @@ class TutorialManager {
     }
     
     this.targetFadeAlpha = 255;
-    
+
     if (audioManager) audioManager.playTutorialTip();
-    
+
     if (tip.pauseGame && this.game.state === GAME_STATE.PLAYING) {
       this.game.state = GAME_STATE.PAUSED;
       this._pausedByTutorial = true;
+    }
+
+    // "Place this" tips open a guided window that lasts only while this tip
+    // is on screen (cleared in update() right after the tip's queued
+    // placements are processed — see the drain there). Placing the guided
+    // type fulfils it; placing anything ELSE while the tip is up triggers
+    // off_script_placement. `until` is just a failsafe upper bound.
+    if (tip.guidedPlaceable) {
+      this.scratch.guidedPlaceable = {
+        type: tip.guidedPlaceable,
+        until: this.game.playTime + 1800
+      };
+    }
+
+    // Optional per-tip hook — lets a tip adjust game state as it appears
+    // (e.g. eagle_hunting arms a grace window on hunting eagles).
+    if (typeof tip.onShow === 'function') {
+      try {
+        tip.onShow(this.game, data);
+      } catch (e) {
+        console.warn(`Tutorial onShow error for ${tipId}:`, e);
+      }
     }
   }
   
@@ -875,68 +1046,69 @@ class TutorialManager {
   }
   
   _renderTipPanel(alpha) {
+    const S = TIP_PANEL_SCALE;
     const tip = this.currentTip;
-    const panelWidth = 500;
+    const panelWidth = 500 * S;
     const content = Array.isArray(tip.content) ? tip.content : [tip.content];
-    const lineHeight = 24;
-    const panelHeight = 80 + (content.length * lineHeight) + 60;
-    
+    const lineHeight = 24 * S;
+    const panelHeight = 80 * S + (content.length * lineHeight) + 60 * S;
+
     const pos = this._getTipPanelPosition(tip.guidePosition, panelWidth, panelHeight);
     this.panelBounds = { x: pos.x, y: pos.y, w: panelWidth, h: panelHeight };
 
     // Guide sprite
-    const spriteSize = 200;
+    const spriteSize = 200 * S;
     const spriteX = pos.x - spriteSize * 0.3;
     const spriteY = pos.y + panelHeight * 0.5 - spriteSize * 0.5;
-    
+
     push();
-    
+
     // Panel background
     fill(25, 40, 32, alpha * 0.95);
     stroke(180, 215, 190, alpha);
     strokeWeight(2);
     rect(pos.x, pos.y, panelWidth, panelHeight, 6);
-    
+
     // Title bar
     fill(40, 70, 50, alpha);
     noStroke();
-    rect(pos.x, pos.y, panelWidth, 50, 6, 6, 0, 0);
-    
+    rect(pos.x, pos.y, panelWidth, 50 * S, 6, 6, 0, 0);
+
     // Title text
     fill(200, 245, 210, alpha);
-    textSize(20);
+    textSize(20 * S);
     textAlign(LEFT, CENTER);
     if (typeof GroceryRounded !== 'undefined') textFont(GroceryRounded);
-    text(tip.title, pos.x + 25, pos.y + 25);
+    text(tip.title, pos.x + 25 * S, pos.y + 25 * S);
     textFont('OpenDyslexic');
-    
+
     // Content text
     fill(180, 215, 190, alpha);
-    textSize(15);
+    textSize(15 * S);
     textAlign(LEFT, TOP);
-    
-    let contentY = pos.y + 65;
+
+    let contentY = pos.y + 65 * S;
     for (const line of content) {
-      text(line, pos.x + 25, contentY, panelWidth - 50);
+      text(line, pos.x + 25 * S, contentY, panelWidth - 50 * S);
       contentY += lineHeight;
     }
-    
+
     // Buttons
-    this._renderTipButtons(pos.x, pos.y + panelHeight - 55, panelWidth, alpha, tip);
-    
+    this._renderTipButtons(pos.x, pos.y + panelHeight - 55 * S, panelWidth, alpha, tip);
+
     pop();
-    
+
     // Guide sprite (outside push/pop)
     this._renderGuide(spriteX, spriteY, alpha, spriteSize);
   }
-  
+
   _renderGuide(x, y, alpha, size) {
     push();
     imageMode(CENTER);
-    
+
     if (this.guideSprite) {
       tint(255, alpha);
-      image(this.guideSprite, (x + size * 0.5) - 150, y + size * 0.5, size, size);
+      image(this.guideSprite, (x + size * 0.5) - 150 * TIP_PANEL_SCALE, y + size * 0.5, size, size);
     } else {
       // Minimal fallback
       fill(80, 150, 80, alpha);
@@ -944,17 +1116,18 @@ class TutorialManager {
       strokeWeight(2);
       ellipse(x + size * 0.5, y + size * 0.5, size * 0.7, size * 0.8);
     }
-    
+
     pop();
   }
   
   _renderTipButtons(x, y, panelWidth, alpha, tip) {
-    const btnHeight = 36;
-    const btnY = y + 12;
-    
+    const S = TIP_PANEL_SCALE;
+    const btnHeight = 36 * S;
+    const btnY = y + 12 * S;
+
     // "Next" / "Got it" button
-    const nextBtnW = 110;
-    const nextBtnX = x + panelWidth - nextBtnW - 25;
+    const nextBtnW = 110 * S;
+    const nextBtnX = x + panelWidth - nextBtnW - 25 * S;
     const nextLabel = tip.nextTip ? "Next →" : "Got it!";
     const hoverNext = this._hitTest({ x: nextBtnX, y: btnY, w: nextBtnW, h: btnHeight }, mouseX, mouseY);
     
@@ -964,15 +1137,15 @@ class TutorialManager {
     rect(nextBtnX, btnY, nextBtnW, btnHeight, 8);
     
     fill(255, 255, 255, alpha);
-    textSize(16);
+    textSize(16 * S);
     textAlign(CENTER, CENTER);
     text(nextLabel, nextBtnX + nextBtnW / 2, btnY + btnHeight / 2);
     
     this.nextButtonBounds = { x: nextBtnX, y: btnY, w: nextBtnW, h: btnHeight };
     
     // "Skip Tutorial" button
-    const skipBtnX = x + 25;
-    const skipBtnW = 100;
+    const skipBtnX = x + 25 * S;
+    const skipBtnW = 100 * S;
     const hoverSkip = this._hitTest({ x: skipBtnX, y: btnY, w: skipBtnW, h: btnHeight }, mouseX, mouseY);
     
     fill(hoverSkip ? [55, 45, 45, alpha] : [35, 35, 35, alpha * 0.8]);
@@ -981,7 +1154,7 @@ class TutorialManager {
     rect(skipBtnX, btnY, skipBtnW, btnHeight, 8);
     
     fill(140, 130, 130, alpha);
-    textSize(12);
+    textSize(12 * S);   // scales with the panel, not the small-UI-text knob
     text("Skip Tutorial", skipBtnX + skipBtnW / 2, btnY + btnHeight / 2);
     
     this.skipButtonBounds = { x: skipBtnX, y: btnY, w: skipBtnW, h: btnHeight };
@@ -1016,6 +1189,7 @@ class TutorialManager {
     this.active = false;
     this.enabled = true;
     this.tipCooldowns = {};
+    this.scratch = {};
     this._pausedByTutorial = false;
   }
 }

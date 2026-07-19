@@ -14,9 +14,9 @@ const LEVEL_KAHURANGI = {
     persistence: 0.3,
     lacunarity: 3.0,
     ridgeInfluence: 1.3,
-    elevationPower: 1.5,
+    elevationPower: 1.4,
     islandFalloff: 0.6,
-    plantDensity: 0.006,
+    plantDensity: 0.005,
     useLakes: false
   },
 
@@ -71,20 +71,54 @@ const LEVEL_KAHURANGI = {
   },
   startingSpecies: 'upland_moa',
 
+  // Calendar: open in spring so the first autumn (and its "Seasons Turn"
+  // tutorial moment) lands mid-level rather than immediately.
+  startSeason: 'spring',
+
+  // One spawned founder eagle; the emergent-eagle system adds an opposite-sex
+  // founder egg at a crag eyrie (~30s hatch), completing the breeding pair.
   initialEntityCounts: {
     moa: 7,
-    eagle: 2
+    eagle: 1
   },
 
   economy: {
     startingMauri: 60,
     seasonDuration: 2100,
     eggIncubationTime: 700,
-    securityTimeToLay: 1200,
-    securityTimeVariation: 600,
+    securityTimeToLay: 1400,
+    securityTimeVariation: 400,
     layingHungerThreshold: 28,
-    eagleSpawnMilestones: [12, 18, 25, 35, 45, 55],
-    maxPopulation: 60
+    eagleSpawnMilestones: [],   // eagles are driven by predator-prey coupling (mechanics below)
+    maxPopulation: 40
+  },
+
+  // Emergent eagles (same system as level 2): no top-down spawn controller.
+  // Each bird holds a nest, feeds or starves on its own energy budget, and a
+  // fed female lays when a mature male is near — with the drive pulled toward
+  // the target eagle:moa ratio. Tuning copied from level 2, capped lower for
+  // the short 4-minute run.
+  mechanics: {
+    // Diminishing hatch rewards: full mauri (10) while the flock is 15 or
+    // fewer, a token 5 up to 20, nothing beyond — late growth toward the
+    // 30-moa bonus is its own reward rather than a mauri faucet.
+    hatchReward: { full: 15, reduced: 20, reducedAmount: 5 },
+
+    emergentEagles: true,
+    eagleTargetRatio: 1 / 4,      // ← the main knob: ~one eagle per eight moa
+    eagleMaxPopulation: 8,        // hard safety cap on total eagles
+    eagleHungerRate: 0.02,        // how fast an unfed eagle's hunger climbs
+    eagleStarveThreshold: 90,     // hunger above this accrues starvation
+    eagleStarveTimeout: 2400,     // ticks of sustained starvation before death
+    eagleReproChance: 0.4,        // base lay chance at full breeding pressure
+    eagleReproCooldown: 1200,     // ticks between clutches for one bird
+    eagleReproCheckInterval: 220, // how often a calm, fed adult considers laying
+    eagleMaturityAge: 1500,       // ticks before a hatchling can breed
+    eaglePreyPopThreshold: 12,    // spare rare prey (moot with one species, kept for consistency)
+    startingEagleEggHatchTime: 1800,  // founder egg hatches ~30s in
+    eagleMateRadius: 250,         // a female needs a mature male this close to lay
+    eagleOverhuntRestraint: 30,   // extra hunger tolerance per unit over-ratio
+    eagleRestraintCap: 45         // cap on that restraint so they hunt eventually
   },
 
   availablePlaceables: {
@@ -96,15 +130,15 @@ const LEVEL_KAHURANGI = {
     harakeke:  { cost: 30 }
   },
 
+  // The level runs to a fixed 4:00 end (timeLimit below); goals are rewards
+  // along the way, not the win condition. The population goal is a bonus.
+  timeLimit: 14400,   // 4 minutes @ 60fps
   goals: [
-    { name: "Hatch 5 eggs",           condition: (sim) => sim.stats.births >= 5, reward: 50 },
-    { name: "Hatch 10 eggs",          condition: (sim) => sim.stats.births >= 10, reward: 100 },
-    { name: "Raise population to 15", condition: (sim, game) => game._cachedMoaCount >= 15, reward: 50 },
-    { name: "Raise population to 20", condition: (sim, game) => game._cachedMoaCount >= 20, reward: 50 },
-    { name: "Raise population to 30", condition: (sim, game) => game._cachedMoaCount >= 30, reward: 100 },
-    { name: "Reach 1 minute",         condition: (sim, game) => game.playTime >= 3600, reward: 50 },
-    { name: "Reach 3 minutes",        condition: (sim, game) => game.playTime >= 10800, reward: 100 },
-    { name: "Reach 4 minutes",        condition: (sim, game) => game.playTime >= 14400, reward: 100 }
+    { name: "Hatch 5 eggs",                condition: (sim) => sim.stats.births >= 5, reward: 50 },
+    { name: "Hatch 10 eggs",               condition: (sim) => sim.stats.births >= 10, reward: 50 },
+    { name: "Reach 2 minutes",             condition: (sim, game) => game.playTime >= 7200, reward: 50 },
+    { name: "Reach 3 minutes",             condition: (sim, game) => game.playTime >= 10800, reward: 100 },
+    { name: "BONUS: Have 30 Moa before 4:00", condition: (sim, game) => game._cachedMoaCount >= 30, reward: 100 }
   ],
 
   menu: {

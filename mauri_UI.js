@@ -103,10 +103,13 @@ class GameUI {
       migrationHintWidth: Math.min(1000, gameAreaWidth - 100),
       migrationHintX: (gameAreaWidth - Math.min(1000, gameAreaWidth - 100)) / 2,
 
-      // Bottom bar toolbar
+      // Bottom bar toolbar. Count the LEVEL'S active palette, not the global
+      // PLACEABLES catalog — the catalog also holds tools from other levels
+      // (lancewood, speargrass, ...), so using its length centers the row and
+      // sizes the tutorial highlight for phantom extra buttons.
       toolbarBtnSize: 70,
       toolbarSpacing: 85,
-      toolbarBtnCount: Object.keys(PLACEABLES).length,
+      toolbarBtnCount: Object.keys((this.game && this.game.activePlaceables) || PLACEABLES).length,
 
       // Sidebar content padding and panel width
       sidebarPadding: 15,
@@ -132,8 +135,11 @@ class GameUI {
     // Event log and species panel heights scale with sidebar width
     // Wider sidebar = can show more; narrower = show less
     const sidebarScale = this.sidebar.width / 560; // 560 is the 16:9 baseline
-    this.layout.eventLogHeight = Math.round(280 * sidebarScale);
-    this.layout.speciesPanelHeight = Math.round(240 * sidebarScale);
+    // Panel heights grow with the small-text bump so their content rhythm
+    // (event log lines, population rows) keeps fitting as the text scales:
+    // one lineHeight bump per log message, two per stat row (5 rows).
+    this.layout.eventLogHeight = Math.round(280 * sidebarScale) + SMALL_TEXT_BUMP * 7;
+    this.layout.speciesPanelHeight = Math.round(240 * sidebarScale) + SMALL_TEXT_BUMP * 10;
     this.layout.eventLogMaxMessages = sidebarScale >= 1 ? 7 : 5;
 
     this.layout.toolbarTotalWidth = toolbarTotalWidth;
@@ -470,7 +476,11 @@ class GameUI {
   // filled in the species' highlight colour.
   renderFocusSpeciesButtons() {
     this._fsFocusBtnBounds = [];
-    const focal = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.focalSpecies) || null;
+    // Levels with an explicit focal list use it; every other level falls back
+    // to its own moa species, so highlight toggles are available in
+    // fullscreen everywhere (the windowed population panel isn't drawn there).
+    const focal = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.focalSpecies) ||
+      ((this.simulation.activeSpecies && this.simulation.activeSpecies.moa) || null);
     if (!focal || !focal.length) return;
 
     const size = 70, gap = 10;
@@ -543,7 +553,7 @@ class GameUI {
     // Label
     fill(140, 180, 150);
     noStroke();
-    textSize(12);
+    smallTextSize(12);
     textAlign(LEFT, TOP);
     text("Mauri", x + 60, y + 12);
 
@@ -613,7 +623,7 @@ class GameUI {
     // Label
     fill(140, 180, 150);
     noStroke();
-    textSize(11);
+    smallTextSize(11);
     textAlign(CENTER, TOP);
     text("TIME", x + 60, y + 10);
 
@@ -652,7 +662,7 @@ class GameUI {
     // Secondary hint
     if (message.subtext) {
       fill(120, 150, 140);
-      textSize(11);
+      smallTextSize(11);
       text(message.subtext, x + 50, y + 36);
     }
   }
@@ -910,13 +920,13 @@ class GameUI {
       // Cost
       fill(canAfford ? 180 : 255, canAfford ? 255 : 120, canAfford ? 190 : 120);
       noStroke();
-      textSize(12);
+      smallTextSize(12);
       textAlign(CENTER, TOP);
       text(def.cost, x + btnSize / 2, btnY + btnSize - 20);
 
       // Hotkey number
       fill(100, 130, 110);
-      textSize(10);
+      smallTextSize(10);
       textAlign(CENTER, TOP);
       text(i + 1, x + btnSize / 2, btnY + btnSize + 5);
 
@@ -946,18 +956,18 @@ class GameUI {
     // Name
     fill(200, 240, 210);
     noStroke();
-    textSize(13);
+    smallTextSize(13);
     textAlign(LEFT, TOP);
     text(def.name, x + 10, y + 8);
 
     // Description
     fill(150, 180, 160);
-    textSize(10);
+    smallTextSize(10);
     text(def.description, x + 10, y + 28);
 
     // Stats
     fill(120, 150, 130);
-    textSize(9);
+    smallTextSize(9);
     text(`Duration: ${(def.duration / 60).toFixed(0)}s`, x + 10, y + 48);
     text(`Radius: ${def.radius}px`, x + 10, y + 62);
   }
@@ -994,12 +1004,12 @@ class GameUI {
     text(def.name, adjustedX + 65, y + 12);
 
     fill(140, 255, 160);
-    textSize(12);
+    smallTextSize(12);
     text(`Cost: ${def.cost} mauri`, adjustedX + 65, y + 32);
 
     // Instruction
     fill(140, 170, 150);
-    textSize(10);
+    smallTextSize(10);
     text("Click in game area to place", adjustedX + 65, y + 50);
   }
 
@@ -1044,7 +1054,7 @@ class GameUI {
     // Completion count
     const completed = this.game.goals.filter(g => g.achieved).length;
     fill(120, 180, 140);
-    textSize(10);
+    smallTextSize(10);
     textAlign(RIGHT, CENTER);
     text(`${completed}/${this.game.goals.length}`, x + panelWidth - 10, y + 15);
 
@@ -1088,7 +1098,7 @@ class GameUI {
 
       // Reward
       fill(goal.achieved ? 100 : 140, goal.achieved ? 130 : 200, goal.achieved ? 110 : 150);
-      textSize(12);
+      smallTextSize(12);
       textAlign(RIGHT, CENTER);
       text(`+${goal.reward}`, x + panelWidth - 12, goalY + 10);
 
@@ -1118,7 +1128,7 @@ class GameUI {
     const msgCount = this.game.notifications.length;
     if (msgCount > 0) {
       fill(100, 150, 120);
-      textSize(9);
+      smallTextSize(9);
       textAlign(RIGHT, CENTER);
       text(`${msgCount} messages`, x + panelWidth - 10, y + 14);
     }
@@ -1131,7 +1141,7 @@ class GameUI {
     // Messages
     let msgY = y + 45;
     const messages = this.game.notifications.slice(0, maxMessages);
-    const lineHeight = 34;
+    const lineHeight = 34 + SMALL_TEXT_BUMP;
 
     for (const msg of messages) {
       const alpha = Math.min(255, msg.life * 0.85);
@@ -1150,7 +1160,7 @@ class GameUI {
 
       // Message text
       fill(190, 210, 200, alpha);
-      textSize(13);
+      smallTextSize(13);
       textAlign(LEFT, TOP);
 
       // Word wrap for variable-width panel
@@ -1167,7 +1177,7 @@ class GameUI {
       // Timestamp
       const msgAge = Math.floor((this.game.playTime - msg.time) / 60);
       fill(100, 120, 110, alpha * 0.7);
-      textSize(8);
+      smallTextSize(8);
       textAlign(RIGHT, TOP);
       text(msgAge === 0 ? 'now' : `${msgAge}s`, x + panelWidth - 10, msgY + 2);
 
@@ -1178,7 +1188,7 @@ class GameUI {
     // Empty state
     if (messages.length === 0) {
       fill(80, 100, 90);
-      textSize(11);
+      smallTextSize(11);
       textAlign(CENTER, CENTER);
       text("No recent events", x + panelWidth / 2, y + panelHeight / 2);
     }
@@ -1192,7 +1202,8 @@ class GameUI {
     // species row never overflows the box (driven by the level's species list).
     const _nMoaSpecies = ((this.simulation.activeSpecies && this.simulation.activeSpecies.moa) || []).length;
     const _speciesRowCount = Math.max(1, Math.ceil(_nMoaSpecies / 2));
-    const panelHeight = this.layout.speciesPanelHeight + Math.max(0, _speciesRowCount - 2) * 28;
+    const panelHeight = this.layout.speciesPanelHeight +
+      Math.max(0, _speciesRowCount - 2) * (28 + SMALL_TEXT_BUMP * 2);
 
     // Panel header
     const header = this._getPanelHeader();
@@ -1256,9 +1267,11 @@ class GameUI {
       _speciesRows.push({ icon: '❔', label: 'Other moa', value: _otherMoa, color: [150, 150, 150] });
     }
 
-    // Population stats — 5 rows x 2 columns, row-major
+    // Population stats — 5 rows x 2 columns, row-major. Each row holds a
+    // small label over a value, so row height grows with the text bump
+    // (label line + value offset each gain SMALL_TEXT_BUMP).
     let statY = y + 42;
-    const rowH = 28;
+    const rowH = 28 + SMALL_TEXT_BUMP * 2;
     const col1X = x + 15;
     const col2X = x + panelWidth / 2 + 5;
 
@@ -1291,13 +1304,13 @@ class GameUI {
       const avgHunger = aliveMoas.reduce((sum, m) => sum + m.hunger, 0) / aliveMoas.length;
 
       fill(140, 160, 150);
-      textSize(12);
+      smallTextSize(12);
       textAlign(LEFT, TOP);
       text(`Avg hunger: ${avgHunger.toFixed(0)}%`, col1X, statY);
 
-      // Hunger bar (adapts to panel width)
+      // Hunger bar (adapts to panel width; sits under the small label)
       const barW = panelWidth - 30;
-      const barY = statY + 16;
+      const barY = statY + 16 + SMALL_TEXT_BUMP;
 
       fill(50, 40, 40);
       noStroke();
@@ -1312,13 +1325,13 @@ class GameUI {
 
       // Hunger level text
       fill(120, 140, 130);
-      textSize(8);
+      smallTextSize(8);
       textAlign(RIGHT, TOP);
       const hungerStatus = avgHunger < 30 ? 'Well Fed' : (avgHunger < 60 ? 'Hungry' : 'Starving!');
       text(hungerStatus, col1X + barW, statY);
     } else {
       fill(150, 100, 100);
-      textSize(11);
+      smallTextSize(11);
       textAlign(CENTER, CENTER);
       text("No moa alive!", x + panelWidth / 2, statY + 10);
     }
@@ -1330,15 +1343,16 @@ class GameUI {
   // toggles the in-world species highlight; while active the row is framed
   // in the species' highlight colour.
   _renderSpeciesRow(x, y, w, row) {
+    const rowBoxH = 32 + SMALL_TEXT_BUMP * 2;   // tracks renderStatItem's height
     if (row.key) {
-      this._speciesRowBounds.push({ key: row.key, x: x - 8, y: y - 4, w: w, h: 32 });
+      this._speciesRowBounds.push({ key: row.key, x: x - 8, y: y - 4, w: w, h: rowBoxH });
 
       if (typeof SPECIES_HIGHLIGHT !== 'undefined' && SPECIES_HIGHLIGHT.has(row.key)) {
         const hc = row.highlightColor || [255, 235, 120];
         noFill();
         stroke(hc[0], hc[1], hc[2], 230);
         strokeWeight(2);
-        rect(x - 8, y - 4, w, 32, 8);
+        rect(x - 8, y - 4, w, rowBoxH, 8);
       }
     }
     this.renderStatItem(x, y, row.icon, row.label, row.value, row.color);
@@ -1356,21 +1370,22 @@ class GameUI {
     noStroke();
     textSize(18);
     textAlign(LEFT, CENTER);
-    text(icon, x, y + 10);
+    text(icon, x, y + 10 + SMALL_TEXT_BUMP);
 
     // Label
     fill(col[0], col[1], col[2]);
-    textSize(12);
+    smallTextSize(12);
     textAlign(LEFT, TOP);
     text(label, x + 26, y);
 
-    // Value
+    // Value — sits below the label, so its offset grows with the small-text
+    // bump to keep the label from descending into it.
     fill(230, 245, 235);
     textSize(20);
     push();
     textFont(GroceryRounded);
     textAlign(LEFT, TOP);
-    text(value, x + 26, y + 10);
+    text(value, x + 26, y + 10 + SMALL_TEXT_BUMP);
     pop();
   }
 

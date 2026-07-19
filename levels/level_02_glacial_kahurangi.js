@@ -319,7 +319,7 @@ const LEVEL_GLACIAL_KAHURANGI = {
       key: 'shrubland', name: "Frost Shrubland", minElevation: 0.28, maxElevation: 0.36,
       colors: ['#7c8858', '#889464', '#94a070'], contourColor: '#5a6640',
       walkable: true, canHavePlants: true,
-      plantTypes: ['coprosma', 'matagouri', 'tussock', 'dracophyllum'], canPlace: true
+      plantTypes: ['coprosma', 'patotara', 'tussock', 'dracophyllum'], canPlace: true
     },
     forestRefuge: {
       key: 'forestRefuge', name: "Forest Refuge", minElevation: 0.36, maxElevation: 0.48,

@@ -177,6 +177,17 @@ const CONFIG = {
 let LEVEL_MECHANICS = {};
 let FOREST_BIOMES = new Set();
 
+// ============================================
+// GLOBAL TEXT SCALE
+// One knob for all small screen-space UI text (labels, costs, hotkeys,
+// log entries, sidebar rows...). Call sites with base sizes ≤ 13 use
+// smallTextSize(base) instead of textSize(base); raising SMALL_TEXT_BUMP
+// nudges them all together. World-space text (drawn inside the zoomed view
+// transform) deliberately keeps plain textSize.
+// ============================================
+let SMALL_TEXT_BUMP = 2;
+function smallTextSize(base) { textSize(base + SMALL_TEXT_BUMP); }
+
 // Player-toggled species highlights: speciesKeys whose moa pulse a halo in
 // their species highlightColor. Toggled from the population panel (full UI)
 // and the focus-species buttons (fullscreen). Cleared on level load.
@@ -700,7 +711,12 @@ class Game {
     this.selectedPlaceable = null;
     this.placePreview = null;
     this._stormCooldownUntil = 0;
-    
+
+    // Touch-and-hold move: press a placed item for ~1s to pick it up, click
+    // to set it down elsewhere for half its mauri price.
+    this._holdCandidate = null;   // { p, heldFrames, startMX, startMY }
+    this.movingPlaceable = null;
+
     this.playTime = 0;
     this.maxPlayTime = 0;
     this._menuBtnBounds = null;
@@ -751,6 +767,11 @@ class Game {
       }));
     }
 
+    // Timed end (classic-goals levels): when set, the level always runs to
+    // this playTime and then completes — goals are en-route rewards, not the
+    // win condition. Phased levels have their own built-in timed end.
+    this.timeLimit = levelDef.timeLimit || null;
+
     // NEW: Load illustration assets for this level's start screen
     this.menuArt.loadForLevel(levelDef);
 
@@ -781,6 +802,8 @@ class Game {
     
     this.playTime = 0;
     this._stormCooldownUntil = 0;   // reset per level load, else a restart starts mid-cooldown
+    this._holdCandidate = null;     // stale refs would point into the old simulation
+    this.movingPlaceable = null;
     // Species highlights: reset, then enable by default for the level's focus
     // species (fall back to its vulnerable-highlight list if no focal list).
     SPECIES_HIGHLIGHT.clear();
@@ -857,10 +880,12 @@ class Game {
       }
     }
     
+    // Moa eggs only: this count backs the "all moa gone" loss check, and an
+    // incubating EAGLE egg must not postpone that verdict on a moa-empty map.
     let eggCount = 0;
     const eggs = this.simulation.eggs;
     for (let i = 0; i < eggs.length; i++) {
-      if (eggs[i].alive) eggCount++;
+      if (eggs[i].alive && eggs[i].offspringType !== 'eagle') eggCount++;
     }
     
     this._cachedMoaCount = moaCount;
@@ -876,6 +901,7 @@ class Game {
     if (this.state !== GAME_STATE.PLAYING && this.state !== GAME_STATE.PAUSED) return;
       
     if (this.tutorial) this.tutorial.update(dt);
+    this.updateHoldToMove(dt);   // like placement, works while paused
     if (this.state !== GAME_STATE.PLAYING) return;
     
     this.playTime += dt;
@@ -944,6 +970,16 @@ class Game {
     }
   }
   
+  // Headline for the WON overlay. Only claims "all goals achieved" when it's
+  // actually true — timed levels (and phased ones) can end with goals unmet.
+  // Levels may override with an `endMessage` string.
+  _endMessage() {
+    if (this.currentLevel && this.currentLevel.endMessage) return this.currentLevel.endMessage;
+    const goals = this.goals || [];
+    const allDone = goals.length > 0 && goals.every(g => g.achieved);
+    return allDone ? "All goals achieved!" : "Your watch as kaitiaki is complete!";
+  }
+
   // Snapshot passed to the (per-level tunable) score formula. See
   // computeLevelScore / defaultLevelScore in mauri_level_format.js.
   _scoreContext() {
@@ -972,7 +1008,9 @@ class Game {
       if (!goal.achieved) allAchieved = false;
     }
     
-    if (allAchieved) {
+    // Timed levels run to the clock; goal completion alone never ends them.
+    const timeUp = this.timeLimit && this.playTime >= this.timeLimit;
+    if (timeUp || (!this.timeLimit && allAchieved)) {
       this.state = GAME_STATE.WON;
       if (audioManager) audioManager.playWin();
 
@@ -1045,9 +1083,18 @@ class Game {
       return;
     }
 
-    // Win: survived to the end of the final phase
+    // Win: survived to the end of the final phase. Enduring to the clock
+    // completes the final phase's SURVIVE goals (same rule as a phase
+    // transition) — but unmet growth goals stay unmet, so the end screen
+    // reports an honest tally instead of claiming everything was achieved.
     if (this.playTime >= total) {
-      for (const g of this.goals) { if (!g.achieved) { g.achieved = true; this._goalsCompleted = (this._goalsCompleted || 0) + 1; } }
+      for (const g of this.goals) {
+        if (g.survive && !g.achieved) {
+          g.achieved = true;
+          this._goalsCompleted = (this._goalsCompleted || 0) + 1;
+          if (g.reward) this.mauri.earn(g.reward, halfWidth, 80, 'goal');
+        }
+      }
       this.state = GAME_STATE.WON;
       if (audioManager) audioManager.playWin();
       const score = computeLevelScore(this.currentLevel, this._scoreContext());
@@ -1094,6 +1141,7 @@ class Game {
   }
   
   selectPlaceable(type) {
+    if (this.movingPlaceable) this.cancelMove();   // one mode at a time
     // Check against level's active placeables, not global PLACEABLES
     const def = this.activePlaceables[type];
     if (def && this.mauri.canAfford(def.cost)) {
@@ -1108,16 +1156,110 @@ class Game {
   cancelPlacement() {
     this.selectedPlaceable = null;
   }
+
+  // ============================================
+  // TOUCH-AND-HOLD MOVE
+  // ============================================
+
+  _moveDef(p) {
+    return (this.activePlaceables && this.activePlaceables[p.type]) || p.def;
+  }
+
+  _moveCost(p) {
+    return Math.ceil((this._moveDef(p).cost || 0) / 2);
+  }
+
+  // Ticks an armed hold candidate toward becoming a move; called every frame
+  // in PLAYING and PAUSED. The candidate dies if the button lifts early, the
+  // cursor drifts, a tool is selected, or the item expires.
+  updateHoldToMove(dt = 1) {
+    if (this.movingPlaceable && !this.movingPlaceable.alive) {
+      this.addNotification("It faded away before it could be moved.", 'error');
+      this.movingPlaceable = null;
+    }
+
+    const hc = this._holdCandidate;
+    if (!hc) return;
+
+    if (!hc.p.alive || this.selectedPlaceable || this.movingPlaceable || !mouseIsPressed ||
+        dist(mouseX, mouseY, hc.startMX, hc.startMY) > 14) {
+      this._holdCandidate = null;
+      return;
+    }
+
+    hc.heldFrames += dt;
+    if (hc.heldFrames >= 60) {   // ~1 second
+      this._holdCandidate = null;
+      this._beginMove(hc.p);
+    }
+  }
+
+  _beginMove(p) {
+    const def = this._moveDef(p);
+    const cost = this._moveCost(p);
+    if (!this.mauri.canAfford(cost)) {
+      this.addNotification(`Need ${cost} mauri to move ${def.name}`, 'error');
+      return;
+    }
+    this.cancelPlacement();
+    this.movingPlaceable = p;
+    this.addNotification(`Moving ${def.name} — click to set it down (${cost} mauri), ESC to cancel`, 'info');
+    if (audioManager) audioManager.playPlantRustle();
+  }
+
+  cancelMove() {
+    if (this.movingPlaceable) {
+      this.movingPlaceable = null;
+      this.addNotification("Move cancelled", 'info');
+    }
+  }
+
+  tryDropMove(x, y) {
+    const p = this.movingPlaceable;
+    if (!p || !p.alive) { this.movingPlaceable = null; return false; }
+    const def = this._moveDef(p);
+
+    if (!this.terrain.canPlace(x, y)) {
+      this.addNotification("Cannot place here!", 'error');
+      return false;
+    }
+    if (def.allowedBiomes) {
+      const biome = this.terrain.getBiomeAt(x, y);
+      if (!def.allowedBiomes.includes(biome.key)) {
+        this.addNotification(`${def.name} can't take root in ${biome.name}`, 'error');
+        return false;
+      }
+    }
+    // Spacing must ignore the item being moved, or it blocks itself
+    const spacingCheck = this.canPlaceWithSpacing(x, y, p.type, p);
+    if (!spacingCheck.allowed) {
+      this.addNotification(spacingCheck.reason, 'error');
+      return false;
+    }
+
+    const cost = this._moveCost(p);
+    if (!this.mauri.spend(cost)) {
+      this.addNotification("Not enough mauri!", 'error');
+      return false;
+    }
+
+    p.moveTo(x, y);
+    if (p.type === 'nest') this.simulation._nestCacheValid = false;
+    this.movingPlaceable = null;
+    this.addNotification(`Moved ${def.name} (-${cost} mauri)`, 'info');
+    if (audioManager) audioManager.playPlantRustle();
+    return true;
+  }
   
-  canPlaceWithSpacing(x, y, type) {
+  canPlaceWithSpacing(x, y, type, exclude = null) {
     const def = this.activePlaceables[type];
     if (def.ignoresSpacing) return { allowed: true };
-    
+
     const mySpacing = def.minSpacing || 40;
     this._tempVec.set(x, y);
-    
+
     for (const p of this.simulation.placeables) {
-      if (!p.alive) continue;
+      if (!p.alive || p === exclude) continue;
       const otherDef = PLACEABLES[p.type];
       if (otherDef.ignoresSpacing) continue;
       
@@ -1178,6 +1320,9 @@ class Game {
     BENCHMARK.recordPlacement(this.selectedPlaceable);
     if (this.selectedPlaceable === 'Storm') this._stormCooldownUntil = this.playTime + 600; // 10s @60fps
     this.addNotification(`Placed ${def.name}`, 'info');
+    if (this.tutorial) {
+      this.tutorial.fireEvent(TUTORIAL_EVENTS.PLACEMENT, { type: this.selectedPlaceable });
+    }
     
     if (audioManager) {
       this.selectedPlaceable === 'Storm' ? audioManager.playBoltStrike() : audioManager.playPlantRustle();
@@ -1233,6 +1378,9 @@ class Game {
     if (this.selectedPlaceable &&
         (this.state === GAME_STATE.PLAYING || this.state === GAME_STATE.PAUSED)) {
       this.renderPlacementPreview();
+    } else if ((this.movingPlaceable || this._holdCandidate) &&
+        (this.state === GAME_STATE.PLAYING || this.state === GAME_STATE.PAUSED)) {
+      this.renderMovePreview();
     }
     
     drawingContext.restore();
@@ -1261,7 +1409,7 @@ class Game {
         title: "ECOSYSTEM THRIVING!",
         titleColor: [180, 255, 180],
         lines: [
-          { text: "All goals achieved!", color: [150, 220, 150], size: 18 },
+          { text: this._endMessage(), color: [150, 220, 150], size: 18 },
           { text: this._goalsTally(), color: [150, 220, 150], size: 14 },
           { text: `Final population: ${this._cachedMoaCount} moa`, color: [120, 180, 120], size: 14 },
           { text: `Total mauri earned: ${this.mauri.totalEarned | 0}`, color: [120, 180, 120], size: 14 },
@@ -1494,7 +1642,7 @@ class Game {
 
       // Description preview
       fill(unlocked ? [120, 160, 130] : [50, 50, 55]);
-      textSize(12);
+      smallTextSize(12);
       const desc = (level.menu?.flavorText || []).slice(0, 2);
       for (let j = 0; j < desc.length; j++) {
         text(desc[j], x + cardW / 2, cardY + 100 + j * 18);
@@ -1510,7 +1658,7 @@ class Game {
       // Best score
       if (PROGRESS.bestScores[level.id]) {
         fill(180, 200, 180);
-        textSize(12);
+        smallTextSize(12);
         text(`Best: ${PROGRESS.bestScores[level.id]} pts`,
              x + cardW / 2, cardY + cardH - 20);
       }
@@ -1522,7 +1670,7 @@ class Game {
     }
 
     fill(CACHED_COLORS.menuFooter);
-    textSize(11);
+    smallTextSize(11);
     text(`Version: ${CONFIG.version}`, centerX, ch - 40);
   }
   
@@ -1675,7 +1823,7 @@ class Game {
       textSize(15);
       text("📊 Benchmark Run", bx + bw / 2, by + bh / 2);
       fill(140, 132, 172);
-      textSize(10);
+      smallTextSize(10);
       text("no tutorial · 10s samples · CSV", bx + bw / 2, by + bh + 12);
 
       this._benchBtnBounds = { x: bx, y: by, w: bw, h: bh };
@@ -1696,7 +1844,7 @@ class Game {
     }
 
     fill(CACHED_COLORS.menuFooter);
-    textSize(11);
+    smallTextSize(11);
     text(`Version: ${CONFIG.version}`, centerX, ch - 40);
 
     this._menuBtnBounds = { x: btnX, y: btnY, w: btnW, h: btnH };
@@ -1741,7 +1889,7 @@ class Game {
     text(plantDef.name, x, y + size * 0.8);
     textStyle(NORMAL);
     fill(CACHED_COLORS.menuText);
-    textSize(12);
+    smallTextSize(12);
     
     this._renderWrappedText(plantDef.description || "", x, y + size * 0.8 + 16, 140);
     pop();
@@ -1813,6 +1961,67 @@ class Game {
     pop();
   }
   
+  // Visuals for the touch-and-hold move: a filling progress ring while the
+  // press is held, then a dashed marker on the lifted item plus a validity
+  // ghost that follows the cursor until the drop click.
+  renderMovePreview() {
+    const hc = this._holdCandidate;
+    if (hc && hc.p.alive) {
+      const prog = constrain(hc.heldFrames / 60, 0, 1);
+      push();
+      translate(hc.p.pos.x, hc.p.pos.y);
+      noFill();
+      stroke(255, 255, 255, 90);
+      strokeWeight(3);
+      ellipse(0, 0, 34, 34);
+      stroke(180, 240, 200, 230);
+      arc(0, 0, 34, 34, -HALF_PI, -HALF_PI + prog * TWO_PI);
+      pop();
+      return;
+    }
+
+    const p = this.movingPlaceable;
+    if (!p || !p.alive) return;
+    const def = (this.activePlaceables && this.activePlaceables[p.type]) || p.def;
+
+    // Dashed ring on the item being moved
+    push();
+    translate(p.pos.x, p.pos.y);
+    noFill();
+    stroke(255, 255, 255, 120 + sin(frameCount * 0.15) * 60);
+    strokeWeight(2);
+    drawingContext.setLineDash([6, 6]);
+    ellipse(0, 0, 40, 40);
+    drawingContext.setLineDash([]);
+    pop();
+
+    // Cursor ghost with validity tint
+    if (!this.isInGameArea(mouseX, mouseY)) return;
+    const invZoom = 1 / CONFIG.viewZoom;
+    const tx = (mouseX - CONFIG.viewX) * invZoom;
+    const ty = (mouseY - CONFIG.viewY) * invZoom;
+    if (tx < 0 || tx > this.terrain.mapWidth || ty < 0 || ty > this.terrain.mapHeight) return;
+
+    const spacingCheck = this.canPlaceWithSpacing(tx, ty, p.type, p);
+    let biomeOk = true;
+    if (def.allowedBiomes) biomeOk = def.allowedBiomes.includes(this.terrain.getBiomeAt(tx, ty).key);
+    const ok = this.terrain.canPlace(tx, ty) && spacingCheck.allowed && biomeOk;
+
+    push();
+    translate(tx, ty);
+    noFill();
+    stroke(ok ? CACHED_COLORS.placementValid : CACHED_COLORS.placementInvalid);
+    strokeWeight(1);
+    ellipse(0, 0, def.radius * 2, def.radius * 2);
+    const col = def._parsedColor;
+    if (col) fill(red(col), green(col), blue(col), ok ? 150 : 80);
+    else fill(150, 200, 160, ok ? 150 : 80);
+    stroke(ok ? CACHED_COLORS.placementValidStrong : CACHED_COLORS.placementInvalidStrong);
+    strokeWeight(2);
+    ellipse(0, 0, 18, 18);
+    pop();
+  }
+
   renderPlacementPreview() {
     if (!this.isInGameArea(mouseX, mouseY)) return;
     
@@ -1935,9 +2144,21 @@ class Game {
     
     if (this.state !== GAME_STATE.PLAYING && this.state !== GAME_STATE.PAUSED) return;
 
-    if (this.isInGameArea(mx, my) && this.selectedPlaceable) {
+    if (this.isInGameArea(mx, my)) {
       const invZoom = 1 / CONFIG.viewZoom;
-      this.tryPlace((mx - CONFIG.viewX) * invZoom, (my - CONFIG.viewY) * invZoom);
+      const tx = (mx - CONFIG.viewX) * invZoom;
+      const ty = (my - CONFIG.viewY) * invZoom;
+
+      if (this.movingPlaceable) { this.tryDropMove(tx, ty); return; }
+      if (this.selectedPlaceable) { this.tryPlace(tx, ty); return; }
+
+      // Nothing selected: pressing near a placed item's center arms a
+      // touch-and-hold — held ~1s it becomes a move (see updateHoldToMove).
+      const held = this.simulation &&
+        this.simulation.getClosestPlaceable(tx, ty, 26, (pl) => pl.alive);
+      if (held) {
+        this._holdCandidate = { p: held, heldFrames: 0, startMX: mx, startMY: my };
+      }
     }
   }
   
@@ -1972,6 +2193,7 @@ class Game {
             ? GAME_STATE.PLAYING : GAME_STATE.PAUSED;
           break;
         case 'Escape':
+          this.cancelMove();
           this.cancelPlacement(); break;
         case 'h': case 'H':
           CONFIG.showHungerBars = !CONFIG.showHungerBars; break;
@@ -2124,7 +2346,7 @@ function draw() {
     let t2 = performance.now();
 
     fill(255);
-    textSize(10);
+    smallTextSize(10);
     text(`Update: ${(t1-t0).toFixed(1)}ms`, 85, 38);
     text(`Render: ${(t2-t1).toFixed(1)}ms`, 85, 52);
     text(`Canvas: ${CONFIG.canvasWidth}×${CONFIG.canvasHeight}`, 85, 70);
@@ -2151,7 +2373,7 @@ function renderFPSCounter() {
   rect(5, 5, 70, 20, 4);
   
   fill(currentFPS >= 55 ? [100, 255, 100] : (currentFPS >= 30 ? [255, 255, 100] : [255, 100, 100]));
-  textSize(12);
+  smallTextSize(12);
   textAlign(LEFT, CENTER);
   textFont('monospace');
   text(`FPS: ${currentFPS.toFixed(1)}`, 10, 15);

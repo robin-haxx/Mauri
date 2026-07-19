@@ -30,6 +30,19 @@ class HaastsEagle extends Boid {
     this.huntSearchTimeout = 300;
     this.lastTargetTime = 0;
     this._huntEventFired = false;
+
+    // Tutorial grace: while > 0 the bird still chases (so the threat reads on
+    // screen) but circles at reduced speed and cannot strike. Set by the
+    // eagle_hunting tutorial tip so a first-time player has a real window to
+    // select and place a storm/shelter after dismissing the tip. Ticks down
+    // only during hunts, i.e. only in unpaused play.
+    this.tutorialGraceTimer = 0;
+
+    // Strike windup: every fresh lock-on starts a short timer before a catch
+    // can land, so a moa (and the player) always gets a beat to react — even
+    // when the hunt begins at point-blank range.
+    this.huntWindupTimer = 0;
+    this.huntWindupDuration = 60;   // ~1 second @60fps
     
     // Hunger
     this.hunger = random(20, 25);
@@ -384,7 +397,11 @@ class HaastsEagle extends Boid {
   // ============================================
   
   hunt(simulation, mauri, dt = 1) {
-    this.maxSpeed = this.huntSpeed;
+    // Tutorial grace window (see constructor): chase slower than a fleeing moa
+    // (fleeSpeed 0.3) so the gap holds, and hold off the strike entirely.
+    const inGrace = this.tutorialGraceTimer > 0;
+    if (inGrace) this.tutorialGraceTimer = Math.max(0, this.tutorialGraceTimer - dt);
+    this.maxSpeed = inGrace ? this.baseSpeed * 0.6 : this.huntSpeed;
     
     const nearbyMoas = simulation.getNearbyMoas(this.pos.x, this.pos.y, this.huntRadius);
     
@@ -437,20 +454,26 @@ class HaastsEagle extends Boid {
       this.huntSearchTimer = 0;
       this.lastTargetTime = frameCount;
 
+      // Fresh lock-on: arm the strike windup (see constructor) so the catch
+      // can't land in the very first moments of a hunt.
+      if (hadNoTarget) this.huntWindupTimer = this.huntWindupDuration;
+
       if (hadNoTarget && !this._huntEventFired) {
         simulation.onEagleStartHunt(this, this.target);
         this._huntEventFired = true;
         if (audioManager) audioManager.playEagleHunt();
       }
-      
+
       // Pursue with prediction
       this._targetVec.set(
         nearestMoa.pos.x + nearestMoa.vel.x * 12,
         nearestMoa.pos.y + nearestMoa.vel.y * 12
       );
       this.applyForce(this.seek(this._targetVec, 1.4));
-      
-      if (nearestDistSq < this.catchRadiusSq) {
+
+      if (this.huntWindupTimer > 0) this.huntWindupTimer -= dt;
+
+      if (nearestDistSq < this.catchRadiusSq && !inGrace && this.huntWindupTimer <= 0) {
         simulation.handleEagleCatch(this, nearestMoa, mauri);
       }
     } else {
@@ -721,6 +744,14 @@ class HaastsEagle extends Boid {
       textSize(7);
       textAlign(CENTER, CENTER);
       text("?", this.pos.x, this.pos.y - this.wingspan - 5);
+    } else if (this.tutorialGraceTimer > 0 && this.hunting) {
+      // Telegraphed strike during the tutorial grace window — marks which
+      // bird the player should drop the storm on.
+      fill(255, 120, 80);
+      noStroke();
+      textSize(8);
+      textAlign(CENTER, CENTER);
+      text("!", this.pos.x, this.pos.y - this.wingspan - 5);
     } else if (this.state === 'relocating') {
       fill(150, 200, 255);
       noStroke();

@@ -18,7 +18,7 @@ function preload(){
   OpenDyslexic = loadFont('typefaces/OpenDyslexic.ttf');
   GroceryRounded = loadFont('typefaces/GroceryRounded.ttf');
   
-  const spritePlants = ['Tussock', 'Flax', 'Fern', 'Rimu', 'Beech', 'Patotara', 'Lancewood'];
+  const spritePlants = ['Tussock', 'Flax', 'Fern', 'Rimu', 'Beech', 'Patotara', 'Lancewood', 'Speargrass'];
   const states = ['Mature', 'Thriving', 'Wilting', 'Dormant'];
   
   for (const plant of spritePlants) {
@@ -455,6 +455,7 @@ const PLACEABLES = {
     description: "Spiny herb the upland moa favour",
     cost: 30,
     icon: '🌵',
+    iconSprite: 'Speargrass.png',
     color: '#8f9a55',
     effect: 'feeding',
     radius: 40,

@@ -910,11 +910,8 @@ class GameUI {
       noStroke();
       ellipse(0, 0, 36, 36);
 
-      // Icon
-      fill(255, 255, 255, canAfford ? 240 : 100);
-      textSize(20);
-      textAlign(CENTER, CENTER);
-      text(def.icon, 0, 0);
+      // Icon (origin is already the centre of the icon circle)
+      this.renderPlaceableIcon(def, 0, 0, 30, 20, canAfford ? 240 : 100);
 
       // Storm recharge: clock-style sweep over the icon circle. The shaded
       // wedge covers the remaining cooldown and its edge advances clockwise
@@ -951,6 +948,27 @@ class GameUI {
 
       i++;
     }
+  }
+
+  // Draws a placeable's palette icon centred on (cx, cy): pixel art when the
+  // definition names an `iconSprite`, otherwise the emoji glyph. spriteSize and
+  // glyphSize are separate because the art fills more of the circle than text.
+  renderPlaceableIcon(def, cx, cy, spriteSize, glyphSize, alpha = 255) {
+    const sprite = def.iconSprite ? placeableSprites.icons[def.iconSprite] : null;
+
+    if (sprite && sprite.width > 0) {
+      push();
+      imageMode(CENTER);
+      tint(255, alpha);
+      image(sprite, cx, cy, spriteSize, spriteSize);
+      pop();
+      return;
+    }
+
+    fill(255, 255, 255, alpha);
+    textSize(glyphSize);
+    textAlign(CENTER, CENTER);
+    text(def.icon, cx, cy);
   }
 
   renderToolTooltip(x, y, def) {
@@ -1006,10 +1024,7 @@ class GameUI {
     fill(red(iconCol), green(iconCol), blue(iconCol));
     noStroke();
     ellipse(adjustedX + 35, y + 35, 40, 40);
-    textSize(22);
-    fill(255);
-    textAlign(CENTER, CENTER);
-    text(def.icon, adjustedX + 35, y + 35);
+    this.renderPlaceableIcon(def, adjustedX + 35, y + 35, 34, 22);
 
     // Name and cost
     fill(200, 240, 210);

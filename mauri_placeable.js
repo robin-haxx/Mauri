@@ -5,6 +5,7 @@ let placeableSprites = {
   cloud1: null,
   cloud2: null,
   bolt: null,
+  icons: {},
   loaded: false
 };
 
@@ -12,6 +13,21 @@ function loadPlaceableSprites() {
   placeableSprites.cloud1 = loadImage('sprites/cloud1.png');
   placeableSprites.cloud2 = loadImage('sprites/cloud2.png');
   placeableSprites.bolt = loadImage('sprites/bolt.png');
+
+  // Palette icons, keyed by filename. Any placeable whose definition names an
+  // `iconSprite` renders pixel art in the toolbar; the emoji glyph stays as the
+  // fallback for placeables that have no art yet.
+  placeableSprites.icons = {};
+  for (const key in PLACEABLES) {
+    const file = PLACEABLES[key].iconSprite;
+    if (!file || placeableSprites.icons[file]) continue;
+    placeableSprites.icons[file] = loadImage(
+      `sprites/${file}`,
+      () => {},
+      () => console.warn(`Could not load placeable icon ${file}`)
+    );
+  }
+
   placeableSprites.loaded = true;
 }
 

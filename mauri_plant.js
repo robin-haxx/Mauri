@@ -19,7 +19,7 @@ const PLANT_TYPE_ID = {
 };
 
 // Plants that use sprite rendering
-const SPRITE_PLANTS = new Set(['tussock', 'flax', 'fern', 'rimu', 'beech', 'patotara', 'lancewood']);
+const SPRITE_PLANTS = new Set(['tussock', 'flax', 'fern', 'rimu', 'beech', 'patotara', 'lancewood', 'speargrass']);
 
 // Forest canopy trees subject to seasonal forest-band contraction
 const FOREST_TREES = new Set(['beech', 'rimu', 'fern']);

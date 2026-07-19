@@ -36,7 +36,8 @@ class AudioManager {
       plantRustle: 15,      // ~0.25 seconds
       mateCheep: 60,        // ~1 second
       eagleHunt: 120,       // ~2 seconds
-      tutorialTip: 30       // ~0.5 seconds
+      tutorialTip: 30,      // ~0.5 seconds
+      moaCall: 45           // ~0.75 seconds (click-spam guard)
     };
     
     // Track currently playing sounds for management
@@ -296,6 +297,16 @@ class AudioManager {
    */
   playMoaMilestone() {
     this._playSound(this.sounds.moaMilestone, this._getVolume() * 0.7);
+  }
+
+  /**
+   * Play a moa call — used when a species name is clicked in the population
+   * panel / fullscreen focus buttons. Reuses the milestone vocalisation;
+   * swap the sample here if a dedicated call recording is added later.
+   */
+  playMoaCall() {
+    if (!this._checkCooldown('moaCall')) return;
+    this._playSound(this.sounds.moaMilestone, this._getVolume() * 0.55);
   }
   
   /**

@@ -55,6 +55,24 @@ class PlaceableObject {
     if (this.type === 'Storm') {
       this._initThunderstorm();
     }
+
+    // Shelter-specific: the fern canopy grows in like a planted tree rather
+    // than appearing full-size. Fixed layout with slight per-placement
+    // variation; each frond starts staggered a little behind the last.
+    if (this.type === 'shelter') {
+      this._fernGrowth = 0;   // 0..1, ticks up in update()
+      this._ferns = [
+        { x: -14, y: -13, rot: -0.3, s: 32, delay: 0.00 },
+        { x:  15, y: -11, rot:  0.4, s: 30, delay: 0.15 },
+        { x:   0, y:  17, rot:  0.1, s: 34, delay: 0.30 },
+        { x: -13, y:  13, rot: -0.5, s: 28, delay: 0.45 }
+      ];
+      for (const f of this._ferns) {
+        f.x += random(-2, 2);
+        f.y += random(-2, 2);
+        f.rot += random(-0.1, 0.1);
+      }
+    }
   }
   
   // ============================================
@@ -242,6 +260,12 @@ class PlaceableObject {
     if (this.type === 'Storm' && this.clouds) {
       this._updateThunderstorm(dt);
     }
+
+    // Fern canopy grow-in — paced like a fern plant maturing (PLANT_TYPES
+    // fern growthTime = 240). Purely visual; the shelter protects instantly.
+    if (this.type === 'shelter' && this._fernGrowth < 1) {
+      this._fernGrowth = Math.min(1, this._fernGrowth + dt / 240);
+    }
   }
   
   // ============================================
@@ -344,6 +368,10 @@ class PlaceableObject {
       for (const plant of this.spawnedPlants) plant.alive = false;
       this.spawnedPlants = [];
       this.spawnPlantsInRadius();
+    }
+    // A transplanted fern canopy re-roots: set the grow-in back partway
+    if (this.type === 'shelter' && this._fernGrowth !== undefined) {
+      this._fernGrowth = Math.min(this._fernGrowth, 0.5);
     }
   }
 
@@ -489,29 +517,29 @@ class PlaceableObject {
         break;
         
       case 'shelter': {
-        // Render a few fern sprites for natural canopy look
+        // Render the fern canopy, growing in like planted trees: each frond
+        // eases from a sprout to full size on its own staggered schedule.
         const fernSprite = plantSprites.fern?.mature;
-        if (fernSprite) {
+        if (fernSprite && this._ferns) {
           imageMode(CENTER);
-          
-          // 3-4 overlapping ferns at slight offsets and rotations
-          const ferns = [
-            { x: -14, y: -13, rot: -0.3, s: 32 },
-            { x:  15, y: -11, rot:  0.4, s: 30 },
-            { x:  0, y:  17, rot:  0.1, s: 34 },
-            { x: -13, y:  13, rot: -0.5, s: 28 }
-          ];
-          
-          for (const f of ferns) {
+
+          const g = this._fernGrowth !== undefined ? this._fernGrowth : 1;
+          for (const f of this._ferns) {
+            // Per-frond progress: 0 until its stagger delay passes, then 0..1
+            const p = constrain((g - f.delay) / (1 - f.delay), 0, 1);
+            if (p <= 0) continue;
+            const ease = 1 - Math.pow(1 - p, 3);        // easeOutCubic, like a shoot slowing as it matures
+            const s = f.s * (0.15 + 0.85 * ease);       // sprout at 15%, grow to full
+
             push();
             translate(f.x, f.y);
             rotate(f.rot);
-            image(fernSprite, 0, 0, f.s, f.s);
+            image(fernSprite, 0, 0, s, s);
             pop();
           }
-          
+
           noTint();
-        } 
+        }
         break;
       }
         

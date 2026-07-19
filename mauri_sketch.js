@@ -821,9 +821,14 @@ class Game {
     this.tutorial.setGuideSprite(
       this._getGuideSprite(this.currentLevel.tutorial?.guideSprite)
     );
-    if (this.currentLevel.tutorial?.tips){
-      this.tutorial.setLevelTips(this.currentLevel.tutorial.tips);
-    }
+    // Tip-script resolution: an inline levelDef override wins, else the
+    // script registered for this level id, else the shared 'default' script.
+    // Per-level scripts live in levels/tutorial_*.js (see TUTORIAL_REGISTRY).
+    this.tutorial.setLevelTips(
+      this.currentLevel.tutorial?.tips ||
+      TUTORIAL_REGISTRY.get(this.currentLevel.id) ||
+      TUTORIAL_REGISTRY.get('default')
+    );
     if (BENCHMARK.pending) this.tutorial.enabled = false;   // benchmark runs clean
     this.tutorial.init();
 
@@ -977,7 +982,7 @@ class Game {
     if (this.currentLevel && this.currentLevel.endMessage) return this.currentLevel.endMessage;
     const goals = this.goals || [];
     const allDone = goals.length > 0 && goals.every(g => g.achieved);
-    return allDone ? "All goals achieved!" : "Your watch as kaitiaki is complete!";
+    return allDone ? "All goals achieved!" : "";
   }
 
   // Snapshot passed to the (per-level tunable) score formula. See

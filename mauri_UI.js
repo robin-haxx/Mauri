@@ -1362,6 +1362,8 @@ class GameUI {
     if (typeof SPECIES_HIGHLIGHT === 'undefined') return;
     if (SPECIES_HIGHLIGHT.has(key)) SPECIES_HIGHLIGHT.delete(key);
     else SPECIES_HIGHLIGHT.add(key);
+    // The species answers when named — a moa call on every toggle
+    if (audioManager) audioManager.playMoaCall();
   }
 
   renderStatItem(x, y, icon, label, value, col) {

@@ -117,6 +117,9 @@ class TutorialUIMapper {
       case 'pauseButton':
         if (fs) return { x: fs.pauseBtnX, y: fs.btnY, w: fs.btnSize, h: fs.btnSize };
         return { x: layout.pauseBtnX, y: layout.pauseBtnY, w: layout.pauseBtnSize, h: layout.pauseBtnSize };
+      case 'fullscreenButton':
+        if (fs) return { x: fs.fsBtnX, y: fs.btnY, w: fs.btnSize, h: fs.btnSize };
+        return { x: layout.fsBtnX, y: layout.pauseBtnY, w: layout.pauseBtnSize, h: layout.pauseBtnSize };
       case 'migrationHint':
         // Not shown in fullscreen — anchor to the HUD strip instead
         if (fs) return { x: fs.mauriX, y: fs.stripY, w: 590, h: 70 };

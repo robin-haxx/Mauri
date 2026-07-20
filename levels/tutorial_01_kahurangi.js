@@ -122,12 +122,28 @@ const TIPS = {
     ],
     guidePosition: 'bottomLeft',
     highlight: { type: 'element', target: 'toolbar' },
+    nextTip: 'ui_fullscreen',
+    pauseGame: true,
+    showOnce: true,
+    priority: 0
+  },
+
+  ui_fullscreen: {
+    id: 'ui_fullscreen',
+    trigger: { type: TRIGGER_TYPE.IMMEDIATE },
+    title: "Going Full-Screen!",
+    content: [
+      "For a focused view, you can enter full-screen mode.",
+      "Try it now by pressing this button or the F key!"
+    ],
+    guidePosition: 'topRight',
+    highlight: { type: 'element', target: 'fullscreenButton' },
     nextTip: 'intro_complete',
     pauseGame: true,
     showOnce: true,
     priority: 0
   },
-  
+
   intro_complete: {
     id: 'intro_complete',
     trigger: { type: TRIGGER_TYPE.IMMEDIATE },
@@ -201,6 +217,9 @@ const TIPS = {
     },
     guidePosition: 'bottomRight',
     highlight: null,
+    // Re-draw the hunting eagle above the dark overlay, flashing white,
+    // so "click on the hunting eagle" points at an unmissable bird.
+    spotlightHuntingEagle: true,
     guidedPlaceable: 'Storm',
     nextTip: null,
     pauseGame: true,
@@ -244,7 +263,10 @@ const TIPS = {
     trigger: {
       type: TRIGGER_TYPE.EVENT,
       event: TUTORIAL_EVENTS.PLACEMENT,
-      condition: (game) => !tutorialGuidedWindowActive(game)
+      // Storms don't count: they're transient, and the move mechanic this
+      // tip teaches doesn't apply to them.
+      condition: (game, data) =>
+        !tutorialGuidedWindowActive(game) && !(data && data.type === 'Storm')
     },
     title: "Giving back the forest's excess Mauri to Tāne!",
     content: [
@@ -495,7 +517,7 @@ const TIPS = {
   
   waterhole_tip: {
     id: 'waterhole_tip',
-    trigger: { type: TRIGGER_TYPE.TIME, delay: 3600 },
+    trigger: { type: TRIGGER_TYPE.TIME, delay: 7600 },
     title: "Waterholes",
     content: [
       "Waterholes [💧] slow down hunger",

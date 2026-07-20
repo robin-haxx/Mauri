@@ -78,7 +78,7 @@ const LEVEL_KAHURANGI = {
   // One spawned founder eagle; the emergent-eagle system adds an opposite-sex
   // founder egg at a crag eyrie (~30s hatch), completing the breeding pair.
   initialEntityCounts: {
-    moa: 7,
+    moa: 6,
     eagle: 1
   },
 
@@ -107,7 +107,7 @@ const LEVEL_KAHURANGI = {
     emergentEagles: true,
     eagleTargetRatio: 1 / 4,      // ← the main knob: ~one eagle per eight moa
     eagleMaxPopulation: 8,        // hard safety cap on total eagles
-    eagleHungerRate: 0.02,        // how fast an unfed eagle's hunger climbs
+    eagleHungerRate: 0.03,        // how fast an unfed eagle's hunger climbs
     eagleStarveThreshold: 90,     // hunger above this accrues starvation
     eagleStarveTimeout: 2400,     // ticks of sustained starvation before death
     eagleReproChance: 0.4,        // base lay chance at full breeding pressure
@@ -133,9 +133,24 @@ const LEVEL_KAHURANGI = {
   // The level runs to a fixed 4:00 end (timeLimit below); goals are rewards
   // along the way, not the win condition. The population goal is a bonus.
   timeLimit: 14400,   // 4 minutes @ 60fps
+
+  // Losing the Upland Moa is losing the level: hatch mutations can spawn
+  // cousin species, but they can't carry the sim to a win on their own.
+  // Grace period while an upland-line egg (parentSpecies upland or unset,
+  // which hatches upland by default) is still incubating.
+  fail: (sim) => {
+    if (sim.getCachedSpeciesCount('upland_moa') > 0) return false;
+    for (let i = 0; i < sim.eggs.length; i++) {
+      const e = sim.eggs[i];
+      if (e.alive && !e.hatched && e.offspringType !== 'eagle' &&
+          (!e.parentSpecies || e.parentSpecies === 'upland_moa')) return false;
+    }
+    return true;
+  },
+  failReason: "The Upland Moa vanished from Kahurangi...",
   goals: [
-    { name: "Hatch 5 eggs",                condition: (sim) => sim.stats.births >= 5, reward: 50 },
-    { name: "Hatch 10 eggs",               condition: (sim) => sim.stats.births >= 10, reward: 50 },
+    { name: "Hatch 5 Upland Moa",          condition: (sim) => (sim.stats.birthsBySpecies['upland_moa'] || 0) >= 5, reward: 50 },
+    { name: "Hatch 15 Upland Moa",         condition: (sim) => (sim.stats.birthsBySpecies['upland_moa'] || 0) >= 15, reward: 50 },
     { name: "Reach 2 minutes",             condition: (sim, game) => game.playTime >= 7200, reward: 50 },
     { name: "Reach 3 minutes",             condition: (sim, game) => game.playTime >= 10800, reward: 100 },
     { name: "BONUS: Have 30 Moa before 4:00", condition: (sim, game) => game._cachedMoaCount >= 30, reward: 100 }

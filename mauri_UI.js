@@ -915,6 +915,20 @@ class GameUI {
       textSize(20);
       textAlign(CENTER, CENTER);
       text(def.icon, 0, 0);
+
+      // Storm recharge: clock-style sweep over the icon circle. The shaded
+      // wedge covers the remaining cooldown and its edge advances clockwise
+      // from 12 o'clock until the storm is ready again.
+      if (type === 'Storm') {
+        const cdRemaining = (this.game._stormCooldownUntil || 0) - this.game.playTime;
+        if (cdRemaining > 0) {
+          const cdTotal = this.game._stormCooldownDuration || 600;
+          const elapsed = constrain(1 - cdRemaining / cdTotal, 0, 1);
+          fill(15, 20, 25, 170);
+          noStroke();
+          arc(0, 0, 36, 36, -HALF_PI + elapsed * TWO_PI, -HALF_PI + TWO_PI, PIE);
+        }
+      }
       pop();
 
       // Cost
@@ -1302,13 +1316,15 @@ class GameUI {
     // Average Hunger Bar
     if (aliveMoas.length > 0) {
       const avgHunger = aliveMoas.reduce((sum, m) => sum + m.hunger, 0) / aliveMoas.length;
+      // Bar shows food security (fullness = how well fed the herd is)
+      const avgFed = 100 - avgHunger;
 
       fill(140, 160, 150);
       smallTextSize(12);
       textAlign(LEFT, TOP);
-      text(`Avg hunger: ${avgHunger.toFixed(0)}%`, col1X, statY);
+      text(`Avg fed: ${avgFed.toFixed(0)}%`, col1X, statY);
 
-      // Hunger bar (adapts to panel width; sits under the small label)
+      // Fed bar (adapts to panel width; sits under the small label)
       const barW = panelWidth - 30;
       const barY = statY + 16 + SMALL_TEXT_BUMP;
 
@@ -1316,18 +1332,25 @@ class GameUI {
       noStroke();
       rect(col1X, barY, barW, 8, 4);
 
-      // Color based on hunger level
-      const hr = avgHunger < 30 ? 100 : (avgHunger < 60 ? 200 : 220);
-      const hg = avgHunger < 30 ? 200 : (avgHunger < 60 ? 200 : 100);
-      const hb = avgHunger < 30 ? 100 : (avgHunger < 60 ? 100 : 100);
+      // Color based on food security: green when fed, red when low
+      let hr = avgFed > 70 ? 100 : (avgFed > 40 ? 200 : 220);
+      let hg = avgFed > 70 ? 200 : (avgFed > 40 ? 200 : 100);
+      let hb = 100;
+      // Under 1/4 fed: pulse the bar red as an extra warning
+      if (avgFed < 25) {
+        const _pulse = 0.5 + 0.5 * Math.sin(frameCount * 0.12);
+        hr = 180 + _pulse * 75;
+        hg = 60 + _pulse * 40;
+        hb = 60;
+      }
       fill(hr, hg, hb);
-      rect(col1X, barY, barW * (avgHunger / 100), 8, 4);
+      rect(col1X, barY, barW * (avgFed / 100), 8, 4);
 
-      // Hunger level text
+      // Fed level text
       fill(120, 140, 130);
       smallTextSize(8);
       textAlign(RIGHT, TOP);
-      const hungerStatus = avgHunger < 30 ? 'Well Fed' : (avgHunger < 60 ? 'Hungry' : 'Starving!');
+      const hungerStatus = avgFed > 70 ? 'Well Fed' : (avgFed > 40 ? 'Hungry' : 'Starving!');
       text(hungerStatus, col1X + barW, statY);
     } else {
       fill(150, 100, 100);

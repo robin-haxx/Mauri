@@ -946,6 +946,17 @@ class Game {
       if (audioManager) audioManager.playLoss();
     }
 
+    // Level-wide fail condition: the non-phased counterpart of a phase's
+    // `fail` hook. Lets a level lose on conditions the generic all-moa check
+    // misses — e.g. level 1's focal Upland Moa dying out while mutated
+    // cousin species carry the headcount.
+    if (this.state === GAME_STATE.PLAYING && this.currentLevel &&
+        this.currentLevel.fail && this.currentLevel.fail(this.simulation, this)) {
+      this.state = GAME_STATE.LOST;
+      this.gameOverReason = this.currentLevel.failReason || "A population you were protecting died out.";
+      if (audioManager) audioManager.playLoss();
+    }
+
     // Eagle extinction (emergent-eagle levels): the apex predator dying out is a
     // loss. A grace period holds while an eagle egg is still incubating.
     if (this.state === GAME_STATE.PLAYING &&
@@ -1323,7 +1334,10 @@ class Game {
     
     this.simulation.addPlaceable(x, y, this.selectedPlaceable);
     BENCHMARK.recordPlacement(this.selectedPlaceable);
-    if (this.selectedPlaceable === 'Storm') this._stormCooldownUntil = this.playTime + 600; // 10s @60fps
+    if (this.selectedPlaceable === 'Storm') {
+      this._stormCooldownDuration = 600;   // 10s @60fps (UI reads this for the cooldown sweep)
+      this._stormCooldownUntil = this.playTime + this._stormCooldownDuration;
+    }
     this.addNotification(`Placed ${def.name}`, 'info');
     if (this.tutorial) {
       this.tutorial.fireEvent(TUTORIAL_EVENTS.PLACEMENT, { type: this.selectedPlaceable });
@@ -1410,12 +1424,16 @@ class Game {
         strokeColor: [70, 110, 80]
       });
     } else if (this.state === GAME_STATE.WON) {
+      // "Thriving" is reserved for a full-clear; a win with unmet goals is
+      // merely "balanced". (_goalsTally() also lazily fills _goalsTotal.)
+      const goalsTally = this._goalsTally();
+      const allGoalsMet = (this._goalsCompleted || 0) >= this._goalsTotal;
       this._renderOverlay(...CONFIG.col_UI.slice(0,3), 150, {
-        title: "ECOSYSTEM THRIVING!",
+        title: allGoalsMet ? "ECOSYSTEM THRIVING!" : "ECOSYSTEM BALANCED",
         titleColor: [180, 255, 180],
         lines: [
           { text: this._endMessage(), color: [150, 220, 150], size: 18 },
-          { text: this._goalsTally(), color: [150, 220, 150], size: 14 },
+          { text: goalsTally, color: [150, 220, 150], size: 14 },
           { text: `Final population: ${this._cachedMoaCount} moa`, color: [120, 180, 120], size: 14 },
           { text: `Total mauri earned: ${this.mauri.totalEarned | 0}`, color: [120, 180, 120], size: 14 },
           { text: `Time elapsed: ${(this.playTime / 60) | 0} seconds`, color: [120, 180, 120], size: 14 },
@@ -1458,6 +1476,13 @@ class Game {
           this.tutorial.currentTip.ringsAboveUI) {
         this.renderVulnerableRingsAboveUI();
       }
+      // Tips flagged spotlightHuntingEagle (e.g. "Drop It on the Eagle!")
+      // re-draw the hunting eagle's sprite above the overlay, flashing white,
+      // so the player knows exactly which bird to storm.
+      if (this.tutorial.active && this.tutorial.currentTip &&
+          this.tutorial.currentTip.spotlightHuntingEagle) {
+        this.renderHuntingEagleAboveUI();
+      }
     }
   }
 
@@ -1484,6 +1509,30 @@ class Game {
       m._highlightActive =
         this.simulation.getCachedSpeciesCount(m.speciesKey) < m._vhl.until;
       m.renderLowPopRing();
+    }
+
+    drawingContext.restore();
+    pop();
+  }
+
+  // Re-draws hunting eagles' sprites in world space, above the tutorial
+  // overlay, with a pulsing white flash (same clip + view transform as the
+  // main game-area pass). Used by tips flagged spotlightHuntingEagle.
+  renderHuntingEagleAboveUI() {
+    push();
+    drawingContext.save();
+    drawingContext.beginPath();
+    const _clipW = CONFIG.fullscreen ? this.terrain.mapWidth * CONFIG.viewZoom : CONFIG.gameAreaWidth;
+    const _clipH = CONFIG.fullscreen ? this.terrain.mapHeight * CONFIG.viewZoom : CONFIG.gameAreaHeight;
+    drawingContext.rect(CONFIG.viewX, CONFIG.viewY, _clipW, _clipH);
+    drawingContext.clip();
+    translate(CONFIG.viewX, CONFIG.viewY);
+    scale(CONFIG.viewZoom);
+
+    const eagles = this.simulation.eagles;
+    for (let i = 0; i < eagles.length; i++) {
+      const e = eagles[i];
+      if (e.alive !== false && e.hunting) e.renderSpotlight();
     }
 
     drawingContext.restore();

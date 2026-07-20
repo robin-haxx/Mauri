@@ -22,7 +22,7 @@ const MOA_SPECIES = {
     
     // Movement
     baseSpeed: 0.16,
-    fleeSpeed: 0.3,
+    fleeSpeed: 0.24,
     maxForce: 0.02,
     
     // Survival
@@ -32,8 +32,8 @@ const MOA_SPECIES = {
     criticalHunger: 80,
     
     // Reproduction
-    eggCooldownTime: 900,
-    securityTimeBase: 450,
+    eggCooldownTime: 1100,
+    securityTimeBase: 550,
     securityTimeVariation: 300,
     
     // Habitat preferences

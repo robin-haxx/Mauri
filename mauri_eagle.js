@@ -712,6 +712,32 @@ class HaastsEagle extends Boid {
   // RENDERING
   // ============================================
   
+  // Tutorial spotlight: re-draws this bird's sprite with a pulsing white
+  // flash. Called above the tutorial's dark overlay (renderHuntingEagleAboveUI
+  // in mauri_sketch.js) so the player can spot the hunting eagle while the
+  // "Drop It on the Eagle!" tip is up.
+  renderSpotlight() {
+    const isActiveHunt = this.hunting && this.target !== null;
+    const spriteState = isActiveHunt ? 'hunting' : (this.state === 'resting' ? 'resting' : 'flying');
+    const sprite = EntitySprites.getEagleSprite(this.animTime, spriteState);
+    if (!sprite) return;
+
+    const _pulse = 0.5 + 0.5 * Math.sin(frameCount * 0.12);
+    push();
+    translate(this.pos.x, this.pos.y);
+    rotate(this._displayAngle || 0);
+    if (SpriteAngle.shouldMirror(this._displayAngle || 0)) scale(-1, 1);
+    imageMode(CENTER);
+    const w = this.wingspan * 2.8, h = this.wingspan * 2.1;
+    image(sprite, 0, 0, w, h);        // the bird itself, above the overlay
+    blendMode(ADD);                   // additive second pass = white-hot pulse
+    tint(255, 90 + _pulse * 165);
+    image(sprite, 0, 0, w, h);
+    noTint();
+    blendMode(BLEND);
+    pop();
+  }
+
   render() {
     const isActiveHunt = this.hunting && this.target !== null;
     const spriteState = isActiveHunt ? 'hunting' : (this.state === 'resting' ? 'resting' : 'flying');

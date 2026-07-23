@@ -558,7 +558,7 @@ const PLANT_TYPES = {
     description: "Tawhai: produces mast seed in good years" },
   kawakawa: { name: "Kawakawa", nutrition: 40, color: '#3d9a5e', size: 22, growthTime: 150,
     description: "Heart-shaped leaves with peppery fruit" },
-  patotara: { name: "Patotara", nutrition: 35, color: '#c94c5a', size: 28, growthTime: 160,
+  patotara: { name: "Pātōtara", nutrition: 35, color: '#c94c5a', size: 28, growthTime: 160,
     description: "Alpine shrub with summer berries" },
 
   // --- Glacial-flora (LGM) additions. Procedural blob-rendered (no sprites yet). ---
@@ -1846,33 +1846,32 @@ class Game {
     text(menu.subtitle || "A New Zealand Ecosystem Strategy Game",
          centerX, centerY - 240);
 
-    // Plants — from level def (responsive spacing)
+    // Plants — from level def, arranged in two vertical columns (one each side
+    // of the featured species) so their descriptions stack vertically instead
+    // of colliding horizontally, keeping the central level info uncluttered.
     const displayPlants = menu.displayPlants || [];
     const plantY = centerY - 80;
     const spriteSize = 64;
-
-    // Calculate plant spacing that adapts to canvas width
-    const maxPlantAreaWidth = cw - 200;  // padding on each side
-    const plantCount = displayPlants.length - 1; // minus featured species in center
-    const baseSpacing = 180;
-    const plantSpacing = Math.min(baseSpacing, maxPlantAreaWidth / (plantCount + 2));
 
     const midpoint = Math.ceil(displayPlants.length / 2);
     const leftPlants = displayPlants.slice(0, midpoint - 1);
     const rightPlants = displayPlants.slice(midpoint);
 
-    for (let i = 0; i < leftPlants.length; i++) {
-      this._renderMenuPlant(
-        centerX - 250 - (leftPlants.length - 1 - i) * plantSpacing,
-        plantY, leftPlants[i], spriteSize
-      );
-    }
-    for (let i = 0; i < rightPlants.length; i++) {
-      this._renderMenuPlant(
-        centerX + 250 + i * plantSpacing,
-        plantY, rightPlants[i], spriteSize
-      );
-    }
+    // Vertical spacing per plant; shrinks so taller columns still fit the band.
+    const maxCol = Math.max(leftPlants.length, rightPlants.length, 1);
+    const rowSpacing = Math.min(150, 360 / Math.max(1, maxCol - 1));
+    const colCenterY = centerY - 40;
+    const leftColX = cw * 0.16;
+    const rightColX = cw * 0.84;
+
+    const placeColumn = (plants, colX) => {
+      const firstY = colCenterY - (plants.length - 1) * rowSpacing / 2;
+      for (let i = 0; i < plants.length; i++) {
+        this._renderMenuPlant(colX, firstY + i * rowSpacing, plants[i], spriteSize);
+      }
+    };
+    placeColumn(leftPlants, leftColX);
+    placeColumn(rightPlants, rightColX);
 
     // Featured species — from level def
     const featured = menu.featuredSpecies;
@@ -1951,7 +1950,7 @@ class Game {
     fill(CACHED_COLORS.menuText);
     noStroke();
     smallTextSize(12);
-    text("Terrain resolution", centerX, sliderY + 4);
+    text("[TERRAIN RESOLUTION]", centerX, sliderY + 4);
 
     // Track
     stroke(CACHED_COLORS.btnStroke);

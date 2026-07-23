@@ -164,12 +164,15 @@ const LEVEL_GLACIAL_KAHURANGI = {
 
   // Favoured, browse-resistant plants occupy the first two palette slots.
   availablePlaceables: {
+    // Plants
     lancewood: { cost: 30 },   // slot 1 — bush moa (emeid)
     speargrass: { cost: 30 },  // slot 2 — upland moa (Megalapteryx)
-    nest:      { cost: 55 },
-    shelter:   { cost: 35 },
-    Storm:     { cost: 40 },
-    waterhole: { cost: 35 }
+    // Habitat items
+    shelter:   { cost: 35 },   // slot 3
+    nest:      { cost: 55 },   // slot 4
+    waterhole: { cost: 35 },   // slot 5
+    // Storm
+    Storm:     { cost: 40 }    // slot 6
   },
 
   // Opt-in gameplay mechanics (read by mauri_moa.js / mauri_plant.js /

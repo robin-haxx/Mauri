@@ -49,7 +49,7 @@ const TIPS = {
       "And this hardy 'clade' adapted well to Kahurangi.",
       "But, now the glaciations are getting more severe.", 
       "If we don’t step in to defend them, they'll be lost... ",
-      "to hunger, or over-hunting by the mighty Pouakai!",
+      "to hunger, or over-hunting by the mighty Pouākai!",
       
     ],
     guidePosition: 'center',
@@ -142,7 +142,7 @@ const TIPS = {
   ui_fullscreen: {
     id: 'ui_fullscreen',
     trigger: { type: TRIGGER_TYPE.IMMEDIATE },
-    title: "Going Full-Screen!",
+    title: "Going Full-Screen",
     content: [
       "For a focused view, you can enter full-screen mode.",
       "Try it now by pressing this button or the F key!"
@@ -226,7 +226,7 @@ const TIPS = {
     title: "Drop It on the Eagle!",
     content: [
       "Now, while time is paused, click on the hunting eagle.",
-      "You'll have to think fast to prevent the strike of a hungry Pouakai!",
+      "You'll have to think fast to prevent the strike of a hungry Pouākai!",
 
     ],
     // Timestamp for the follow-up shelter tip ("a few seconds later").
@@ -412,11 +412,11 @@ const TIPS = {
       type: TRIGGER_TYPE.EVENT, 
       event: TUTORIAL_EVENTS.EAGLE_SPAWNED 
     },
-    title: "A New Predator Arrives",
+    title: "That's another Eagle!",
     content: [
       "The Moa population is starting to thrive! But be wary..",
       "Haast's Eagle evolved gigantism with Moa, to eat 'em!",
-      "Knowing these sorts of relationships between flora and fauna is what makes a true eco-steward."
+      "As predator and prey, they balance each other out -- but keep focused on your Upland Moa if you want them to thrive in this dicey situation!"
     ],
     guidePosition: 'center',
     highlight: null,
@@ -555,7 +555,7 @@ const TIPS = {
     content: [
       "Upland moa can feed in cold regions during summer,",
       "and migrate as the mosaic shifts with the seasons.",
-      "There is plenty of juicy patotara uphill for now...",
+      "There is plenty of juicy pātōtara uphill for now...",
       "But it will become scarce when winter arrives!"
     ],
     guidePosition: 'bottomLeft',

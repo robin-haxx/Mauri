@@ -122,12 +122,15 @@ const LEVEL_KAHURANGI = {
   },
 
   availablePlaceables: {
-    kawakawa:  { cost: 25 },
-    shelter:   { cost: 40 },
-    nest:      { cost: 50 },
-    Storm:     { cost: 35 },
-    waterhole: { cost: 45 },
-    harakeke:  { cost: 30 }
+    // Plants
+    kawakawa:  { cost: 25 },   // slot 1
+    harakeke:  { cost: 30 },   // slot 2 — flax
+    // Habitat items
+    shelter:   { cost: 40 },   // slot 3 — fern shelter
+    nest:      { cost: 50 },   // slot 4
+    waterhole: { cost: 45 },   // slot 5
+    // Storm
+    Storm:     { cost: 35 }    // slot 6 — storm
   },
 
   // The level runs to a fixed 4:00 end (timeLimit below); goals are rewards

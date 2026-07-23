@@ -189,34 +189,32 @@ class GameUI {
     // Fullscreen (max-view) button sits just left of the pause button
     this.layout.fsBtnX = this.layout.pauseBtnX - 80;
 
-    // Fullscreen overlay HUD layout: compact strip of mauri/season/time +
-    // fullscreen/pause buttons along the top, goals at top-right, placeables
-    // toolbar along the bottom — all drawn over the maximised play area.
-    const cw = this.config.canvasWidth;
-    const chFull = this.config.canvasHeight;
-    const fsGap = 12;
-    const fsBtn = this.layout.pauseBtnSize;
-    // Same element widths as the docked top bar, just tighter gaps. The clock
-    // rides immediately after the timer using its own (smaller) gap.
-    const fsStripW = mauriWidth + seasonWidth + timerBlockWidth +
-                     fsBtn * 2 + fsGap * 4;
-    const stripX = (cw - fsStripW) / 2;
-    const fsTimerX = stripX + mauriWidth + seasonWidth + fsGap * 2;
-    const fsAfterTimer = fsTimerX + timerBlockWidth;
+    // Fullscreen overlay HUD layout: the HUD is drawn over the maximised play
+    // area, but the top-bar essentials, the fullscreen/pause buttons and the
+    // goals panel all sit exactly where they do in the docked full UI, so
+    // nothing jumps when toggling fullscreen. (Toggling fullscreen only
+    // changes the view transform, not gameAreaWidth/rightSidebarX, so the
+    // docked positions computed above are still valid here.) The focus-species
+    // population toggles sit *below* the goals panel — see
+    // renderFocusSpeciesButtons. The placeables toolbar runs along the bottom.
+    const contentY = 20; // matches renderTopBar's docked contentY
     this.layout.fs = {
-      stripY: 10,
-      btnY: 10,
-      btnSize: fsBtn,
-      mauriX: stripX,
-      seasonX: stripX + mauriWidth + fsGap,
-      timerX: fsTimerX,
-      clockX: fsTimerX + timerWidth + clockGap,
-      fsBtnX: fsAfterTimer + fsGap,
-      pauseBtnX: fsAfterTimer + fsBtn + fsGap * 2,
-      goalsX: cw - this.layout.sidebarPanelWidth - 30,
-      goalsY: 102,
-      toolbarStartX: (cw - toolbarTotalWidth) / 2,
-      toolbarY: chFull - this.layout.toolbarBtnSize - 35
+      stripY: contentY,
+      btnY: this.layout.pauseBtnY,
+      btnSize: this.layout.pauseBtnSize,
+      // Top-bar elements at their docked positions (centred in the game area).
+      mauriX: this.layout.mauriX,
+      seasonX: this.layout.seasonX,
+      timerX: this.layout.timerX,
+      clockX: this.layout.clockX,
+      fsBtnX: this.layout.fsBtnX,
+      pauseBtnX: this.layout.pauseBtnX,
+      // Goals in the same spot as the docked sidebar's goals panel (top of the
+      // right sidebar column).
+      goalsX: this.config.rightSidebarX + this.layout.sidebarPadding,
+      goalsY: this.layout.sidebarPadding,
+      toolbarStartX: (this.config.canvasWidth - toolbarTotalWidth) / 2,
+      toolbarY: this.config.canvasHeight - this.layout.toolbarBtnSize - 35
     };
   }
 
@@ -515,8 +513,6 @@ class GameUI {
     this.renderFullscreenButton(fs.fsBtnX, fs.btnY);
     this.renderPauseButton(fs.pauseBtnX, fs.btnY);
 
-    this.renderFocusSpeciesButtons();
-
     // Extend the goals panel's own green backing 12px past the content on
     // every side (same colour as the panel body, so it reads as one panel).
     const goalsH = 30 + this.game.goals.length * 26;
@@ -527,11 +523,14 @@ class GameUI {
 
     this.renderGoalsPanel(fs.goalsX, fs.goalsY);
 
+    // Focus-species population toggles sit directly below the goals panel.
+    this.renderFocusSpeciesButtons();
+
     this.renderToolbar(fs.toolbarStartX, fs.toolbarY);
   }
 
-  // Fullscreen-only quick toggles for the level's focus species (top-right,
-  // above the goals panel): idle sprite + live population. Clicking toggles
+  // Fullscreen-only quick toggles for the level's focus species (directly
+  // below the goals panel): idle sprite + live population. Clicking toggles
   // the in-world highlight; while active the button is framed and softly
   // filled in the species' highlight colour.
   renderFocusSpeciesButtons() {
@@ -543,9 +542,14 @@ class GameUI {
       ((this.simulation.activeSpecies && this.simulation.activeSpecies.moa) || null);
     if (!focal || !focal.length) return;
 
+    // Sit the row just below the goals panel, left-aligned to the same column.
+    // The goals panel has a 12px translucent backing skirt around it, so start
+    // a little further down to clear it.
+    const fs = this.layout.fs;
+    const goalsH = 30 + this.game.goals.length * 26;
     const size = 70, gap = 10;
-    let x = this.config.canvasWidth - 15 - focal.length * size - (focal.length - 1) * gap;
-    const y = 10;
+    let x = fs.goalsX;
+    const y = fs.goalsY + goalsH + 24;
 
     for (const key of focal) {
       const cfg = (typeof MOA_SPECIES !== 'undefined' && MOA_SPECIES[key]) || {};

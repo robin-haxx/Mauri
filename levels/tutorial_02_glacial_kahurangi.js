@@ -11,7 +11,7 @@ const TIPS = {
   gk_spring_1: {
     id: 'gk_spring_1',
     trigger: { type: TRIGGER_TYPE.EVENT, event: TUTORIAL_EVENTS.GAME_START },
-    title: "Brr... sure is cold out, eh?",
+    title: "Brr... It's getting cold out!",
     content: [
       "That's because the 'season' of the earth has turned.", 
       "The temperature has dropped, and the snow has crept pretty far down the mountains!",
@@ -24,7 +24,7 @@ const TIPS = {
   gk_spring_speargrass: {
     id: 'gk_spring_speargrass',
     trigger: { type: TRIGGER_TYPE.IMMEDIATE },
-    title: "Good news for your friend the Upland Moa!",
+    title: "That's good news for your friend, the Upland Moa.",
     content: [
       "There's a lot more subalpine habitat, and you've unlocked a favourite food: speargrass!",
       "",
@@ -41,8 +41,8 @@ const TIPS = {
     title: "Say hello to the new Moa!",
     content: [
       "I hereby promote your guardianship:","You now also protect the little bush moa!",
-      "They inhabit dense forest and have a ","special beak for shearing tough plants,",
-      "but because of this climate they're particularly vulnerable right now and need your attention."
+      "They love dense forest, and have a ","special beak for shearing tough plants,",
+      "but because of this chill they're vulnerable right now and need your attention!"
     ],
     guidePosition: 'center', highlight: null, ringsAboveUI: true,
     nextTip: 'gk_spring_lancewood', pauseGame: true, showOnce: true, priority: 0
@@ -74,9 +74,9 @@ const TIPS = {
   gk_spring_mauri: {
     id: 'gk_spring_mauri',
     trigger: { type: TRIGGER_TYPE.IMMEDIATE },
-    title: "Mauri & Competition",
+    title: "Keep an eye on the competition!",
     content: [
-      "You'll get more Mauri for having more moa, but keep in mind that some species can out-compete others, which can lead to local extinctions."
+      "You'll get more Mauri for having more moa, but keep in mind that some species can out-compete others, and drive them out of this area."
     ],
     guidePosition: 'topLeft', highlight: { type: 'element', target: 'mauriDisplay' },
     nextTip: 'gk_spring_goals', pauseGame: true, showOnce: true, priority: 2

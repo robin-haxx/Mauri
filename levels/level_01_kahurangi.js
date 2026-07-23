@@ -107,18 +107,18 @@ const LEVEL_KAHURANGI = {
     emergentEagles: true,
     eagleTargetRatio: 1 / 4,      // ← the main knob: ~one eagle per eight moa
     eagleMaxPopulation: 8,        // hard safety cap on total eagles
-    eagleHungerRate: 0.03,        // how fast an unfed eagle's hunger climbs
+    eagleHungerRate: 0.02,        // how fast an unfed eagle's hunger climbs
     eagleStarveThreshold: 90,     // hunger above this accrues starvation
     eagleStarveTimeout: 2400,     // ticks of sustained starvation before death
     eagleReproChance: 0.4,        // base lay chance at full breeding pressure
-    eagleReproCooldown: 1200,     // ticks between clutches for one bird
+    eagleReproCooldown: 1000,     // ticks between clutches for one bird
     eagleReproCheckInterval: 220, // how often a calm, fed adult considers laying
     eagleMaturityAge: 1500,       // ticks before a hatchling can breed
     eaglePreyPopThreshold: 12,    // spare rare prey (moot with one species, kept for consistency)
     startingEagleEggHatchTime: 1800,  // founder egg hatches ~30s in
     eagleMateRadius: 250,         // a female needs a mature male this close to lay
     eagleOverhuntRestraint: 30,   // extra hunger tolerance per unit over-ratio
-    eagleRestraintCap: 45         // cap on that restraint so they hunt eventually
+    eagleRestraintCap: 60         // cap on that restraint so they hunt eventually
   },
 
   availablePlaceables: {

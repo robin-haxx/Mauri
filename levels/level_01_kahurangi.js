@@ -160,10 +160,10 @@ const LEVEL_KAHURANGI = {
   ],
 
   menu: {
-    title: "Avian Age:  MAURI Demo",
-    subtitle: "A New Zealand Ecosystem Strategy Game",
-    areaLabel: "Area #1: Kahurangi, Te Waipounamu",
-    areaSubtitle: "(Upper West Coast, South Island)",
+    title: "Kahurangi Region",
+    subtitle: "~30,000 years ago",
+    areaLabel: "Kahurangi, Te Waipounamu",
+    areaSubtitle: "Upper West Coast, South Island",
     featuredSpecies: {
       key: 'upland_moa',
       displayName: 'Upland Moa',

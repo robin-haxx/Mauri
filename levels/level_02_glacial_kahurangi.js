@@ -340,10 +340,10 @@ const LEVEL_GLACIAL_KAHURANGI = {
   ],
 
   menu: {
-    title: "Avian Age:  Glacial Kahurangi",
-    subtitle: "A New Zealand Ecosystem Strategy Game",
-    areaLabel: "Area #2: Kahurangi (Glacial Maximum)",
-    areaSubtitle: "NW Nelson, Te Waipounamu (~21,000 years ago.)",
+    title: "Glacial Kahurangi",
+    subtitle: "~21,000 years ago",
+    areaLabel: "NW Nelson, Te Waipounamu",
+    areaSubtitle: "Upper West Coast, South Island",
     featuredSpecies: {
       key: 'little_bush_moa',
       displayName: 'Little Bush Moa',

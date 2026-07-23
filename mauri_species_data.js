@@ -399,6 +399,7 @@ const EAGLE_SPECIES = {
     scientificName: "Hieraaetus moorei",
     description: "Largest known eagle, apex predator of moa",
     rarity: 'common',
+    highlightColor: [255, 145, 90],   // ember — player highlight (pulse + UI border)
     
     wingspan: { min: 20, max: 26 },
     
@@ -428,6 +429,7 @@ const EAGLE_SPECIES = {
     scientificName: "Hieraaetus moorei (juvenile)",
     description: "Inexperienced but energetic hunter",
     rarity: 'uncommon',
+    highlightColor: [255, 145, 90],   // ember — player highlight (pulse + UI border)
     
     wingspan: { min: 16, max: 20 },
     

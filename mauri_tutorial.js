@@ -433,8 +433,18 @@ class TutorialManager {
   
   dismissCurrentTip() {
     if (!this.active || !this.currentTip) return;
-    
+
     const tip = this.currentTip;
+
+    // Optional per-tip hook, mirroring onShow — runs on every dismissal path
+    // (close or chain). E.g. goal_intro turns the species highlight back off.
+    if (typeof tip.onDismiss === 'function') {
+      try {
+        tip.onDismiss(this.game);
+      } catch (e) {
+        console.warn(`Tutorial onDismiss error for ${tip.id}:`, e);
+      }
+    }
     
     if (this._pausedByTutorial && this.game.state === GAME_STATE.PAUSED) {
       this.game.state = GAME_STATE.PLAYING;
@@ -587,7 +597,7 @@ class TutorialManager {
     fill(200, 245, 210, alpha);
     textSize(20 * S);
     textAlign(LEFT, CENTER);
-    if (typeof GroceryRounded !== 'undefined') textFont(GroceryRounded);
+    if (typeof FreckleFace !== 'undefined') textFont(FreckleFace);
     text(tip.title, pos.x + 25 * S, pos.y + 25 * S);
     textFont('OpenDyslexic');
 

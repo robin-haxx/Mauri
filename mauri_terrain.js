@@ -53,6 +53,11 @@ class TerrainGenerator {
     this.invScale = 1 / config.pixelScale;
     this.gridCols = Math.ceil(this.mapWidth * this.invScale);
     this.gridRows = Math.ceil(this.mapHeight * this.invScale);
+
+    // Render-only detail multiplier: bakes terrain buffers at N x the
+    // resolution without touching the gameplay grid (pixelScale).
+    // Supports fractions (e.g. 0.5 = half-resolution buffers).
+    this.detail = Math.max(0.25, config.terrainDetail || 1);
     
     this._initBiomeIndex();
     this._colorCache = new Map();
@@ -431,8 +436,11 @@ class TerrainGenerator {
       }
     }
     
+    // Build high-resolution maps used only for rendering
+    this._buildRenderMaps();
+
     this._initSnowColors();
-    
+
     // Compute base cell colors (without snow)
     this._computeBaseCellColors();
     
@@ -441,25 +449,80 @@ class TerrainGenerator {
   }
   
   /**
+   * Build render-resolution height/biome maps (detail x the gameplay grid).
+   * Used only for baking terrain buffers — gameplay lookups stay on the
+   * coarse heightMap/biomeIndexMap.
+   */
+  _buildRenderMaps() {
+    const detail = this.detail;
+
+    if (detail === 1) {
+      this.renderCols = this.gridCols;
+      this.renderRows = this.gridRows;
+      this.renderHeightMap = this.heightMap;
+      this.renderBiomeIndexMap = this.biomeIndexMap;
+      return;
+    }
+
+    const renderCols = Math.ceil(this.gridCols * detail);
+    const renderRows = Math.ceil(this.gridRows * detail);
+    const renderScale = this.scale / detail;
+
+    this.renderCols = renderCols;
+    this.renderRows = renderRows;
+    this.renderHeightMap = new Float32Array(renderCols * renderRows);
+    this.renderBiomeIndexMap = new Uint8Array(renderCols * renderRows);
+
+    let idx = 0;
+    for (let row = 0; row < renderRows; row++) {
+      const y = row * renderScale;
+      const coarseRow = Math.min(this.gridRows - 1, (row / detail) | 0);
+      for (let col = 0; col < renderCols; col++) {
+        const elevation = this.getElevation(col * renderScale, y);
+        this.renderHeightMap[idx] = elevation;
+
+        let biome = this.getBiomeFromElevation(elevation);
+        // Same lake/sea fallback as the gameplay grid, checked on the
+        // coarse grid so water bodies match gameplay
+        if (biome === this.biomeList[1] && this._waterBiome) {
+          const coarseCol = Math.min(this.gridCols - 1, (col / detail) | 0);
+          if (!this.hasAdjacentWater(coarseRow, coarseCol)) {
+            biome = this._fallbackBiome;
+          }
+        }
+
+        this.renderBiomeIndexMap[idx] = this.biomeIndexByKey[biome.key];
+        idx++;
+      }
+    }
+  }
+
+  /**
    * Compute base terrain colors once (reused for all seasons)
    */
   _computeBaseCellColors() {
-    const gridCols = this.gridCols;
-    const gridRows = this.gridRows;
+    const gridCols = this.renderCols;
+    const gridRows = this.renderRows;
     const totalCells = gridCols * gridRows;
-    
+
     // Store RGB + contour flag for each cell
     this._baseCellColors = new Uint8Array(totalCells * 4); // R, G, B, isContour
-    
+
     const showContours = this.config.showContours;
     const contourInterval = this.config.contourInterval;
-    
+    // Half-width of a contour band, in elevation units. The band spans
+    // 2 x this out of every contourInterval, so it covers
+    // (2 * contourWidth / contourInterval) of the map. At the old hardcoded
+    // 0.008 against an interval of 0.045 that was ~36% — bands, not lines.
+    const contourWidth = (this.config.contourWidth != null)
+      ? this.config.contourWidth : 0.008;
+
     let idx = 0;
     for (let row = 0; row < gridRows; row++) {
       for (let col = 0; col < gridCols; col++) {
         const cellIdx = row * gridCols + col;
-        const elevation = this.heightMap[cellIdx];
-        const biomeIdx = this.biomeIndexMap[cellIdx];
+        const elevation = this.renderHeightMap[cellIdx];
+        const biomeIdx = this.renderBiomeIndexMap[cellIdx];
         const biome = this.biomeArray[biomeIdx];
         
         const c = this.getColor(elevation, biome);
@@ -472,7 +535,7 @@ class TerrainGenerator {
         // Check if this is a contour line
         if (showContours) {
           const mod = elevation % contourInterval;
-          this._baseCellColors[colorIdx + 3] = (mod < 0.008 || mod > contourInterval - 0.008) ? 1 : 0;
+          this._baseCellColors[colorIdx + 3] = (mod < contourWidth || mod > contourInterval - contourWidth) ? 1 : 0;
         } else {
           this._baseCellColors[colorIdx + 3] = 0;
         }
@@ -499,13 +562,15 @@ class TerrainGenerator {
    * Bake a single season's terrain buffer using direct pixel manipulation
    */
   _bakeSeasonBuffer(seasonKey) {
-    const buf = createGraphics(this.mapWidth, this.mapHeight);
+    const detail = this.detail;
+    const buf = createGraphics(Math.ceil(this.mapWidth * detail),
+                               Math.ceil(this.mapHeight * detail));
     buf.loadPixels();
-    
+
     const d = buf.pixelDensity();
-    const gridCols = this.gridCols;
-    const gridRows = this.gridRows;
-    const heightMap = this.heightMap;
+    const gridCols = this.renderCols;
+    const gridRows = this.renderRows;
+    const heightMap = this.renderHeightMap;
     const baseCellColors = this._baseCellColors;
     const snowColorsRGB = this._snowColorsRGB;
     const hasSnow = this._snowBiome && snowColorsRGB;
@@ -519,6 +584,12 @@ class TerrainGenerator {
       snowContourRGB = [red(snowContourColor), green(snowContourColor), blue(snowContourColor)];
     }
     
+    // How strongly a contour cell is pulled toward contourColor.
+    // 1.0 = the old behaviour (flat replacement), 0.35 = a gentle shading of
+    // whatever the ground colour already was, 0 = invisible.
+    const contourStrength = (this.config.contourStrength != null)
+      ? this.config.contourStrength : 1.0;
+
     // Pre-compute cell colors with snow for this season
     const cellColors = new Uint8Array(gridCols * gridRows * 3);
     
@@ -530,8 +601,12 @@ class TerrainGenerator {
         const outIdx = cellIdx * 3;
         
         const isContour = baseCellColors[baseIdx + 3] === 1;
-        
-        // Check if this cell has snow in this season
+
+        // 1. Resolve the ground colour for this cell (base, or base blended
+        //    toward snow for the season), ignoring contours entirely.
+        let gR, gB, gG;
+        let contourRGB = null;
+
         if (hasSnow && elevation >= snowLine) {
           // Calculate snow coverage
           let snowCoverage;
@@ -545,55 +620,61 @@ class TerrainGenerator {
           // Add subtle noise for natural look
           const noiseVal = (Math.sin(elevation * 847 + col * 0.13 + row * 0.17) * 0.5 + 0.5) * 0.12;
           snowCoverage = Math.min(1, snowCoverage + noiseVal);
-          
-          if (isContour) {
-            // Use snow contour color
-            cellColors[outIdx] = snowContourRGB[0];
-            cellColors[outIdx + 1] = snowContourRGB[1];
-            cellColors[outIdx + 2] = snowContourRGB[2];
-          } else {
-            // Blend base color with snow
-            const snowIdx = Math.min(snowColorsRGB.length - 1, (snowCoverage * snowColorsRGB.length) | 0);
-            const snowRGB = snowColorsRGB[snowIdx];
-            
-            const baseR = baseCellColors[baseIdx];
-            const baseG = baseCellColors[baseIdx + 1];
-            const baseB = baseCellColors[baseIdx + 2];
-            
-            cellColors[outIdx] = baseR + (snowRGB[0] - baseR) * snowCoverage;
-            cellColors[outIdx + 1] = baseG + (snowRGB[1] - baseG) * snowCoverage;
-            cellColors[outIdx + 2] = baseB + (snowRGB[2] - baseB) * snowCoverage;
-          }
+
+          const snowIdx = Math.min(snowColorsRGB.length - 1, (snowCoverage * snowColorsRGB.length) | 0);
+          const snowRGB = snowColorsRGB[snowIdx];
+
+          const baseR = baseCellColors[baseIdx];
+          const baseG = baseCellColors[baseIdx + 1];
+          const baseB = baseCellColors[baseIdx + 2];
+
+          gR = baseR + (snowRGB[0] - baseR) * snowCoverage;
+          gG = baseG + (snowRGB[1] - baseG) * snowCoverage;
+          gB = baseB + (snowRGB[2] - baseB) * snowCoverage;
+
+          if (isContour) contourRGB = snowContourRGB;
         } else {
-          // No snow - use base color
+          gR = baseCellColors[baseIdx];
+          gG = baseCellColors[baseIdx + 1];
+          gB = baseCellColors[baseIdx + 2];
+
           if (isContour) {
-            // Get biome contour color
-            const biomeIdx = this.biomeIndexMap[cellIdx];
+            const biomeIdx = this.renderBiomeIndexMap[cellIdx];
             const biome = this.biomeArray[biomeIdx];
             const contourC = this._getCachedColor(biome.contourColor);
-            cellColors[outIdx] = red(contourC);
-            cellColors[outIdx + 1] = green(contourC);
-            cellColors[outIdx + 2] = blue(contourC);
-          } else {
-            cellColors[outIdx] = baseCellColors[baseIdx];
-            cellColors[outIdx + 1] = baseCellColors[baseIdx + 1];
-            cellColors[outIdx + 2] = baseCellColors[baseIdx + 2];
+            contourRGB = [red(contourC), green(contourC), blue(contourC)];
           }
+        }
+
+        // 2. Shade the contour over the top, rather than replacing it.
+        if (contourRGB && contourStrength > 0) {
+          const s = contourStrength;
+          cellColors[outIdx]     = gR + (contourRGB[0] - gR) * s;
+          cellColors[outIdx + 1] = gG + (contourRGB[1] - gG) * s;
+          cellColors[outIdx + 2] = gB + (contourRGB[2] - gB) * s;
+        } else {
+          cellColors[outIdx]     = gR;
+          cellColors[outIdx + 1] = gG;
+          cellColors[outIdx + 2] = gB;
         }
       }
     }
     
     // Fill buffer pixels
-    const fullWidth = this.mapWidth * d;
-    const fullHeight = this.mapHeight * d;
+    // Buffer is (mapWidth*detail) wide; a render cell covers scale/detail
+    // world px = scale buffer px, so px -> cell mapping is px * invScale / d
+    const fullWidth = buf.width * d;
+    const fullHeight = buf.height * d;
     const invScaleD = this.invScale / d;
-    
+    const maxCol = gridCols - 1;
+    const maxRow = gridRows - 1;
+
     for (let py = 0; py < fullHeight; py++) {
-      const gridRow = (py * invScaleD) | 0;
+      const gridRow = Math.min(maxRow, (py * invScaleD) | 0);
       const rowOffset = gridRow * gridCols;
-      
+
       for (let px = 0; px < fullWidth; px++) {
-        const gridCol = (px * invScaleD) | 0;
+        const gridCol = Math.min(maxCol, (px * invScaleD) | 0);
         const colorIdx = (rowOffset + gridCol) * 3;
         const pixelIdx = (py * fullWidth + px) * 4;
         
@@ -619,29 +700,33 @@ class TerrainGenerator {
    * This is EXTREMELY fast - no computation, just image drawing
    */
   render() {
+    // Buffers are baked at detail x resolution; draw them at world size
+    const w = this.mapWidth;
+    const h = this.mapHeight;
+
     if (!this.seasonManager) {
       // No season manager - just draw summer
-      image(this.seasonBuffers.summer, 0, 0);
+      image(this.seasonBuffers.summer, 0, 0, w, h);
       return;
     }
-    
+
     const currentKey = this.seasonManager.currentKey;
     const transitionProgress = this.seasonManager.transitionProgress;
-    
+
     if (transitionProgress < 0.01) {
       // No transition - just draw current season
-      image(this.seasonBuffers[currentKey], 0, 0);
+      image(this.seasonBuffers[currentKey], 0, 0, w, h);
     } else {
       // Crossfade between current and next season
       const nextKey = this.seasonManager.nextKey;
-      
+
       // Draw current season
-      image(this.seasonBuffers[currentKey], 0, 0);
-      
+      image(this.seasonBuffers[currentKey], 0, 0, w, h);
+
       // Draw next season with alpha
       push();
       tint(255, transitionProgress * 255);
-      image(this.seasonBuffers[nextKey], 0, 0);
+      image(this.seasonBuffers[nextKey], 0, 0, w, h);
       noTint();
       pop();
     }

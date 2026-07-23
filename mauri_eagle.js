@@ -746,7 +746,18 @@ class HaastsEagle extends Boid {
     if (sprite) {
       push();
       translate(this.pos.x, this.pos.y);
-      
+
+      // Species highlight: a soft pulsing halo under the eagle, driven by the
+      // player toggle (the "Total eagles" sidebar row). Mirrors the moa halo.
+      if (typeof SPECIES_HIGHLIGHT !== 'undefined' && SPECIES_HIGHLIGHT.has(this.speciesKey)) {
+        const _hc = (this.speciesData && this.speciesData.highlightColor) || [255, 145, 90];
+        const _pulse = 0.5 + 0.5 * Math.sin(frameCount * 0.12);
+        noStroke();
+        fill(_hc[0], _hc[1], _hc[2], 55 + _pulse * 95);
+        const _d = this.wingspan * (2.2 + _pulse * 1.0);
+        ellipse(0, 0, _d, _d);
+      }
+
       // Shadow
       noStroke();
       fill(0, 0, 0, isActiveHunt ? 35 : 25);

@@ -169,7 +169,7 @@ const LEVEL_KAHURANGI = {
       spriteScale: 2
     },
     flavorText: [
-      "Guide the Upland Moa through the seasons!","",
+      "Guide Upland Moa through the seasons!","",
       "Nurture the ecosystem to gain Mauri...",
       "And beware the giant Haast's eagle, Pouākai."
     ],

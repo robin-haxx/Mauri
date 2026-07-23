@@ -17,7 +17,7 @@ let currentFPS = 60;
 function preload(){
   OpenDyslexic = loadFont('typefaces/OpenDyslexic.ttf');
   GroceryRounded = loadFont('typefaces/GroceryRounded.ttf');
-  
+  FreckleFace = loadFont('typefaces/FreckleFace-Regular.ttf');
   const spritePlants = ['Tussock', 'Flax', 'Fern', 'Rimu', 'Beech', 'Patotara', 'Lancewood', 'Speargrass'];
   const states = ['Mature', 'Thriving', 'Wilting', 'Dormant'];
   
@@ -45,7 +45,7 @@ function preload(){
 // ============================================
 const CONFIG = {
   // ===== ENGINE CONSTANTS (never change between levels) =====
-  version: 'alpha 1.0.6 (TEST_BUILD_2_dev)',
+  version: 'alpha 1.1.2 (TEST_BUILD_2_dev)',
 
   // Reference height is always 1080; width is computed from window aspect ratio
   referenceHeight: 1080,
@@ -82,6 +82,7 @@ const CONFIG = {
   get height() { return this.gameAreaHeight; },
 
   pixelScale: 1,
+  terrainDetail: 2,  // render-only: bakes terrain buffers at 2x resolution
   zoom: 2.5,
   debugMode: false,
 
@@ -101,6 +102,7 @@ const CONFIG = {
 
   showContours: true,
   contourInterval: 0.045,
+  contourStrength: 0.45,
   showLabels: false,
   showDebug: false,
   showHungerBars: true,
@@ -305,11 +307,21 @@ function initCachedColors() {
 const GAME_STATE = {
   LEVEL_SELECT: 'level_select',
   MENU: 'menu',
+  LOADING: 'loading',
   PLAYING: 'playing',
   PAUSED: 'paused',
   WON: 'won',
   LOST: 'lost'
 };
+
+// Terrain resolution options for the splash-screen slider (left to right).
+// Low resolutions coarsen the terrain cells (pixelScale) rather than
+// shrinking the baked buffer, so pixels stay crisp instead of blurring.
+const TERRAIN_DETAIL_OPTIONS = [
+  { label: '2x',   pixelScale: 1, detail: 2 },
+  { label: '1x',   pixelScale: 1, detail: 1 },
+  { label: '0.5x', pixelScale: 2, detail: 1 }
+];
 
 // ============================================
 // PLACEABLE ITEMS
@@ -486,41 +498,41 @@ function initPlaceableColors() {
 const BIOMES = {
   sea: {
     key: 'sea', name: "Sea", minElevation: 0, maxElevation: 0.1,
-    colors: ['#1a3a52', '#1e4d6b', '#236384'], contourColor: '#0f2533',
+    colors: ['#1a3a52', '#1e4d6b', '#236384'], contourColor: '#112b3b',
     walkable: false, canHavePlants: false, canPlace: false
   },
   coastal: {
     key: 'coastal', name: "Coastal/Beach", minElevation: 0.1, maxElevation: 0.15,
-    colors: ['#c2b280', '#d4c794', '#e6dca8'], contourColor: '#8a7d5a',
+    colors: ['#c2b280', '#d4c794', '#e6dca8'], contourColor: '#93855d',
     walkable: true, canHavePlants: false, canPlace: true
   },
   grassland: {
     key: 'grassland', name: "Lowland Grassland", minElevation: 0.15, maxElevation: 0.3,
-    colors: ['#7fb069', '#8fbc79', '#9fc889'], contourColor: '#5a7d4a',
+    colors: ['#7fb069', '#8fbc79', '#9fc889'], contourColor: '#658c53',
     walkable: true, canHavePlants: true, plantTypes: ['tussock', 'flax'], canPlace: true
   },
   podocarp: {
     key: 'podocarp', name: "Podocarp Forest", minElevation: 0.3, maxElevation: 0.4,
-    colors: ['#2d5a3d', '#346644', '#3b724b'], contourColor: '#1e3d29',
+    colors: ['#2d5a3d', '#346644', '#3b724b'], contourColor: '#295438',
     walkable: true, canHavePlants: true, plantTypes: ['fern', 'rimu'], canPlace: true
   },
   montane: {
     key: 'montane', name: "Montane Forest", minElevation: 0.4, maxElevation: 0.60,
-    colors: ['#4a7c59', '#528764', '#5a926f'], contourColor: '#335740',
+    colors: ['#4a7c59', '#528764', '#5a926f'], contourColor: '#406f52',
     walkable: true, canHavePlants: true, 
     plantTypes: ['beech', 'fern', 'patotara'],
     canPlace: true
   },
   subalpine: {
     key: 'subalpine', name: "Subalpine Tussock", minElevation: 0.60, maxElevation: 0.80,
-    colors: ['#a8a060', '#b5ad6d', '#c2ba7a'], contourColor: '#7a7445',
+    colors: ['#a8a060', '#b5ad6d', '#c2ba7a'], contourColor: '#827c4a',
     walkable: true, canHavePlants: true, 
     plantTypes: ['tussock', 'patotara'],
     canPlace: true
   },
   alpine: {
     key: 'alpine', name: "Alpine Rock", minElevation: 0.77, maxElevation: 0.9,
-    colors: ['#8b8b8b', '#9a9a9a', '#a9a9a9'], contourColor: '#5c5c5c',
+    colors: ['#8b8b8b', '#9a9a9a', '#a9a9a9'], contourColor: '#696969',
     walkable: false, canHavePlants: false, canPlace: false
   },
   snow: {
@@ -776,7 +788,18 @@ class Game {
     // NEW: Load illustration assets for this level's start screen
     this.menuArt.loadForLevel(levelDef);
 
-    this.init();
+    // NOTE: init() is intentionally NOT called here. The level splash only
+    // needs the level def + menu art; the heavy work (terrain generation,
+    // buffer baking, simulation setup) is deferred to _startLoading(),
+    // triggered by the Start Level button.
+  }
+
+  // Show the loading screen, then run init() on the following frame.
+  // The one-frame delay lets the browser actually paint the loading screen
+  // before the blocking generation work starts.
+  _startLoading() {
+    this.state = GAME_STATE.LOADING;
+    this._loadingFramesDrawn = 0;
   }
   
   init() {
@@ -970,7 +993,7 @@ class Game {
       }
       if (eagleEggs === 0) {
         this.state = GAME_STATE.LOST;
-        this.gameOverReason = "The Pouākai vanished from these ranges — an ecosystem loses its apex predator.";
+        this.gameOverReason = "The ecosystem lost its apex predator!";
         if (audioManager) audioManager.playLoss();
       }
     }
@@ -1364,7 +1387,17 @@ class Game {
       this.renderMenu();
       return;
     }
-    
+
+    if (this.state === GAME_STATE.LOADING) {
+      this.renderLoading();
+      if (this._loadingFramesDrawn >= 1) {
+        this.init();   // blocking; the loading frame painted last frame stays visible
+      } else {
+        this._loadingFramesDrawn++;
+      }
+      return;
+    }
+
     if (!CONFIG.fullscreen) this.ui.renderPanels();
 
     push();
@@ -1413,7 +1446,10 @@ class Game {
       BENCHMARK.finish(this, this.state === GAME_STATE.WON ? 'win' : 'loss');
     }
 
-    if (this.state === GAME_STATE.PAUSED) {
+    // A tutorial-tip pause shows only the tip (its own overlay dims the
+    // world); the PAUSED dialog is for pauses the player asked for.
+    const _tutorialPause = this.tutorial && this.tutorial._pausedByTutorial;
+    if (this.state === GAME_STATE.PAUSED && !_tutorialPause) {
       this._renderOverlay(...CONFIG.col_UI.slice(0,3), 100, {
         title: "PAUSED",
         titleColor: [255, 255, 255],
@@ -1440,7 +1476,7 @@ class Game {
           { text: `Time elapsed: ${(this.playTime / 60) | 0} seconds`, color: [120, 180, 120], size: 14 },
           { text: `Final Score: ${computeLevelScore(this.currentLevel, this._scoreContext())} points`, color: [200, 240, 200], size: 16 },
           { text: "", color: [200, 240, 200], size: 18 },
-          { text: "Press R to play again", color: [200, 240, 200], size: 18 }
+          { text: "Press R to return to menu", color: [200, 240, 200], size: 18 }
         ],
         boxColor: [30, 60, 40, 250],
         strokeColor: [100, 180, 120]
@@ -1456,7 +1492,7 @@ class Game {
           { text: `Moa hatched: ${this.simulation.stats.births}`, color: [180, 120, 120], size: 14 },
           { text: `Total mauri earned: ${this.mauri.totalEarned | 0}`, color: [180, 120, 120], size: 14 },
           { text: "", color: [200, 240, 200], size: 18 },
-          { text: "Press R to try again", color: [220, 180, 180], size: 18 }
+          { text: "Press R to return to menu", color: [220, 180, 180], size: 18 }
         ],
         boxColor: [60, 35, 35, 250],
         strokeColor: [150, 100, 100]
@@ -1484,7 +1520,39 @@ class Game {
           this.tutorial.currentTip.spotlightHuntingEagle) {
         this.renderHuntingEagleAboveUI();
       }
+      // Tips flagged speciesHighlightAboveUI (e.g. "The Upland Moa need your
+      // help!") re-draw every SPECIES_HIGHLIGHT moa above the overlay, so the
+      // flock the tip introduces glows through the dimmed world.
+      if (this.tutorial.active && this.tutorial.currentTip &&
+          this.tutorial.currentTip.speciesHighlightAboveUI) {
+        this.renderHighlightedMoaAboveUI();
+      }
     }
+  }
+
+  // Re-draws every moa of a highlighted species (halo + sprite) in world
+  // space, above the tutorial overlay (same clip + view transform as the main
+  // game-area pass). Used by tips flagged speciesHighlightAboveUI.
+  renderHighlightedMoaAboveUI() {
+    if (typeof SPECIES_HIGHLIGHT === 'undefined' || SPECIES_HIGHLIGHT.size === 0) return;
+    push();
+    drawingContext.save();
+    drawingContext.beginPath();
+    const _clipW = CONFIG.fullscreen ? this.terrain.mapWidth * CONFIG.viewZoom : CONFIG.gameAreaWidth;
+    const _clipH = CONFIG.fullscreen ? this.terrain.mapHeight * CONFIG.viewZoom : CONFIG.gameAreaHeight;
+    drawingContext.rect(CONFIG.viewX, CONFIG.viewY, _clipW, _clipH);
+    drawingContext.clip();
+    translate(CONFIG.viewX, CONFIG.viewY);
+    scale(CONFIG.viewZoom);
+
+    const moas = this.simulation.moas;
+    for (let i = 0; i < moas.length; i++) {
+      const m = moas[i];
+      if (m.alive && SPECIES_HIGHLIGHT.has(m.speciesKey)) m.render();
+    }
+
+    drawingContext.restore();
+    pop();
   }
 
   // Re-draws the pulsing red low-population rings in world space, above the
@@ -1591,7 +1659,7 @@ class Game {
     fill(...opts.titleColor);
     textSize(42);
     push();
-    textFont(GroceryRounded);
+    textFont(FreckleFace);
     const titleY = centerY - boxH / 2 + 40;
     text(opts.title, centerX, titleY);
     pop();
@@ -1620,13 +1688,13 @@ class Game {
     textAlign(CENTER, CENTER);
     fill(CACHED_COLORS.menuTitle);
     textSize(52);
-    push(); textFont(GroceryRounded);
-    text("Avian Age: Select Area", centerX, 100);
+    push(); textFont(FreckleFace);
+    text("Avian Age: Mauri", centerX, 100);
     pop();
 
     fill(CACHED_COLORS.menuSubtitle);
     textSize(18);
-    text("Choose an ecosystem to protect", centerX, 150);
+    text("Select a habitat...", centerX, 150);
 
     // Responsive card layout
     const levels = LEVEL_REGISTRY.getAll();
@@ -1672,6 +1740,7 @@ class Game {
       }
       strokeWeight(completed ? 3 : 2);
       rect(x, cardY, cardW, cardH, 12);
+      noStroke();
 
       // Completion badge
       if (completed) {
@@ -1686,7 +1755,7 @@ class Game {
       // Level name
       fill(unlocked ? [200, 240, 210] : [80, 80, 85]);
       textSize(22);
-      push(); textFont(GroceryRounded);
+      push(); textFont(FreckleFace);
       text(level.name, x + cardW / 2, cardY + 40);
       pop();
 
@@ -1729,6 +1798,29 @@ class Game {
     text(`Version: ${CONFIG.version}`, centerX, ch - 40);
   }
   
+  renderLoading() {
+    const cw = CONFIG.canvasWidth;
+    const ch = CONFIG.canvasHeight;
+    const centerX = cw * 0.5;
+    const centerY = ch * 0.5;
+
+    fill(CACHED_COLORS.menuBg);
+    noStroke();
+    rect(0, 0, cw, ch);
+
+    textAlign(CENTER, CENTER);
+
+    fill(CACHED_COLORS.menuTitle);
+    textSize(42);
+    push(); textFont(FreckleFace);
+    text(this.currentLevel?.name || "Loading", centerX, centerY - 40);
+    pop();
+
+    fill(CACHED_COLORS.menuSubtitle);
+    textSize(18);
+    text("Preparing the ecosystem...", centerX, centerY + 20);
+  }
+
     renderMenu() {
     const cw = CONFIG.canvasWidth;
     const ch = CONFIG.canvasHeight;
@@ -1745,7 +1837,7 @@ class Game {
     // Title — from level def
     fill(CACHED_COLORS.menuTitle);
     textSize(64);
-    push(); textFont(GroceryRounded);
+    push(); textFont(FreckleFace);
     text(menu.title || "Avian Age", centerX, centerY - 300);
     pop();
 
@@ -1838,14 +1930,64 @@ class Game {
     fill(255);
     noStroke();
     textSize(28);
-    push(); textFont(GroceryRounded);
+    push(); textFont(FreckleFace);
     text("Start Level", centerX, btnY + btnH * 0.5);
     pop();
+
+    // Terrain resolution slider (same width as Start Level button)
+    const sliderW = btnW;
+    const sliderX = btnX;
+    const sliderY = btnY + btnH + 18;
+    const trackPad = 16;
+    const trackY = sliderY + 22;
+    const opts = TERRAIN_DETAIL_OPTIONS;
+
+    let selIdx = 0;
+    for (let i = 0; i < opts.length; i++) {
+      if (CONFIG.pixelScale === opts[i].pixelScale &&
+          CONFIG.terrainDetail === opts[i].detail) selIdx = i;
+    }
+
+    fill(CACHED_COLORS.menuText);
+    noStroke();
+    smallTextSize(12);
+    text("Terrain resolution", centerX, sliderY + 4);
+
+    // Track
+    stroke(CACHED_COLORS.btnStroke);
+    strokeWeight(3);
+    line(sliderX + trackPad, trackY, sliderX + sliderW - trackPad, trackY);
+
+    // Ticks + labels
+    const stepW = (sliderW - trackPad * 2) / (opts.length - 1);
+    for (let i = 0; i < opts.length; i++) {
+      const tx = sliderX + trackPad + i * stepW;
+      stroke(CACHED_COLORS.btnStroke);
+      strokeWeight(2);
+      line(tx, trackY - 5, tx, trackY + 5);
+      noStroke();
+      fill(i === selIdx ? [200, 240, 210] : CACHED_COLORS.menuText);
+      smallTextSize(12);
+      text(opts[i].label, tx, trackY + 18);
+    }
+
+    // Handle
+    const hx = sliderX + trackPad + selIdx * stepW;
+    fill(CACHED_COLORS.btnNormal);
+    stroke(200, 240, 210);
+    strokeWeight(2);
+    ellipse(hx, trackY, 16, 16);
+    noStroke();
+
+    this._detailSliderBounds = {
+      x: sliderX, y: sliderY, w: sliderW, h: trackY + 12 - sliderY,
+      trackPad, stepW
+    };
 
     // Back button
     const backW = 120, backH = 40;
     const backX = centerX - backW / 2;
-    const backY = btnY + btnH + 20;
+    const backY = trackY + 48;
     const backHover = mouseX > backX && mouseX < backX + backW
                    && mouseY > backY && mouseY < backY + backH;
 
@@ -2159,7 +2301,7 @@ class Game {
         if (mx > btn.x && mx < btn.x + btn.w &&
             my > btn.y && my < btn.y + btn.h) {
           BENCHMARK.arm();
-          this.init();  // Start playing with the benchmark recording
+          this._startLoading();  // Start playing with the benchmark recording
           return;
         }
       }
@@ -2168,7 +2310,7 @@ class Game {
         if (mx > btn.x && mx < btn.x + btn.w &&
             my > btn.y && my < btn.y + btn.h) {
           BENCHMARK.armBatch(5);   // five unattended runs, one CSV each
-          this.init();
+          this._startLoading();
           return;
         }
       }
@@ -2176,7 +2318,19 @@ class Game {
         const btn = this._menuBtnBounds;
         if (mx > btn.x && mx < btn.x + btn.w &&
             my > btn.y && my < btn.y + btn.h) {
-          this.init();  // Start playing
+          this._startLoading();  // Start playing
+          return;
+        }
+      }
+      if (this._detailSliderBounds) {
+        const s = this._detailSliderBounds;
+        if (mx > s.x && mx < s.x + s.w &&
+            my > s.y && my < s.y + s.h) {
+          const t = (mx - (s.x + s.trackPad)) / s.stepW;
+          const idx = Math.max(0, Math.min(TERRAIN_DETAIL_OPTIONS.length - 1,
+                                           Math.round(t)));
+          CONFIG.pixelScale = TERRAIN_DETAIL_OPTIONS[idx].pixelScale;
+          CONFIG.terrainDetail = TERRAIN_DETAIL_OPTIONS[idx].detail;
           return;
         }
       }
@@ -2224,6 +2378,7 @@ class Game {
         this.state = GAME_STATE.LEVEL_SELECT;
       } else if (this.currentLevel) {
         this.loadLevel(this.currentLevel.id);  // Restart current level
+        this._startLoading();
       }
       return;
     }

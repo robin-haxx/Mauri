@@ -45,7 +45,7 @@ const TIPS = {
     trigger: { type: TRIGGER_TYPE.IMMEDIATE },
     title: "The Upland Moa need your help!",
     content: [
-      "They've walked these hills for over 5 million years,",
+      "They've walked these hills millions of years,",
       "And this hardy 'clade' adapted well to Kahurangi.",
       "But, now the glaciations are getting more severe.", 
       "If we don’t step in to defend them, they'll be lost... ",
@@ -53,7 +53,17 @@ const TIPS = {
       
     ],
     guidePosition: 'center',
-    highlight: { type: 'element', target: 'gameArea' },
+    highlight: null,
+    // Instead of boxing the whole play area, light up the birds themselves:
+    // the upland moa species highlight comes on while this tip is up (their
+    // sprites re-drawn above the dim overlay) and goes off when it's done.
+    onShow: (game) => {
+      if (typeof SPECIES_HIGHLIGHT !== 'undefined') SPECIES_HIGHLIGHT.add('upland_moa');
+    },
+    onDismiss: (game) => {
+      if (typeof SPECIES_HIGHLIGHT !== 'undefined') SPECIES_HIGHLIGHT.delete('upland_moa');
+    },
+    speciesHighlightAboveUI: true,
     nextTip: 'ui_mauri',
     pauseGame: true,
     showOnce: true,
@@ -100,11 +110,11 @@ const TIPS = {
     title: "Goals & Information",
     content: [
       "The sidebar shows your goals and ecosystem status.",
-      "You pass the level when all the goals are complete!",
-      "The event log and top tooltip show the most vital info; pause & check them if things get busy!"
+      "Your deadline is the 4 minute mark --",
+      "Pause & check occasionally to make sure you're on track to the goals!"
     ],
     guidePosition: 'left',
-    highlight: { type: 'element', target: 'sidebar' },
+    highlight: { type: 'element', target: 'goalsPanel' },
     nextTip: 'ui_toolbar',
     pauseGame: true,
     showOnce: true,
@@ -114,11 +124,12 @@ const TIPS = {
   ui_toolbar: {
     id: 'ui_toolbar',
     trigger: { type: TRIGGER_TYPE.IMMEDIATE },
-    title: "Your Tools",
+    title: "You have a toolbox for shaping the ecosystem!",
     content: [
-      "These tools help shape the ecosystem.",
-      "Click one, then click in the world to place it.",
-      "Press number keys 1-6 for quick selection!"
+      "Mauri can transform into plants, clearings and storms.",
+      "Select a tool, then a spot in the world to place it.",
+      "(On keyboard, you can press 1-6 for quick selection,",
+      "And hold shift if you want to place more than one.)"
     ],
     guidePosition: 'bottomLeft',
     highlight: { type: 'element', target: 'toolbar' },
@@ -147,9 +158,9 @@ const TIPS = {
   intro_complete: {
     id: 'intro_complete',
     trigger: { type: TRIGGER_TYPE.IMMEDIATE },
-    title: "You're Ready!",
+    title: "That's all the basics!",
     content: [
-      "That's the basics! Observe the forest for a moment;",
+      "Observe the forest for a moment;",
       "an opportunity might arise to help the Upland Moa!",
       "I'll be back to help when that happens.",
       "Good luck, budding eco-guardian!"
@@ -165,10 +176,18 @@ const TIPS = {
   // ===== EVENT-TRIGGERED TIPS =====
   eagle_hunting: {
     id: 'eagle_hunting',
-    trigger: { 
-      type: TRIGGER_TYPE.EVENT, 
+    trigger: {
+      type: TRIGGER_TYPE.EVENT,
       event: TUTORIAL_EVENTS.EAGLE_HUNTING,
-      minGameTime: 180
+      minGameTime: 180,
+      // The storm lesson only runs when the player can actually afford one.
+      // If they're broke, eagle_hunting_no_mauri takes this beat instead —
+      // and since a skipped trigger isn't "shown", this tip stays available
+      // for a later hunt when the Mauri is there.
+      condition: (game) => {
+        const def = game.activePlaceables && game.activePlaceables.Storm;
+        return game.mauri.canAfford(def ? def.cost : 40);
+      }
     },
     title: "Haast's Eagle Attack!",
     content: [
@@ -228,6 +247,37 @@ const TIPS = {
     urgency: 'high'
   },
 
+  // Alternate first-attack beat: the Pouākai hunts but the player can't
+  // afford a storm. Shown at most once, and only while the storm lesson
+  // hasn't run yet (eagle_hunting skips when broke and stays unburned for a
+  // later, affordable hunt). No grace window — the chase plays out for real.
+  eagle_hunting_no_mauri: {
+    id: 'eagle_hunting_no_mauri',
+    trigger: {
+      type: TRIGGER_TYPE.EVENT,
+      event: TUTORIAL_EVENTS.EAGLE_HUNTING,
+      minGameTime: 180,
+      condition: (game) => {
+        const def = game.activePlaceables && game.activePlaceables.Storm;
+        if (game.mauri.canAfford(def ? def.cost : 40)) return false;
+        return !game.tutorial.shownTips.has('eagle_hunting');
+      }
+    },
+    title: "The Pouākai is on the hunt!",
+    content: [
+      "You used your Mauri already, so we'll unfortunately",
+      "have to watch this chase play out uninterrupted...",
+      "Try to keep enough Mauri for an emergency Storm [🌩️] in case you need to save a Moa!"
+    ],
+    guidePosition: 'bottomRight',
+    highlight: null,
+    nextTip: null,
+    pauseGame: true,
+    showOnce: true,
+    priority: 1,
+    urgency: 'high'
+  },
+
   // The calmer follow-up beat: once the emergency has played out, teach the
   // preventive tool. Fires ~8s of unpaused play after the storm tips.
   shelter_secure: {
@@ -240,11 +290,12 @@ const TIPS = {
                game.playTime > t.scratch.eagleTipsAt + 480;
       }
     },
-    title: "The Fern Shelter",
+    title: "A passing storm won't protect the moa forever!",
     content: [
-      "A passing storm won't protect the moa forever!",
-      "A Fern Shelter [🌴] grows a secure patch of forest:",
-      "moa under its fronds are hidden from the Pouākai,",
+      "You have six ways to return mauri to the forest.",
+      "The Fern Shelter [🌴] grows a patch of Mamaku:",
+      "a hardy tree fern that grows up to 20 metres tall!",
+      "Moa under its fronds are hidden from the Pouākai,",
       "free to feed and breed in safety."
     ],
     guidePosition: 'bottomLeft',
@@ -499,13 +550,13 @@ const TIPS = {
   // ===== TIMED TIPS =====
   migration_reminder: {
     id: 'migration_reminder',
-    trigger: { type: TRIGGER_TYPE.TIME, delay: 2400 },
+    trigger: { type: TRIGGER_TYPE.TIME, delay: 5100 },
     title: "Migration Patterns",
     content: [
       "Upland moa can feed in cold regions during summer,",
       "and migrate as the mosaic shifts with the seasons.",
       "There is plenty of juicy patotara uphill for now...",
-      "But you could create a patch of dense bush for them!"
+      "But it will become scarce when winter arrives!"
     ],
     guidePosition: 'bottomLeft',
     highlight: { type: 'element', target: 'migrationHint' },

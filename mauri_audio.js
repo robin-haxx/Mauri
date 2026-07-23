@@ -2,6 +2,15 @@
 // AUDIO MANAGER FOR MAURI
 // ============================================
 
+// Per-species call recordings for the highlight buttons. Drop a matching file
+// into audio/ and it is picked up automatically on the next launch; species
+// without an entry (or whose file is missing) fall back to the generic moa or
+// eagle call in playSpeciesCall(). Add new species here as recordings arrive.
+const SPECIES_CALL_FILES = {
+  little_bush_moa: 'call_little_bush_moa.mp3',
+  upland_moa: 'call_upland_moa.mp3'
+};
+
 class AudioManager {
   constructor() {
     // Sound storage
@@ -16,7 +25,8 @@ class AudioManager {
       eagleHunt: null,
       eagleCatch: null,
       win: null,
-      loss: null
+      loss: null,
+      speciesCalls: {}      // key -> dedicated call sample (see SPECIES_CALL_FILES)
     };
     
     // State
@@ -37,7 +47,7 @@ class AudioManager {
       mateCheep: 60,        // ~1 second
       eagleHunt: 120,       // ~2 seconds
       tutorialTip: 30,      // ~0.5 seconds
-      moaCall: 45           // ~0.75 seconds (click-spam guard)
+      speciesCall: 45       // ~0.75 seconds (highlight-button click-spam guard)
     };
     
     // Track currently playing sounds for management
@@ -123,7 +133,26 @@ class AudioManager {
       () => {},
       (err) => console.warn('Could not load loss:', err)
     );
-    
+
+    // Dedicated species calls — optional files. IMPORTANT: not loadSound().
+    // p5.sound's loadSound only releases the preload counter on success, so a
+    // missing optional file would hang preload() and setup() would never run.
+    // Constructing p5.SoundFile directly skips the counter: the file loads in
+    // the background and a miss just falls back to the generic call.
+    for (const [key, file] of Object.entries(SPECIES_CALL_FILES)) {
+      try {
+        this.sounds.speciesCalls[key] = new p5.SoundFile(audioPath + file,
+          () => {},
+          () => {
+            this.sounds.speciesCalls[key] = null;
+            console.info(`No dedicated call for ${key} (${file}) — using generic call`);
+          }
+        );
+      } catch (e) {
+        this.sounds.speciesCalls[key] = null;
+      }
+    }
+
     this.loaded = true;
   }
   
@@ -300,13 +329,45 @@ class AudioManager {
   }
 
   /**
-   * Play a moa call — used when a species name is clicked in the population
-   * panel / fullscreen focus buttons. Reuses the milestone vocalisation;
-   * swap the sample here if a dedicated call recording is added later.
+   * True if the key names an eagle species (vs a moa).
+   */
+  _isEagleSpecies(key) {
+    return typeof EAGLE_SPECIES !== 'undefined' && !!EAGLE_SPECIES[key];
+  }
+
+  /**
+   * Play the call for a species — used when a highlight button is clicked
+   * (population panel rows / fullscreen focus buttons / eagle row).
+   * Priority: dedicated recording from SPECIES_CALL_FILES if loaded, else the
+   * eagle hunt cry for eagle species, else the generic moa vocalisation.
+   */
+  playSpeciesCall(speciesKey = null) {
+    if (!this._checkCooldown('speciesCall')) return;
+
+    const custom = speciesKey && this.sounds.speciesCalls[speciesKey];
+    if (custom && custom.isLoaded()) {
+      this._playSound(custom, this._getVolume() * 0.55);
+      return;
+    }
+    if (this._isEagleSpecies(speciesKey)) {
+      this._playSound(this.sounds.eagleHunt, this._getVolume() * 0.55);
+      return;
+    }
+    this._playSound(this.sounds.moaMilestone, this._getVolume() * 0.55);
+  }
+
+  /**
+   * Generic moa call (kept for existing call sites).
    */
   playMoaCall() {
-    if (!this._checkCooldown('moaCall')) return;
-    this._playSound(this.sounds.moaMilestone, this._getVolume() * 0.55);
+    this.playSpeciesCall(null);
+  }
+
+  /**
+   * Eagle call — the hunt cry at button volume.
+   */
+  playEagleCall() {
+    this.playSpeciesCall('haasts_eagle');
   }
   
   /**

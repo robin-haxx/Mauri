@@ -1,4 +1,38 @@
 // ============================================
+// LEVEL COUNTDOWN PIE - tunables
+// A small pie sitting to the right of the TIME panel. It begins as a full
+// disc and is eaten away clockwise from 12 o'clock over the course of the
+// level, hitting empty as the level ends. It encodes proportion of level
+// remaining only - the TIME panel next to it already carries the minutes.
+// ============================================
+const LEVEL_CLOCK = {
+  enabled: true,        // false = no dial drawn, and no layout space reserved
+  size: 70,             // outer diameter (px); also the width it claims in the top bar
+  gap: 10,              // spacing between the TIME panel and the dial
+
+  // Levels declare their length as `timeLimit` in FRAMES (14400 = 4 min).
+  // This is only a last-resort fallback in seconds if that can't be found;
+  // leave it null so an unresolved level simply draws no pie rather than
+  // counting down a duration that means nothing.
+  fallbackSeconds: null,
+
+  // Urgency thresholds, as a FRACTION of the level still remaining
+  warnAt: 0.25,         // amber at or below this (last 60s of a 4:00 level)
+  dangerAt: 0.10,       // red + pulsing at or below this (last 24s of 4:00)
+  pulseHz: 2.0,         // pulse speed (cycles/sec) inside the danger band
+
+  // Colours [r, g, b]
+  calmColor: [140, 220, 170],
+  warnColor: [235, 190, 90],
+  dangerColor: [235, 100, 90],
+  spentColor: [28, 42, 34, 200],   // the disc left behind as the wedge retreats
+  faceStroke: [70, 110, 80],       // outer ring
+
+  // Show the remaining mm:ss in the middle of the dial once inside warnAt
+  showNumbersWhenLow: true
+};
+
+// ============================================
 // GAME UI CLASS - Responsive layout support
 // ============================================
 class GameUI {
@@ -73,18 +107,24 @@ class GameUI {
     const timerWidth = 120;
     const elementSpacing = 30;
 
+    // The TIME panel and the countdown dial travel together as one block, so
+    // the centring maths below only ever sees a single (wider) timer element.
+    const clockGap = LEVEL_CLOCK.enabled ? LEVEL_CLOCK.gap : 0;
+    const clockWidth = LEVEL_CLOCK.enabled ? LEVEL_CLOCK.size : 0;
+    const timerBlockWidth = timerWidth + clockGap + clockWidth;
+
     // Total width of top bar elements
-    const topBarElementsWidth = mauriWidth + seasonWidth + timerWidth + (elementSpacing * 2);
+    const topBarElementsWidth = mauriWidth + seasonWidth + timerBlockWidth + (elementSpacing * 2);
 
     // If game area is too narrow, compress spacing
     let adjustedSpacing = elementSpacing;
     if (topBarElementsWidth > gameAreaWidth - 120) {
       // Leave room for pause button; compress element spacing
-      const available = gameAreaWidth - 120 - mauriWidth - seasonWidth - timerWidth;
+      const available = gameAreaWidth - 120 - mauriWidth - seasonWidth - timerBlockWidth;
       adjustedSpacing = Math.max(10, available / 2);
     }
 
-    const adjustedTotalWidth = mauriWidth + seasonWidth + timerWidth + (adjustedSpacing * 2);
+    const adjustedTotalWidth = mauriWidth + seasonWidth + timerBlockWidth + (adjustedSpacing * 2);
     const topBarStartX = (gameAreaWidth - adjustedTotalWidth) / 2;
 
     // Store calculated positions for top bar
@@ -93,6 +133,8 @@ class GameUI {
       mauriX: topBarStartX,
       seasonX: topBarStartX + mauriWidth + adjustedSpacing,
       timerX: topBarStartX + mauriWidth + seasonWidth + (adjustedSpacing * 2),
+      clockX: topBarStartX + mauriWidth + seasonWidth + (adjustedSpacing * 2) +
+              timerWidth + clockGap,
 
       // Pause button (right edge of game area, before sidebar)
       pauseBtnX: gameAreaWidth - 90,
@@ -154,17 +196,23 @@ class GameUI {
     const chFull = this.config.canvasHeight;
     const fsGap = 12;
     const fsBtn = this.layout.pauseBtnSize;
-    const stripW = 180 + 280 + 120 + fsBtn * 2 + fsGap * 4;
-    const stripX = (cw - stripW) / 2;
+    // Same element widths as the docked top bar, just tighter gaps. The clock
+    // rides immediately after the timer using its own (smaller) gap.
+    const fsStripW = mauriWidth + seasonWidth + timerBlockWidth +
+                     fsBtn * 2 + fsGap * 4;
+    const stripX = (cw - fsStripW) / 2;
+    const fsTimerX = stripX + mauriWidth + seasonWidth + fsGap * 2;
+    const fsAfterTimer = fsTimerX + timerBlockWidth;
     this.layout.fs = {
       stripY: 10,
       btnY: 10,
       btnSize: fsBtn,
       mauriX: stripX,
-      seasonX: stripX + 180 + fsGap,
-      timerX: stripX + 180 + 280 + fsGap * 2,
-      fsBtnX: stripX + 180 + 280 + 120 + fsGap * 3,
-      pauseBtnX: stripX + 180 + 280 + 120 + fsBtn + fsGap * 4,
+      seasonX: stripX + mauriWidth + fsGap,
+      timerX: fsTimerX,
+      clockX: fsTimerX + timerWidth + clockGap,
+      fsBtnX: fsAfterTimer + fsGap,
+      pauseBtnX: fsAfterTimer + fsBtn + fsGap * 2,
       goalsX: cw - this.layout.sidebarPanelWidth - 30,
       goalsY: 102,
       toolbarStartX: (cw - toolbarTotalWidth) / 2,
@@ -302,6 +350,14 @@ class GameUI {
         }
       }
     }
+    // "Total eagles" row toggles the eagle highlight (and eagle call)
+    if (this._eagleRowBounds) {
+      const b = this._eagleRowBounds;
+      if (this._inRect(mx, my, b.x, b.y, b.w, b.h)) {
+        this._toggleEagleHighlight();
+        return true;
+      }
+    }
     return false;
   }
 
@@ -432,6 +488,9 @@ class GameUI {
     // Timer (centered right)
     this.renderTimer(this.layout.timerX, contentY);
 
+    // Level countdown dial, immediately right of the timer
+    this.renderLevelClock(this.layout.clockX, contentY);
+
     // Fullscreen + pause buttons (right edge, before sidebar)
     this.renderFullscreenButton(this.layout.fsBtnX, this.layout.pauseBtnY);
     this.renderPauseButton(this.layout.pauseBtnX, this.layout.pauseBtnY);
@@ -452,6 +511,7 @@ class GameUI {
     this.renderMauriCounter(fs.mauriX, fs.stripY);
     this.renderSeasonPanel(fs.seasonX, fs.stripY);
     this.renderTimer(fs.timerX, fs.stripY);
+    this.renderLevelClock(fs.clockX, fs.stripY);
     this.renderFullscreenButton(fs.fsBtnX, fs.btnY);
     this.renderPauseButton(fs.pauseBtnX, fs.btnY);
 
@@ -524,7 +584,7 @@ class GameUI {
       textSize(16);
       textAlign(CENTER, BOTTOM);
       push();
-      textFont(GroceryRounded);
+      textFont(FreckleFace);
       text(count, x + size / 2, y + size - 2);
       pop();
 
@@ -561,7 +621,7 @@ class GameUI {
     fill(120, 255, 150);
     textSize(32);
     push();
-    textFont(GroceryRounded);
+    textFont(FreckleFace);
     text(Math.floor(this.mauri.mauri), x + 60, y + 28);
     pop();
   }
@@ -631,9 +691,127 @@ class GameUI {
     fill(200, 240, 210);
     textSize(28);
     push();
-    textFont(GroceryRounded);
+    textFont(FreckleFace);
     textAlign(CENTER, TOP);
     text(timeStr, x + 60, y + 28);
+    pop();
+  }
+
+  /**
+   * Resolve the active level's time limit, in FRAMES (playTime's own unit).
+   * Levels declare this as e.g. `timeLimit: 14400` (4 min @ 60fps).
+   *
+   * The level config may hang off the game object under a few different
+   * names depending on how it was loaded, so check the likely ones and fall
+   * back to a bare `game.timeLimit` if the game copies it up. Returns null
+   * for an untimed level, in which case no pie is drawn.
+   */
+  _levelTimeLimitFrames() {
+    const g = this.game;
+    const level = g.level || g.currentLevel || g.levelConfig || g.levelData;
+
+    if (level && level.timeLimit != null) return level.timeLimit;
+    if (g.timeLimit != null) return g.timeLimit;
+    if (LEVEL_CLOCK.fallbackSeconds != null) return LEVEL_CLOCK.fallbackSeconds * 60;
+    return null;
+  }
+
+  /**
+   * How much of the level is left.
+   * Returns { remaining, total, fraction } with times in SECONDS (for the
+   * readout) and fraction in 0..1 (1 = level just started, 0 = time up),
+   * or null if the level is untimed.
+   */
+  _levelTimeRemaining() {
+    const totalFrames = this._levelTimeLimitFrames();
+    if (!totalFrames || totalFrames <= 0) return null;
+
+    const remainingFrames = Math.max(0, totalFrames - this.game.playTime);
+
+    return {
+      remaining: remainingFrames / 60,
+      total: totalFrames / 60,
+      fraction: remainingFrames / totalFrames
+    };
+  }
+
+  /**
+   * Level countdown pie, drawn to the right of the TIME panel.
+   * The filled wedge is the proportion of the LEVEL still remaining - it
+   * starts as a full disc and is eaten away clockwise from 12 o'clock,
+   * reaching nothing exactly as the level ends. It shows no minutes and has
+   * no moving hand; the only thing it encodes is "how much level is left".
+   *
+   * x, y is the top-left of a LEVEL_CLOCK.size square, matching the 70px
+   * height of its neighbouring panels.
+   */
+  renderLevelClock(x, y, size = LEVEL_CLOCK.size) {
+    if (!LEVEL_CLOCK.enabled) return;
+
+    const t = this._levelTimeRemaining();
+    if (!t) return;   // untimed level - nothing to count down
+    const cx = x + size / 2;
+    const cy = y + size / 2;
+    const r = size / 2 - 4;
+
+    // Urgency colour: calm -> amber -> red as the wedge shrinks
+    let col = LEVEL_CLOCK.calmColor;
+    if (t.fraction <= LEVEL_CLOCK.dangerAt) col = LEVEL_CLOCK.dangerColor;
+    else if (t.fraction <= LEVEL_CLOCK.warnAt) col = LEVEL_CLOCK.warnColor;
+
+    // Pulse the wedge inside the danger band (steady once time is actually up)
+    let wedgeAlpha = 255;
+    if (t.fraction <= LEVEL_CLOCK.dangerAt && t.remaining > 0) {
+      const phase = (this.game.playTime / 60) * TWO_PI * LEVEL_CLOCK.pulseHz;
+      wedgeAlpha = 165 + 90 * ((Math.sin(phase) + 1) / 2);
+    }
+
+    push();
+
+    // Spent portion: the whole disc, left exposed as the wedge retreats
+    noStroke();
+    fill(LEVEL_CLOCK.spentColor[0], LEVEL_CLOCK.spentColor[1],
+         LEVEL_CLOCK.spentColor[2], LEVEL_CLOCK.spentColor[3]);
+    ellipse(cx, cy, r * 2, r * 2);
+
+    // Remaining slice, depleting clockwise from 12 o'clock.
+    // p5 won't close a full-circle arc cleanly, so draw a plain disc when
+    // the level has barely started.
+    if (t.fraction >= 0.999) {
+      fill(col[0], col[1], col[2], wedgeAlpha);
+      ellipse(cx, cy, r * 2, r * 2);
+    } else if (t.fraction > 0.001) {
+      fill(col[0], col[1], col[2], wedgeAlpha);
+      arc(cx, cy, r * 2, r * 2, -HALF_PI, -HALF_PI + TWO_PI * t.fraction, PIE);
+    }
+
+    // Outer ring, so an empty or nearly-empty pie still reads as a dial
+    noFill();
+    stroke(LEVEL_CLOCK.faceStroke[0], LEVEL_CLOCK.faceStroke[1],
+           LEVEL_CLOCK.faceStroke[2]);
+    strokeWeight(1.5);
+    ellipse(cx, cy, r * 2, r * 2);
+
+    // Numeric readout once things get tight
+    if (LEVEL_CLOCK.showNumbersWhenLow && t.fraction <= LEVEL_CLOCK.warnAt) {
+      const m = Math.floor(t.remaining / 60);
+      const s = Math.floor(t.remaining % 60);
+      const label = `${m}:${s.toString().padStart(2, '0')}`;
+
+      // Knock the centre back so the label stays legible over the wedge
+      noStroke();
+      fill(20, 32, 26, 215);
+      ellipse(cx, cy + 1, 44, 22);
+
+      fill(col[0], col[1], col[2]);
+      textAlign(CENTER, CENTER);
+      textSize(15);
+      push();
+      textFont(FreckleFace);
+      text(label, cx, cy + 1);
+      pop();
+    }
+
     pop();
   }
 
@@ -845,10 +1023,10 @@ class GameUI {
       },
       'spring': {
         icon: '🌸',
-        text: 'Spring: Plants regrowing. Excellent nesting conditions.',
-        subtext: moaCount < CONFIG.maxMoaPopulation * 0.5
-          ? 'Moa are struggling! encourage breeding with nesting sites.'
-          : 'Territory expanding as dormant plants wake up.',
+        text: 'Spring: Plants regrow, and territory expands uphill.',
+        subtext: moaCount < CONFIG.maxMoaPopulation * 0.2
+          ? 'Moa are dwindling! encourage breeding with nesting sites.'
+          : 'The subalpine region is warm enough for Upland species again.',
         color: [255, 200, 220]
       }
     };
@@ -1318,7 +1496,7 @@ class GameUI {
       statY += rowH;
     }
     this.renderStatItem(col1X, statY, '👣', 'Total moa', `${stats.moas}/${this.config.maxMoaPopulation}`, [180, 210, 150]);
-    this.renderStatItem(col2X, statY, '🦅', 'Total eagles', stats.eagles, [180, 130, 130]);
+    this._renderEagleRow(col2X, statY, _rowW, stats.eagles);
     statY += rowH;
     this.renderStatItem(col1X, statY, '🥚', 'Eggs', stats.eggs, [245, 240, 220]);
     this.renderStatItem(col2X, statY, '🐣', 'Hatched', stats.births, [255, 230, 180]);
@@ -1396,12 +1574,48 @@ class GameUI {
     this.renderStatItem(x, y, row.icon, row.label, row.value, row.color);
   }
 
+  // The clickable "Total eagles" row — same shape as a species row. Clicking
+  // it (handleSidebarClick) toggles the eagle highlight and plays the eagle
+  // call; while active the row is framed in the eagle highlight colour.
+  _renderEagleRow(x, y, w, count) {
+    const rowBoxH = 32 + SMALL_TEXT_BUMP * 2;   // tracks renderStatItem's height
+    this._eagleRowBounds = { x: x - 8, y: y - 4, w: w, h: rowBoxH };
+
+    const keys = (this.simulation.activeSpecies && this.simulation.activeSpecies.eagle) || [];
+    const active = typeof SPECIES_HIGHLIGHT !== 'undefined' &&
+                   keys.some(k => SPECIES_HIGHLIGHT.has(k));
+    if (active) {
+      const cfg = (typeof EAGLE_SPECIES !== 'undefined' && EAGLE_SPECIES[keys[0]]) || {};
+      const hc = cfg.highlightColor || [255, 145, 90];
+      noFill();
+      stroke(hc[0], hc[1], hc[2], 230);
+      strokeWeight(2);
+      rect(x - 8, y - 4, w, rowBoxH, 8);
+    }
+    this.renderStatItem(x, y, '🦅', 'Total eagles', count, [180, 130, 130]);
+  }
+
   _toggleSpeciesHighlight(key) {
     if (typeof SPECIES_HIGHLIGHT === 'undefined') return;
     if (SPECIES_HIGHLIGHT.has(key)) SPECIES_HIGHLIGHT.delete(key);
     else SPECIES_HIGHLIGHT.add(key);
-    // The species answers when named — a moa call on every toggle
-    if (audioManager) audioManager.playMoaCall();
+    // The species answers when named — its own call on every toggle
+    // (dedicated recording if present, else moa/eagle generic).
+    if (audioManager) audioManager.playSpeciesCall(key);
+  }
+
+  // Toggle the in-world highlight for every active eagle species at once
+  // (the sidebar has a single eagle row, not one per eagle species).
+  _toggleEagleHighlight() {
+    if (typeof SPECIES_HIGHLIGHT === 'undefined') return;
+    const keys = (this.simulation.activeSpecies && this.simulation.activeSpecies.eagle) || [];
+    if (!keys.length) return;
+    const anyActive = keys.some(k => SPECIES_HIGHLIGHT.has(k));
+    for (const k of keys) {
+      if (anyActive) SPECIES_HIGHLIGHT.delete(k);
+      else SPECIES_HIGHLIGHT.add(k);
+    }
+    if (audioManager) audioManager.playSpeciesCall(keys[0]);
   }
 
   renderStatItem(x, y, icon, label, value, col) {
@@ -1423,7 +1637,7 @@ class GameUI {
     fill(230, 245, 235);
     textSize(20);
     push();
-    textFont(GroceryRounded);
+    textFont(FreckleFace);
     textAlign(LEFT, TOP);
     text(value, x + 26, y + 10 + SMALL_TEXT_BUMP);
     pop();

@@ -56,7 +56,7 @@ ecology and behaviour in a more narrative "how it works" style.
   last. Pulls in `p5.js` and `p5.sound.min.js`.
 - **`p5.js`, `p5.sound.min.js`** — the p5 library and its sound add-on.
 - **`sprites/`, `audio/`, `typefaces/`, `style.css`** — art (moa/eagle/plant PNGs),
-  sound, fonts (OpenDyslexic, GroceryRounded), and minimal CSS.
+  sound, fonts (OpenDyslexic, FreckleFace, GroceryRounded), and minimal CSS.
 
 ### Core engine
 - **`mauri_sketch.js`** *(the brain, ~1700 lines)* — defines the global `CONFIG`

@@ -162,7 +162,9 @@ class Moa extends Boid {
     this.migrationCooldown = 0;
     this.localFoodScore = 1.0;
     this.foodCheckTimer = 0;
+    this._nextForageSearch = 0;       // frameCount gate for retrying a failed plant search
     this._nearFavouredPlant = false;  // near a plant favoured by this species
+    this._nearPlacedPlant = false;    // near any player-placed (spawned) plant
     this.preferredElevation = s.preferredElevation;
     
     // Reusable vectors
@@ -314,15 +316,17 @@ class Moa extends Boid {
     if (this.foodCheckTimer >= 60) {
       this.foodCheckTimer -= 60;
       const plants = simulation.getNearbyPlants(this.pos.x, this.pos.y, 60);
-      let edible = 0, nearFav = false;
+      let edible = 0, nearFav = false, nearPlaced = false;
       for (let i = 0; i < plants.length; i++) {
         const p = plants[i];
         if (!p.alive) continue;
         if (p.favouredSpecies === this.speciesKey) nearFav = true;
+        if (p.isSpawned) nearPlaced = true;   // player-placed plant nearby
         if (!p.dormant && p.growth > 0.5 && edible < 8) edible++;
       }
       this.localFoodScore = edible * 0.125;
       this._nearFavouredPlant = nearFav;
+      this._nearPlacedPlant = nearPlaced;
     }
     
     // Get nearby entities
@@ -550,10 +554,14 @@ class Moa extends Boid {
   // MATING
   // ============================================
 
-  // Mating search radius — doubled while standing near a plant favoured by
-  // this species (a well-fed spot is a good place to pair up from).
+  // Mating search radius — widened near good food, since a well-fed spot is a
+  // good place to pair up from. A player-placed plant expands it 1.5x; a plant
+  // favoured by this species is stronger still at 2x (takes precedence).
   effectiveMatingRadius() {
-    return this._nearFavouredPlant ? this.matingSearchRadius * 2 : this.matingSearchRadius;
+    let mult = 1;
+    if (this._nearPlacedPlant) mult = 1.5;
+    if (this._nearFavouredPlant) mult = 2;
+    return this.matingSearchRadius * mult;
   }
 
   findPotentialMate(moas) {
@@ -898,9 +906,16 @@ class Moa extends Boid {
 
   forage(simulation, mauri) {
     if (!this.targetPlant?.alive || this.targetPlant.growth < 0.5) {
-      this.targetPlant = this.findPlant(simulation);
+      // Re-scan for a plant, but if the last scan came up empty don't repeat the
+      // (relatively costly) grid search every single frame — back off ~20 frames.
+      // A successful search resets the backoff, so normal foraging is unaffected;
+      // this only throttles hungry moa stuck where no food is in range.
+      if (frameCount >= this._nextForageSearch) {
+        this.targetPlant = this.findPlant(simulation);
+        this._nextForageSearch = this.targetPlant ? 0 : frameCount + 20;
+      }
     }
-    
+
     if (this.targetPlant) {
       const dx = this.targetPlant.pos.x - this.pos.x, dy = this.targetPlant.pos.y - this.pos.y;
       const dSq = dx * dx + dy * dy;
@@ -914,12 +929,13 @@ class Moa extends Boid {
         if (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.forestCompetition
             && FOREST_BIOMES.has(this.targetPlant.biomeKey)) {
           const radius = LEVEL_MECHANICS.forestCompetitionRadius ?? 45;
-          const neighbours = simulation.getNearbyMoas(this.pos.x, this.pos.y, radius);
-          let competitors = 0;
-          for (let n = 0; n < neighbours.length; n++) {
-            const m = neighbours[n];
-            if (m !== this && m.alive) competitors++;
-          }
+          // Count competitors WITHOUT the shared getNearbyMoas() list buffer.
+          // That buffer is the same array behave() still holds as its neighbour
+          // list; re-querying it here would overwrite the neighbours used by the
+          // separation force applied after executeState() — which showed up as
+          // jittery moa movement. countNearbyMoas() counts in place, no buffer.
+          const competitors = simulation.countNearbyMoas(
+            this.pos.x, this.pos.y, radius, m => m.alive && m !== this);
           const tolerance = LEVEL_MECHANICS.forestCompetitionTolerance ?? 2;
           if (competitors > tolerance) {
             const over = competitors - tolerance;
@@ -973,7 +989,7 @@ class Moa extends Boid {
       
       const hx = this.homeRange.x - p.pos.x, hy = this.homeRange.y - p.pos.y;
       if (hx * hx + hy * hy < this.homeRangeRadiusSq) score *= 0.7;
-      if (p.isSpawned) score *= 0.6;
+      if (p.isSpawned) score *= 0.45;   // pull moa toward player-placed plants a little more
       if (p.favouredSpecies) {
         if (p.favouredSpecies === this.speciesKey) score *= 0.6;  // prefer own resource
         else score *= 4.0;                                        // largely ignore others'
@@ -1141,12 +1157,14 @@ class Moa extends Boid {
     if (SpriteAngle.shouldMirror(this._displayAngle)) scale(1, -1);
     
     // Per-species tint (by genus), but skip it for species with their own
-    // dedicated sprite set (e.g. bush moa) so their art shows unaltered.
+    // dedicated sprite set (e.g. bush moa) so their art shows unaltered. Instead
+    // of calling p5's tint() every draw (a slow per-draw path), fetch a cached
+    // pre-tinted copy of the frame and blit it plainly.
     const _tint = variant ? null : this.speciesConfig.tint;
-    if (_tint) tint(_tint[0], _tint[1], _tint[2]);
+    const _img = _tint ? EntitySprites.getTintedMoaFrame(sprite, _tint) : sprite;
     imageMode(CENTER);
     const _drawSize = this.size * 2.5 * (this.speciesConfig.spriteScale || 1);
-    image(sprite, 0, 0, _drawSize, _drawSize);
+    image(_img, 0, 0, _drawSize, _drawSize);
     pop();
   }
 

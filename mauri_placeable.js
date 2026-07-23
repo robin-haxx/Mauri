@@ -233,7 +233,7 @@ class PlaceableObject {
         plant.growth = 0.8;
         
         this.spawnedPlants.push(plant);
-        this.simulation.plants.push(plant);
+        this.simulation.addPlant(plant);   // syncs plants list, render partition & grid
       }
     }
   }

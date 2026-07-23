@@ -18,7 +18,7 @@ function preload(){
   OpenDyslexic = loadFont('typefaces/OpenDyslexic.ttf');
   GroceryRounded = loadFont('typefaces/GroceryRounded.ttf');
   FreckleFace = loadFont('typefaces/FreckleFace-Regular.ttf');
-  const spritePlants = ['Tussock', 'Flax', 'Fern', 'Rimu', 'Beech', 'Patotara', 'Lancewood', 'Speargrass'];
+  const spritePlants = ['Tussock', 'Flax', 'Fern', 'Rimu', 'Beech', 'Patotara', 'Lancewood', 'Speargrass', 'Coprosma', 'Dracophyllum'];
   const states = ['Mature', 'Thriving', 'Wilting', 'Dormant'];
   
   for (const plant of spritePlants) {
@@ -45,7 +45,7 @@ function preload(){
 // ============================================
 const CONFIG = {
   // ===== ENGINE CONSTANTS (never change between levels) =====
-  version: 'alpha 1.1.2 (TEST_BUILD_2_dev)',
+  version: 'alpha 1.2.1',
 
   // Reference height is always 1080; width is computed from window aspect ratio
   referenceHeight: 1080,
@@ -561,7 +561,7 @@ const PLANT_TYPES = {
   patotara: { name: "Pātōtara", nutrition: 35, color: '#c94c5a', size: 28, growthTime: 160,
     description: "Alpine shrub with summer berries" },
 
-  // --- Glacial-flora (LGM) additions. Procedural blob-rendered (no sprites yet). ---
+  // --- Glacial-flora (LGM) additions. Coprosma & dracophyllum are sprite-rendered; matagouri is procedural. ---
   coprosma: { name: "Coprosma", nutrition: 30, color: '#5c7d3e', size: 22, growthTime: 190,
     description: "Divaricating shrub; hardy glacial browse with orange berries" },
   dracophyllum: { name: "Dracophyllum", nutrition: 28, color: '#9a7b4f', size: 30, growthTime: 250,

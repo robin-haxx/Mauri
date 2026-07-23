@@ -19,7 +19,7 @@ const PLANT_TYPE_ID = {
 };
 
 // Plants that use sprite rendering
-const SPRITE_PLANTS = new Set(['tussock', 'flax', 'fern', 'rimu', 'beech', 'patotara', 'lancewood', 'speargrass']);
+const SPRITE_PLANTS = new Set(['tussock', 'flax', 'fern', 'rimu', 'beech', 'patotara', 'lancewood', 'speargrass', 'coprosma', 'dracophyllum']);
 
 // Forest canopy trees subject to seasonal forest-band contraction
 const FOREST_TREES = new Set(['beech', 'rimu', 'fern']);
@@ -427,19 +427,16 @@ class Plant {
     }
     
     const halfSize = spriteSize * 0.5;
-    
-    // Only use push/pop if we need rotation (sway)
+
+    // Sway as a cheap sub-pixel horizontal offset rather than a per-plant
+    // push/translate/rotate/pop. With thousands of plants on screen that matrix
+    // churn was the dominant render cost; at the sway's tiny amplitude (max
+    // ~0.05 rad) an x-offset reads the same as a base-pivot rotation.
+    let drawX = px - halfSize;
     if (!dormant && this.seasonalModifier > 0.1) {
-      const sway = PlantStatics.getSway(frameCount, this.swayPhase, this.seasonalModifier);
-      push();
-      translate(px, py);
-      rotate(sway);
-      image(sprite, -halfSize, -halfSize, spriteSize, spriteSize);
-      pop();
-    } else {
-      // No rotation needed - direct draw (faster)
-      image(sprite, px - halfSize, py - halfSize, spriteSize, spriteSize);
+      drawX += PlantStatics.getSway(frameCount, this.swayPhase, this.seasonalModifier) * halfSize;
     }
+    image(sprite, drawX, py - halfSize, spriteSize, spriteSize);
     
     // Dormant indicator
     if (dormant) {
@@ -460,19 +457,13 @@ class Plant {
     ellipse(px + 1, py + 1, displaySize * 1.2, displaySize * 0.6);
     
     const halfSize = displaySize * 0.5;
-    
-    // Only use push/pop if we need rotation (sway)
+
+    // Cheap sub-pixel sway offset (see _renderSprite) — no per-plant matrix ops.
+    let drawX = px - halfSize;
     if (!dormant && this.seasonalModifier > 0.1) {
-      const sway = PlantStatics.getSway(frameCount, this.swayPhase, this.seasonalModifier);
-      push();
-      translate(px, py);
-      rotate(sway);
-      image(buffer, -halfSize, -halfSize, displaySize, displaySize);
-      pop();
-    } else {
-      // No rotation needed - direct draw (faster)
-      image(buffer, px - halfSize, py - halfSize, displaySize, displaySize);
+      drawX += PlantStatics.getSway(frameCount, this.swayPhase, this.seasonalModifier) * halfSize;
     }
+    image(buffer, drawX, py - halfSize, displaySize, displaySize);
     
     // Dormant indicator
     if (dormant) {

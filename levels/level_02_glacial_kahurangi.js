@@ -93,7 +93,7 @@ const LEVEL_GLACIAL_KAHURANGI = {
       key: 'glacialFlats', name: "Glacial Flats", minElevation: 0.15, maxElevation: 0.28,
       colors: ['#9aa878', '#a6b484', '#b2c090'], contourColor: '#6f7d52',
       walkable: true, canHavePlants: true,
-      plantTypes: ['tussock', 'matagouri', 'coprosma', 'flax'], canPlace: true
+      plantTypes: ['tussock', 'coprosma', 'flax'], canPlace: true
     },
     shrubland: {
       key: 'shrubland', name: "Frost Shrubland", minElevation: 0.28, maxElevation: 0.36,
@@ -152,7 +152,7 @@ const LEVEL_GLACIAL_KAHURANGI = {
   },
 
   economy: {
-    startingMauri: 110,
+    startingMauri: 60,
     seasonDuration: 3600,        // 8 seasons x 3600 = ~8 minutes across 4 phases
     eggIncubationTime: 600,
     securityTimeToLay: 900,

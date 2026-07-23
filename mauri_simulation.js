@@ -11,6 +11,11 @@ class Simulation {
     this.moas = [];
     this.eagles = [];
     this.plants = [];
+    // Render-only partition of `plants` by draw layer (type never changes), so
+    // render() walks each layer directly instead of scanning the whole plants
+    // list twice with a type filter. Kept in sync by addPlant().
+    this.groundPlants = [];   // drawn under entities
+    this.treePlants = [];     // rimu / beech / fern — drawn above entities
     this.eggs = [];
     this.placeables = [];
 
@@ -49,14 +54,25 @@ class Simulation {
     this.placeableGrid = new SpatialGrid(worldWidth, worldHeight, 80);
     this.eggGrid = new SpatialGrid(worldWidth, worldHeight, 40);
 
-    // All grids + entity lists for batch operations
-    this._gridEntityPairs = [
+    // Grids are split by whether their entities MOVE.
+    //  • Moving grids (moa/eagle/placeable) are rebuilt every frame because the
+    //    entities change position. Only live entities are inserted so a dead-
+    //    but-not-yet-cleaned entity is never a phantom neighbour/threat.
+    //  • Static grids (plants/eggs) never move, so each only needs rebuilding
+    //    when its LIST membership changes (a plant/egg added or removed) —
+    //    flagged by a per-grid `dirty` bit. This skips an O(plants) rebuild
+    //    every frame, which was the dominant per-frame cost on big maps.
+    this._movingGridPairs = [
       { grid: this.moaGrid, list: this.moas },
       { grid: this.eagleGrid, list: this.eagles },
-      { grid: this.plantGrid, list: this.plants },
-      { grid: this.placeableGrid, list: this.placeables },
-      { grid: this.eggGrid, list: this.eggs }
+      { grid: this.placeableGrid, list: this.placeables }
     ];
+    // Independent dirty flags per static grid so frequent egg churn (breeding)
+    // never forces a plant-grid rebuild, and vice-versa. `dirty: true` builds
+    // each once on the first frame.
+    this._plantGridPair = { grid: this.plantGrid, list: this.plants, dirty: true };
+    this._eggGridPair   = { grid: this.eggGrid,   list: this.eggs,   dirty: true };
+    this._staticGridPairs = [this._plantGridPair, this._eggGridPair];
 
     this.dynamicGrids = {};
 
@@ -312,7 +328,7 @@ class Simulation {
         if (biome.canHavePlants && random() < density) {
           const plantTypes = biome.plantTypes;
           const plantType = plantTypes[(random() * plantTypes.length) | 0];
-          this.plants.push(new Plant(x, y, plantType, terrain, biome.key));
+          this.addPlant(new Plant(x, y, plantType, terrain, biome.key));
         }
       }
     }
@@ -324,7 +340,14 @@ class Simulation {
     for (let i = 0; i < count; i++) {
       const pos = this.findWalkablePosition(pref.min, pref.max);
       const moa = this._createFromRegistry('moa', speciesKey, pos.x, pos.y, Moa);
-      if (moa) this.moas.push(moa);
+      if (moa) {
+        // Deterministic founder sexing: alternate F/M so the starting flock is
+        // as evenly split as possible (e.g. 6 founders → 3♀/3♂) instead of the
+        // lopsided draws random per-moa sexing can give. Matches the
+        // multi-species spawn path; _biasClosestPairSexes() preserves the split.
+        moa.isFemale = (i % 2 === 0);
+        this.moas.push(moa);
+      }
     }
   }
 
@@ -575,6 +598,7 @@ class Simulation {
   addEgg(x, y, parentSpecies = null) {
     const egg = new Egg(x, y, this.terrain, this.config, parentSpecies);
     this.eggs.push(egg);
+    this.markEggGridDirty();   // new egg → rebuild the static egg grid
     return egg;
   }
   
@@ -674,20 +698,36 @@ class Simulation {
   // ============================================
   
   updateSpatialGrids() {
-    // Existing grid updates
-    for (const pair of this._gridEntityPairs) {
+    // Moving entities: rebuilt every frame. Only live entities are inserted, so
+    // a starved eagle awaiting cleanup is never a phantom threat.
+    for (const pair of this._movingGridPairs) {
       pair.grid.clear();
       const list = pair.list;
       for (let i = 0, len = list.length; i < len; i++) {
         const entity = list[i];
-        // Every entity now carries `.alive` (emergent eagles included), so a
-        // starved eagle awaiting cleanup is never inserted as a phantom threat.
         if (entity.alive) {
           pair.grid.insert(entity);
         }
       }
     }
-    
+
+    // Static entities (plants, eggs): positions never change, so rebuild a grid
+    // only when its list membership changed (its `dirty` bit). Insert ALL of
+    // them — including plants that are momentarily eaten (alive=false) and will
+    // regrow — because the entry stays positionally valid and every plant-grid
+    // consumer already filters on `.alive`. If we inserted only live plants
+    // here, a plant that regrew between rebuilds would be missing from the grid
+    // until the next membership change, and foragers couldn't find it.
+    for (const pair of this._staticGridPairs) {
+      if (!pair.dirty) continue;
+      pair.grid.clear();
+      const list = pair.list;
+      for (let i = 0, len = list.length; i < len; i++) {
+        pair.grid.insert(list[i]);
+      }
+      pair.dirty = false;
+    }
+
     // Dynamic grids for other entity types
     for (const [type, list] of Object.entries(this.otherEntities)) {
       if (!this._dynamicGrids[type]) {
@@ -702,12 +742,33 @@ class Simulation {
       }
     }
   }
-  
+
+  // Flag a static grid for a rebuild on the next frame. Call whenever a plant or
+  // egg is ADDED or REMOVED from its list. Not needed when a plant is merely
+  // eaten or regrows — it stays in the grid and consumers read its live
+  // `.alive` state.
+  markPlantGridDirty() { this._plantGridPair.dirty = true; }
+  markEggGridDirty()   { this._eggGridPair.dirty = true; }
+
+  // Single entry point for adding a plant: keeps the master list, the render
+  // partition (ground/tree) and the plant grid all in sync. Use this instead of
+  // pushing to `this.plants` directly.
+  addPlant(plant) {
+    this.plants.push(plant);
+    if (FOREST_TREES.has(plant.type)) this.treePlants.push(plant);
+    else this.groundPlants.push(plant);
+    this.markPlantGridDirty();
+  }
+
   // ============================================
   // SPATIAL QUERY METHODS
   // ============================================
   
   getNearbyMoas(x, y, radius) { return this.moaGrid.getInRadius(x, y, radius); }
+  // Count-only query: returns a number and touches NO shared result buffer, so
+  // it's safe to call while a getNearbyMoas() list is still being held (and it's
+  // cheaper — no array is built).
+  countNearbyMoas(x, y, radius, filter = null) { return this.moaGrid.countInRadius(x, y, radius, filter); }
   getNearbyEagles(x, y, radius) { return this.eagleGrid.getInRadius(x, y, radius); }
   getNearbyPlants(x, y, radius) { return this.plantGrid.getInRadius(x, y, radius); }
   getNearbyPlaceables(x, y, radius) { return this.placeableGrid.getInRadius(x, y, radius); }
@@ -1005,8 +1066,11 @@ class Simulation {
       
       if (egg.alive) eggs[writeIdx++] = egg;
     }
-    
-    eggs.length = writeIdx;
+
+    if (writeIdx !== eggs.length) {
+      eggs.length = writeIdx;
+      this.markEggGridDirty();   // egg(s) hatched/removed → rebuild egg grid
+    }
   }
 
   updateMoas(mauri, dt = 1) {
@@ -1162,32 +1226,31 @@ class Simulation {
       px >= vl - m - extra && px <= vr + m + extra &&
       py >= vt - m - extra && py <= vb + m + extra;
     
-    const plants = this.plants;
     const placeables = this.placeables;
     const eggs = this.eggs;
     const moas = this.moas;
     const eagles = this.eagles;
 
     // DRAW ORDER Z INDEX
-    
-    // Layer 1: Ground plants (not trees — fern is now a tree)
-    this._renderFiltered(plants, 0, p => p.type !== 'rimu' && p.type !== 'beech' && p.type !== 'fern', true, inView);
-    
+
+    // Layer 1: Ground plants (pre-partitioned — no per-plant type filter)
+    this._renderFiltered(this.groundPlants, 0, null, true, inView);
+
     // Layer 2: Placeables (not Storms)
     this._renderFiltered(placeables, 50, p => p.type !== 'Storm', true, inView);
-    
+
     // Layer 3: Eggs
     this._renderFiltered(eggs, 0, null, true, inView);
-    
+
     // Layer 4: Moas (body)
     this._renderFiltered(moas, 0, null, true, inView, 'render');
-    
+
     for (const [type, list] of Object.entries(this.otherEntities)) {
       this._renderFiltered(list, 0, null, true, inView, 'render');
     }
 
-    // Layer 5: Trees (rimu, beech, fern)
-    this._renderFiltered(plants, 30, p => p.type === 'rimu' || p.type === 'beech' || p.type === 'fern', true, inView);
+    // Layer 5: Trees (rimu, beech, fern — pre-partitioned)
+    this._renderFiltered(this.treePlants, 30, null, true, inView);
     
     // Layer 6: Eagles (aliveCheck true so a just-starved bird stops drawing
     // immediately instead of lingering until the next cleanup pass)

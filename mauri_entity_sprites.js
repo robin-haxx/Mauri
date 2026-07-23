@@ -177,8 +177,34 @@ const EntitySprites = {
       const sprite = this.eagle.fly[frameIndex];
       if (this.isValid(sprite)) return sprite;
     }
-    
+
     return null;
+  },
+
+  // Pre-tinted moa frame cache. p5's tint() runs a slow per-draw path and
+  // defeats the fast image blit, so instead of tinting live every frame we bake
+  // ONE tinted copy of each base frame per species tint — lazily, on first use —
+  // and draw that with a plain image(). Keyed by (base p5.Image) → ("r,g,b").
+  // A few unique genus tints × ~5 frames = a handful of tiny buffers.
+  _tintCache: null,
+
+  getTintedMoaFrame(baseSprite, tint) {
+    // No tint, or art not loaded yet → draw the base frame untinted for now.
+    if (!tint || !this.isValid(baseSprite)) return baseSprite;
+
+    let cache = this._tintCache || (this._tintCache = new Map());
+    let perTint = cache.get(baseSprite);
+    if (!perTint) { perTint = new Map(); cache.set(baseSprite, perTint); }
+
+    const key = tint[0] + ',' + tint[1] + ',' + tint[2];
+    let baked = perTint.get(key);
+    if (baked === undefined) {
+      baked = createGraphics(baseSprite.width, baseSprite.height);
+      baked.tint(tint[0], tint[1], tint[2]);
+      baked.image(baseSprite, 0, 0);   // bake the tint once, at native resolution
+      perTint.set(key, baked);
+    }
+    return baked;
   }
 };
 

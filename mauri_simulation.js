@@ -1231,6 +1231,15 @@ class Simulation {
     const moas = this.moas;
     const eagles = this.eagles;
 
+    // Fixed-3D: billboard the cast onto the relief terrain and depth-sort it
+    // front-to-back. The layered 2D path below is left untouched for 2D mode.
+    if (typeof CONFIG !== 'undefined' && CONFIG.view3D &&
+        typeof Projection !== 'undefined' && Projection.relief) {
+      this._render3D(inView);
+      if (CONFIG.debugMode && CONFIG.showGridStats) this.renderGridStats();
+      return;
+    }
+
     // DRAW ORDER Z INDEX
 
     // Layer 1: Ground plants (pre-partitioned — no per-plant type filter)
@@ -1288,6 +1297,80 @@ class Simulation {
       if (inView(e.pos.x, e.pos.y, extraMargin)) {
         e[method]();
       }
+    }
+  }
+
+  // ============================================
+  // FIXED-3D RENDER
+  // ============================================
+  // Each entity draws itself relative to its own pos (sprite + shadow + bars), so
+  // wrapping its render in translate(0, dy) lifts the WHOLE entity so its feet sit
+  // on the relief — that is the billboard: an upright, unsquashed sprite pinned to
+  // the projected ground point (screenX is unchanged in plan-oblique). The cast is
+  // then painted back-to-front by projected ground y so nearer things overlap
+  // farther ones — the layered 2D order can't express depth once the land tilts.
+
+  _render3D(inView) {
+    const P = Projection;
+    // Far entities lift UP into the frame by up to LIFT, so widen the cull test.
+    const lift = P.LIFT;
+
+    // Ground detail sits under the cast, billboarded but not depth-sorted (it is
+    // low and dense; sorting ~1000 tussocks each frame buys nothing visible).
+    this._billboardList(this.groundPlants, 0, null, inView, lift, 'render');
+
+    // The depth-sorted cast: everything with real height, back-to-front.
+    const cast = this._cast || (this._cast = []);
+    cast.length = 0;
+    this._collectCast(this.placeables, cast, inView, lift, p => p.type !== 'Storm');
+    this._collectCast(this.eggs, cast, inView, lift, null);
+    this._collectCast(this.moas, cast, inView, lift, null);
+    for (const type in this.otherEntities) {
+      this._collectCast(this.otherEntities[type], cast, inView, lift, null);
+    }
+    this._collectCast(this.treePlants, cast, inView, lift, null);
+    this._collectCast(this.eagles, cast, inView, lift, null);
+    cast.sort(Simulation._castCmp);
+    for (let i = 0; i < cast.length; i++) {
+      const e = cast[i];
+      push();
+      translate(0, e._py - e.pos.y);
+      e.render();
+      pop();
+    }
+
+    // Overlays on top: storms, then moa indicators (hunger bars / halos).
+    this._billboardList(this.placeables, 80, p => p.type === 'Storm', inView, lift, 'render');
+    this._billboardList(this.moas, 0, null, inView, lift, 'renderIndicators');
+  }
+
+  // Draw a list billboarded (feet on the relief) in its existing order.
+  _billboardList(list, extraMargin, filter, inView, lift, method) {
+    const P = Projection;
+    for (let i = 0, len = list.length; i < len; i++) {
+      const e = list[i];
+      if (!e.alive) continue;
+      if (filter && !filter(e)) continue;
+      if (!inView(e.pos.x, e.pos.y, extraMargin + lift)) continue;
+      const elev = this.terrain.getElevationAt(e.pos.x, e.pos.y);
+      push();
+      translate(0, P.groundY(e.pos.y, elev) - e.pos.y);
+      e[method]();
+      pop();
+    }
+  }
+
+  // Push in-view entities onto the cast, tagging each with its projected ground y.
+  _collectCast(list, cast, inView, lift, filter) {
+    const P = Projection;
+    for (let i = 0, len = list.length; i < len; i++) {
+      const e = list[i];
+      if (!e.alive) continue;
+      if (filter && !filter(e)) continue;
+      if (!inView(e.pos.x, e.pos.y, 30 + lift)) continue;
+      const elev = this.terrain.getElevationAt(e.pos.x, e.pos.y);
+      e._py = P.groundY(e.pos.y, elev);
+      cast.push(e);
     }
   }
   
@@ -1384,3 +1467,8 @@ class Simulation {
     return summary;
   }
 }
+
+// Depth comparator for the fixed-3D cast: ascending projected ground y, so
+// farther (higher on screen) entities paint first and nearer ones over them.
+// Module-level so the per-frame sort allocates no comparator closure.
+Simulation._castCmp = (a, b) => a._py - b._py;

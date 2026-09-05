@@ -95,6 +95,28 @@ const CONFIG = {
   viewY: 180,
   viewZoom: 2.5,
 
+  // ===== FIXED 3D VIEW (plan-oblique) =====
+  // Toggled with V (Game.toggleView3D). When on, the terrain is re-drawn from a
+  // relief bake so the ranges stand up, and the sprite cast is billboarded onto
+  // it (see mauri_projection.js / mauri_simulation.js). view3DK + view3DLiftFrac
+  // feed Projection.configure; keep their sum ≈ 1.0 so the standing terrain fills
+  // the same rect the flat map did (no view-transform change needed).
+  view3D: false,
+  view3DK: 0.72,         // pitch squash (1 = top-down, lower = more tilt). Keep K + liftFrac ≈ 1.0
+  view3DLiftFrac: 0.28,  // range height at elevation 1.0, as a fraction of map height
+  view3DHaze: [206, 220, 230],   // atmospheric haze behind the far ridge
+  view3DEdge: [38, 46, 42],      // dark ink lip on prominent relief silhouettes
+  // Over-scan: extra terrain (as a fraction of map height) the relief bake
+  // generates beyond the map so neither end of the tilt shows a cut. FAR fills the
+  // receding distance past the top of the frame (needs ≳ liftFrac/K ≈ 0.39); NEAR
+  // continues the foreground down under the bottom HUD bar. 2D and the sim domain
+  // are unchanged — this land only exists in the 3D bake and is off-frame in 2D.
+  view3DOverscan: 0.45,       // far (up-map) over-scan
+  view3DOverscanNear: 0.28,   // near (down-map) over-scan — hides the near cut under the HUD
+  // Aerial perspective: how far the far distance blends toward view3DHaze (0 = off,
+  // ~0.7 = distance dissolves softly into haze so the body reads continuous end to end).
+  view3DHazeFade: 0.72,
+
   col_UI: [40, 70, 30, 180],
   col_panelBg: [25, 35, 30, 240],
   col_panelBorder: [60, 90, 70],
@@ -810,8 +832,9 @@ class Game {
     this.seasonManager = new SeasonManager(CONFIG);
     this.terrain.setSeasonManager(this.seasonManager);
     this.terrain.generate();
+    this._configureProjection();   // 3D projection depends on the new map dimensions
     this._updateViewTransform();
-    
+
     this.simulation = new Simulation(
       this.terrain, CONFIG, this, this.seasonManager
     );
@@ -879,6 +902,54 @@ class Game {
   toggleFullscreen() {
     CONFIG.fullscreen = !CONFIG.fullscreen;
     this._updateViewTransform();
+  }
+
+  // Fixed 3D view (plan-oblique). Toggled with V. The relief terrain is baked
+  // lazily on the first switch (a one-time hitch), then cached; entities are
+  // billboarded onto it. No view-transform change is needed because K+liftFrac≈1
+  // keeps the standing terrain inside the flat map's rect.
+  toggleView3D() {
+    if (!this.terrain) return;
+    CONFIG.view3D = !CONFIG.view3D;
+    this._configureProjection();
+    this.addNotification(CONFIG.view3D ? "3D view" : "Top-down view", 'info');
+  }
+
+  // Point Projection at the current map + authored pitch/lift, and mirror the
+  // 3D flag onto Projection.relief (the master switch the bake + billboards read).
+  _configureProjection() {
+    if (typeof Projection === 'undefined' || !this.terrain) return;
+    Projection.configure({
+      K: CONFIG.view3DK,
+      liftFrac: CONFIG.view3DLiftFrac,
+      mapWidth: this.terrain.mapWidth,
+      mapHeight: this.terrain.mapHeight
+    });
+    Projection.relief = !!CONFIG.view3D;
+  }
+
+  // Screen (canvas) point → world point, honouring the 3D projection so clicks
+  // and placement previews land on the ground under the cursor. In 2D this is the
+  // plain inverse of the view transform; in 3D it also inverts the plan-oblique
+  // lift via Projection.screenToWorld (iterative, off the per-frame path).
+  _pointerWorld(mx, my) {
+    const invZoom = 1 / CONFIG.viewZoom;
+    const px = (mx - CONFIG.viewX) * invZoom;
+    const py = (my - CONFIG.viewY) * invZoom;
+    if (CONFIG.view3D && typeof Projection !== 'undefined' && Projection.relief) {
+      return Projection.screenToWorld(px, py, (x, y) => this.terrain.getElevationAt(x, y));
+    }
+    return { x: px, y: py };
+  }
+
+  // Paint-space y for a world point — where a thing standing at (x, y) is drawn.
+  // In 2D this is just y; in 3D it lifts onto the relief so placement rings and
+  // ghosts sit on the ground like the billboarded cast. Used only by previews.
+  _groundPaintY(x, y) {
+    if (CONFIG.view3D && typeof Projection !== 'undefined' && Projection.relief) {
+      return Projection.groundY(y, this.terrain.getElevationAt(x, y));
+    }
+    return y;
   }
 
   // Recomputes the active render transform. Normal mode: the classic
@@ -1400,11 +1471,17 @@ class Game {
 
     if (!CONFIG.fullscreen) this.ui.renderPanels();
 
+    // In 3D (windowed) the terrain is allowed to fill DOWN under the bottom HUD
+    // bar so the near over-scan continues off-frame instead of ending in a hard
+    // cut at the game-area edge; the bar is redrawn opaque over it after the world.
+    const _clip3D = CONFIG.view3D && !CONFIG.fullscreen && this.terrain;
+
     push();
     drawingContext.save();
     drawingContext.beginPath();
     const _clipW = CONFIG.fullscreen ? this.terrain.mapWidth * CONFIG.viewZoom : CONFIG.gameAreaWidth;
-    const _clipH = CONFIG.fullscreen ? this.terrain.mapHeight * CONFIG.viewZoom : CONFIG.gameAreaHeight;
+    const _clipH = CONFIG.fullscreen ? this.terrain.mapHeight * CONFIG.viewZoom
+                 : (_clip3D ? CONFIG.canvasHeight - CONFIG.viewY : CONFIG.gameAreaHeight);
     drawingContext.rect(CONFIG.viewX, CONFIG.viewY, _clipW, _clipH);
     drawingContext.clip();
 
@@ -1438,6 +1515,13 @@ class Game {
     
     drawingContext.restore();
     pop();
+
+    // 3D: the terrain filled behind the bottom bar — repaint the bar over it so the
+    // near over-scan is hidden and the palette sits on a clean panel again.
+    if (_clip3D) {
+      const bb = this.ui.bottomBar;
+      this.ui.renderPanelBackground(bb.x, bb.y, bb.width, bb.height, 'bottom');
+    }
 
     // Benchmark: the run ends with the level (update() no longer ticks in
     // WON/LOST states, so the final sample + CSV save happens here)
@@ -2165,7 +2249,7 @@ class Game {
     if (hc && hc.p.alive) {
       const prog = constrain(hc.heldFrames / 60, 0, 1);
       push();
-      translate(hc.p.pos.x, hc.p.pos.y);
+      translate(hc.p.pos.x, this._groundPaintY(hc.p.pos.x, hc.p.pos.y));
       noFill();
       stroke(255, 255, 255, 90);
       strokeWeight(3);
@@ -2182,7 +2266,7 @@ class Game {
 
     // Dashed ring on the item being moved
     push();
-    translate(p.pos.x, p.pos.y);
+    translate(p.pos.x, this._groundPaintY(p.pos.x, p.pos.y));
     noFill();
     stroke(255, 255, 255, 120 + sin(frameCount * 0.15) * 60);
     strokeWeight(2);
@@ -2193,9 +2277,7 @@ class Game {
 
     // Cursor ghost with validity tint
     if (!this.isInGameArea(mouseX, mouseY)) return;
-    const invZoom = 1 / CONFIG.viewZoom;
-    const tx = (mouseX - CONFIG.viewX) * invZoom;
-    const ty = (mouseY - CONFIG.viewY) * invZoom;
+    const { x: tx, y: ty } = this._pointerWorld(mouseX, mouseY);
     if (tx < 0 || tx > this.terrain.mapWidth || ty < 0 || ty > this.terrain.mapHeight) return;
 
     const spacingCheck = this.canPlaceWithSpacing(tx, ty, p.type, p);
@@ -2204,7 +2286,7 @@ class Game {
     const ok = this.terrain.canPlace(tx, ty) && spacingCheck.allowed && biomeOk;
 
     push();
-    translate(tx, ty);
+    translate(tx, this._groundPaintY(tx, ty));
     noFill();
     stroke(ok ? CACHED_COLORS.placementValid : CACHED_COLORS.placementInvalid);
     strokeWeight(1);
@@ -2221,9 +2303,7 @@ class Game {
   renderPlacementPreview() {
     if (!this.isInGameArea(mouseX, mouseY)) return;
     
-    const invZoom = 1 / CONFIG.viewZoom;
-    const tx = (mouseX - CONFIG.viewX) * invZoom;
-    const ty = (mouseY - CONFIG.viewY) * invZoom;
+    const { x: tx, y: ty } = this._pointerWorld(mouseX, mouseY);
     
     if (tx < 0 || tx > this.terrain.mapWidth || ty < 0 || ty > this.terrain.mapHeight) return;
     
@@ -2238,7 +2318,7 @@ class Game {
     const canPlace = canPlaceTerrain && spacingCheck.allowed && biomeOk;
     
     push();
-    translate(tx, ty);
+    translate(tx, this._groundPaintY(tx, ty));
     
     noFill();
     stroke(canPlace ? CACHED_COLORS.placementValid : CACHED_COLORS.placementInvalid);
@@ -2353,9 +2433,7 @@ class Game {
     if (this.state !== GAME_STATE.PLAYING && this.state !== GAME_STATE.PAUSED) return;
 
     if (this.isInGameArea(mx, my)) {
-      const invZoom = 1 / CONFIG.viewZoom;
-      const tx = (mx - CONFIG.viewX) * invZoom;
-      const ty = (my - CONFIG.viewY) * invZoom;
+      const { x: tx, y: ty } = this._pointerWorld(mx, my);
 
       if (this.movingPlaceable) { this.tryDropMove(tx, ty); return; }
       if (this.selectedPlaceable) { this.tryPlace(tx, ty); return; }
@@ -2389,7 +2467,13 @@ class Game {
       this.toggleFullscreen();
       return;
     }
-    
+
+    if ((key === 'v' || key === 'V') &&
+        (this.state === GAME_STATE.PLAYING || this.state === GAME_STATE.PAUSED)) {
+      this.toggleView3D();
+      return;
+    }
+
     if (this.state === GAME_STATE.PLAYING || this.state === GAME_STATE.PAUSED) {
       const palette = this.activePlaceables || PLACEABLES;
       const paletteKeys = Object.keys(palette);

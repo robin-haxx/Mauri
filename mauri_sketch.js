@@ -106,16 +106,24 @@ const CONFIG = {
   view3DLiftFrac: 0.28,  // range height at elevation 1.0, as a fraction of map height
   view3DHaze: [206, 220, 230],   // atmospheric haze behind the far ridge
   view3DEdge: [38, 46, 42],      // dark ink lip on prominent relief silhouettes
-  // Over-scan: extra terrain (as a fraction of map height) the relief bake
-  // generates beyond the map so neither end of the tilt shows a cut. FAR fills the
-  // receding distance past the top of the frame (needs ≳ liftFrac/K ≈ 0.39); NEAR
-  // continues the foreground down under the bottom HUD bar. 2D and the sim domain
-  // are unchanged — this land only exists in the 3D bake and is off-frame in 2D.
+  // World pad: the terrain is generated as an island spanning a domain this much
+  // TALLER than the play area on each side (fraction of map height), so the play
+  // area is a WINDOW into the CENTRE of a larger island rather than a whole island.
+  // 2D shows the window at the same zoom (the rest cropped); 3D reveals the rest as
+  // one continuous real landmass. Applied at level generation (it shifts the habitat
+  // toward the island interior — retune levels to taste). 0 = the old whole-island.
+  view3DWorldPad: 0.5,
+  // Over-scan: how much of that larger island (as a fraction of map height) the 3D
+  // relief bake actually draws beyond the play window. FAR fills the receding
+  // distance past the top of the frame (needs ≳ liftFrac/K ≈ 0.39); NEAR continues
+  // the foreground down under the bottom HUD bar. Keep ≤ view3DWorldPad.
   view3DOverscan: 0.45,       // far (up-map) over-scan
   view3DOverscanNear: 0.28,   // near (down-map) over-scan — hides the near cut under the HUD
-  // Aerial perspective: how far the far distance blends toward view3DHaze (0 = off,
-  // ~0.7 = distance dissolves softly into haze so the body reads continuous end to end).
-  view3DHazeFade: 0.72,
+  // Aerial perspective: optional. 0 = off — the over-scan renders as plain real
+  // terrain, identical in fashion to the play area (the island's true near/far
+  // outskirts). Raise toward ~0.5 only if a seed's compressed far distance reads
+  // too busy and you want it muted into haze.
+  view3DHazeFade: 0,
 
   col_UI: [40, 70, 30, 180],
   col_panelBg: [25, 35, 30, 240],
@@ -421,6 +429,27 @@ const PLACEABLES = {
     seasonalBonus: { summer: 1.0, autumn: 1.0, winter: 1.2, spring: 1.0 }
   },
   
+  // A GLOBAL one-shot interactable (Free Play), not a spatial placement: invoking it
+  // makes the NEXT year a mast year — the podocarp forest fruits abundantly (huge
+  // forest growth, fruit edible through the cold) and the fruit-birds (kererū, kōkako)
+  // boom. Costs a lot of mauri. Handled by Game._useGlobalInteractable / triggerMastYear
+  // (the `global` flag routes it past tryPlace's spatial checks). Beech mast is cued a
+  // year ahead by the previous summer's warmth — hence the deliberate one-year delay.
+  mastYear: {
+    name: "Mast Year",
+    description: "Invoke a bumper year: next year the podocarp forest blooms and the fruit-birds boom",
+    cost: 200,
+    icon: '🌰',
+    color: '#c98a3a',
+    effect: 'mastYear',
+    global: true,           // gamewide one-shot — no map placement
+    cooldown: 3600,         // recharge (~1 year @ this level's seasonDuration); also gated by "next year"
+    radius: 0,
+    minSpacing: 0,
+    ignoresSpacing: true,
+    seasonalBonus: { summer: 1.0, autumn: 1.0, winter: 1.0, spring: 1.0 }
+  },
+
   waterhole: {
     name: "Waterhole",
     description: "Rest and slow hunger",
@@ -567,35 +596,40 @@ const BIOMES = {
 // ============================================
 // PLANT DEFINITIONS
 // ============================================
+// winterEdibility (0..1): fraction of a plant's food value that survives the cold.
+// Read ONLY by the Free Play winter-inedibility mechanic (LEVEL_MECHANICS.winterInedibility);
+// inert on every other level. NZ's flora is evergreen, so winter takes FOOD, not the
+// plant: berry/fruit sources drop to ~0, the evergreen beech refuge keeps the most.
+// See FREEPLAY_PLAN.md §4.2. A deepening glacial erodes these floors further (in Plant).
 const PLANT_TYPES = {
   tussock: { name: "Tussock", nutrition: 25, color: '#8ea040', size: 24, growthTime: 200,
-    description: "Hardy grass that covers the high country" },
+    winterEdibility: 0.20, description: "Hardy grass that covers the high country" },
   flax: { name: "Flax", nutrition: 35, color: '#487020', size: 26, growthTime: 280,
-    description: "Harakeke: versatile, with sweet nectar" },
+    winterEdibility: 0.10, description: "Harakeke: versatile, with sweet nectar" },
   fern: { name: "Fern", nutrition: 30, color: '#228B22', size: 36, growthTime: 240,
-    description: "The iconic Ponga's fronds populate forests" },
+    winterEdibility: 0.10, description: "The iconic Ponga's fronds populate forests" },
   rimu: { name: "Rimu", nutrition: 50, color: '#8B0000', size: 48, growthTime: 400,
-    description: "Ancient podocarp with bright red fruit" },
+    winterEdibility: 0.0, description: "Ancient podocarp with bright red fruit" },
   beech: { name: "Beech", nutrition: 40, color: '#8b430f', size: 52, growthTime: 350,
-    description: "Tawhai: produces mast seed in good years" },
+    winterEdibility: 0.35, description: "Tawhai: produces mast seed in good years" },
   kawakawa: { name: "Kawakawa", nutrition: 40, color: '#3d9a5e', size: 22, growthTime: 150,
-    description: "Heart-shaped leaves with peppery fruit" },
+    winterEdibility: 0.15, description: "Heart-shaped leaves with peppery fruit" },
   patotara: { name: "Pātōtara", nutrition: 35, color: '#c94c5a', size: 28, growthTime: 160,
-    description: "Alpine shrub with summer berries" },
+    winterEdibility: 0.0, description: "Alpine shrub with summer berries" },
 
   // --- Glacial-flora (LGM) additions. Coprosma & dracophyllum are sprite-rendered; matagouri is procedural. ---
   coprosma: { name: "Coprosma", nutrition: 30, color: '#5c7d3e', size: 22, growthTime: 190,
-    description: "Divaricating shrub; hardy glacial browse with orange berries" },
+    winterEdibility: 0.15, description: "Divaricating shrub; hardy glacial browse with orange berries" },
   dracophyllum: { name: "Dracophyllum", nutrition: 28, color: '#9a7b4f', size: 30, growthTime: 250,
-    description: "Inaka grass-tree of the cold subalpine tops" },
+    winterEdibility: 0.15, description: "Inaka grass-tree of the cold subalpine tops" },
   matagouri: { name: "Matagouri", nutrition: 26, color: '#7a6f4a', size: 24, growthTime: 210,
-    description: "Tūmatakuru: thorny shrub of the glacial outwash flats" },
+    winterEdibility: 0.15, description: "Tūmatakuru: thorny shrub of the glacial outwash flats" },
 
   // --- Favoured, browse-resistant plants (planted via the palette) ---
   lancewood: { name: "Juvenile Lancewood", nutrition: 34, color: '#6a5a33', size: 30, growthTime: 300,
-    description: "Horoeka: tough and spiky when growing." },
+    winterEdibility: 0.25, description: "Horoeka: tough and spiky when growing." },
   speargrass: { name: "Speargrass", nutrition: 30, color: '#8f9a55', size: 26, growthTime: 260,
-    description: "Taramea: spiny herb of the hills" }
+    winterEdibility: 0.25, description: "Taramea: spiny herb of the hills" }
 };
 
 // ============================================
@@ -756,6 +790,23 @@ class Game {
     this.maxPlayTime = 0;
     this._menuBtnBounds = null;
 
+    // Free Play climate drift (see mauri_climate_drift.js). Inert unless the level
+    // sets mechanics.climateDrift; _climateCfg stays null on every other level.
+    this._climateCfg = null;
+    this.coldIndex = 0;
+    this.cycle = 0;
+    // Free Play endless yearly-goal engine state.
+    this._freeplayYear = -1;      // which year's goals are currently built
+    this.freeplayFocus = [];      // the two species this year's goals protect
+    this._yearsSurvived = 0;
+    // Mast Year interactable (see triggerMastYear): the cycle a bought mast lands on
+    // (-1 = none). Global one-shot cooldowns live here, keyed by placeable type.
+    this._mastYearTargetCycle = -1;
+    this._globalCooldownUntil = {};
+
+    // Gamewide field guide / encyclopedia (opened with E).
+    this.encyclopedia = (typeof Encyclopedia !== 'undefined') ? new Encyclopedia() : null;
+
     this.goals = [];
     this.phases = null;
     this._phaseIndex = -1;
@@ -848,6 +899,17 @@ class Game {
     this.ui = new GameUI(CONFIG, this.terrain, this.simulation, this.mauri, this, this.seasonManager);
     
     this.playTime = 0;
+    // Free Play: build the climate-drift config for this level (null = mode off).
+    this._climateCfg = (typeof ClimateDrift !== 'undefined' && LEVEL_MECHANICS && LEVEL_MECHANICS.climateDrift)
+      ? ClimateDrift.cfgFrom(LEVEL_MECHANICS) : null;
+    this.coldIndex = 0;
+    this.cycle = 0;
+    if (this.seasonManager) this.seasonManager.coldIndex = 0;
+    this._freeplayYear = -1;
+    this.freeplayFocus = [];
+    this._yearsSurvived = 0;
+    this._mastYearTargetCycle = -1;   // reset the pending/active mast per level load
+    this._globalCooldownUntil = {};
     this._stormCooldownUntil = 0;   // reset per level load, else a restart starts mid-cooldown
     this._holdCandidate = null;     // stale refs would point into the old simulation
     this.movingPlaceable = null;
@@ -1006,7 +1068,24 @@ class Game {
     
     this.playTime += dt;
     if (this.playTime > this.maxPlayTime) this.maxPlayTime = this.playTime;
-    
+
+    // Free Play: track the year, and advance the deepening climate. The cycle (year)
+    // drives the endless yearly goals; coldIndex is the glacial severity of the year,
+    // which the season manager folds into its winter-end getters. Set BEFORE
+    // seasonManager.update and simulation.update so this frame reads it.
+    this.cycle = Math.floor(this.playTime / (4 * CONFIG.seasonDuration));
+    if (this._climateCfg) {
+      this.coldIndex = ClimateDrift.severityOfCycle(this.cycle, this._climateCfg);
+      this.seasonManager.coldIndex = this.coldIndex;
+    }
+
+    // Mast Year: a bought bumper year is live while cycle == its target. The season
+    // manager folds it into forest growth + winter edibility; the simulation into the
+    // fruit-birds' breeding. Set BEFORE seasonManager/simulation update so this frame reads it.
+    const _mast = this._isMastYear();
+    this.seasonManager.mastYear = _mast;
+    this.simulation.mastYear = _mast;
+
     if (this.seasonManager.update(dt)) this.onSeasonChange();
     
     this.simulation.update(this.mauri, dt);
@@ -1053,8 +1132,10 @@ class Game {
     }
 
     // Eagle extinction (emergent-eagle levels): the apex predator dying out is a
-    // loss. A grace period holds while an eagle egg is still incubating.
-    if (this.state === GAME_STATE.PLAYING &&
+    // loss — EXCEPT in Free Play, where it instead unleashes a dominant-moa boom
+    // (handled in _updateEagleBoom) and eagles re-immigrate next year. A grace
+    // period holds while an eagle egg is still incubating.
+    if (this.state === GAME_STATE.PLAYING && !(this.currentLevel && this.currentLevel.endless) &&
         typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.emergentEagles &&
         this.simulation.countAliveEagles() === 0) {
       let eagleEggs = 0;
@@ -1104,6 +1185,10 @@ class Game {
   }
 
   checkGoals() {
+    // Free Play is endless: rolling yearly goals, and NEVER a win (an empty goals
+    // array would otherwise win on frame one — see MISTAKES.md). Loss stays with the
+    // all-moa-gone check in update().
+    if (this.currentLevel && this.currentLevel.endless) { this._checkFreeplayYear(); return; }
     if (this.phases) { this._checkPhases(); return; }
     const goals = this.goals;
     const halfWidth = CONFIG.width / 2 / CONFIG.zoom;
@@ -1213,6 +1298,184 @@ class Game {
     }
   }
   
+  // ============================================
+  // FREE PLAY — endless yearly goals, refounding & the eagle-loss boom
+  // (see FREEPLAY_PLAN.md §4.4 / §4.5). Only reached for a level with endless:true.
+  // ============================================
+
+  _freeplaySpeciesName(key) {
+    return (typeof MOA_SPECIES !== 'undefined' && MOA_SPECIES[key] && MOA_SPECIES[key].displayName) || key;
+  }
+
+  // Roster moa species ranked most-endangered first (lowest headcount).
+  _rankFreeplaySpecies() {
+    const roster = (this.activeSpecies && this.activeSpecies.moa) || [];
+    const sim = this.simulation;
+    return roster
+      .map(k => ({ k, count: sim.getSpeciesCount(k) }))
+      .sort((a, b) => (a.count - b.count) || (roster.indexOf(a.k) - roster.indexOf(b.k)));
+  }
+
+  _dominantNonFocusSpecies() {
+    const roster = (this.activeSpecies && this.activeSpecies.moa) || [];
+    const sim = this.simulation;
+    let best = null, bestN = -1;
+    for (const k of roster) {
+      if (this.freeplayFocus.includes(k)) continue;
+      const n = sim.getSpeciesCount(k);
+      if (n > bestN) { bestN = n; best = k; }
+    }
+    return best;
+  }
+
+  _checkFreeplayYear() {
+    const sim = this.simulation;
+    const halfWidth = CONFIG.width / 2 / CONFIG.zoom;
+
+    if (this.cycle !== this._freeplayYear) {
+      if (this._freeplayYear >= 0) this._yearsSurvived++;
+      this._freeplayYear = this.cycle;
+      this._beginFreeplayYear();
+    }
+
+    // Soft growth goals: reward when met. There is deliberately NO win path.
+    for (const goal of this.goals) {
+      if (!goal.achieved && goal.condition && goal.condition()) {
+        goal.achieved = true;
+        this._goalsCompleted = (this._goalsCompleted || 0) + 1;
+        if (goal.reward) this.mauri.earn(goal.reward, halfWidth, 80, 'goal');
+        this.addNotification(`Recovered: ${goal.name}! +${goal.reward} mauri`, 'success');
+      }
+    }
+
+    this._updateEagleBoom();
+  }
+
+  _beginFreeplayYear() {
+    const sim = this.simulation;
+    const M = (typeof LEVEL_MECHANICS !== 'undefined') ? LEVEL_MECHANICS : {};
+    const protectFloor = M.freeplayProtectFloor ?? 2;
+    const refoundCount = M.freeplayRefoundCount ?? 3;
+    const targets = this.currentLevel.freeplayTargets || M.freeplayTargets || {};
+    const defaultTarget = M.freeplayDefaultTarget ?? 8;
+
+    // 1) The two most-endangered species become this year's focus.
+    const ranked = this._rankFreeplaySpecies();
+    this.freeplayFocus = ranked.slice(0, 2).map(s => s.k);
+
+    // 2) Refound extinct NON-focus species so the full cast returns each year.
+    for (const s of ranked) {
+      if (this.freeplayFocus.includes(s.k)) continue;
+      if (s.count === 0) sim._spawnDistributedMoas({ [s.k]: refoundCount });
+    }
+    // 3) Top a crashed focus species up to its protect floor so it stays growable.
+    for (const k of this.freeplayFocus) {
+      const short = protectFloor - sim.getSpeciesCount(k);
+      if (short > 0) sim._spawnDistributedMoas({ [k]: short });
+    }
+
+    // 4) Protect ONLY the focus species from a total wipe this year (dynamic floor).
+    const floors = {};
+    for (const k of this.freeplayFocus) floors[k] = protectFloor;
+    sim.dynamicFloors = floors;
+
+    // 5) Highlight the focus species in the UI.
+    if (typeof SPECIES_HIGHLIGHT !== 'undefined') {
+      SPECIES_HIGHLIGHT.clear();
+      for (const k of this.freeplayFocus) SPECIES_HIGHLIGHT.add(k);
+    }
+
+    // 6) Eagles re-immigrate if the apex predator was lost (this ends any boom).
+    if (M.emergentEagles && sim.countAliveEagles() === 0) {
+      sim.spawnEagle(); sim.spawnEagle();
+      sim.boomSpecies = null;
+    }
+
+    // 7) Build this year's goals: recover each focus species to its target.
+    this.goals = this.freeplayFocus.map(k => {
+      const target = targets[k] || defaultTarget;
+      const reward = Math.round((M.freeplayGoalReward ?? 80) * (1 + this.coldIndex));
+      return {
+        name: `${this._freeplaySpeciesName(k)} ≥ ${target}`,
+        condition: () => this.simulation.getSpeciesCount(k) >= target,
+        reward,
+        achieved: false
+      };
+    });
+
+    // 8) Announce the year.
+    const stage = (typeof ClimateDrift !== 'undefined' && this._climateCfg)
+      ? ClimateDrift.stageName(this.coldIndex) : '';
+    const names = this.freeplayFocus.map(k => this._freeplaySpeciesName(k)).join(' & ');
+    this.addNotification(`Year ${this.cycle + 1}${stage ? ' — ' + stage : ''}: protect ${names}`, 'info');
+
+    // 9) Mast year onset: announce the boom and seed a few extra fruit-birds to the
+    // feast so it reads at once (forest growth + faster breeding do the rest all year).
+    if (this._isMastYear()) {
+      this.addNotification('Mast year! The podocarp forest blooms — the fruit-birds will boom.', 'success');
+      if (sim._spawnOtherEntities) {
+        sim._spawnOtherEntities('kereru', 2);
+        sim._spawnOtherEntities('kokako', 1);
+      }
+    }
+  }
+
+  // Endless eagle-loss consequence: with no apex predator, the current dominant
+  // (non-focus) moa surges unchecked, filling the population budget and crowding the
+  // focus species out of the forest — until eagles re-immigrate next year.
+  _updateEagleBoom() {
+    const sim = this.simulation;
+    if (!(typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.emergentEagles)) return;
+    if (sim.countAliveEagles() === 0) {
+      if (!sim.boomSpecies) {
+        const dom = this._dominantNonFocusSpecies();
+        if (dom) {
+          sim.boomSpecies = dom;
+          this.addNotification(`No eagles: ${this._freeplaySpeciesName(dom)} surge unchecked.`, 'error');
+        }
+      }
+    } else if (sim.boomSpecies) {
+      sim.boomSpecies = null;
+    }
+  }
+
+  // Free Play HUD: the deepening-climate gauge — current year, glacial stage, a
+  // cold thermometer, and years survived. Drawn in screen space over the game.
+  _renderClimateGauge() {
+    if (this.state !== GAME_STATE.PLAYING && this.state !== GAME_STATE.PAUSED) return;
+    const W = CONFIG.canvasWidth;
+    const gw = 190, gh = 42, gx = W / 2 - gw / 2, gy = 44;
+    push();
+    noStroke();
+    fill(20, 26, 34, 205); rect(gx, gy, gw, gh, 8);
+    fill(224, 232, 226); textAlign(LEFT, CENTER); textStyle(BOLD); textSize(13);
+    text(`Year ${this.cycle + 1}`, gx + 10, gy + 14);
+    textStyle(NORMAL); textSize(10); fill(168, 190, 178);
+    const stage = (typeof ClimateDrift !== 'undefined') ? ClimateDrift.stageName(this.coldIndex) : '';
+    text(stage, gx + 10, gy + 30);
+    // thermometer
+    const bx = gx + 84, by = gy + 11, bw = gw - 96, bh = 8;
+    fill(40, 50, 58); rect(bx, by, bw, bh, 4);
+    const t = Math.max(0, Math.min(1, this.coldIndex));
+    fill(lerp(92, 208, t), lerp(172, 224, t), lerp(150, 246, t));
+    rect(bx, by, bw * t, bh, 4);
+    fill(150, 168, 158); textAlign(LEFT, CENTER); textSize(10);
+    text(`survived: ${this._yearsSurvived}`, bx, gy + 30);
+
+    // Mast Year tag: shown while a mast is booked — "coming" next year, then live this
+    // year — so the player sees their (costly) investment on its way and landing.
+    if (this._mastYearTargetCycle >= 0 && this._mastYearTargetCycle >= this.cycle) {
+      const active = this._isMastYear();
+      const label = active ? 'MAST YEAR' : 'mast year next';
+      textAlign(CENTER, CENTER); textStyle(BOLD); textSize(10);
+      const tw = textWidth(label) + 16, px = gx + gw / 2 - tw / 2, py = gy + gh + 4;
+      fill(70, 138, 62, active ? 235 : 150); rect(px, py, tw, 16, 6);
+      fill(242, 250, 236); text(label, gx + gw / 2, py + 8);
+      textStyle(NORMAL);
+    }
+    pop();
+  }
+
   addNotification(text, type = 'info') {
     this.notifications.push({
       text, type,
@@ -1393,9 +1656,13 @@ class Game {
     
   tryPlace(x, y) {
     if (!this.selectedPlaceable) return false;
-    
+
     const def = this.activePlaceables[this.selectedPlaceable];
     if (!def) return false;
+
+    // Global one-shot interactables (e.g. Mast Year) fire a gamewide effect instead of
+    // placing an object — route them past the spatial checks below.
+    if (def.global) return this._useGlobalInteractable(this.selectedPlaceable, def);
 
     if (this.selectedPlaceable === 'Storm' && this.playTime < this._stormCooldownUntil) {
       const secs = Math.ceil((this._stormCooldownUntil - this.playTime) / 60);
@@ -1445,7 +1712,51 @@ class Game {
     if (!keyIsDown(SHIFT)) this.selectedPlaceable = null;
     return true;
   }
-  
+
+  // Use a GLOBAL one-shot interactable (a placeable flagged `global`): spend its cost,
+  // fire its gamewide effect, and start its own recharge — no map placement. Currently
+  // just Mast Year, but written so another gamewide tool can slot in the same way.
+  _useGlobalInteractable(type, def) {
+    const until = this._globalCooldownUntil[type] || 0;
+    if (this.playTime < until) {
+      const secs = Math.ceil((until - this.playTime) / 60);
+      this.addNotification(`${def.name} is recharging (${secs}s)`, 'error');
+      return false;
+    }
+    // Feature precondition: a mast is already booked for next year.
+    if (type === 'mastYear' && this._mastYearTargetCycle > this.cycle) {
+      this.addNotification('A mast year is already on the way.', 'error');
+      return false;
+    }
+    if (!this.mauri.spend(def.cost)) {
+      this.addNotification('Not enough mauri!', 'error');
+      return false;
+    }
+
+    if (type === 'mastYear') this.triggerMastYear();
+
+    this._globalCooldownUntil[type] = this.playTime + (def.cooldown || 3600);
+    if (typeof BENCHMARK !== 'undefined') BENCHMARK.recordPlacement(type);
+    if (audioManager) audioManager.playPlantRustle();
+    if (!keyIsDown(SHIFT)) this.selectedPlaceable = null;
+    return true;
+  }
+
+  // Book a mast year for the NEXT full year (a real beech/rimu mast is cued a year
+  // ahead by the previous summer's warmth). While that year runs, _isMastYear() is
+  // true: mauri_seasons.js surges forest growth and keeps forest fruit edible through
+  // the cold, and the fruit-birds (kererū/kōkako) breed hard (mauri_kereru.js /
+  // Simulation._hatchFlyerEgg). The onset is announced in _beginFreeplayYear.
+  triggerMastYear() {
+    this._mastYearTargetCycle = this.cycle + 1;
+    this.addNotification('Mast year invoked — next year the podocarp forest will bloom.', 'success');
+  }
+
+  // Is the current game year the booked mast year?
+  _isMastYear() {
+    return this._mastYearTargetCycle >= 0 && this.cycle === this._mastYearTargetCycle;
+  }
+
   render() {
     background(20, 30, 25);
 
@@ -2301,6 +2612,9 @@ class Game {
   }
 
   renderPlacementPreview() {
+    // Global one-shot interactables (Mast Year) place nothing on the map — no ghost.
+    const _gdef = this.activePlaceables && this.activePlaceables[this.selectedPlaceable];
+    if (_gdef && _gdef.global) return;
     if (!this.isInGameArea(mouseX, mouseY)) return;
     
     const { x: tx, y: ty } = this._pointerWorld(mouseX, mouseY);
@@ -2594,7 +2908,20 @@ function scaleCanvasToFit() {
 function initializeRegistry() {
   REGISTRY.registerAnimalType('moa', {}, Moa);
   REGISTRY.registerAnimalType('eagle', {}, HaastsEagle);
-  
+
+  // Flighted birds — each its own base type + list (Simulation.otherEntities[key]),
+  // seeded per level via initialEntityCounts and bred emergently, the way the moa
+  // are seeded (see mauri_kereru.js / mauri_kokako.js). kea / kākā / kākāpō extend
+  // the same Kereru base later.
+  if (typeof Kereru !== 'undefined') {
+    REGISTRY.registerAnimalType('kereru', {}, Kereru);
+    REGISTRY.registerSpecies('kereru', 'kereru', KERERU_SPECIES);
+  }
+  if (typeof Kokako !== 'undefined') {
+    REGISTRY.registerAnimalType('kokako', {}, Kokako);
+    REGISTRY.registerSpecies('kokako', 'kokako', KOKAKO_SPECIES);
+  }
+
   for (const [key, config] of Object.entries(MOA_SPECIES)) REGISTRY.registerSpecies(key, 'moa', config);
   for (const [key, config] of Object.entries(EAGLE_SPECIES)) REGISTRY.registerSpecies(key, 'eagle', config);
   for (const [key, config] of Object.entries(PLANT_TYPES)) REGISTRY.registerPlant(key, config);
@@ -2648,6 +2975,12 @@ function draw() {
     game.update(deltaMultiplier);
     game.render();
   }
+
+  // Free Play climate gauge + gamewide field guide overlay (screen space, on top).
+  if (game) {
+    if (game._climateCfg && typeof game._renderClimateGauge === 'function') game._renderClimateGauge();
+    if (game.encyclopedia && game.encyclopedia.open) game.encyclopedia.render(game);
+  }
 }
 
 function updateFPS() {
@@ -2673,5 +3006,15 @@ function renderFPSCounter() {
   pop();
 }
 
-function mousePressed() { game.handleClick(mouseX, mouseY); }
-function keyPressed() { game.handleKey(key); }
+function mousePressed() {
+  if (game && game.encyclopedia && game.encyclopedia.open) { game.encyclopedia.handleClick(mouseX, mouseY); return; }
+  game.handleClick(mouseX, mouseY);
+}
+function keyPressed() {
+  // Gamewide field guide: E toggles it, and it swallows keys while open (modal).
+  if (game && game.encyclopedia && game.encyclopedia.handleGlobalKey(key, game)) return;
+  game.handleKey(key);
+}
+function mouseWheel(e) {
+  if (game && game.encyclopedia && game.encyclopedia.open) { game.encyclopedia.handleWheel(e.delta); return false; }
+}

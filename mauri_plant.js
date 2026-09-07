@@ -24,6 +24,12 @@ const SPRITE_PLANTS = new Set(['tussock', 'flax', 'fern', 'rimu', 'beech', 'pato
 // Forest canopy trees subject to seasonal forest-band contraction
 const FOREST_TREES = new Set(['beech', 'rimu', 'fern']);
 
+// Free Play winter-inedibility tuning (read only when LEVEL_MECHANICS.winterInedibility).
+// A deepening glacial (coldIndex) erodes each plant's winter food floor; below the
+// threshold a plant is standing scenery, not forage. See FREEPLAY_PLAN.md §4.2.
+const PLANT_CLIMATE_EDIBILITY_EROSION = 0.8;   // how hard coldIndex erodes the floor
+const PLANT_INEDIBLE_THRESHOLD = 3;            // nutrition below this => skipped as food
+
 // Sprite reference - initialized from mauri_sketch.js
 let PLANT_SPRITES = null;
 
@@ -220,6 +226,7 @@ class Plant {
     this.parentPlaceable = null;
     this.favouredSpecies = null;   // set by a placeable that plants a species-specific resource
     this.suppressed = false;       // true when a forest tree is outside the contracted forest band
+    this.winterInedible = false;   // Free Play: standing (frosted) but no winter food value
     
     // Pre-calculate visual variation
     this.visualOffset = random(-1, 1);
@@ -265,13 +272,45 @@ class Plant {
     this.plantTypeModifier = seasonManager.getPlantTypeModifier(this.type);
     
     this.checkDormancy(seasonManager);
-    
+
     if (this.dormant) {
       this.handleDormancy(seasonManager);
       return;
     }
-    
+
     this.handleGrowth();
+
+    // Free Play: winter takes FOOD VALUE, not the plant. A wild plant stays alive and
+    // standing (rendered frosted) but its nutrition drops to its winter floor, eroded
+    // by the deepening glacial. Only grazing removes a plant — never the cold. (Placeable-
+    // spawned food is exempt above: a tended grove stays a winter lifeline.)
+    if (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.winterInedibility) {
+      this._applyWinterEdibility(seasonManager);
+    } else {
+      this.winterInedible = false;
+    }
+  }
+
+  // Standing-but-inedible winter model (see FREEPLAY_PLAN.md §4.2 / MISTAKES.md).
+  // Blends the season-computed nutrition toward a per-type winter floor by winterness,
+  // then flags the plant unforageable when that floor falls below the threshold. Never
+  // touches `alive` — the plant persists as frosted cover.
+  _applyWinterEdibility(seasonManager) {
+    const w = seasonManager.getWinterness ? seasonManager.getWinterness() : 0;
+    if (w <= 0) { this.winterInedible = false; return; }
+    // Mast year: the podocarp forest fruits abundantly, so forest plants keep their
+    // food value right through the cold — the boom that feeds the fruit-birds and the
+    // browsers. (Growth is surged in mauri_seasons.js getPlantTypeModifier.)
+    if (seasonManager.mastYear && typeof FOREST_TREES !== 'undefined' && FOREST_TREES.has(this.type)) {
+      this.winterInedible = false; return;
+    }
+    const def = PLANT_TYPES[this.type];
+    const we = (def && def.winterEdibility != null) ? def.winterEdibility : 0.12;
+    const cold = seasonManager.coldIndex || 0;
+    const eff = Math.max(0, we * (1 - PLANT_CLIMATE_EDIBILITY_EROSION * cold));
+    const winterVal = this.baseNutrition * this.growth * eff;
+    this.nutrition = this.nutrition + (winterVal - this.nutrition) * w;   // ease in by winterness
+    this.winterInedible = this.nutrition < PLANT_INEDIBLE_THRESHOLD;
   }
   
   checkDormancy(seasonManager) {
@@ -364,7 +403,11 @@ class Plant {
     if (this.dormant) {
       return 'dormant';
     }
-    
+    // Free Play: winter-inedible plants stand frosted/wilted (present, not gone).
+    if (this.winterInedible) {
+      return 'wilting';
+    }
+
     if (this.seasonalModifier < 0.5) {
       return 'wilting';
     }

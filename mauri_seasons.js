@@ -168,6 +168,24 @@ class SeasonManager {
     // Forest-band cache (recomputed at most once per frame)
     this._fbFrame = -1;
     this._fbCache = null;
+
+    // Free Play climate drift. coldIndex in [0,1] is the glacial severity of the
+    // current year, set each frame by Game from ClimateDrift (0 on every level that
+    // doesn't opt in, so the folds below are inert). It deepens the WINTER end of
+    // the seasonal getters — never summer, never the authored base values (those
+    // stay in SEASONS; writing back would compound — see MISTAKES.md).
+    this.coldIndex = 0;
+    this.CLIMATE_SNOW_DROP = 0.20;       // snow line drop at full glacial (0.77 winter -> ~0.57)
+    this.CLIMATE_FOREST_SQUEEZE = 0.05;  // forest refuge band narrows at full glacial
+    this.CLIMATE_HUNGER_MULT = 0.6;      // extra winter hunger at full glacial (+60%)
+
+    // Free Play Mast Year: set true by Game while a bought mast year is live. Surges
+    // FOREST_TREES growth (rimu most — the fruiting podocarp) in getPlantTypeModifier,
+    // and keeps forest fruit edible through the cold (mauri_plant.js). Read-time only;
+    // never written back into SEASONS.
+    this.mastYear = false;
+    this.MAST_PODO_MULT = 3.0;    // rimu (podocarp) growth multiplier in a mast year
+    this.MAST_FOREST_MULT = 2.0;  // other forest trees (beech/fern) in a mast year
   }
   
   get current() { return SEASONS[this.seasonOrder[this.currentSeasonIndex]]; }
@@ -210,30 +228,27 @@ class SeasonManager {
   }
 
   // ============================================
-  // UNIFIED LERP HELPER
+  // SEASONAL BLEND (inlined, allocation-free)
   // ============================================
-  
-  /**
-   * Get a value from current season, with smooth transition to next.
-   * Works for any numeric property path.
-   */
-  _lerpSeasonal(getCurrentVal, getNextVal) {
-    const current = getCurrentVal();
-    if (this.transitionProgress > 0) {
-      return lerp(current, getNextVal(), this.transitionProgress);
-    }
-    return current;
-  }
+  // Each getter below inlines the current->next transition blend directly. A prior
+  // closure-taking helper (_lerpSeasonal(getCur, getNext)) allocated two arrow
+  // functions per call on a per-entity, per-frame path — the sim's single largest
+  // GC source in the Te Manawa fork. Do NOT reintroduce it. See MISTAKES.md.
 
   // ============================================
   // SNOW & WEATHER
   // ============================================
 
   getSnowLineElevation() {
-    return this._lerpSeasonal(
-      () => this.current.snowLine,
-      () => this.next.snowLine
-    );
+    const cur = this.current.snowLine;
+    let sl = (this.transitionProgress > 0) ? lerp(cur, this.next.snowLine, this.transitionProgress) : cur;
+    // Free Play: a deepening glacial pushes the snow line down year-round (shrinking
+    // walkable high country), most strongly through winter.
+    if (this.coldIndex > 0) {
+      sl -= this.coldIndex * this.CLIMATE_SNOW_DROP * (0.5 + 0.5 * this.getWinterness());
+      if (sl < 0.5) sl = 0.5;
+    }
+    return sl;
   }
 
   isSeasonalSnow(elevation) {
@@ -269,6 +284,15 @@ class SeasonManager {
     } else {
       band = { min: cur.min, max: cur.max };
     }
+    // Free Play: a deepening glacial tightens the refuge — the treeline creeps up
+    // from below and eases down from above, so the productive band narrows over the
+    // run, not just within a winter. Keep a sliver so it never inverts.
+    if (this.coldIndex > 0) {
+      const sq = this.coldIndex * this.CLIMATE_FOREST_SQUEEZE;
+      const min = band.min + sq;
+      const max = band.max - sq * 0.5;
+      band = { min, max: Math.max(min + 0.01, max) };
+    }
     this._fbFrame = frameCount;
     this._fbCache = band;
     return band;
@@ -279,17 +303,27 @@ class SeasonManager {
   // ============================================
 
   getPlantTypeModifier(plantType) {
-    return this._lerpSeasonal(
-      () => this.current.plantTypeModifiers?.[plantType] || 1.0,
-      () => this.next.plantTypeModifiers?.[plantType] || 1.0
-    );
+    const cur = this.current.plantTypeModifiers?.[plantType] || 1.0;
+    let m = cur;
+    if (this.transitionProgress > 0) {
+      const nxt = this.next.plantTypeModifiers?.[plantType] || 1.0;
+      m = lerp(cur, nxt, this.transitionProgress);
+    }
+    // Free Play Mast Year: the podocarp forest fruits abundantly — forest plants surge,
+    // rimu (the podocarp) most of all. Read-time only; never written back (MISTAKES.md).
+    if (this.mastYear && typeof FOREST_TREES !== 'undefined' && FOREST_TREES.has(plantType)) {
+      m *= (plantType === 'rimu') ? this.MAST_PODO_MULT : this.MAST_FOREST_MULT;
+    }
+    return m;
   }
-  
+
   getPlantModifier(biomeKey) {
-    return this._lerpSeasonal(
-      () => this.current.plantModifiers[biomeKey] || 1.0,
-      () => this.next.plantModifiers[biomeKey] || 1.0
-    );
+    const cur = this.current.plantModifiers[biomeKey] || 1.0;
+    if (this.transitionProgress > 0) {
+      const nxt = this.next.plantModifiers[biomeKey] || 1.0;
+      return lerp(cur, nxt, this.transitionProgress);
+    }
+    return cur;
   }
   
   // ============================================
@@ -297,17 +331,19 @@ class SeasonManager {
   // ============================================
 
   getHungerModifier() {
-    return this._lerpSeasonal(
-      () => this.current.hungerModifier,
-      () => this.next.hungerModifier
-    );
+    const cur = this.current.hungerModifier;
+    let h = (this.transitionProgress > 0) ? lerp(cur, this.next.hungerModifier, this.transitionProgress) : cur;
+    // Free Play: cold costs energy. Concentrated in winter via winterness, so a
+    // glacial winter is hungrier than an interglacial one, and deep glacials hungrier
+    // still. (Per-species cold tolerance is applied on top, in mauri_moa.js.)
+    if (this.coldIndex > 0) h *= (1 + this.CLIMATE_HUNGER_MULT * this.coldIndex * this.getWinterness());
+    return h;
   }
-  
+
   getMigrationStrength() {
-    return this._lerpSeasonal(
-      () => this.current.migrationStrength,
-      () => this.next.migrationStrength
-    );
+    const cur = this.current.migrationStrength;
+    if (this.transitionProgress > 0) return lerp(cur, this.next.migrationStrength, this.transitionProgress);
+    return cur;
   }
   
   getPreferredElevation() {

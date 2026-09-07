@@ -59,6 +59,12 @@ class TerrainGenerator {
     this.worldWidth = gameWidth;
     this.worldHeight = gameHeight;
     this.zoom = zoom;
+
+    // Island Y-pad: the island falloff spans mapHeight + 2·worldPadY (near–far), so
+    // the play window [0,mapHeight] is the CENTRE of a larger island. getElevation
+    // reads this for both the play-area heightmap AND the 3D over-scan, so the two
+    // stay one continuous landmass. 0 = the old whole-island-fills-the-window.
+    this.worldPadY = Math.max(0, (config.view3DWorldPad != null ? config.view3DWorldPad : 0)) * this.mapHeight;
     
     this.scale = config.pixelScale;
     this.invScale = 1 / config.pixelScale;
@@ -222,8 +228,11 @@ class TerrainGenerator {
   
   getIslandFalloff(x, y) {
     const nx = x / this.mapWidth;
-    const ny = y / this.mapHeight;
-    
+    // Y maps through the padded island domain, so the play window is the island's
+    // vertical centre and the over-scan (y<0 or y>mapHeight) is its real near/far land.
+    const pad = this.worldPadY || 0;
+    const ny = (y + pad) / (this.mapHeight + 2 * pad);
+
     const warpX = noise(x * 0.01 + this.seed, y * 0.01) * 0.2;
     const warpY = noise(x * 0.01 + this.seed * 2, y * 0.01 + this.seed) * 0.2;
     
@@ -304,9 +313,11 @@ class TerrainGenerator {
     }
     
     // Soft edge falloff at map borders (not ocean, just prevents
-    // entities walking off the edge)
+    // entities walking off the edge). Y through the padded island domain so the
+    // play window is interior and the near/far over-scan tapers at the world edge.
+    const pad = this.worldPadY || 0;
     const nx = x / this.mapWidth;
-    const ny = y / this.mapHeight;
+    const ny = (y + pad) / (this.mapHeight + 2 * pad);
     const edgeDist = Math.min(nx, 1 - nx, ny, 1 - ny);
     const edgeFalloff = Math.min(1, edgeDist * 12);
     elevation *= 0.3 + edgeFalloff * 0.7;

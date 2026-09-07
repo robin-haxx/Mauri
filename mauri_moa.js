@@ -177,7 +177,7 @@ class Moa extends Boid {
     this._threateningEagles = [];
     
     // Season cache
-    this._seasonCache = { key: null, hungerMod: 1, migrationStrength: 0, winterness: 0, preferredElevation: { min: 0.25, max: 0.70 } };
+    this._seasonCache = { key: null, hungerMod: 1, migrationStrength: 0, winterness: 0, coldIndex: 0, preferredElevation: { min: 0.25, max: 0.70 } };
   }
 
   // Called from simulation's updateEggs when hatching new moa
@@ -192,6 +192,7 @@ class Moa extends Boid {
     // winter, fades across the winter->spring thaw. Winter penalties scale by
     // this instead of snapping on at the hard season boundary.
     c.winterness = sm.getWinterness ? sm.getWinterness() : (c.key === 'winter' ? 1 : 0);
+    c.coldIndex = sm.coldIndex || 0;   // Free Play deepening-glacial severity (0 otherwise)
     const sp = sm.getPreferredElevation();
     const pp = this.speciesConfig.preferredElevation || sp;
     c.preferredElevation.min = (pp.min + sp.min) * 0.5;
@@ -251,6 +252,9 @@ class Moa extends Boid {
   // the unprompted spring boom flattens into a measured climb, and — because it
   // keys off live population — breeding rebounds automatically after a crash.
   _computeBreedDensityFactor(simulation) {
+    // Free Play eagle-loss boom: with no predator, the dominant species breeds
+    // unsuppressed until eagles re-immigrate (see Game._updateEagleBoom).
+    if (simulation.boomSpecies && simulation.boomSpecies === this.speciesKey) return 1;
     const M = (typeof LEVEL_MECHANICS !== 'undefined') ? LEVEL_MECHANICS : null;
     const soft = M ? M.breedingSoftCap : undefined;
     if (soft == null) return 1;                       // feature off — no change
@@ -303,7 +307,19 @@ class Moa extends Boid {
         }
       }
     }
-    
+
+    // Free Play cold-tolerance axis (opt-in): a deepening glacial taxes low
+    // cold-tolerance species (the lowland browsers) far more than the cold-adapted
+    // upland moa, so the surviving flock drifts upland-ward as the run cools. Scaled
+    // by baseHungerRate so it stays proportionate to a species' metabolism.
+    if (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.coldToleranceMatters
+        && sc.coldIndex > 0 && sc.winterness > 0) {
+      const tol = this.speciesConfig.temperatureTolerance?.cold ?? 0.5;
+      const mult = LEVEL_MECHANICS.coldToleranceMattersMult ?? 1;
+      const surcharge = this.baseHungerRate * sc.coldIndex * sc.winterness * (1 - tol) * mult;
+      if (surcharge > 0) this.hunger = Math.min(this.hunger + surcharge * dt, this.maxHunger);
+    }
+
     // Cooldowns
     if (this.mateCooldown > 0) {
       this.mateCooldown -= dt;
@@ -687,7 +703,11 @@ class Moa extends Boid {
     if (typeof LEVEL_MECHANICS !== 'undefined') {
       // Cold-season breeding slowdown ramps in with winterness instead of snapping
       // on at the winter boundary.
-      const _wm = LEVEL_MECHANICS.winterBreedingCooldownMult ?? 1;
+      let _wm = LEVEL_MECHANICS.winterBreedingCooldownMult ?? 1;
+      // Free Play: a deepening glacial lengthens the winter breeding slowdown further,
+      // so growth genuinely gets harder cycle over cycle (the mode's whole point).
+      const _ci = (moa._seasonCache && moa._seasonCache.coldIndex) || 0;
+      if (_ci > 0) _wm = 1 + (_wm - 1) * (1 + _ci);
       _cd *= 1 + (_wm - 1) * ((moa._seasonCache && moa._seasonCache.winterness) || 0);
       // Global "more measured" breeding: a flat lengthening of every cooldown.
       _cd *= (LEVEL_MECHANICS.breedingCooldownMult ?? 1);
@@ -715,7 +735,9 @@ class Moa extends Boid {
   }
 
   layEgg(simulation, mauri) {
-    const _cap = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.maxPerSpecies) || Infinity;
+    let _cap = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.maxPerSpecies) || Infinity;
+    // Free Play eagle-loss boom: the dominant species may exceed the usual cap.
+    if (simulation.boomSpecies === this.speciesKey && _cap !== Infinity) _cap = Math.ceil(_cap * 1.5);
     if (simulation.getMoaPopulation() >= this.config.maxMoaPopulation ||
         (this.speciesKey && simulation.getSpeciesCount(this.speciesKey) >= _cap)) {
       this.isPregnant = false;
@@ -982,6 +1004,10 @@ class Moa extends Boid {
     for (let i = 0; i < plants.length; i++) {
       const p = plants[i];
       if (!p.alive || p.growth < 0.5) continue;
+      // Free Play: a winter-inedible plant still stands (frosted) but has no food
+      // value — skip it as forage like a dormant plant, so the flock must seek the
+      // evergreen refuge rather than nibbling worthless standing browse.
+      if (p.winterInedible) continue;
       if (p.seasonalModifier < 0.3 && this.hunger < 70) continue;
       
       const dx = p.pos.x - this.pos.x, dy = p.pos.y - this.pos.y;

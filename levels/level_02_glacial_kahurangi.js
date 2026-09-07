@@ -133,7 +133,11 @@ const LEVEL_GLACIAL_KAHURANGI = {
       'south_island_giant_moa',// lowland browser — a rival for the forest
       'heavy_footed_moa'       // forest-edge Pachyornis — competes at the margin
     ],
-    eagle: ['haasts_eagle']
+    eagle: ['haasts_eagle'],
+    // Flighted forest birds — ambient population, seeded and bred like the moa but
+    // via the otherEntities path (mauri_kereru.js / mauri_kokako.js). They feed on
+    // the forestRefuge canopy (beech/rimu/fern) and thin with it in the glacial.
+    other: ['kereru', 'kokako']
   },
   startingSpecies: 'upland_moa',
 
@@ -148,7 +152,9 @@ const LEVEL_GLACIAL_KAHURANGI = {
 
   initialEntityCounts: {
     moa: 14,
-    eagle: 1
+    eagle: 1,
+    kereru: 4,     // founding flock — breeds up toward kereru maxPopulation (16)
+    kokako: 3      // founding birds — breeds up toward kokako maxPopulation (10)
   },
 
   economy: {

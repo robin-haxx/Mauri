@@ -39,6 +39,11 @@ class Simulation {
     this._speciesStableTimes = {};
     this._speciesLastAlive = {};
 
+    // Free Play Mast Year: set true by Game while a bought mast year is live. The
+    // fruit-birds (kererū/kōkako) breed harder — a higher flock cap and shorter egg
+    // cooldown (mauri_kereru.js._tryReproduce / _hatchFlyerEgg).
+    this.mastYear = false;
+
     this._speciesStableTimes = {};
     this.speciesLastAlive = {};
 
@@ -74,7 +79,7 @@ class Simulation {
     this._eggGridPair   = { grid: this.eggGrid,   list: this.eggs,   dirty: true };
     this._staticGridPairs = [this._plantGridPair, this._eggGridPair];
 
-    this.dynamicGrids = {};
+    this._dynamicGrids = {};   // per-other-entity-type spatial grids (kereru, kokako, ...)
 
     // Population cache
     this._cachedAliveMoas = 0;
@@ -502,6 +507,47 @@ class Simulation {
     }
   }
 
+  // Hatch a flighted-bird egg (kererū / kōkako / …) into a juvenile in its flock.
+  // Emergent reproduction, mirroring _hatchEagleEgg; the bird lives in
+  // otherEntities[type]. Cap-guarded by the species' own maxPopulation — an
+  // over-cap egg is simply lost rather than lingering.
+  _hatchFlyerEgg(egg, type) {
+    if (!this.otherEntities[type]) this.otherEntities[type] = [];
+    const flock = this.otherEntities[type];
+
+    // Flock cap: read the species config, else the kererū LEVEL_MECHANICS fallback.
+    let cap = 16;
+    const sp = (typeof REGISTRY !== 'undefined') ? REGISTRY.getSpecies(type) : null;
+    if (sp && sp.config && sp.config.maxPopulation != null) cap = sp.config.maxPopulation;
+    else if (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.kereruMaxPopulation != null) cap = LEVEL_MECHANICS.kereruMaxPopulation;
+    // Mast year: the flock is allowed to swell past its usual cap (the boom).
+    if (this.mastYear) cap = Math.ceil(cap * ((typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.mastFlockMult) || 1.6));
+    if (this.getSpeciesCount(type) >= cap) return;
+
+    const chick = this._createFromRegistry(type, type, egg.pos.x, egg.pos.y, null);
+    if (!chick) return;
+
+    chick.age = 0;
+    chick.mature = false;
+    chick.hunger = 30;
+
+    // Sex-balance the hatchling: take the minority sex of its own living flock so a
+    // small population keeps both sexes and stays able to pair within itself.
+    let _f = 0, _m = 0;
+    for (let i = 0; i < flock.length; i++) {
+      const o = flock[i];
+      if (o.alive) { o.isFemale ? _f++ : _m++; }
+    }
+    chick.isFemale = (_f < _m) ? true : (_m < _f ? false : random() < 0.5);
+
+    flock.push(chick);
+    this._invalidateCache();
+
+    if (this.stats && this.stats.births !== undefined) this.stats.births++;
+    const name = (sp && sp.displayName) || (chick.species && chick.species.displayName) || type;
+    if (this.game) this.game.addNotification(`A ${name} has hatched!`, 'success');
+  }
+
   findWalkablePosition(minElev, maxElev) {
     const terrain = this.terrain;
     const padding = this.spawnPadding;
@@ -649,9 +695,15 @@ class Simulation {
   // (LEVEL_MECHANICS.populationFloors) — its remaining members can't be hunted or
   // starved, so the species can never be wiped out below that floor.
   isSpeciesProtected(speciesKey) {
-    const floors = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.populationFloors) || null;
-    if (!floors || floors[speciesKey] === undefined) return false;
-    return this.getCachedSpeciesCount(speciesKey) <= floors[speciesKey];
+    const staticFloors = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.populationFloors) || null;
+    const dynFloors = this.dynamicFloors || null;   // Free Play: this year's protected focus species
+    let floor;
+    if (staticFloors && staticFloors[speciesKey] !== undefined) floor = staticFloors[speciesKey];
+    if (dynFloors && dynFloors[speciesKey] !== undefined) {
+      floor = (floor === undefined) ? dynFloors[speciesKey] : Math.max(floor, dynFloors[speciesKey]);
+    }
+    if (floor === undefined) return false;
+    return this.getCachedSpeciesCount(speciesKey) <= floor;
   }
 
   // Convenience getters for level 2 goal conditions
@@ -758,6 +810,41 @@ class Simulation {
     if (FOREST_TREES.has(plant.type)) this.treePlants.push(plant);
     else this.groundPlants.push(plant);
     this.markPlantGridDirty();
+  }
+
+  // Plant a forest seedling where a kererū / kōkako dropped a seed — the one runtime
+  // path that grows the plant population (see mauri_kereru.js). Cap-guarded and
+  // FOREST-ONLY: a seed establishes only on plant-bearing ground whose biome grows a
+  // forest tree, never carpets an already-dense stand, and starts as a young recruit
+  // that grows in. Returns true if it planted. A level can switch it off with
+  // LEVEL_MECHANICS.seedDispersal = false.
+  disperseSeed(x, y) {
+    const M = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS) ? LEVEL_MECHANICS : {};
+    if (M.seedDispersal === false) return false;
+
+    // Density gate: don't carpet a stand that already holds enough live plants.
+    const R = M.disperseDensityRadius ?? 26;
+    const maxD = M.disperseDensityMax ?? 3;
+    const near = this.getNearbyPlants(x, y, R);
+    let n = 0;
+    for (let i = 0; i < near.length; i++) if (near[i].alive) n++;
+    if (n >= maxD) return false;
+
+    // Must be plant-bearing ground whose biome actually grows a forest tree.
+    const biome = this.terrain.getBiomeAt(x, y);
+    if (!biome || !biome.canHavePlants || !biome.plantTypes) return false;
+    const forestHere = biome.plantTypes.filter(t => FOREST_TREES.has(t));
+    if (forestHere.length === 0) return false;
+
+    // Soft total cap so runaway recruitment can't blow the plant budget.
+    const cap = M.maxPlants ?? this.config.maxPlants ?? 1200;
+    if (this.plants.length >= cap) return false;
+
+    const type = forestHere[(Math.random() * forestHere.length) | 0];
+    const seedling = new Plant(x, y, type, this.terrain, biome.key);
+    seedling.growth = 0.25;                              // a young recruit — handleGrowth() grows it in
+    this.addPlant(seedling);
+    return true;
   }
 
   // ============================================
@@ -997,6 +1084,11 @@ class Simulation {
           // Emergent eagle reproduction: hatch a juvenile Pouākai, then consume
           // the egg (over-cap eggs are simply lost rather than lingering).
           this._hatchEagleEgg(egg);
+          egg.alive = false;
+        } else if (typeof FLYER_TYPES !== 'undefined' && FLYER_TYPES.has(egg.offspringType)) {
+          // Emergent flighted-bird reproduction (kererū / kōkako / …): hatch a
+          // juvenile into its flock, then consume the egg.
+          this._hatchFlyerEgg(egg, egg.offspringType);
           egg.alive = false;
         } else if (this.getMoaPopulation() < config.maxMoaPopulation) {
           const offspringSpecies = egg.getOffspringSpecies();
@@ -1254,21 +1346,23 @@ class Simulation {
     // Layer 4: Moas (body)
     this._renderFiltered(moas, 0, null, true, inView, 'render');
 
+    // Ground-dwelling other entities render here (below the trees); flighted birds
+    // (isFlyer: kererū, kōkako) are held back to a pass above the trees, below.
     for (const [type, list] of Object.entries(this.otherEntities)) {
-      this._renderFiltered(list, 0, null, true, inView, 'render');
+      this._renderFiltered(list, 0, e => !e.isFlyer, true, inView, 'render');
     }
 
     // Layer 5: Trees (rimu, beech, fern — pre-partitioned)
     this._renderFiltered(this.treePlants, 30, null, true, inView);
-    
+
     // Layer 6: Eagles (aliveCheck true so a just-starved bird stops drawing
     // immediately instead of lingering until the next cleanup pass)
     this._renderFiltered(eagles, 30, null, true, inView);
-    
-    // Layer 6b: Flying other entities (kea)
-    // Kea should render above trees like eagles
-    if (this.otherEntities.kea) {
-      this._renderFiltered(this.otherEntities.kea, 30, null, true, inView);
+
+    // Layer 6b: Flighted other entities (kererū, kōkako) — above the trees like the
+    // eagles, since they fly over and perch in the canopy.
+    for (const [type, list] of Object.entries(this.otherEntities)) {
+      this._renderFiltered(list, 30, e => e.isFlyer, true, inView, 'render');
     }
 
     // Layer 7: Storms

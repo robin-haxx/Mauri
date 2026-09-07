@@ -25,6 +25,7 @@
     <!-- Terrain and seasons -->
     <script src="mauri_projection.js"></script>  <!-- plan-oblique 3D projection (before terrain: the relief bake reads it) -->
     <script src="mauri_terrain.js"></script>
+    <script src="mauri_climate_drift.js"></script>  <!-- Free Play deepening-glacial curve (pure; before seasons/sketch read it) -->
     <script src="mauri_seasons.js"></script>
 
     <!-- Base classes -->
@@ -33,6 +34,8 @@
     <!-- Entities -->
     <script src="mauri_moa.js"></script>
     <script src="mauri_eagle.js"></script>
+    <script src="mauri_kereru.js"></script>  <!-- flighted-bird base (frugivore flyer) -->
+    <script src="mauri_kokako.js"></script>  <!-- extends Kereru (must load after it) -->
     <script src="mauri_egg.js"></script>
     <script src="mauri_plant.js"></script>
     <script src="mauri_placeable.js"></script>
@@ -50,6 +53,8 @@
     <script src="levels/level_01_kahurangi.js"></script>
     <script src="levels/level_02_glacial_kahurangi.js"></script>
     <script src="levels/level_03_alpine_lakes.js"></script>
+    <script src="levels/level_freeplay_kahurangi.js"></script>  <!-- endless deepening-glacial Free Play -->
+    <script src="mauri_encyclopedia.js"></script>
 
     <!-- Per-level tutorial scripts (register with TUTORIAL_REGISTRY) -->
     <script src="levels/tutorial_01_kahurangi.js"></script>

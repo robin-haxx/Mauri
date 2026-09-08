@@ -4,7 +4,7 @@
     {
       "name": "mauri",
       "runtimeExecutable": "node",
-      "runtimeArgs": ["D:/ac.coding/Mauri/tools/serve.js"],
+      "runtimeArgs": ["tools/serve.js"],
       "port": 8081
     }
   ]

@@ -2921,6 +2921,10 @@ function initializeRegistry() {
     REGISTRY.registerAnimalType('kokako', {}, Kokako);
     REGISTRY.registerSpecies('kokako', 'kokako', KOKAKO_SPECIES);
   }
+  if (typeof Kea !== 'undefined') {
+    REGISTRY.registerAnimalType('kea', {}, Kea);
+    REGISTRY.registerSpecies('kea', 'kea', KEA_SPECIES);
+  }
 
   for (const [key, config] of Object.entries(MOA_SPECIES)) REGISTRY.registerSpecies(key, 'moa', config);
   for (const [key, config] of Object.entries(EAGLE_SPECIES)) REGISTRY.registerSpecies(key, 'eagle', config);

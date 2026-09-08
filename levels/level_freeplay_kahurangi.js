@@ -71,7 +71,7 @@ const LEVEL_FREEPLAY_KAHURANGI = {
       'heavy_footed_moa'        // forest-edge Pachyornis
     ],
     eagle: ['haasts_eagle'],
-    other: ['kereru', 'kokako']
+    other: ['kereru', 'kokako', 'kea']
   },
   startingSpecies: 'upland_moa',
 
@@ -82,7 +82,7 @@ const LEVEL_FREEPLAY_KAHURANGI = {
     'south_island_giant_moa': 3,
     'heavy_footed_moa': 2
   },
-  initialEntityCounts: { moa: 18, eagle: 2, kereru: 4, kokako: 3 },
+  initialEntityCounts: { moa: 18, eagle: 2, kereru: 4, kokako: 3, kea: 4 },
 
   economy: {
     startingMauri: 80,

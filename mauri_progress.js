@@ -62,6 +62,12 @@ const PROGRESS = {
   },
   
   isUnlocked(levelId) {
+    // A level with no unlockCondition is open by default (e.g. Free Play / endless),
+    // regardless of stored progress — no completion checks required.
+    if (typeof LEVEL_REGISTRY !== 'undefined') {
+      const def = LEVEL_REGISTRY.get(levelId);
+      if (def && !def.unlockCondition) return true;
+    }
     return this.levelsUnlocked.includes(levelId);
   },
   

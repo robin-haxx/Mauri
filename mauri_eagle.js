@@ -362,16 +362,21 @@ class HaastsEagle extends Boid {
       this.patrolCenter.y + sin(this.patrolAngle) * this.patrolRadius
     );
     
-    this.applyForce(this.seek(this._targetVec, 0.4));
-    
+    // Readability: seek the orbit point a little harder and wander less, so the
+    // eagle traces a clear circle around its nest/site rather than drifting about.
+    this.applyForce(this.seek(this._targetVec, 0.55));
+
     const wander = this.wander();
-    wander.mult(0.25);
+    wander.mult(0.12);
     this.applyForce(wander);
-    
+
+    // Gentler, less frequent random re-centring — the patrol holds its ground so the
+    // player can read where an eagle is guarding (the site-follow logic still moves it
+    // deliberately when the prey/nests move).
     this._driftTimer += dt;
-    if (this._driftTimer >= 256) {
-      this._driftTimer -= 256;
-      this.driftPatrolCenter(20);
+    if (this._driftTimer >= 420) {
+      this._driftTimer -= 420;
+      this.driftPatrolCenter(10);
     }
   }
   
@@ -445,12 +450,36 @@ class HaastsEagle extends Boid {
       }
     }
     
-    if (nearestMoa) {
+    // LINK 4 — opportunistic predation on FLIGHTED birds (kea/kākā/kererū/kōkako). Moa
+    // are always the preferred prey; a HUNGRY eagle (hunger past eagleFlyerHungerGate)
+    // also considers any flyer in range, which "feels" eagleFlyerPreyPenalty× farther so
+    // it's taken only when it's the easy option (near, or no moa about). The bird itself
+    // is the target, never its nest/eggs. Grounded birds (kākāpō, isFlyer=false) are NOT
+    // eligible — they freeze and rely on camouflage. Gated by eagleHuntsFlyers.
+    let target = nearestMoa, targetDistSq = nearestDistSq, targetEff = nearestEff, targetIsFlyer = false;
+    if (_M.eagleHuntsFlyers && this.hunger >= (_M.eagleFlyerHungerGate ?? 55)) {
+      const penalty = _M.eagleFlyerPreyPenalty ?? 1.7;
+      const huntRSq = this.huntRadius * this.huntRadius;
+      const others = simulation.otherEntities;
+      for (const type in others) {
+        const list = others[type];
+        for (let i = 0; i < list.length; i++) {
+          const b = list[i];
+          if (!b.alive || !b.isFlyer) continue;   // only flighted birds; grounded kākāpō is safe
+          const dx = b.pos.x - px, dy = b.pos.y - py, dSq = dx * dx + dy * dy;
+          if (dSq > huntRSq) continue;
+          const eff = dSq * penalty;
+          if (eff < targetEff) { targetEff = eff; targetDistSq = dSq; target = b; targetIsFlyer = true; }
+        }
+      }
+    }
+
+    if (target) {
       const hadNoTarget = this.target === null;
 
       this.state = 'hunting';
       this.hunting = true;
-      this.target = nearestMoa;
+      this.target = target;
       this.huntSearchTimer = 0;
       this.lastTargetTime = frameCount;
 
@@ -466,15 +495,16 @@ class HaastsEagle extends Boid {
 
       // Pursue with prediction
       this._targetVec.set(
-        nearestMoa.pos.x + nearestMoa.vel.x * 12,
-        nearestMoa.pos.y + nearestMoa.vel.y * 12
+        target.pos.x + target.vel.x * 12,
+        target.pos.y + target.vel.y * 12
       );
       this.applyForce(this.seek(this._targetVec, 1.4));
 
       if (this.huntWindupTimer > 0) this.huntWindupTimer -= dt;
 
-      if (nearestDistSq < this.catchRadiusSq && !inGrace && this.huntWindupTimer <= 0) {
-        simulation.handleEagleCatch(this, nearestMoa, mauri);
+      if (targetDistSq < this.catchRadiusSq && !inGrace && this.huntWindupTimer <= 0) {
+        if (targetIsFlyer) simulation.handleEagleCatchFlyer(this, target);
+        else simulation.handleEagleCatch(this, target, mauri);
       }
     } else {
       this.huntSearchTimer += dt;
@@ -489,13 +519,34 @@ class HaastsEagle extends Boid {
           // than roaming the barren alps. Only when NO moa can be found does the
           // bird stay put and let hunger take its course (a real local ebb).
           const followR = _M.eagleFollowRadius ?? 900;
-          const prey = simulation.getClosestMoa
-            ? simulation.getClosestMoa(this.pos.x, this.pos.y, followR)
-            : null;
-          if (prey) {
+          // LINK 3 — patrol tracks moa NESTS: prefer the nearest moa egg, so the
+          // territory follows where moa are breeding. When kea rob the forest nests,
+          // the eagles drift off after the moa that are still nesting elsewhere —
+          // leaving the forest, which is what makes it safe for kea. Falls back to the
+          // nearest adult moa when no nests are about.
+          let anchor = null;
+          if (_M.eaglePatrolTracksNests) {
+            // Prefer an established NESTING SITE — the eagles orbit the moa nests, so
+            // raiding a site out from under them makes them relocate off it (visibly).
+            if (simulation.getNearestNestingSite) {
+              const site = simulation.getNearestNestingSite(this.pos.x, this.pos.y, followR);
+              if (site) anchor = site.pos;
+            }
+            if (!anchor && simulation.getClosestMoaNest) {   // else a loose egg
+              const nest = simulation.getClosestMoaNest(this.pos.x, this.pos.y, followR);
+              if (nest) anchor = nest.pos;
+            }
+          }
+          if (!anchor) {
+            const prey = simulation.getClosestMoa
+              ? simulation.getClosestMoa(this.pos.x, this.pos.y, followR)
+              : null;
+            if (prey) anchor = prey.pos;
+          }
+          if (anchor) {
             // Drag a bonded partner along so the pair tracks prey together and
             // stays inside mate range instead of splitting up.
-            this._relocateTerritory(prey.pos.x, prey.pos.y);
+            this._relocateTerritory(anchor.x, anchor.y);
           }
           this.state = 'patrol';
           this.hunting = false;

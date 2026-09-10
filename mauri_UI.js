@@ -188,6 +188,8 @@ class GameUI {
 
     // Fullscreen (max-view) button sits just left of the pause button
     this.layout.fsBtnX = this.layout.pauseBtnX - 80;
+    // Field-guide (encyclopedia) toggle sits just left of the fullscreen button
+    this.layout.guideBtnX = this.layout.fsBtnX - 80;
 
     // Fullscreen overlay HUD layout: the HUD is drawn over the maximised play
     // area, but the top-bar essentials, the fullscreen/pause buttons and the
@@ -208,6 +210,7 @@ class GameUI {
       timerX: this.layout.timerX,
       clockX: this.layout.clockX,
       fsBtnX: this.layout.fsBtnX,
+      guideBtnX: this.layout.guideBtnX,
       pauseBtnX: this.layout.pauseBtnX,
       // Goals in the same spot as the docked sidebar's goals panel (top of the
       // right sidebar column).
@@ -254,10 +257,18 @@ class GameUI {
       return this.handleFullscreenClick(mx, my);
     }
 
-    // Check pause / fullscreen button clicks first (top bar area)
+    // Check guide / pause / fullscreen button clicks first (top bar area)
     if (my >= this.topBar.y && my < this.topBar.y + this.topBar.height) {
+      if (this.handleGuideButtonClick(mx, my)) return true;
       if (this.handlePauseButtonClick(mx, my)) return true;
       if (this.handleFullscreenButtonClick(mx, my)) return true;
+    }
+
+    // Docked field guide, when open, takes clicks that land inside its panel.
+    if (this.game.encyclopedia && this.game.encyclopedia.open &&
+        this.game.encyclopedia.pointerOverPanel(mx, my)) {
+      this.game.encyclopedia.handleDockedClick(mx, my);
+      return true;
     }
 
     // Check bottom toolbar clicks
@@ -281,12 +292,23 @@ class GameUI {
     const fs = this.layout.fs;
     const bs = fs.btnSize;
 
+    if (this._inRect(mx, my, fs.guideBtnX, fs.btnY, bs, bs)) {
+      if (this.game.encyclopedia) this.game.encyclopedia.toggle(this.game);
+      return true;
+    }
     if (this._inRect(mx, my, fs.fsBtnX, fs.btnY, bs, bs)) {
       this.game.toggleFullscreen();
       return true;
     }
     if (this._inRect(mx, my, fs.pauseBtnX, fs.btnY, bs, bs)) {
       this._togglePause();
+      return true;
+    }
+
+    // Docked field guide, when open, takes clicks inside its panel.
+    if (this.game.encyclopedia && this.game.encyclopedia.open &&
+        this.game.encyclopedia.pointerOverPanel(mx, my)) {
+      this.game.encyclopedia.handleDockedClick(mx, my);
       return true;
     }
 
@@ -489,7 +511,8 @@ class GameUI {
     // Level countdown dial, immediately right of the timer
     this.renderLevelClock(this.layout.clockX, contentY);
 
-    // Fullscreen + pause buttons (right edge, before sidebar)
+    // Field-guide + fullscreen + pause buttons (right edge, before sidebar)
+    this.renderGuideButton(this.layout.guideBtnX, this.layout.pauseBtnY);
     this.renderFullscreenButton(this.layout.fsBtnX, this.layout.pauseBtnY);
     this.renderPauseButton(this.layout.pauseBtnX, this.layout.pauseBtnY);
 
@@ -510,6 +533,7 @@ class GameUI {
     this.renderSeasonPanel(fs.seasonX, fs.stripY);
     this.renderTimer(fs.timerX, fs.stripY);
     this.renderLevelClock(fs.clockX, fs.stripY);
+    this.renderGuideButton(fs.guideBtnX, fs.btnY);
     this.renderFullscreenButton(fs.fsBtnX, fs.btnY);
     this.renderPauseButton(fs.pauseBtnX, fs.btnY);
 
@@ -526,6 +550,15 @@ class GameUI {
     // Focus-species population toggles sit directly below the goals panel.
     this.renderFocusSpeciesButtons();
 
+    // Field guide docks below the focus-species row (translucent over the play area).
+    if (this.game.encyclopedia && this.game.encyclopedia.open) {
+      const gy = (this._fsFocusBottomY || (fs.goalsY + goalsH + 24)) + 12;
+      const gh = this.config.canvasHeight - gy - 20;
+      this.game.encyclopedia.renderDocked(
+        fs.goalsX, gy, this.layout.sidebarPanelWidth, gh, { translucent: true }
+      );
+    }
+
     this.renderToolbar(fs.toolbarStartX, fs.toolbarY);
   }
 
@@ -535,12 +568,22 @@ class GameUI {
   // filled in the species' highlight colour.
   renderFocusSpeciesButtons() {
     this._fsFocusBtnBounds = [];
-    // Levels with an explicit focal list use it; every other level falls back
-    // to its own moa species, so highlight toggles are available in
-    // fullscreen everywhere (the windowed population panel isn't drawn there).
-    const focal = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.focalSpecies) ||
-      ((this.simulation.activeSpecies && this.simulation.activeSpecies.moa) || null);
-    if (!focal || !focal.length) return;
+    // Free Play shows THIS YEAR'S focus species (rotates — may be kea/kākā/kākāpō),
+    // not the static focal moa. Other levels use their explicit focal list, else the
+    // moa roster (so the toggles exist everywhere in fullscreen).
+    let focal = null;
+    if (this.game && this.game.freeplayFocus && this.game.freeplayFocus.length) {
+      focal = this.game.freeplayFocus;
+    } else {
+      focal = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.focalSpecies) ||
+        ((this.simulation.activeSpecies && this.simulation.activeSpecies.moa) || null);
+    }
+    if (!focal || !focal.length) {
+      // No focus row — the guide (if open) docks straight below the goals panel.
+      const goalsH0 = 30 + this.game.goals.length * 26;
+      this._fsFocusBottomY = this.layout.fs.goalsY + goalsH0 + 24;
+      return;
+    }
 
     // Sit the row just below the goals panel, left-aligned to the same column.
     // The goals panel has a 12px translucent backing skirt around it, so start
@@ -552,7 +595,9 @@ class GameUI {
     const y = fs.goalsY + goalsH + 24;
 
     for (const key of focal) {
-      const cfg = (typeof MOA_SPECIES !== 'undefined' && MOA_SPECIES[key]) || {};
+      const isMoa = (typeof MOA_SPECIES !== 'undefined' && !!MOA_SPECIES[key]);
+      const regSp = (!isMoa && typeof REGISTRY !== 'undefined' && REGISTRY.getSpecies) ? REGISTRY.getSpecies(key) : null;
+      const cfg = isMoa ? MOA_SPECIES[key] : ((regSp && regSp.config) || {});
       const active = typeof SPECIES_HIGHLIGHT !== 'undefined' && SPECIES_HIGHLIGHT.has(key);
       const hc = cfg.highlightColor || [255, 235, 120];
 
@@ -567,16 +612,42 @@ class GameUI {
       }
       rect(x, y, size, size, 10);
 
-      // Idle sprite — the species' own art; generic art gets the species tint
-      const set = (cfg.spriteSet && EntitySprites.moaVariants[cfg.spriteSet]) || EntitySprites.moa;
-      const sprite = EntitySprites.isValid(set.idle) ? set.idle : EntitySprites.moa.idle;
-      if (EntitySprites.isValid(sprite)) {
-        push();
-        imageMode(CENTER);
-        const s = Math.min(40 / sprite.width, 40 / sprite.height);
-        if (!cfg.spriteSet && cfg.tint) tint(cfg.tint[0], cfg.tint[1], cfg.tint[2]);
-        image(sprite, x + size / 2, y + size / 2 - 8, sprite.width * s, sprite.height * s);
-        pop();
+      // Short name so a rotating focus reads (kea vs a moa).
+      const name = (isMoa ? cfg.displayName : (regSp && regSp.displayName)) || key;
+      noStroke(); fill(214, 230, 214); textAlign(CENTER, TOP); textSize(9);
+      text(name.length > 12 ? name.slice(0, 11) + '…' : name, x + size / 2, y + 4);
+
+      if (isMoa) {
+        // Idle sprite — the species' own art; generic art gets the species tint.
+        const set = (cfg.spriteSet && EntitySprites.moaVariants[cfg.spriteSet]) || EntitySprites.moa;
+        const sprite = EntitySprites.isValid(set.idle) ? set.idle : EntitySprites.moa.idle;
+        if (EntitySprites.isValid(sprite)) {
+          push();
+          imageMode(CENTER);
+          const s = Math.min(40 / sprite.width, 40 / sprite.height);
+          if (!cfg.spriteSet && cfg.tint) tint(cfg.tint[0], cfg.tint[1], cfg.tint[2]);
+          image(sprite, x + size / 2, y + size / 2 - 4, sprite.width * s, sprite.height * s);
+          pop();
+        }
+      } else {
+        // Bird focus species — its own sprite (kea/kākā/kākāpō/kōkako, keyed the
+        // same as EntitySprites.flyers). A species without dedicated art keeps the
+        // simple coloured marker as a fallback.
+        const birdSprite = (typeof EntitySprites !== 'undefined' && EntitySprites.flyers)
+          ? EntitySprites.flyers[key] : null;
+        if (EntitySprites.isValid(birdSprite)) {
+          push();
+          imageMode(CENTER);
+          const s = Math.min(44 / birdSprite.width, 44 / birdSprite.height);
+          image(birdSprite, x + size / 2, y + size / 2 - 4, birdSprite.width * s, birdSprite.height * s);
+          pop();
+        } else {
+          push(); noStroke();
+          fill(hc[0], hc[1], hc[2]); ellipse(x + size / 2, y + size / 2 - 2, 24, 19);
+          fill(hc[0] * 0.6 + 20, hc[1] * 0.6 + 20, hc[2] * 0.6 + 20);
+          ellipse(x + size / 2 + 7, y + size / 2 - 8, 11, 11);
+          pop();
+        }
       }
 
       // Live population count
@@ -595,6 +666,8 @@ class GameUI {
       this._fsFocusBtnBounds.push({ key, x, y, size });
       x += size + gap;
     }
+    // Where the right-column content ends, for docking the field guide below it.
+    this._fsFocusBottomY = y + size;
   }
 
   renderMauriCounter(x, y) {
@@ -886,6 +959,66 @@ class GameUI {
       rect(centerX - 12, centerY - 12, 8, 24, 2);
       rect(centerX + 4, centerY - 12, 8, 24, 2);
     }
+  }
+
+  // Field-guide (encyclopedia) toggle. A little open-book glyph; framed/tinted
+  // while the guide is open. Sits left of the fullscreen button in both the docked
+  // top bar and the fullscreen overlay.
+  renderGuideButton(x, y) {
+    const size = this.layout.pauseBtnSize;
+    const isHovered = mouseX > x && mouseX < x + size &&
+                      mouseY > y && mouseY < y + size;
+    const isOpen = !!(this.game.encyclopedia && this.game.encyclopedia.open);
+
+    if (isOpen) {
+      fill(46, 78, 56);
+      stroke(120, 180, 140);
+      strokeWeight(2);
+    } else if (isHovered) {
+      fill(50, 85, 60);
+      stroke(100, 160, 120);
+      strokeWeight(2);
+    } else {
+      fill(35, 55, 40, 200);
+      stroke(70, 110, 80);
+      strokeWeight(1);
+    }
+    rect(x, y, size, size, 10);
+
+    // Open-book icon
+    const cx = x + size / 2;
+    const cy = y + size / 2;
+    const bw = 24, bh = 18;
+    stroke(190, 210, 195);
+    strokeWeight(2);
+    noFill();
+    // spine + two page fans
+    line(cx, cy - bh / 2, cx, cy + bh / 2);
+    beginShape(); vertex(cx, cy - bh / 2); vertex(cx - bw / 2, cy - bh / 2 + 3);
+    vertex(cx - bw / 2, cy + bh / 2); vertex(cx, cy + bh / 2 - 2); endShape();
+    beginShape(); vertex(cx, cy - bh / 2); vertex(cx + bw / 2, cy - bh / 2 + 3);
+    vertex(cx + bw / 2, cy + bh / 2); vertex(cx, cy + bh / 2 - 2); endShape();
+    // faint page lines
+    stroke(190, 210, 195, 120); strokeWeight(1);
+    line(cx - bw / 2 + 3, cy - 3, cx - 3, cy - 4);
+    line(cx + 3, cy - 4, cx + bw / 2 - 3, cy - 3);
+    noStroke();
+
+    // Label under the icon (small), so the toggle reads
+    fill(isOpen ? [180, 220, 190] : [150, 180, 160]);
+    textAlign(CENTER, TOP); smallTextSize(9);
+    text('Guide', cx, y + size - 13);
+  }
+
+  handleGuideButtonClick(mx, my) {
+    const x = this.layout.guideBtnX;
+    const y = this.layout.pauseBtnY;
+    const size = this.layout.pauseBtnSize;
+    if (mx > x && mx < x + size && my > y && my < y + size) {
+      if (this.game.encyclopedia) this.game.encyclopedia.toggle(this.game);
+      return true;
+    }
+    return false;
   }
 
   renderFullscreenButton(x, y) {
@@ -1245,6 +1378,15 @@ class GameUI {
 
     // Section 4: Mini Map
     this.renderMiniMap(x + padding, y + 12);
+
+    // Section 5: Field guide (docked below the rest, when toggled open)
+    if (this.game.encyclopedia && this.game.encyclopedia.open) {
+      const gy = y + 12;
+      const gh = this.sidebar.y + this.sidebar.height - gy - padding;
+      this.game.encyclopedia.renderDocked(
+        x + padding, gy, this.layout.sidebarPanelWidth, gh, { translucent: false }
+      );
+    }
   }
 
   renderGoalsPanel(x, y) {

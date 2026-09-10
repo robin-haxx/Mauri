@@ -190,35 +190,28 @@ const ENCYCLOPEDIA = [
 const ENCYCLOPEDIA_BY_ID = {};
 for (const e of ENCYCLOPEDIA) ENCYCLOPEDIA_BY_ID[e.id] = e;
 
+// Docked field guide. Lives in the right-bar column (below the other panels) in
+// both the windowed (full) UI and the fullscreen (focus) overlay — it does NOT
+// pause the sim, so the world keeps running while you read. One view at a time:
+// the entry LIST, or a single entry's DETAIL with a "back to encyclopedia" toggle
+// at the top. GameUI computes the panel box and routes clicks; see renderDocked /
+// handleDockedClick and mauri_UI.js (renderGuideButton, renderSidebar).
 class Encyclopedia {
   constructor() {
     this.open = false;
+    this.viewMode = 'list';  // 'list' (choose an entry) | 'detail' (one entry)
     this.index = 0;          // selected entry
     this.listOffset = 0;     // first visible list row (for scrolling long lists)
     this._rowRects = [];     // hit rects rebuilt each render
+    this._seeAlsoRects = [];
+    this._backRect = null;
     this._closeRect = null;
-    this._wasPlaying = false;
+    this._panelRect = null;  // last docked box (for wheel hit-testing)
   }
 
   toggle(game) { this.open ? this.close(game) : this.openGuide(game); }
-
-  openGuide(game) {
-    this.open = true;
-    // Pause the sim while reading (restored on close) without fighting other pauses.
-    if (game && typeof GAME_STATE !== 'undefined') {
-      this._wasPlaying = (game.state === GAME_STATE.PLAYING);
-      if (this._wasPlaying) game.state = GAME_STATE.PAUSED;
-    }
-  }
-
-  close(game) {
-    this.open = false;
-    if (game && this._wasPlaying && typeof GAME_STATE !== 'undefined' &&
-        game.state === GAME_STATE.PAUSED) {
-      game.state = GAME_STATE.PLAYING;
-    }
-    this._wasPlaying = false;
-  }
+  openGuide() { this.open = true; }   // docked panel — the sim keeps running
+  close() { this.open = false; }
 
   select(idOrIndex) {
     if (typeof idOrIndex === 'string') {
@@ -227,81 +220,106 @@ class Encyclopedia {
     } else {
       this.index = Math.max(0, Math.min(ENCYCLOPEDIA.length - 1, idOrIndex));
     }
+    this.viewMode = 'detail';
   }
 
-  // Returns true if it consumed the key.
+  // Returns true only for keys it actually consumes — the guide is no longer modal,
+  // so gameplay keys must still reach the game while it's open.
   handleGlobalKey(k, game) {
     const key = (k || '').toLowerCase();
     if (key === 'e') { this.toggle(game); return true; }
     if (!this.open) return false;
-    if (key === 'escape') { this.close(game); return true; }
-    if (keyCode === UP_ARROW) { this.select(this.index - 1); this._ensureVisible(); return true; }
-    if (keyCode === DOWN_ARROW) { this.select(this.index + 1); this._ensureVisible(); return true; }
-    return true;   // swallow all other keys while open (modal)
+    if (key === 'escape') {
+      if (this.viewMode === 'detail') this.viewMode = 'list';   // step back to the list first
+      else this.close();
+      return true;
+    }
+    if (this.viewMode === 'list') {
+      if (keyCode === UP_ARROW) { this.index = Math.max(0, this.index - 1); this._ensureVisible(); return true; }
+      if (keyCode === DOWN_ARROW) { this.index = Math.min(ENCYCLOPEDIA.length - 1, this.index + 1); this._ensureVisible(); return true; }
+    }
+    return false;
   }
 
+  pointerOverPanel(mx, my) { return !!this._panelRect && this._hit(this._panelRect, mx, my); }
+
   handleWheel(delta) {
-    if (!this.open) return;
+    if (!this.open || this.viewMode !== 'list') return;
     this.listOffset = Math.max(0, this.listOffset + (delta > 0 ? 1 : -1));
   }
 
-  handleClick(mx, my) {
-    if (!this.open) return;
-    if (this._closeRect && this._hit(this._closeRect, mx, my)) { this.close(null); return; }
-    for (const r of this._rowRects) {
-      if (this._hit(r, mx, my)) { this.select(r.index); return; }
+  // Called by GameUI only when the click lands inside the docked panel.
+  handleDockedClick(mx, my) {
+    if (!this.open) return false;
+    if (this._closeRect && this._hit(this._closeRect, mx, my)) { this.close(); return true; }
+    if (this.viewMode === 'detail') {
+      if (this._backRect && this._hit(this._backRect, mx, my)) { this.viewMode = 'list'; return true; }
+      for (const r of this._seeAlsoRects) if (this._hit(r, mx, my)) { this.select(r.id); return true; }
+      return true;   // swallow clicks inside the panel body
     }
-    // clicking a seeAlso chip
-    for (const r of (this._seeAlsoRects || [])) {
-      if (this._hit(r, mx, my)) { this.select(r.id); this._ensureVisible(); return; }
-    }
+    for (const r of this._rowRects) if (this._hit(r, mx, my)) { this.select(r.index); return true; }
+    return true;     // swallow clicks inside the list background
   }
 
   _hit(r, mx, my) { return mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h; }
 
   _ensureVisible() {
-    // keep selection within the rendered window (approx; render clamps precisely)
     if (this.index < this.listOffset) this.listOffset = this.index;
   }
 
-  // ---- render (screen space; called after game.render) ------------------------
-  render(game) {
-    const W = CONFIG.canvasWidth, H = CONFIG.canvasHeight;
+  // Small × close glyph at (x,y); returns its 20×20 hit rect.
+  _drawClose(x, y) {
     push();
-    // Backdrop
-    noStroke(); fill(10, 14, 20, 210); rect(0, 0, W, H);
+    stroke(150, 170, 160); strokeWeight(2);
+    const s = 6, cx = x + 10, cy = y + 10;
+    line(cx - s, cy - s, cx + s, cy + s);
+    line(cx - s, cy + s, cx + s, cy - s);
+    pop();
+    return { x, y, w: 20, h: 20 };
+  }
 
-    // Panel
-    const pw = Math.min(940, W * 0.86), ph = Math.min(660, H * 0.86);
-    const px = (W - pw) / 2, py = (H - ph) / 2;
-    fill(24, 30, 38); stroke(70, 90, 80); strokeWeight(2);
-    rect(px, py, pw, ph, 10);
+  // ---- docked render (right-bar column) ---------------------------------------
+  // x,y,w,h is the panel box GameUI reserved below the other sidebar content.
+  // opts.translucent softens the fill for the fullscreen overlay.
+  renderDocked(x, y, w, h, opts = {}) {
+    if (h < 60) { this._panelRect = null; return; }   // no usable room — skip
+    this._panelRect = { x, y, w, h };
+    const pad = 12, headerH = 30;
+
+    push();
+    // Panel body + border
+    noStroke();
+    fill(24, 30, 38, opts.translucent ? 225 : 255);
+    rect(x, y, w, h, 8);
+    noFill(); stroke(70, 90, 80); strokeWeight(1);
+    rect(x, y, w, h, 8);
     noStroke();
 
-    // Header
-    fill(228, 236, 228); textAlign(LEFT, TOP); textStyle(BOLD);
-    if (typeof textSize === 'function') textSize(22);
-    text('Field Guide', px + 22, py + 16);
-    textStyle(NORMAL); textSize(12); fill(150, 170, 160);
-    textAlign(RIGHT, TOP);
-    const closeLabel = 'E or Esc to close';
-    text(closeLabel, px + pw - 22, py + 22);
-    this._closeRect = { x: px + pw - 130, y: py + 14, w: 116, h: 22 };
+    // Header bar
+    fill(45, 75, 55);
+    rect(x, y, w, headerH, 8, 8, 0, 0);
 
-    // Layout columns
-    const listX = px + 18, listY = py + 56, listW = pw * 0.34, listH = ph - 74;
-    const bodyX = listX + listW + 20, bodyY = listY, bodyW = pw - (bodyX - px) - 22, bodyH = listH;
+    if (this.viewMode === 'detail') this._renderDetail(x, y, w, h, pad, headerH);
+    else this._renderList(x, y, w, h, pad, headerH);
+    pop();
+  }
 
-    // Divider
-    stroke(60, 74, 66); strokeWeight(1);
-    line(listX + listW + 8, listY, listX + listW + 8, listY + listH);
-    noStroke();
+  _renderList(x, y, w, h, pad, headerH) {
+    this._backRect = null;
+    this._seeAlsoRects = [];
 
-    // ---- entry list (grouped by category), with paging -----------------------
-    this._rowRects = [];
-    const rowH = 26;
-    const maxRows = Math.floor(listH / rowH);
-    // Build a flat display list of {type:'cat'|'entry', ...}
+    // Header: title + close
+    fill(200, 224, 206); textAlign(LEFT, CENTER); textStyle(BOLD); textSize(14);
+    text('FIELD GUIDE', x + 12, y + headerH / 2);
+    textStyle(NORMAL);
+    this._closeRect = this._drawClose(x + w - 26, y + (headerH - 20) / 2);
+
+    const listX = x + pad;
+    const listY = y + headerH + 6;
+    const listBottom = y + h - 6;
+    const rowH = 24;
+
+    // Flat display list, grouped by category.
     const rows = [];
     let lastCat = null;
     for (let i = 0; i < ENCYCLOPEDIA.length; i++) {
@@ -309,64 +327,81 @@ class Encyclopedia {
       if (e.category !== lastCat) { rows.push({ type: 'cat', label: e.category }); lastCat = e.category; }
       rows.push({ type: 'entry', label: e.title, index: i });
     }
+    const maxRows = Math.max(1, Math.floor((listBottom - listY) / rowH));
     if (this.listOffset > Math.max(0, rows.length - maxRows)) {
       this.listOffset = Math.max(0, rows.length - maxRows);
     }
+
+    this._rowRects = [];
     let ry = listY;
-    for (let r = this.listOffset; r < rows.length && (ry + rowH) <= listY + listH; r++) {
+    for (let r = this.listOffset; r < rows.length && (ry + rowH) <= listBottom; r++) {
       const row = rows[r];
       if (row.type === 'cat') {
-        fill(120, 150, 130); textAlign(LEFT, CENTER); textStyle(BOLD); textSize(11);
-        text(row.label.toUpperCase(), listX + 4, ry + rowH / 2);
+        fill(120, 150, 130); textAlign(LEFT, CENTER); textStyle(BOLD); textSize(10);
+        text(row.label.toUpperCase(), listX + 2, ry + rowH / 2);
         textStyle(NORMAL);
       } else {
         const selected = row.index === this.index;
-        if (selected) { fill(46, 66, 54); rect(listX, ry + 2, listW - 6, rowH - 4, 5); }
-        fill(selected ? [235, 245, 235] : [186, 200, 190]);
-        textAlign(LEFT, CENTER); textSize(13);
-        text(row.label, listX + 12, ry + rowH / 2);
-        this._rowRects.push({ x: listX, y: ry, w: listW - 6, h: rowH, index: row.index });
+        if (selected) { noStroke(); fill(46, 66, 54); rect(listX - 2, ry + 2, w - 2 * pad + 4, rowH - 4, 5); }
+        fill(selected ? [235, 245, 235] : [190, 204, 194]);
+        textAlign(LEFT, CENTER); textSize(12.5);
+        text(row.label, listX + 8, ry + rowH / 2);
+        this._rowRects.push({ x: listX - 2, y: ry, w: w - 2 * pad + 4, h: rowH, index: row.index });
       }
       ry += rowH;
     }
-    // scroll hint
+
     if (rows.length > maxRows) {
-      fill(120, 140, 130); textAlign(LEFT, TOP); textSize(10);
-      text('scroll ▲▼', listX + 4, listY + listH + 2);
+      fill(120, 140, 130); textAlign(RIGHT, BOTTOM); textSize(9);
+      text('scroll ▲▼', x + w - 10, listBottom);
     }
+  }
 
-    // ---- selected entry body -------------------------------------------------
+  _renderDetail(x, y, w, h, pad, headerH) {
+    this._rowRects = [];
     const e = ENCYCLOPEDIA[this.index];
-    if (e) {
-      fill(236, 244, 236); textAlign(LEFT, TOP); textStyle(BOLD); textSize(20);
-      text(e.title, bodyX, bodyY);
-      textStyle(ITALIC); textSize(12); fill(150, 172, 158);
-      text(e.subtitle || '', bodyX, bodyY + 28);
-      textStyle(NORMAL); textSize(13.5); fill(206, 216, 208);
-      const bodyStr = (e.body || []).join('\n');
-      text(bodyStr, bodyX, bodyY + 52, bodyW, bodyH - 120);
 
-      // seeAlso chips
-      this._seeAlsoRects = [];
-      if (e.seeAlso && e.seeAlso.length) {
-        let cx = bodyX, cy = bodyY + bodyH - 34;
-        fill(140, 160, 148); textAlign(LEFT, TOP); textSize(11);
-        text('See also:', cx, cy - 16);
-        textSize(12);
-        for (const id of e.seeAlso) {
-          const ref = ENCYCLOPEDIA_BY_ID[id];
-          if (!ref) continue;
-          const label = ref.title;
-          const w = textWidth(label) + 16;
-          if (cx + w > bodyX + bodyW) { cx = bodyX; cy += 26; }
-          fill(40, 58, 48); rect(cx, cy, w, 20, 10);
-          fill(200, 226, 210); textAlign(LEFT, TOP);
-          text(label, cx + 8, cy + 4);
-          this._seeAlsoRects.push({ x: cx, y: cy, w, h: 20, id });
-          cx += w + 8;
-        }
+    // Header: back toggle + close
+    fill(180, 214, 190); textAlign(LEFT, CENTER); textStyle(BOLD); textSize(12);
+    const backLabel = '‹ Back to encyclopedia';
+    text(backLabel, x + 12, y + headerH / 2);
+    this._backRect = { x: x + 6, y: y + 4, w: textWidth(backLabel) + 12, h: headerH - 8 };
+    textStyle(NORMAL);
+    this._closeRect = this._drawClose(x + w - 26, y + (headerH - 20) / 2);
+
+    if (!e) return;
+    const bx = x + pad, bw = w - 2 * pad;
+    let by = y + headerH + 10;
+
+    fill(236, 244, 236); textAlign(LEFT, TOP); textStyle(BOLD); textSize(17);
+    text(e.title, bx, by, bw); by += 24;
+    textStyle(ITALIC); textSize(11); fill(150, 172, 158);
+    text(e.subtitle || '', bx, by, bw); by += 18;
+
+    const bottom = y + h - 8;
+    const seeAlsoH = (e.seeAlso && e.seeAlso.length) ? 48 : 0;
+    textStyle(NORMAL); textSize(12.5); fill(206, 216, 208);
+    text((e.body || []).join('\n'), bx, by + 6, bw, bottom - (by + 6) - seeAlsoH);
+
+    // seeAlso chips (navigate within detail)
+    this._seeAlsoRects = [];
+    if (seeAlsoH) {
+      let cx = bx, cy = bottom - seeAlsoH + 14;
+      fill(140, 160, 148); textAlign(LEFT, TOP); textSize(10);
+      text('See also:', cx, cy - 13);
+      textSize(11);
+      for (const id of e.seeAlso) {
+        const ref = ENCYCLOPEDIA_BY_ID[id];
+        if (!ref) continue;
+        const label = ref.title;
+        const cw = textWidth(label) + 16;
+        if (cx + cw > bx + bw) { cx = bx; cy += 24; }
+        fill(40, 58, 48); rect(cx, cy, cw, 20, 10);
+        fill(200, 226, 210); textAlign(LEFT, TOP);
+        text(label, cx + 8, cy + 4);
+        this._seeAlsoRects.push({ x: cx, y: cy, w: cw, h: 20, id });
+        cx += cw + 8;
       }
     }
-    pop();
   }
 }

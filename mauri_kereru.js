@@ -585,7 +585,18 @@ class Kereru extends Boid {
     push();
     translate(this.pos.x, this.pos.y);
 
-    // Species highlight: a soft pulsing halo (the sidebar toggle). Mirrors the eagle.
+    // Shadow on the ground, fainter/smaller the higher the bird flies.
+    const sf = 1 - Math.min(0.5, alt / 60);
+    noStroke();
+    fill(0, 0, 0, 26 * sf);
+    ellipse(3 * sf, 3 * sf, s * 1.5 * sf, s * 0.55 * sf);
+
+    translate(offX, -alt + offY);                    // body lifts to altitude + perch offset
+
+    // Species highlight: a soft pulsing halo (the sidebar toggle). Mirrors the
+    // eagle, but drawn AFTER the altitude lift so it centres on the hovering
+    // bird rather than on its ground shadow — correct in both 2D and 3D, since
+    // -alt is applied in both.
     if (typeof SPECIES_HIGHLIGHT !== 'undefined' && SPECIES_HIGHLIGHT.has(this.speciesKey)) {
       const _hc = (this.speciesData && this.speciesData.config && this.speciesData.config.highlightColor) || [120, 180, 120];
       const _pulse = 0.5 + 0.5 * Math.sin(frameCount * 0.12);
@@ -594,14 +605,6 @@ class Kereru extends Boid {
       const _d = s * (2.4 + _pulse * 1.0);
       ellipse(0, 0, _d, _d);
     }
-
-    // Shadow on the ground, fainter/smaller the higher the bird flies.
-    const sf = 1 - Math.min(0.5, alt / 60);
-    noStroke();
-    fill(0, 0, 0, 26 * sf);
-    ellipse(3 * sf, 3 * sf, s * 1.5 * sf, s * 0.55 * sf);
-
-    translate(offX, -alt + offY);                    // body lifts to altitude + perch offset
 
     const sprite = this._getSprite(perched);
     if (sprite) {

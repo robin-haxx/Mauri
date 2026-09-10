@@ -41,7 +41,12 @@ class PlaceableObject {
     this.terrain = terrain;
     this.simulation = simulation;
     this.seasonManager = seasonManager;
-    this.def = PLACEABLES[type];
+    // Prefer the level/year-resolved def so per-level and per-year overrides (cost,
+    // duration, radius, …) actually apply to the placed object — the active palette
+    // entry is a full merged copy of PLACEABLES[type] + those overrides, and carries
+    // _parsedColor. Fall back to the global base for any off-palette/programmatic spawn.
+    // (See Game._resolvePalette / resolveLevelDef._resolvedPlaceables.)
+    this.def = (typeof game !== 'undefined' && game && game.activePlaceables && game.activePlaceables[type]) || PLACEABLES[type];
     
     this.life = this.def.duration;
     this.maxLife = this.def.duration;
@@ -282,6 +287,19 @@ class PlaceableObject {
     if (this.type === 'shelter' && this._fernGrowth < 1) {
       this._fernGrowth = Math.min(1, this._fernGrowth + dt / 240);
     }
+
+    // Kea Raid v2 — the Berry Cache CULTIVATES podocarp forest: over its life it
+    // periodically seeds a rimu/beech tree in its radius (expanding the forest even
+    // into shrubland/flats — the player changing the habitat), so kea get perch trees
+    // downslope. Gated by the def's grow params; density-limited inside growForestAt.
+    if (this.def.growsForest && this.simulation && this.simulation.growForestAt) {
+      const every = (this.def.growEverySec ?? 6) * 60;
+      this._growTimer = (this._growTimer || 0) + dt;
+      if (this._growTimer >= every) {
+        this._growTimer = 0;
+        this.simulation.growForestAt(this.pos.x, this.pos.y, this.radius, this.def.growCap ?? 8);
+      }
+    }
   }
   
   // ============================================
@@ -290,6 +308,7 @@ class PlaceableObject {
   
   feedMoa(moa, dt = 1) {
     if (!this.def.feedingRate) return 0;
+    if (this.frostDying) return 0;   // a frost-killed grove no longer feeds (see frostKill)
 
     // Species-selective feeders (lancewood, speargrass) nourish ONLY the species
     // they favour. Any other moa is scaled by the same knob as browsing a
@@ -394,6 +413,20 @@ class PlaceableObject {
   destroy() {
     this.alive = false;
     for (const plant of this.spawnedPlants) plant.alive = false;
+  }
+
+  // Free Play LGM: the first winter frost-kills a warm-forest grove (kawakawa)
+  // GRADUALLY. Its spawned plants stop feeding and render wilted at once, and the
+  // grove's remaining life is capped to a short wither window so it fades out over
+  // the start of that winter rather than lingering. destroy() then clears the plants
+  // when the life runs down. One-shot. See Game._banKawakawa.
+  frostKill() {
+    if (this.frostDying) return;
+    this.frostDying = true;
+    for (const plant of this.spawnedPlants) plant.dormant = true;   // wilted look; consume() yields 0
+    const seasonFrames = (typeof CONFIG !== 'undefined' && CONFIG.seasonDuration) ? CONFIG.seasonDuration : 3600;
+    const witherFrames = seasonFrames * 0.5;
+    if (this.life > witherFrames) this.life = witherFrames;
   }
   
   // ============================================

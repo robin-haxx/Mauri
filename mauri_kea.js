@@ -41,6 +41,16 @@ class Kea extends Kereru {
     this._descendWinter = sp.descendFromWinter ?? 0.7;
     this._descendCold   = sp.descendFromCold ?? 0.6;
     this._sm = null;   // season manager, stashed each tick so the band helper can read it
+
+    // Egg-raiding (LINK 1): kea rob moa nests — it destroys the egg, feeds the kea a
+    // little, and (via the sim) seeds a disturbance moa steer away from. A cooldown
+    // keeps it opportunistic rather than obsessive.
+    const M = (typeof LEVEL_MECHANICS !== 'undefined') ? LEVEL_MECHANICS : {};
+    this._raidEnabled = !!M.keaRaidsEggs;
+    this._raidRadius = M.keaRaidRadius ?? 95;
+    this._raidNutrition = M.keaRaidNutrition ?? 46;
+    this._raidCooldownFrames = (M.keaRaidCooldownSec ?? 5) * 60;
+    this._raidCooldown = Math.random() * this._raidCooldownFrames;
   }
 
   // Stash the season manager so _preferredElevBand (reached deep in the base state
@@ -53,11 +63,139 @@ class Kea extends Kereru {
   // storm-grounded so shelter isn't fought.
   behave(sim, mauri, seasonManager, dt) {
     this._sm = seasonManager;
+    if (this._raidCooldown > 0) this._raidCooldown -= dt;
+
+    // Perch tree (Slice C): each kea holds a fruiting FOREST tree, chosen by the food
+    // around it, as its home perch — this is what "stations" the flock near a spot.
+    // Refreshed when it's lost or on a timer. _anchorPoint() feeds it to the base
+    // loop so the bird orbits and returns to it.
+    this._perchSearchTimer = (this._perchSearchTimer || 0) - dt;
+    if (!this._perchValid() || this._perchSearchTimer <= 0) {
+      this._perchSearchTimer = 120;
+      this._choosePerchTree(sim);
+    }
+
     super.behave(sim, mauri, seasonManager, dt);
     if (!this._grounded && this.state === KERERU_STATE.FLYING) {
-      const pt = this._bandwardPoint();
-      if (pt) this.applyForce(this.seekPoint(pt.x, pt.y, 0.6));
+      // A Berry Cache (kea lure) placed downslope outranks everything — it pulls the
+      // flock onto the forest patch to settle. Else, if the bird has no perch yet,
+      // drift toward the elevation band to go find forest. With a perch, the anchor
+      // (via _anchorPoint) keeps it home — no extra force needed.
+      const lure = this._nearestLure(sim);
+      if (lure) {
+        this.applyForce(this.seekPoint(lure.pos.x, lure.pos.y, 0.85, (lure.def && lure.def.radius) || 70));
+      } else if (!this._perchValid()) {
+        const pt = this._bandwardPoint();
+        if (pt) this.applyForce(this.seekPoint(pt.x, pt.y, 0.6));
+      }
     }
+  }
+
+  _perchValid() {
+    const p = this._perchTree;
+    return !!(p && p.alive && !p._consumed);
+  }
+
+  // Home anchor for the base flight loop: the kea's perch tree (kererū is free-ranging).
+  _anchorPoint() {
+    return this._perchValid() ? this._perchTree.pos : null;
+  }
+
+  // Pick the best nearby fruiting FOREST tree to perch in — "best" = the one with the
+  // most food (other fruiting trees + berries) around it, so kea gather where the
+  // player has grown forest/berries (a Berry Cache patch).
+  _choosePerchTree(sim) {
+    if (!sim.getNearbyPlants) return;
+    const isForest = (typeof FOREST_TREES !== 'undefined') ? FOREST_TREES : null;
+    if (!isForest) return;
+    const trees = sim.getNearbyPlants(this.pos.x, this.pos.y, this._feedRadius * 1.6);
+    let best = null, bestScore = -1;
+    for (let i = 0; i < trees.length; i++) {
+      const p = trees[i];
+      if (!p.alive || p._consumed || p.dormant || p.growth < 0.5 || !isForest.has(p.type)) continue;
+      const near = sim.getNearbyPlants(p.pos.x, p.pos.y, 60);
+      let food = 0;
+      for (let j = 0; j < near.length; j++) {
+        const q = near[j];
+        if (q.alive && q.growth >= 0.4 && (isForest.has(q.type) || q.type === 'coprosma')) food++;
+      }
+      if (food > bestScore) { bestScore = food; best = p; }
+    }
+    if (best) this._perchTree = best;
+  }
+
+  // Nearest active Berry Cache whose pull reaches this kea (placeables list is tiny).
+  _nearestLure(sim) {
+    const list = sim.placeables;
+    if (!list) return null;
+    const px = this.pos.x, py = this.pos.y;
+    let best = null, bestSq = Infinity;
+    for (let i = 0; i < list.length; i++) {
+      const p = list[i];
+      if (!p.alive || p.type !== 'keaLure') continue;
+      const r = (p.def && p.def.keaAttractRadius) || 520, rSq = r * r;
+      const dx = p.pos.x - px, dy = p.pos.y - py, d2 = dx * dx + dy * dy;
+      if (d2 <= rSq && d2 < bestSq) { bestSq = d2; best = p; }
+    }
+    return best;
+  }
+
+  // Raiding is an alternative to the base "fly to a plant" action: while airborne and
+  // off cooldown, a moa egg within reach outranks foraging — the kea diverts to rob
+  // it. Keeping this inside _runState (not behave) preserves all the base bookkeeping
+  // (hunger, ageing, starvation, landward/edges) that behave runs around it.
+  _runState(sim, dt) {
+    // Player-DIRECTED egg raid (tap a moa egg): the assigned kea flies to it and eats
+    // it, whatever the auto-raid flag says. Cleared when the egg is gone.
+    if (this._directedEgg) {
+      if (!this._directedEgg.alive || this._directedEgg.hatched) {
+        this._directedEgg = null;
+      } else {
+        this.state = KERERU_STATE.FLYING;
+        this._raidStep(sim, this._directedEgg, dt);
+        return;
+      }
+    }
+    // Auto-raid (Link 1) — OFF in Free Play (keaRaidsEggs:false), kept for other configs.
+    if (this._raidEnabled && this._raidCooldown <= 0 && this.state === KERERU_STATE.FLYING) {
+      const egg = this._findMoaEgg(sim);
+      if (egg) { this._raidStep(sim, egg, dt); return; }
+    }
+    super._runState(sim, dt);
+  }
+
+  // Nearest un-hatched MOA egg within raid range (kea target moa nests, not other birds').
+  _findMoaEgg(sim) {
+    if (!sim.getNearbyEggs) return null;
+    const eggs = sim.getNearbyEggs(this.pos.x, this.pos.y, this._raidRadius);
+    const px = this.pos.x, py = this.pos.y;
+    let best = null, bestSq = Infinity;
+    for (let i = 0; i < eggs.length; i++) {
+      const e = eggs[i];
+      if (!e.alive || e.hatched) continue;
+      if (e.offspringType && e.offspringType !== 'moa') continue;   // only moa nests
+      const dx = e.pos.x - px, dy = e.pos.y - py, d2 = dx * dx + dy * dy;
+      if (d2 < bestSq) { bestSq = d2; best = e; }
+    }
+    return best;
+  }
+
+  // Fly to the egg; on arrival, rob it (sim destroys it + seeds disturbance), take the
+  // meal, start the cooldown, and perch a beat.
+  _raidStep(sim, egg, dt) {
+    this.maxSpeed = (this.speciesData && this.speciesData.config && this.speciesData.config.baseSpeed) || 0.4;
+    const dx = egg.pos.x - this.pos.x, dy = egg.pos.y - this.pos.y;
+    if (dx * dx + dy * dy < 13 * 13) {
+      if (sim.raidMoaEgg) sim.raidMoaEgg(egg, this);
+      const scale = (typeof CONFIG !== 'undefined' && CONFIG.faunaNutritionScale) ? CONFIG.faunaNutritionScale : 1;
+      this.hunger = Math.max(0, this.hunger - this._raidNutrition * scale);
+      this._raidCooldown = this._raidCooldownFrames;
+      this.state = KERERU_STATE.PERCHED;
+      this._restTimer = this._restFrames;
+      return;
+    }
+    this._target.set(egg.pos.x, egg.pos.y);
+    this.applyForce(this.seek(this._target, 1.2, 20));
   }
 
   // The nearest walkable step (of 8 sampled) whose elevation is closer to the
@@ -149,25 +287,6 @@ class Kea extends Kereru {
   _getSprite(perched) {
     return (typeof EntitySprites !== 'undefined' && EntitySprites.getKeaSprite)
       ? EntitySprites.getKeaSprite(perched) : null;
-  }
-
-  // Glyph fallback: olive-green body with a scarlet underwing flash in flight and a
-  // dark hooked beak — distinct from the kererū (green/white) and kōkako (grey).
-  _renderGlyph(s, perched) {
-    const dir = (this._flip >= 0) ? 1 : -1;
-    const wing = perched ? 1.5 : 1.85;
-    if (!perched) {
-      fill(196, 72, 44);                                     // scarlet underwing (shows in flight)
-      ellipse(-dir * s * 0.34, s * 0.06, s * 1.02, s * 0.7);
-    }
-    fill(88, 108, 58);                                       // olive-green body
-    ellipse(0, 0, s * wing, s * 1.05);
-    fill(112, 132, 78);                                      // paler back
-    ellipse(dir * s * 0.24, -s * 0.06, s * 0.9, s * 0.7);
-    fill(96, 92, 72);                                        // brownish head
-    ellipse(dir * s * 0.55, -s * 0.30, s * 0.6, s * 0.56);
-    fill(38, 40, 40);                                        // dark hooked beak
-    triangle(dir * s * 0.76, -s * 0.36, dir * s * 0.96, -s * 0.30, dir * s * 0.80, -s * 0.12);
   }
 }
 

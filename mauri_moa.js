@@ -722,7 +722,7 @@ class Moa extends Boid {
 
   executePregnancy(simulation, mauri, placeables, dt) {
     this.pregnancyTimer -= dt;
-    
+
     for (let i = 0; i < placeables.length; i++) {
       const p = placeables[i];
       if (p.alive && p.type === 'nest' && p.isInRange(this.pos)) {
@@ -730,7 +730,18 @@ class Moa extends Boid {
         break;
       }
     }
-    
+
+    // Kea Raid v2: a ready-to-lay moa is drawn to its nearest nesting site, so the
+    // flock gathers there to breed and eggs cluster at the nest. Gentle, so urgent
+    // feeding/fleeing still win.
+    if (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.nestingSites && simulation.getNearestNestingSite) {
+      const draw = LEVEL_MECHANICS.nestingSites.drawRadius ?? 520;
+      const site = simulation.getNearestNestingSite(this.pos.x, this.pos.y, draw, this.speciesKey);
+      if (site && !site.isInRange(this.pos)) {
+        this.applyForce(this.seekPoint(site.pos.x, site.pos.y, 0.7));
+      }
+    }
+
     if (this.pregnancyTimer <= 0) this.layEgg(simulation, mauri);
   }
 
@@ -750,7 +761,19 @@ class Moa extends Boid {
     // tip for the player's actual first moa egg.
     const aliveMoaEggs = simulation.eggs.filter(
       e => e.alive && !e.hatched && e.offspringType !== 'eagle');
-    const egg = simulation.addEgg(this.pos.x, this.pos.y);
+
+    // Kea Raid v2: lay at the nearest established nesting site if one is close, so
+    // eggs CLUSTER at sites (the nests eagles patrol and kea raid). Else lay in place.
+    let ex = this.pos.x, ey = this.pos.y;
+    if (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.nestingSites && simulation.getNearestNestingSite) {
+      const snap = LEVEL_MECHANICS.nestingSites.laySnapRadius ?? 160;
+      const site = simulation.getNearestNestingSite(this.pos.x, this.pos.y, snap, this.speciesKey);
+      if (site) {
+        ex = site.pos.x + random(-site.radius * 0.5, site.radius * 0.5);
+        ey = site.pos.y + random(-site.radius * 0.4, site.radius * 0.4);
+      }
+    }
+    const egg = simulation.addEgg(ex, ey);
     egg.speedBonus = this.eggSpeedBonus;
     if (this.speciesKey) egg.parentSpecies = this.speciesKey;
 
@@ -1030,11 +1053,21 @@ class Moa extends Boid {
   // MIGRATION
   // ============================================
 
-  shouldMigrate(sc) {
+  shouldMigrate(sc, simulation) {
     const elev = this.terrain.getElevationAt(this.pos.x, this.pos.y);
     const p = this.preferredElevation;
     const err = elev < p.min ? p.min - elev : (elev > p.max ? elev - p.max : 0);
-    
+
+    // LINK 2 — a moa standing in a disturbed nesting area (kea robbing nests nearby)
+    // wants to leave, so the flock vacates the raided forest. The avoidance lever
+    // scales it; 0 makes disturbance inert (pure-emergent mode).
+    if (simulation && typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.moaNestDisturbance &&
+        simulation.disturbanceAt) {
+      const dist = simulation.disturbanceAt(this.pos.x, this.pos.y) *
+        (LEVEL_MECHANICS.moaDisturbanceAvoidance ?? 1);
+      if (dist > 0.5) return true;
+    }
+
     return err > 0.08 || (this.localFoodScore < 0.3 && this.hunger > 30) || (err > 0.03 && sc.migrationStrength > 0.7);
   }
 
@@ -1045,7 +1078,7 @@ class Moa extends Boid {
       return;
     }
 
-    if (!this.isMigrating && this.shouldMigrate(sc)) {
+    if (!this.isMigrating && this.shouldMigrate(sc, simulation)) {
       this.migrationTarget = this.findMigrationTarget(simulation);
       this.isMigrating = !!this.migrationTarget;
     }
@@ -1065,6 +1098,11 @@ class Moa extends Boid {
       (simulation && typeof FOREST_TREES !== 'undefined' &&
        this.speciesConfig.forestAffinity) || 0;
 
+    // LINK 2 — steer migration AWAY from disturbed nesting areas (raided forest).
+    const dAvoid = (simulation && typeof LEVEL_MECHANICS !== 'undefined' &&
+      LEVEL_MECHANICS.moaNestDisturbance && simulation.disturbanceAt)
+      ? (LEVEL_MECHANICS.moaDisturbanceAvoidance ?? 1) : 0;
+
     for (let i = 0; i < 20; i++) {
       const angle = random(TWO_PI), dist = random(50, 150);
       const x = constrain(this.pos.x + cos(angle) * dist, 20, mapW);
@@ -1076,6 +1114,7 @@ class Moa extends Boid {
       let score = 1 - abs(elev - target) * 5;
       if (elev >= this.preferredElevation.min && elev <= this.preferredElevation.max) score += 0.5;
       if ((current < target && elev > current) || (current > target && elev < current)) score += 0.3;
+      if (dAvoid > 0) score -= dAvoid * simulation.disturbanceAt(x, y);
 
       if (forestAffinity > 0) {
         const plants = simulation.getNearbyPlants(x, y, 60);

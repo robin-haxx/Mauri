@@ -18,6 +18,98 @@ comment) and, where general, in `OVERVIEW.md`.
 
 ---
 
+## [process] "The plants didn't spawn" — a stale spatial grid, not a bug
+
+- **What happened.** Right after `addPlaceable('keaLure')`, a `getNearbyPlants()` check reported
+  0 coprosma berries — looked like the Berry Cache wasn't planting them. It was; a check one
+  update later found 9.
+- **Root cause.** New plants (from `addPlant`, `spawnPlantsInRadius`) only enter the plant spatial
+  grid when it REBUILDS, which happens in `updateSpatialGrids()` on the next `update(dt)`. A query
+  issued in the same tick as the insert can't see them yet. `mauri_simulation.js`.
+- **Rule.** After adding entities to a static grid (plants/eggs/nesting sites), step at least one
+  `update()` before verifying via a `getNearby*` query — or read the list directly. Don't conclude
+  "spawn failed" from a same-tick grid read.
+
+## [verified] disperseSeed can't EXPAND the forest — it refuses non-forest biomes
+
+- **What happened.** Building habitat expansion (grow podocarp forest downslope), the obvious reuse
+  — `disperseSeed` — did nothing in shrubland/flats.
+- **Root cause.** `disperseSeed` gates on `biome.plantTypes` already containing a FOREST_TREE, so it
+  only thickens EXISTING forest; it can't push forest into shrubland/flats. That gate is correct for
+  natural recruitment (kererū), but wrong for deliberate cultivation. `mauri_simulation.js`.
+- **Rule.** Player cultivation that changes the habitat needs its own path (`growForestAt`) that
+  bypasses the biome gate (still density- and cap-limited). Keep `disperseSeed` for emergent
+  recruitment; don't loosen its biome gate to serve cultivation.
+
+## [fixed] World-gen froze the browser ~45s — three compounding hot loops, none of them the obvious one
+
+- **What happened.** Loading a level took tens of seconds ("page is slowing your browser"). The
+  obvious suspect (baking 4 season buffers) was NOT the main cost.
+- **Root cause.** Measured, not guessed (`performance.now` around each sub-step). At `terrainDetail:2`:
+  (1) `_buildRenderMaps` called `getElevation()` — the full multi-octave noise stack — for every
+  render cell (detail² × the gameplay grid), ~85% of gen time; (2) `_computeBaseCellColors` built a
+  p5.Color per cell via `lerpColor()` then read `red()/green()/blue()` (~600K allocations + 1.8M slow
+  accessors); (3) p5's default `noiseDetail` of 4 octaves compounded the code's OWN octave loop, so
+  every `noise()` did 4 hidden Perlin evals. `mauri_terrain.js`.
+- **Consequence.** ~45s synchronous freeze at 1080p (a full page-unresponsive event).
+- **Rule.** A VISUAL-ONLY upscaled map should be **interpolated** from the coarse map, never
+  re-sampled from noise. On per-pixel/per-cell hot loops, work in **raw RGB numbers**, not p5.Color
+  (`lerpColor`/`red`/`green`/`blue` allocate and go through colour-mode machinery). Set `noiseDetail`
+  to match your own fractal strategy rather than paying p5's default octaves on top. **Measure the
+  sub-steps before optimising** — the bake looked guilty and was innocent.
+
+## [fixed] Changing noise params shifted terrain and exposed a null-deref in eyrie placement
+
+- **What happened.** After `noiseDetail(2,0.5)`, `game.init()` threw
+  `Cannot read properties of null (reading 'x')` in `Simulation._findCragEyrie`.
+- **Root cause.** `_findCragEyrie` sampled `findWalkablePositionNear()` and used `p.x` without a null
+  check; that helper returns null when no walkable spot is near (e.g. an eagle over water/ice). The
+  latent bug was always there — the noise change just moved terrain enough to trigger an eagle spawn
+  with no nearby land. `mauri_simulation.js`.
+- **Consequence.** Level load crashed on some seeds.
+- **Rule.** Any placement/threshold search that calls `findWalkablePositionNear` (or reads elevation
+  bands, snow line, crag sites) must handle a null / no-match result. AND: changing a global noise
+  parameter reshapes the whole heightmap — re-verify the biome distribution and every
+  elevation-threshold-dependent placement after such a change (a quick biome histogram is enough).
+
+## [fixed] A new prey species eagles couldn't ever catch — the population cache was moa-only
+
+- **What happened.** Building LINK 4 (eagles opportunistically hunt kea), the eagle would lock
+  onto a kea but the catch always failed — kea read as permanently "protected".
+- **Root cause.** `Simulation.handleEagleCatchKea` guards with `isSpeciesProtected(key)`, which
+  reads `getCachedSpeciesCount(key)`. `_ensurePopulationCache()` only walked `this.moas`, so the
+  per-species map had no entry for `kea` → `getCachedSpeciesCount('kea')` returned 0 →
+  `0 <= floor` → protected forever. `mauri_simulation.js`.
+- **Consequence.** The whole predation premise was inert; kea were unkillable by eagles.
+- **Rule.** When a coupling starts reading `getCachedSpeciesCount` / `isSpeciesProtected` for an
+  **other-entity** species (kea/kākā/kākāpō/…), make sure `_ensurePopulationCache()` actually
+  counts that species. It now folds `otherEntities` into the per-species map (but NOT into
+  `moaCount`). Live `getSpeciesCount()` always counted others; the *cache* did not — don't assume
+  the cache mirrors the live scan.
+
+## [process] Don't read "0 raids" in a short passive run as "raiding is broken"
+
+- **What happened.** After LINK 1, a 700-tick passive Year-1 run showed `eggsRaided: 0` and no
+  disturbances — looked like the raid code didn't work.
+- **Root cause.** Two innocent reasons, not a bug: (a) at 1-min seasons moa breeding is slow, so
+  **no moa eggs existed yet** in that window; and (b) kea and moa nests only overlap once a lure
+  pulls kea onto a nesting patch — by design. A deterministic test (seed a cluster of moa eggs
+  beside the kea) immediately showed 4/6 robbed.
+- **Consequence.** Nearly chased a non-bug.
+- **Rule.** For emergent couplings that depend on two populations *meeting*, verify the mechanism
+  by seeding the meeting deterministically; only judge the *emergent rate* over long runs (or once
+  the player-facing lever that creates the meeting — here the kea lure — exists.)
+
+## [verified] The cascade needs kea and moa nests to co-locate — that's the player's job
+
+- **What happened (design, not a defect).** With links 1–4 in, the forest doesn't clear on its
+  own in Year 1: kea forage at the forest edge, moa breed slowly and elsewhere, so raids are rare.
+- **Root cause.** The trophic cascade only runs where kea overlap moa nests. Nothing yet brings
+  them together each year.
+- **Rule.** The per-year **kea-lure/cache** interaction is not optional polish — it is the input
+  that fires the whole cascade. Build the per-year palette before judging Year-1 balance. Keep
+  `moaDisturbanceAvoidance` as the focusing lever if the emergent thinning is too gentle.
+
 ## [fixed] Other-entity spatial grid crashed on the first tick — a rename missed the constructor
 
 - **What happened.** Driving the Free Play level (which seeds kererū and kōkako via the

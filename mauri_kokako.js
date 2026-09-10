@@ -164,22 +164,6 @@ class Kokako extends Kereru {
       ? EntitySprites.getKokakoSprite(perched) : null;
   }
 
-  // Glyph fallback: slate-grey body, dark bandit mask, a dab of ORANGE wattle (the
-  // South Island kōkako — the North Island bird is blue-wattled).
-  _renderGlyph(s, perched) {
-    const dir = (this._flip >= 0) ? 1 : -1;
-    const wing = perched ? 1.4 : 1.7;
-    fill(120, 138, 146);
-    ellipse(0, 0, s * wing, s * 1.02);                                // slate-grey body
-    fill(150, 166, 172);
-    ellipse(dir * s * 0.28, s * 0.20, s * 0.8, s * 0.66);             // paler underside
-    fill(34, 40, 46);
-    ellipse(dir * s * 0.55, -s * 0.28, s * 0.62, s * 0.56);           // head
-    ellipse(dir * s * 0.66, -s * 0.16, s * 0.5, s * 0.34);            // dark facial mask
-    fill(224, 138, 46);
-    ellipse(dir * s * 0.5, s * 0.02, s * 0.22, s * 0.22);             // orange wattle
-  }
-
   // Song cue — a small music note lifting from the singing bird. USER-FACING (like
   // the mating heart), gentle bob on the anim clock, non-flashing (CLAUDE.md).
   _renderExtra(s, perched) {

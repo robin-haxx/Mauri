@@ -124,6 +124,16 @@ class Simulation {
     // Nest lookup cache
     this._nestCache = [];
     this._nestCacheValid = false;
+
+    // Nest-disturbance field (LINK 2): decaying points seeded where kea rob moa eggs;
+    // moa steer away from them so the flock vacates a raided nesting area. Each entry
+    // { x, y, strength }; strength ebbs to 0 and is pruned. Read via disturbanceAt().
+    this._disturbances = [];
+
+    // Established moa nesting sites (Kea Raid v2). Seeded in init() when the level
+    // opts in (LEVEL_MECHANICS.nestingSites); moa lay at their nearest site.
+    this.nestingSites = [];
+    this._nestingRecomputeTimer = 0;
   }
 
   init() {
@@ -159,6 +169,174 @@ class Simulation {
       for (const [type, count] of Object.entries(level.initialEntityCounts)) {
         if (type === 'moa' || type === 'eagle') continue; // Already handled
         this._spawnOtherEntities(type, count);
+      }
+    }
+
+    this._seedNestingSites();
+  }
+
+  // ============================================
+  // WORLD-GRID AREA CHANGE (endless "years" camera pan)
+  // ============================================
+  // The world is one continuous landmass, but only the active area (window) is ever
+  // populated. At a year boundary the camera pans to the next area; these two calls
+  // unload the old area's trees/fauna and regenerate them on the new ground, carrying
+  // the living POPULATIONS across (the flock the player built, relocated to a new
+  // country) rather than resetting them. See Game._scrollWorldGrid / _updateWorldGridPan.
+
+  // Snapshot the living populations, then clear every spatial entity. Called as the pan begins.
+  unloadAreaEntities() {
+    const snap = { moa: {}, eagles: 0, others: {} };
+    for (const m of this.moas) if (m.alive) snap.moa[m.speciesKey] = (snap.moa[m.speciesKey] || 0) + 1;
+    for (const e of this.eagles) if (e.alive) snap.eagles++;
+    for (const type in this.otherEntities) {
+      let n = 0; for (const e of this.otherEntities[type]) if (e.alive) n++;
+      if (n) snap.others[type] = n;
+    }
+    this._areaSnapshot = snap;
+
+    this.moas.length = 0;
+    this.eagles.length = 0;
+    this.eggs.length = 0;
+    this.plants.length = 0;
+    this.groundPlants.length = 0;
+    this.treePlants.length = 0;
+    for (const type in this.otherEntities) this.otherEntities[type].length = 0;
+    if (this.nestingSites) this.nestingSites.length = 0;
+    this.markPlantGridDirty();
+    this.markEggGridDirty();
+  }
+
+  // Regenerate the cast for the newly-framed area: fresh trees for its terrain, and the
+  // snapshot populations re-placed on the new ground. Called when the pan settles.
+  spawnAreaEntities() {
+    const snap = this._areaSnapshot;
+    this.spawnPlants();
+    if (snap) {
+      if (Object.keys(snap.moa).length) this._spawnDistributedMoas(snap.moa);
+      this._biasClosestPairSexes();
+      for (let i = 0; i < snap.eagles; i++) this.spawnEagle();
+      for (const type in snap.others) this._spawnOtherEntities(type, snap.others[type]);
+    }
+    this._seedNestingSites();
+    this._areaSnapshot = null;
+  }
+
+  // ============================================
+  // NESTING SITES (Kea Raid v2) — see mauri_nesting.js
+  // ============================================
+
+  // Seed the established moa nests: a few in the downslope forest, the rest across
+  // open moa country. Count/placement from LEVEL_MECHANICS.nestingSites; inert on
+  // levels that don't opt in.
+  _seedNestingSites() {
+    this.nestingSites = [];
+    const M = (typeof LEVEL_MECHANICS !== 'undefined') ? LEVEL_MECHANICS : {};
+    const cfg = M.nestingSites;
+    if (!cfg || typeof NestingSite === 'undefined') return;
+    const forestBand = cfg.forestBand || { min: 0.36, max: 0.48 };
+    const openBand = cfg.openBand || { min: 0.18, max: 0.34 };
+    const radius = cfg.radius ?? 46;
+    const forestCount = cfg.forestCount ?? 2;
+    const openCount = cfg.openCount ?? 3;
+    // Keep sites from overlapping: a new site must sit at least minGap from every
+    // existing one (default 2.6 radii apart, so their raid/egg circles never touch).
+    const minGap = cfg.minGap != null ? cfg.minGap : radius * 2.6;
+    const minGapSq = minGap * minGap;
+    const farEnough = (x, y) => {
+      for (let i = 0; i < this.nestingSites.length; i++) {
+        const s = this.nestingSites[i];
+        const dx = s.pos.x - x, dy = s.pos.y - y;
+        if (dx * dx + dy * dy < minGapSq) return false;
+      }
+      return true;
+    };
+    const place = (band, habitat) => {
+      for (let tries = 0; tries < 24; tries++) {
+        const p = this.findWalkablePosition(band.min, band.max);
+        if (!p) continue;
+        // Reject findWalkablePosition's centre-of-map fallback (and any out-of-band or
+        // unwalkable spot): never seed a nest on scree/ice the moa can't nest on. If the
+        // area has no room in the band, we simply place fewer sites.
+        const e = this.terrain.getElevationAt(p.x, p.y);
+        if (e <= band.min || e >= band.max || !this.terrain.isWalkable(p.x, p.y)) continue;
+        if (!farEnough(p.x, p.y)) continue;
+        this.nestingSites.push(new NestingSite(p.x, p.y, { radius, habitat }));
+        return;
+      }
+    };
+    for (let i = 0; i < forestCount; i++) place(forestBand, 'forest');
+    for (let i = 0; i < openCount; i++) place(openBand, 'open');
+  }
+
+  // Nearest ALIVE nesting site within radius (optionally only those whose habitat a
+  // species favours — forest sites for the forest-dwelling little bush moa).
+  getNearestNestingSite(x, y, radius = Infinity, speciesKey = null) {
+    const forestSpecies = speciesKey === 'little_bush_moa';
+    const rSq = radius === Infinity ? Infinity : radius * radius;
+    let best = null, bestSq = rSq;
+    for (let i = 0; i < this.nestingSites.length; i++) {
+      const s = this.nestingSites[i];
+      if (!s.alive) continue;
+      const dx = s.pos.x - x, dy = s.pos.y - y, dSq = dx * dx + dy * dy;
+      // Soft habitat preference: forest moa favour forest sites (feel them nearer).
+      const eff = (forestSpecies && s.habitat === 'forest') ? dSq * 0.5 : dSq;
+      if (eff < bestSq) { bestSq = eff; best = s; }
+    }
+    return best;
+  }
+
+  // A raid (or any cause) removes a site: consume the eggs inside it, drop the site,
+  // and send moa that were nesting here off to another site (they migrate).
+  destroyNestingSite(site) {
+    if (!site || !site.alive) return 0;
+    site.alive = false;
+    let eaten = 0;
+    const eggs = this.eggs;
+    for (let i = 0; i < eggs.length; i++) {
+      const e = eggs[i];
+      if (!e.alive || e.hatched) continue;
+      if (e.offspringType && e.offspringType !== 'moa') continue;
+      if (site.isInRange(e.pos)) { e.alive = false; eaten++; }
+    }
+    if (eaten) this.markEggGridDirty();
+
+    // Displace the moa that were here toward another surviving site (or just away).
+    const alt = this.getNearestNestingSite(site.pos.x, site.pos.y, Infinity);
+    const R2 = (site.radius * 2.2) * (site.radius * 2.2);
+    for (let i = 0; i < this.moas.length; i++) {
+      const m = this.moas[i];
+      if (!m.alive) continue;
+      const dx = m.pos.x - site.pos.x, dy = m.pos.y - site.pos.y;
+      if (dx * dx + dy * dy > R2) continue;
+      if (alt && alt !== site) {
+        m.migrationTarget = alt.pos;
+        m.isMigrating = true;
+        m.migrationCooldown = 0;
+      }
+      // Seed a disturbance so they also steer away in the meantime (Link 2 reuse).
+      if (m.isPregnant) { m.isPregnant = false; m.pregnancyTimer = 0; }
+    }
+    this._addDisturbance(site.pos.x, site.pos.y);
+    this._invalidateCache();
+    return eaten;
+  }
+
+  // Refresh each site's egg tally (for the raid indicator) — throttled, cheap.
+  _updateNestingSites(dt) {
+    if (this.nestingSites.length === 0) return;
+    this._nestingRecomputeTimer += dt;
+    if (this._nestingRecomputeTimer < 20) return;
+    this._nestingRecomputeTimer = 0;
+    for (let i = 0; i < this.nestingSites.length; i++) this.nestingSites[i].eggCount = 0;
+    const eggs = this.eggs;
+    for (let i = 0; i < eggs.length; i++) {
+      const e = eggs[i];
+      if (!e.alive || e.hatched) continue;
+      if (e.offspringType && e.offspringType !== 'moa') continue;
+      for (let j = 0; j < this.nestingSites.length; j++) {
+        const s = this.nestingSites[j];
+        if (s.alive && s.isInRange(e.pos)) { s.eggCount++; break; }
       }
     }
   }
@@ -424,6 +602,7 @@ class Simulation {
     let bx = x, by = y, bestE = this.terrain.getElevationAt(x, y);
     for (let i = 0; i < 12; i++) {
       const p = this.findWalkablePositionNear(x, y, radius);
+      if (!p) continue;   // no walkable spot this sample (e.g. over water/ice) — skip
       const e = this.terrain.getElevationAt(p.x, p.y);
       if (e > bestE) { bestE = e; bx = p.x; by = p.y; }
     }
@@ -637,6 +816,37 @@ class Simulation {
     this.stats.deaths++;
     this._invalidateCache();
   }
+
+  // LINK 4 — an eagle takes an adult flighted bird (kea/kākā/kererū/kōkako). Leaner
+  // than the moa catch: no mauri reward (this is the loss the player is trying to
+  // prevent) and no MOA_KILLED tutorial event. Two floors shield the last few so
+  // predation pressures without guaranteeing extinction: the year's dynamic floor
+  // (via isSpeciesProtected) AND the bird's own species populationFloor.
+  handleEagleCatchFlyer(eagle, prey) {
+    const key = prey.speciesKey;
+    const ownFloor = (typeof prey._populationFloor === 'function') ? prey._populationFloor() : 0;
+    if ((this.isSpeciesProtected && this.isSpeciesProtected(key)) ||
+        (ownFloor > 0 && this.getSpeciesCount(key) <= ownFloor)) {
+      eagle.hunting = false; eagle.target = null; eagle.huntSearchTimer = 0;
+      return;
+    }
+    prey.alive = false;
+    if (audioManager) audioManager.playEagleCatch();
+
+    eagle.kills++;
+    const feed = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.eagleFlyerFeed) || 60;
+    eagle.hunger = Math.max(0, eagle.hunger - feed);   // a small bird is lighter fare than a moa
+    eagle.vel.mult(0.1);
+    eagle.hunting = false; eagle.target = null; eagle.huntSearchTimer = 0;
+    eagle.state = 'resting'; eagle.restTimer = eagle.restDuration;
+    if (eagle.emergent) eagle.patrolCenter.set(eagle.nest.x, eagle.nest.y);
+    else eagle.patrolCenter.set(eagle.pos.x, eagle.pos.y);
+
+    const name = (prey.species && prey.species.displayName) || (prey._label) || 'bird';
+    if (this.game) this.game.addNotification(`An eagle seized a ${name}!`, 'error');
+    this.stats.deaths++;
+    this._invalidateCache();
+  }
   // ============================================
   // ENTITY CREATION
   // ============================================
@@ -646,6 +856,56 @@ class Simulation {
     this.eggs.push(egg);
     this.markEggGridDirty();   // new egg → rebuild the static egg grid
     return egg;
+  }
+
+  // LINK 1 — a kea robs a moa nest: destroy the egg and seed a disturbance the moa
+  // avoid (LINK 2). Only moa eggs are raidable; other birds' eggs are left alone.
+  raidMoaEgg(egg, raider) {
+    if (!egg || !egg.alive || egg.hatched) return;
+    if (egg.offspringType && egg.offspringType !== 'moa') return;
+    egg.alive = false;
+    this.markEggGridDirty();
+    this._addDisturbance(egg.pos.x, egg.pos.y);
+    if (this.stats) this.stats.eggsRaided = (this.stats.eggsRaided || 0) + 1;
+    this._invalidateCache();
+  }
+
+  // LINK 2 — disturbance field. Seeded by a raid; decays over disturbanceDecaySec.
+  _addDisturbance(x, y) {
+    const M = (typeof LEVEL_MECHANICS !== 'undefined') ? LEVEL_MECHANICS : {};
+    if (!M.moaNestDisturbance) return;
+    this._disturbances.push({ x, y, strength: M.disturbancePerRaid ?? 1.0 });
+    if (this._disturbances.length > 200) this._disturbances.shift();   // safety cap
+  }
+
+  // Summed disturbance at a point (each source falls off linearly to its radius).
+  // 0 when the mechanic is off or nothing is near — moa scoring subtracts this.
+  disturbanceAt(x, y) {
+    const list = this._disturbances;
+    if (!list || list.length === 0) return 0;
+    const M = (typeof LEVEL_MECHANICS !== 'undefined') ? LEVEL_MECHANICS : {};
+    const R = M.disturbanceRadius ?? 75, R2 = R * R;
+    let sum = 0;
+    for (let i = 0; i < list.length; i++) {
+      const d = list[i];
+      const dx = d.x - x, dy = d.y - y, dSq = dx * dx + dy * dy;
+      if (dSq >= R2) continue;
+      sum += d.strength * (1 - Math.sqrt(dSq) / R);
+    }
+    return sum;
+  }
+
+  _decayDisturbances(dt) {
+    const list = this._disturbances;
+    if (list.length === 0) return;
+    const M = (typeof LEVEL_MECHANICS !== 'undefined') ? LEVEL_MECHANICS : {};
+    const per = 1 / (((M.disturbanceDecaySec ?? 22) * 60) || 1);   // strength lost per tick
+    let wi = 0;
+    for (let i = 0; i < list.length; i++) {
+      list[i].strength -= per * dt;
+      if (list[i].strength > 0.01) list[wi++] = list[i];
+    }
+    list.length = wi;
   }
   
   addPlaceable(x, y, type) {
@@ -674,6 +934,17 @@ class Simulation {
         if (k) sc[k] = (sc[k] || 0) + 1;
       }
     }
+    // Other entities (kererū/kōkako/kea/kākā/kākāpō) counted into the per-species map
+    // too, so getCachedSpeciesCount / isSpeciesProtected work for them (e.g. the
+    // Year-1 kea floor that stops eagles wiping the last kea). They do NOT add to
+    // moaCount — that stays a moa-only tally.
+    for (const type in this.otherEntities) {
+      const list = this.otherEntities[type];
+      let n = 0;
+      for (let i = 0, l = list.length; i < l; i++) if (list[i].alive) n++;
+      sc[type] = n;
+    }
+
     const eggs = this.eggs;
     for (let i = 0, len = eggs.length; i < len; i++) {
       if (eggs[i].alive && !eggs[i].hatched) eggCount++;
@@ -818,6 +1089,54 @@ class Simulation {
   // forest tree, never carpets an already-dense stand, and starts as a young recruit
   // that grows in. Returns true if it planted. A level can switch it off with
   // LEVEL_MECHANICS.seedDispersal = false.
+  // Kea Raid v2 (Slice B) — CULTIVATE forest: plant a podocarp/beech tree within
+  // radius, even where the biome isn't already forest (the player expanding the
+  // podocarp forest downslope). Density-gated per spot and capped per patch, so it
+  // grows a grove rather than a carpet. Distinct from disperseSeed, which refuses
+  // non-forest biomes (that's natural recruitment; this is deliberate planting).
+  growForestAt(x, y, radius, patchCap = 8) {
+    if (typeof Plant === 'undefined' || typeof FOREST_TREES === 'undefined') return false;
+    const M = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS) ? LEVEL_MECHANICS : {};
+    const cap = M.maxPlants ?? this.config.maxPlants ?? 1200;
+    if (this.plants.length >= cap) return false;
+
+    // Patch cap: stop once this grove already holds enough forest trees.
+    const patch = this.getNearbyPlants(x, y, radius);
+    let forestN = 0;
+    for (let i = 0; i < patch.length; i++) if (patch[i].alive && FOREST_TREES.has(patch[i].type)) forestN++;
+    if (forestN >= patchCap) return false;
+
+    for (let tries = 0; tries < 6; tries++) {
+      const a = Math.random() * Math.PI * 2, rr = Math.sqrt(Math.random()) * radius;
+      const px = x + Math.cos(a) * rr, py = y + Math.sin(a) * rr;
+      const biome = this.terrain.getBiomeAt(px, py);
+      if (!biome || !biome.canHavePlants || !this.terrain.isWalkable(px, py)) continue;
+      // Local density gate so trees don't stack.
+      const near = this.getNearbyPlants(px, py, 24);
+      let n = 0;
+      for (let i = 0; i < near.length; i++) if (near[i].alive && FOREST_TREES.has(near[i].type)) n++;
+      if (n >= 2) continue;
+      const type = Math.random() < 0.6 ? 'rimu' : 'beech';   // podocarp-led
+      const seedling = new Plant(px, py, type, this.terrain, biome.key);
+      seedling.growth = 0.25;
+      this.addPlant(seedling);
+      return true;
+    }
+    return false;
+  }
+
+  // "Does this spot read as podocarp forest?" — enough live forest trees within
+  // radius. Used for kea perch selection (Slice C) and forest-site formation.
+  isForestPatch(x, y, radius = 70, minTrees = 3) {
+    if (typeof FOREST_TREES === 'undefined') return false;
+    const near = this.getNearbyPlants(x, y, radius);
+    let n = 0;
+    for (let i = 0; i < near.length; i++) {
+      if (near[i].alive && FOREST_TREES.has(near[i].type)) { n++; if (n >= minTrees) return true; }
+    }
+    return false;
+  }
+
   disperseSeed(x, y) {
     const M = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS) ? LEVEL_MECHANICS : {};
     if (M.seedDispersal === false) return false;
@@ -862,6 +1181,11 @@ class Simulation {
   getNearbyEggs(x, y, radius) { return this.eggGrid.getInRadius(x, y, radius); }
   getClosestPlant(x, y, radius, filter = null) { return this.plantGrid.getClosest(x, y, radius, filter); }
   getClosestMoa(x, y, radius, filter = null) { return this.moaGrid.getClosest(x, y, radius, filter); }
+  // Nearest un-hatched MOA egg (a moa "nest") — LINK 3, so eagles patrol where moa breed.
+  getClosestMoaNest(x, y, radius) {
+    return this.eggGrid.getClosest(x, y, radius,
+      e => e.alive && !e.hatched && (!e.offspringType || e.offspringType === 'moa'));
+  }
   getClosestPlaceable(x, y, radius, filter = null) { return this.placeableGrid.getClosest(x, y, radius, filter); }
   // Query method for any entity type
   getNearbyOfType(type, x, y, radius) {
@@ -953,6 +1277,9 @@ class Simulation {
       this._cleanupTimer -= 512;
       this.cleanup();
     }
+
+    this._decayDisturbances(dt);   // LINK 2 — age out raided-nest disturbance
+    this._updateNestingSites(dt);  // refresh site egg tallies (raid indicator)
   }
 
   _updateOtherEntities(mauri, dt) {
@@ -1222,6 +1549,15 @@ class Simulation {
       }
       list.length = wi;
     }
+
+    // Nesting-site cleanup (raided/destroyed sites drop out).
+    if (this.nestingSites.length) {
+      let wi = 0;
+      for (let i = 0; i < this.nestingSites.length; i++) {
+        if (this.nestingSites[i].alive) this.nestingSites[wi++] = this.nestingSites[i];
+      }
+      this.nestingSites.length = wi;
+    }
   }
 
   // ============================================
@@ -1334,6 +1670,9 @@ class Simulation {
 
     // DRAW ORDER Z INDEX
 
+    // Layer 0: Nesting sites (ground scrapes, under everything else).
+    if (this.nestingSites.length) this._renderFiltered(this.nestingSites, 0, null, true, inView);
+
     // Layer 1: Ground plants (pre-partitioned — no per-plant type filter)
     this._renderFiltered(this.groundPlants, 0, null, true, inView);
 
@@ -1411,6 +1750,7 @@ class Simulation {
 
     // Ground detail sits under the cast, billboarded but not depth-sorted (it is
     // low and dense; sorting ~1000 tussocks each frame buys nothing visible).
+    if (this.nestingSites.length) this._billboardList(this.nestingSites, 0, null, inView, lift, 'render');
     this._billboardList(this.groundPlants, 0, null, inView, lift, 'render');
 
     // The depth-sorted cast: everything with real height, back-to-front.

@@ -15,7 +15,9 @@ const PLANT_TYPE_ID = {
   dracophyllum: 8,
   matagouri: 9,
   lancewood: 10,
-  speargrass: 11
+  speargrass: 11,
+  toatoa: 12,
+  pohuehue: 13
 };
 
 // Plants that use sprite rendering

@@ -67,6 +67,15 @@ const EntitySprites = {
     dive: null,
     glide: null
   },
+  // Flighted-bird art — one static 360×360 sprite each (the perched vs flying
+  // pose isn't distinguished). The kererū base still draws its glyph; these are
+  // the four subclasses with dedicated sprites.
+  flyers: {
+    kea: null,
+    kaka: null,
+    kakapo: null,
+    kokako: null
+  },
   loaded: false,
   loadAttempted: false,
   
@@ -138,7 +147,18 @@ const EntitySprites = {
       () => console.log('Loaded eagle_glide.png'),
       () => console.warn('Could not load eagle_glide.png')
     );
-    
+
+    // Flighted-bird sprites — one static image each.
+    const flyerFiles = { kea: 'kea.png', kaka: 'kaka.png', kakapo: 'kakapo.png', kokako: 'kokako.png' };
+    for (const name in flyerFiles) {
+      const file = flyerFiles[name];
+      this.flyers[name] = loadImage(
+        `${spritePath}${file}`,
+        () => console.log(`Loaded ${file}`),
+        () => console.warn(`Could not load ${file}`)
+      );
+    }
+
     this.loaded = true;
   },
 
@@ -180,6 +200,13 @@ const EntitySprites = {
 
     return null;
   },
+
+  // Flighted-bird sprite getters — one static image each, so the perched flag is
+  // ignored. null while the image is still loading (draw falls back to the glyph).
+  getKeaSprite()    { return this.isValid(this.flyers.kea)    ? this.flyers.kea    : null; },
+  getKakaSprite()   { return this.isValid(this.flyers.kaka)   ? this.flyers.kaka   : null; },
+  getKakapoSprite() { return this.isValid(this.flyers.kakapo) ? this.flyers.kakapo : null; },
+  getKokakoSprite() { return this.isValid(this.flyers.kokako) ? this.flyers.kokako : null; },
 
   // Pre-tinted moa frame cache. p5's tint() runs a slow per-draw path and
   // defeats the fast image blit, so instead of tinting live every frame we bake

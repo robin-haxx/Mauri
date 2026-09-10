@@ -82,7 +82,9 @@ const CONFIG = {
   get height() { return this.gameAreaHeight; },
 
   pixelScale: 1,
-  terrainDetail: 2,  // render-only: bakes terrain buffers at 2x resolution
+  terrainDetail: 1,  // render-only: 1 = single-res terrain buffers (fast world-gen).
+                     // The '2x' toggle bakes at double res (crisper, ~2-3x slower gen —
+                     // now viable thanks to the interpolation/noise/colour perf fixes).
   zoom: 2.5,
   debugMode: false,
 
@@ -101,7 +103,7 @@ const CONFIG = {
   // it (see mauri_projection.js / mauri_simulation.js). view3DK + view3DLiftFrac
   // feed Projection.configure; keep their sum ≈ 1.0 so the standing terrain fills
   // the same rect the flat map did (no view-transform change needed).
-  view3D: false,
+  view3D: true,          // default view: fixed 3D (plan-oblique). Toggle to top-down with V.
   view3DK: 0.72,         // pitch squash (1 = top-down, lower = more tilt). Keep K + liftFrac ≈ 1.0
   view3DLiftFrac: 0.28,  // range height at elevation 1.0, as a fraction of map height
   view3DHaze: [206, 220, 230],   // atmospheric haze behind the far ridge
@@ -257,7 +259,12 @@ function applyLevelToConfig(levelDef) {
   }
 
   CONFIG.plantDensity = t.plantDensity;
-  
+
+  // Endless "years" world grid (a 2×2 grid of terrain areas the world scrolls
+  // through, one per year). Null on classic levels → the terrain behaves exactly
+  // as a single window. See TerrainGenerator + Game._scrollWorldGrid.
+  CONFIG.worldGrid = levelDef.worldGrid || null;
+
   const e = levelDef.economy;
   CONFIG.startingMauri = e.startingMauri;
   CONFIG.seasonDuration = e.seasonDuration;
@@ -534,6 +541,52 @@ const PLACEABLES = {
     seasonalBonus: { summer: 1.2, autumn: 1.0, winter: 0.9, spring: 1.1 },
     attractsHungryMoa: true,
     attractionStrength: 1.4
+  },
+
+  // Year-1 kea interaction (Free Play). A cache of subalpine berries (Coprosma /
+  // snowberry) that the gregarious, food-driven kea flock to — the player places it
+  // DOWNSLOPE to draw the kea onto the forest, where they rob moa nests and set the
+  // cascade going (see YEARS_PLAN.md). Behaviour read by mauri_kea.js (attractsKea /
+  // keaAttractRadius); no plants spawned, no moa effect — it is purely a kea magnet.
+  keaLure: {
+    name: "Berry Cache",
+    description: "Plants subalpine berries and cultivates podocarp forest — draws kea downslope and grows perch trees",
+    cost: 45,
+    icon: '🫐',
+    color: '#6a4a7a',
+    effect: 'keaLure',
+    radius: 70,
+    duration: 3600,
+    minSpacing: 30,
+    ignoresSpacing: false,
+    // Berries (kea food) planted on placement…
+    plantSpawnCount: 4,
+    plantType: 'coprosma',
+    // …and podocarp forest cultivated over the cache's life (Slice B).
+    growsForest: true,
+    growEverySec: 5,           // seed a rimu/beech in-radius this often
+    growCap: 9,                // stop once the grove holds this many forest trees
+    attractsKea: true,
+    keaAttractRadius: 520,     // kea within this range are drawn to the cache
+    allowedBiomes: ['forestRefuge', 'shrubland', 'glacialFlats'],
+    seasonalBonus: { summer: 1.0, autumn: 1.0, winter: 1.0, spring: 1.0 }
+  },
+
+  // A toolbar INTERACTION (not a placement): selecting it opens the nest-raid dialog
+  // (Game._openRaidDialog) to pick a moa nesting site to raid. The mauri cost is
+  // charged per raid inside the dialog (mechanics.keaRaid.cost), so this shows 0 and
+  // opensDialog routes it past selection's affordability check.
+  nestRaid: {
+    name: "Nest Raid",
+    description: "Loose the stationed kea on a moa nesting site — pick one from the list",
+    cost: 0,
+    icon: '🥚',
+    color: '#8a3a3a',
+    effect: 'nestRaid',
+    opensDialog: true,
+    global: true,              // not a spatial placement
+    radius: 0, minSpacing: 0, ignoresSpacing: true,
+    seasonalBonus: { summer: 1.0, autumn: 1.0, winter: 1.0, spring: 1.0 }
   }
 };
 
@@ -617,13 +670,18 @@ const PLANT_TYPES = {
   patotara: { name: "Pātōtara", nutrition: 35, color: '#c94c5a', size: 28, growthTime: 160,
     winterEdibility: 0.0, description: "Alpine shrub with summer berries" },
 
-  // --- Glacial-flora (LGM) additions. Coprosma & dracophyllum are sprite-rendered; matagouri is procedural. ---
+  // --- Glacial-flora (LGM) additions. Coprosma & dracophyllum are sprite-rendered;
+  // matagouri, toatoa & pohuehue are procedural (no sprite assets yet — generic blob). ---
   coprosma: { name: "Coprosma", nutrition: 30, color: '#5c7d3e', size: 22, growthTime: 190,
     winterEdibility: 0.15, description: "Divaricating shrub; hardy glacial browse with orange berries" },
   dracophyllum: { name: "Dracophyllum", nutrition: 28, color: '#9a7b4f', size: 30, growthTime: 250,
     winterEdibility: 0.15, description: "Inaka grass-tree of the cold subalpine tops" },
   matagouri: { name: "Matagouri", nutrition: 26, color: '#7a6f4a', size: 24, growthTime: 210,
     winterEdibility: 0.15, description: "Tūmatakuru: thorny shrub of the glacial outwash flats" },
+  toatoa: { name: "Mountain Toatoa", nutrition: 32, color: '#3f6b4f', size: 34, growthTime: 320,
+    winterEdibility: 0.30, description: "Cold-hardy celery pine (Phyllocladus alpinus) of the subalpine tops" },
+  pohuehue: { name: "Pōhuehue", nutrition: 24, color: '#75794a', size: 20, growthTime: 180,
+    winterEdibility: 0.18, description: "Wiry scrambling Muehlenbeckia of the glacial scrub and outwash" },
 
   // --- Favoured, browse-resistant plants (planted via the palette) ---
   lancewood: { name: "Juvenile Lancewood", nutrition: 34, color: '#6a5a33', size: 30, growthTime: 300,
@@ -799,6 +857,7 @@ class Game {
     this._freeplayYear = -1;      // which year's goals are currently built
     this.freeplayFocus = [];      // the two species this year's goals protect
     this._yearsSurvived = 0;
+    this._kawakawaBanned = false; // set at the first winter (endless): kawakawa unplantable for good
     // Mast Year interactable (see triggerMastYear): the cycle a bought mast lands on
     // (-1 = none). Global one-shot cooldowns live here, keyed by placeable type.
     this._mastYearTargetCycle = -1;
@@ -908,6 +967,7 @@ class Game {
     this._freeplayYear = -1;
     this.freeplayFocus = [];
     this._yearsSurvived = 0;
+    this._kawakawaBanned = false;     // re-enable kawakawa for a fresh run (see _banKawakawa)
     this._mastYearTargetCycle = -1;   // reset the pending/active mast per level load
     this._globalCooldownUntil = {};
     this._stormCooldownUntil = 0;   // reset per level load, else a restart starts mid-cooldown
@@ -1089,6 +1149,10 @@ class Game {
     if (this.seasonManager.update(dt)) this.onSeasonChange();
     
     this.simulation.update(this.mauri, dt);
+    // Advance a world-grid camera pan BEFORE caching counts: the frame the pan
+    // settles it repopulates the new area, so the fresh cast is counted this frame
+    // and the "all moa gone" check never sees the empty transition as a wipe.
+    this._updateWorldGridPan(dt);
     this.updateCachedCounts();
     if (BENCHMARK.active) BENCHMARK.update(this);
     
@@ -1113,8 +1177,14 @@ class Game {
     
     this.checkGoals();
     this.mauri.checkMilestones(this._cachedMoaCount, this.simulation, this);
-    
-    if (this._cachedMoaCount === 0 && this._cachedEggCount === 0) {
+
+    // While the world grid is panning between areas (or waiting to repopulate the
+    // new one), the cast is unloaded — an empty map then is a transition, not a wipe,
+    // so hold the loss / fail / apex-extinction verdicts until it settles.
+    const _areaTransition = this.terrain && this.terrain.hasWorldGrid &&
+      ((this.terrain.isPanning && this.terrain.isPanning()) || this._pendingAreaSpawn);
+
+    if (!_areaTransition && this._cachedMoaCount === 0 && this._cachedEggCount === 0) {
       this.state = GAME_STATE.LOST;
       this.gameOverReason = "All moa here were hunted...";
       if (audioManager) audioManager.playLoss();
@@ -1124,7 +1194,7 @@ class Game {
     // `fail` hook. Lets a level lose on conditions the generic all-moa check
     // misses — e.g. level 1's focal Upland Moa dying out while mutated
     // cousin species carry the headcount.
-    if (this.state === GAME_STATE.PLAYING && this.currentLevel &&
+    if (!_areaTransition && this.state === GAME_STATE.PLAYING && this.currentLevel &&
         this.currentLevel.fail && this.currentLevel.fail(this.simulation, this)) {
       this.state = GAME_STATE.LOST;
       this.gameOverReason = this.currentLevel.failReason || "A population you were protecting died out.";
@@ -1304,7 +1374,58 @@ class Game {
   // ============================================
 
   _freeplaySpeciesName(key) {
-    return (typeof MOA_SPECIES !== 'undefined' && MOA_SPECIES[key] && MOA_SPECIES[key].displayName) || key;
+    if (typeof MOA_SPECIES !== 'undefined' && MOA_SPECIES[key] && MOA_SPECIES[key].displayName) {
+      return MOA_SPECIES[key].displayName;
+    }
+    // Non-moa focus species (kea / kākā / kākāpō, kererū, kōkako) resolve via the registry.
+    if (typeof REGISTRY !== 'undefined') {
+      const sp = REGISTRY.getSpecies(key);
+      if (sp && sp.displayName) return sp.displayName;
+      if (sp && sp.config && sp.config.displayName) return sp.config.displayName;
+    }
+    return key;
+  }
+
+  // The authored schedule entry for a given year (0-based cycle), or null.
+  // level.freeplaySchedule is { opening:[...], cycle:[...] }: the `opening` years play
+  // once in order, then `cycle` repeats forever. Each entry is
+  // { focus:[speciesKey...], introduce:[{type,count}...], note }.
+  _scheduledYearEntry(cycle) {
+    const sched = this.currentLevel && this.currentLevel.freeplaySchedule;
+    if (!sched) return null;
+    const opening = sched.opening || [];
+    const cyc = sched.cycle || [];
+    if (cycle < opening.length) return opening[cycle] || null;
+    if (cyc.length) return cyc[(cycle - opening.length) % cyc.length] || null;
+    return null;
+  }
+
+  // Is this species registered and constructible? Guards schedule entries that name a
+  // species not yet built (e.g. kākā / kākāpō before their slices land) so they are
+  // skipped gracefully rather than leaving a dead goal or spawning nothing.
+  _speciesUsable(key) {
+    return (typeof REGISTRY !== 'undefined') && !!REGISTRY.getSpecies(key);
+  }
+
+  // Spawn n of a species, routing moa vs other-entity (flighted bird) correctly.
+  _spawnFreeplaySpecies(key, n) {
+    if (n <= 0) return;
+    const sim = this.simulation;
+    if (typeof MOA_SPECIES !== 'undefined' && MOA_SPECIES[key]) sim._spawnDistributedMoas({ [key]: n });
+    else if (sim._spawnOtherEntities) sim._spawnOtherEntities(key, n);
+  }
+
+  // Resolve a per-year interaction palette (schedule entry availablePlaceables) into
+  // full placeable defs: base PLACEABLES, then the level's cost/tuning overrides, then
+  // the year's own overrides. Lets each year present its own toolbar set.
+  _resolvePalette(avail) {
+    const base = (this.currentLevel && this.currentLevel.availablePlaceables) || {};
+    const out = {};
+    for (const key of Object.keys(avail || {})) {
+      if (typeof PLACEABLES === 'undefined' || !PLACEABLES[key]) continue;
+      out[key] = Object.assign({}, PLACEABLES[key], base[key] || {}, avail[key] || {});
+    }
+    return out;
   }
 
   // Roster moa species ranked most-endangered first (lowest headcount).
@@ -1359,39 +1480,77 @@ class Game {
     const targets = this.currentLevel.freeplayTargets || M.freeplayTargets || {};
     const defaultTarget = M.freeplayDefaultTarget ?? 8;
 
-    // 1) The two most-endangered species become this year's focus.
+    // 1) This year's FOCUS. An authored freeplaySchedule (see the level) wins; its
+    //    focus can name ANY species — moa or the flighted birds (kea/kākā/kākāpō).
+    //    Species not yet registered are dropped; if that empties the scheduled focus
+    //    (e.g. a kākāpō year before kākāpō is built), we fall back to the dynamic
+    //    "two most-endangered moa" ranker so a year never lacks a focus. Non-scheduled
+    //    years use the ranker too.
     const ranked = this._rankFreeplaySpecies();
-    this.freeplayFocus = ranked.slice(0, 2).map(s => s.k);
+    const entry = this._scheduledYearEntry(this.cycle);
+    let note = null, introduce = null, focus = null;
+    if (entry) {
+      const f = (entry.focus || []).filter(k => this._speciesUsable(k));
+      if (f.length) { focus = f; note = entry.note || null; introduce = entry.introduce || null; }
+    }
+    if (!focus) focus = ranked.slice(0, 2).map(s => s.k);   // dynamic fallback
+    this.freeplayFocus = focus;
 
-    // 2) Refound extinct NON-focus species so the full cast returns each year.
+    // 2) Introduce this year's scheduled newcomers (guarded: registered species only,
+    //    and only up to the requested count if they aren't already present).
+    if (introduce) {
+      for (const spec of introduce) {
+        if (!spec || !this._speciesUsable(spec.type)) continue;
+        const short = (spec.count || 0) - sim.getSpeciesCount(spec.type);
+        if (short > 0) {
+          this._spawnFreeplaySpecies(spec.type, short);
+          this.addNotification(`${this._freeplaySpeciesName(spec.type)} are introduced to the forest.`, 'info');
+        }
+      }
+    }
+
+    // 3) Refound extinct NON-focus MOA so the moa cast persists each year.
     for (const s of ranked) {
       if (this.freeplayFocus.includes(s.k)) continue;
       if (s.count === 0) sim._spawnDistributedMoas({ [s.k]: refoundCount });
     }
-    // 3) Top a crashed focus species up to its protect floor so it stays growable.
+    // 4) Top a crashed focus species up to its protect floor so it stays growable.
     for (const k of this.freeplayFocus) {
       const short = protectFloor - sim.getSpeciesCount(k);
-      if (short > 0) sim._spawnDistributedMoas({ [k]: short });
+      if (short > 0) this._spawnFreeplaySpecies(k, short);
     }
 
-    // 4) Protect ONLY the focus species from a total wipe this year (dynamic floor).
+    // 5) Protect ONLY the focus species from a total wipe this year (dynamic floor).
     const floors = {};
     for (const k of this.freeplayFocus) floors[k] = protectFloor;
     sim.dynamicFloors = floors;
 
-    // 5) Highlight the focus species in the UI.
+    // 6) Highlight the focus species in the UI.
     if (typeof SPECIES_HIGHLIGHT !== 'undefined') {
       SPECIES_HIGHLIGHT.clear();
       for (const k of this.freeplayFocus) SPECIES_HIGHLIGHT.add(k);
     }
 
-    // 6) Eagles re-immigrate if the apex predator was lost (this ends any boom).
+    // 6b) Per-year interaction palette: swap the toolbar to this year's tools (a new
+    // set each year), falling back to the level's base palette. Rebuild the toolbar
+    // layout, and drop a selected tool that isn't in the new set.
+    const yearPalette = entry && entry.availablePlaceables;
+    if (yearPalette) this.activePlaceables = this._resolvePalette(yearPalette);
+    else if (this.currentLevel._resolvedPlaceables) this.activePlaceables = this.currentLevel._resolvedPlaceables;
+    // Once the first winter has banned kawakawa, keep it out of every later year's palette.
+    if (this._kawakawaBanned && this.activePlaceables) delete this.activePlaceables.kawakawa;
+    if (this.ui && this.ui._calculateLayoutPositions) this.ui._calculateLayoutPositions();
+    if (this.selectedPlaceable && this.activePlaceables && !this.activePlaceables[this.selectedPlaceable]) {
+      this.selectedPlaceable = null;
+    }
+
+    // 7) Eagles re-immigrate if the apex predator was lost (this ends any boom).
     if (M.emergentEagles && sim.countAliveEagles() === 0) {
       sim.spawnEagle(); sim.spawnEagle();
       sim.boomSpecies = null;
     }
 
-    // 7) Build this year's goals: recover each focus species to its target.
+    // 8) Build this year's goals: recover each focus species to its target.
     this.goals = this.freeplayFocus.map(k => {
       const target = targets[k] || defaultTarget;
       const reward = Math.round((M.freeplayGoalReward ?? 80) * (1 + this.coldIndex));
@@ -1403,13 +1562,15 @@ class Game {
       };
     });
 
-    // 8) Announce the year.
+    // 9) Announce the year — the schedule's own note if it has one, else the generic
+    //    "protect X & Y".
     const stage = (typeof ClimateDrift !== 'undefined' && this._climateCfg)
       ? ClimateDrift.stageName(this.coldIndex) : '';
     const names = this.freeplayFocus.map(k => this._freeplaySpeciesName(k)).join(' & ');
     this.addNotification(`Year ${this.cycle + 1}${stage ? ' — ' + stage : ''}: protect ${names}`, 'info');
+    if (note) this.addNotification(note, 'info');
 
-    // 9) Mast year onset: announce the boom and seed a few extra fruit-birds to the
+    // 10) Mast year onset: announce the boom and seed a few extra fruit-birds to the
     // feast so it reads at once (forest growth + faster breeding do the rest all year).
     if (this._isMastYear()) {
       this.addNotification('Mast year! The podocarp forest blooms — the fruit-birds will boom.', 'success');
@@ -1417,6 +1578,56 @@ class Game {
         sim._spawnOtherEntities('kereru', 2);
         sim._spawnOtherEntities('kokako', 1);
       }
+    }
+
+    // World grid: LAST, once this year's populations are settled — pan the camera to
+    // the year's area of the continuous land and regenerate the cast there (a no-op on
+    // year 1 / classic levels). Snapshots the populations above, so they carry across.
+    this._scrollWorldGrid();
+  }
+
+  // World grid (endless years): at each year boundary, PAN the camera across the one
+  // continuous landmass to this year's area, unloading the old area's plants/fauna and
+  // regenerating them for the new one. Year 1 (cycle 0) opens on the start area (east /
+  // alps→podocarp) with no pan. A full loop back to the start deepens the glacial share.
+  _scrollWorldGrid() {
+    const t = this.terrain;
+    if (!t || !t.hasWorldGrid) return;
+    if (this.cycle === 0) return;   // opening area is already framed at init
+
+    const q = t.quadrantForCycle(this.cycle);
+    if (q[0] === t.activeCol && q[1] === t.activeRow) return;   // already here
+
+    // Glacial deepening: once per full loop (returning to the tour's start), reshape
+    // the SAME land colder so glacial habitats climb higher over the run.
+    const wg = (this.currentLevel && this.currentLevel.worldGrid) || {};
+    const perLoop = (wg.glacialPerLoop != null) ? wg.glacialPerLoop : 0;
+    const cap = (wg.glacialCap != null) ? wg.glacialCap : 0.6;
+    if (perLoop > 0 && t._quadIndexForCycle(this.cycle) === 0) {
+      const loops = Math.floor(this.cycle / t._quadOrder.length);
+      t.setGlacialAdvance(Math.min(cap, loops * perLoop));   // heavy: rebakes the world
+    }
+
+    const fromCol = t.activeCol;
+    t.panToArea(q[0], q[1]);          // start the camera pan
+    this._pendingAreaSpawn = true;    // repopulate when the pan settles
+    if (this.simulation && this.simulation.unloadAreaEntities) this.simulation.unloadAreaEntities();
+
+    const dir = q[0] < fromCol ? 'downslope to the west (toward the shore)'
+              : q[0] > fromCol ? 'back upslope to the east (the high alps)'
+              : 'across the range';
+    this.addNotification(`The kāhui moves ${dir} — a new country for the year.`, 'info');
+  }
+
+  // Per-frame: advance the camera pan; when it settles, regenerate the new area's cast.
+  _updateWorldGridPan(dt) {
+    const t = this.terrain;
+    if (!t || !t.hasWorldGrid) return;
+    const wasPanning = t.isPanning();
+    if (wasPanning) t.updatePan(dt);
+    if (this._pendingAreaSpawn && !t.isPanning()) {
+      this._pendingAreaSpawn = false;
+      if (this.simulation && this.simulation.spawnAreaEntities) this.simulation.spawnAreaEntities();
     }
   }
 
@@ -1476,6 +1687,195 @@ class Game {
     pop();
   }
 
+  // ============================================
+  // KEA RAID v2 — the player-driven raid action (Slice D)
+  // ============================================
+
+  // World ground point → screen pixel (inverse of _pointerWorld; uses the relief lift
+  // so an indicator sits on the nest like the billboarded cast).
+  _worldToScreen(x, y) {
+    const py = this._groundPaintY(x, y);
+    return { x: x * CONFIG.viewZoom + CONFIG.viewX, y: py * CONFIG.viewZoom + CONFIG.viewY };
+  }
+
+  _keaRaidCfg() {
+    const M = (typeof LEVEL_MECHANICS !== 'undefined') ? LEVEL_MECHANICS : {};
+    return M.keaRaid || null;
+  }
+
+  // How many kea are STATIONED at a site: alive kea whose perch tree sits within the
+  // station radius (a kea with no perch yet doesn't count — it hasn't settled).
+  keaStationedCount(site) {
+    const cfg = this._keaRaidCfg(); if (!cfg) return 0;
+    const list = this.simulation.otherEntities && this.simulation.otherEntities.kea;
+    if (!list) return 0;
+    const rSq = (cfg.stationRadius ?? 140) ** 2;
+    let n = 0;
+    for (let i = 0; i < list.length; i++) {
+      const k = list[i];
+      if (!k.alive || !k._perchTree || !k._perchTree.alive) continue;
+      const dx = k._perchTree.pos.x - site.pos.x, dy = k._perchTree.pos.y - site.pos.y;
+      if (dx * dx + dy * dy <= rSq) n++;
+    }
+    return n;
+  }
+
+  _moaNearSite(site, radius) {
+    const moas = this.simulation.moas;
+    const rSq = radius * radius;
+    let n = 0;
+    for (let i = 0; i < moas.length; i++) {
+      const m = moas[i];
+      if (!m.alive) continue;
+      const dx = m.pos.x - site.pos.x, dy = m.pos.y - site.pos.y;
+      if (dx * dx + dy * dy <= rSq) n++;
+    }
+    return n;
+  }
+
+  // Success chance of raiding a site right now: high when the moa have left, low
+  // while they're still crowding the nest (they drive the kea off).
+  _raidSuccessChance(site) {
+    const cfg = this._keaRaidCfg(); if (!cfg) return 0;
+    const moa = this._moaNearSite(site, cfg.moaRadius ?? 90);
+    let p = (cfg.baseSuccess ?? 0.9) - (cfg.moaPenalty ?? 0.12) * moa;
+    return Math.max(cfg.minSuccess ?? 0.05, Math.min(1, p));
+  }
+
+  // Attempt the raid: spend mauri, roll against the success chance, and on success
+  // consume the site's eggs + destroy it + scatter its moa (destroyNestingSite).
+  attemptRaid(site) {
+    const cfg = this._keaRaidCfg();
+    if (!cfg || !site || !site.alive) return;
+    if (this.keaStationedCount(site) < (cfg.stationCount ?? 3)) return;   // not enough kea
+    const cost = cfg.cost ?? 60;
+    if (this.mauri.mauri < cost) {
+      this.addNotification(`Not enough mauri to loose the kea (need ${cost}).`, 'error');
+      return;
+    }
+    this.mauri.spend(cost);
+    const chance = this._raidSuccessChance(site);
+    if (Math.random() < chance) {
+      const eaten = this.simulation.destroyNestingSite(site);
+      this.addNotification(`The kea raid the nest — ${eaten} egg${eaten === 1 ? '' : 's'} taken; the moa flee to another site.`, 'success');
+      if (audioManager && audioManager.playEagleCatch) audioManager.playEagleCatch();
+    } else {
+      this.addNotification(`The moa drove the kea off — the raid failed. Thin their numbers here first.`, 'error');
+    }
+  }
+
+  // Draw a clickable indicator over each raidable nest; records screen rects for
+  // handleClick. Screen space, HUD layer (endless only).
+  // The raid is a toolbar interaction (Nest Raid): selecting it opens this dialog,
+  // which lists the moa nesting sites with their stationed-kea count + success%, and
+  // lets the player pick one to raid. (Replaces the old per-site on-map indicators.)
+  _openRaidDialog() { this._raidDialogOpen = true; this._raidDialogRows = null; }
+  _closeRaidDialog() { this._raidDialogOpen = false; this._raidDialogRows = null; }
+
+  _renderRaidDialog() {
+    if (!this._raidDialogOpen) return;
+    const cfg = this._keaRaidCfg();
+    const W = CONFIG.canvasWidth, H = CONFIG.canvasHeight;
+    const sites = (this.simulation && this.simulation.nestingSites)
+      ? this.simulation.nestingSites.filter(s => s.alive) : [];
+    const need = cfg ? (cfg.stationCount ?? 3) : 3;
+    const cost = cfg ? (cfg.cost ?? 60) : 60;
+
+    push();
+    noStroke(); fill(10, 14, 18, 180); rect(0, 0, W, H);          // dim backdrop
+    const pw = Math.min(470, W - 80), rowH = 46, headH = 62, footH = 34;
+    const ph = headH + Math.max(1, sites.length) * (rowH + 8) + footH;
+    const px = (W - pw) / 2, py = Math.max(40, (H - ph) / 2);
+    fill(28, 36, 30, 246); stroke(90, 130, 100); strokeWeight(2);
+    rect(px, py, pw, ph, 12); noStroke();
+    fill(226, 240, 226); textAlign(LEFT, TOP); textStyle(BOLD); textSize(18);
+    push(); if (typeof FreckleFace !== 'undefined') textFont(FreckleFace); text('Loose the kea — raid a nest', px + 18, py + 14); pop();
+    textStyle(NORMAL); textSize(11); fill(150, 180, 158);
+    text(`Needs ${need} kea stationed · costs ${cost} mauri · clear the moa first (they drive the kea off).`, px + 18, py + 40);
+
+    const rows = [];
+    let ry = py + headH;
+    if (sites.length === 0) {
+      fill(180, 160, 120); textAlign(CENTER, CENTER); textSize(13);
+      text('No moa nesting sites remain.', px + pw / 2, ry + rowH / 2);
+    }
+    for (let i = 0; i < sites.length; i++) {
+      const s = sites[i];
+      const stationed = this.keaStationedCount(s);
+      const ready = stationed >= need;
+      const afford = this.mauri.mauri >= cost;
+      const chance = Math.round(this._raidSuccessChance(s) * 100);
+      const clickable = ready && afford;
+      const rx = px + 14, rw = pw - 28;
+      fill(clickable ? 58 : 40, clickable ? 80 : 48, clickable ? 56 : 44, 235);
+      stroke(clickable ? 120 : 70, clickable ? 170 : 92, 120, 200); strokeWeight(1.4);
+      rect(rx, ry, rw, rowH, 8); noStroke();
+      fill(232, 242, 232); textAlign(LEFT, CENTER); textStyle(BOLD); textSize(13);
+      text(`${s.habitat === 'forest' ? 'Forest nest' : 'Open nest'} · ${s.eggCount} egg${s.eggCount === 1 ? '' : 's'}`, rx + 12, ry + 15);
+      textStyle(NORMAL); textSize(11); fill(ready ? 168 : 205, ready ? 198 : 150, 160);
+      text(ready ? `${stationed}/${need} kea · raid ${chance}%` : `${stationed}/${need} kea stationed — gather more`, rx + 12, ry + 32);
+      textAlign(RIGHT, CENTER); textSize(12);
+      if (!ready) { fill(200, 140, 120); text('not ready', rx + rw - 12, ry + rowH / 2); }
+      else if (!afford) { fill(200, 140, 120); text(`need ${cost}`, rx + rw - 12, ry + rowH / 2); }
+      else { fill(240, 210, 120); textStyle(BOLD); text(`RAID (${cost})`, rx + rw - 12, ry + rowH / 2); textStyle(NORMAL); }
+      if (clickable) rows.push({ x: rx, y: ry, w: rw, h: rowH, site: s });
+      ry += rowH + 8;
+    }
+    const cb = { x: px + pw / 2 - 44, y: py + ph - 28, w: 88, h: 22 };
+    fill(50, 62, 54); rect(cb.x, cb.y, cb.w, cb.h, 6);
+    fill(210, 224, 212); textAlign(CENTER, CENTER); textSize(12); text('Close', cb.x + cb.w / 2, cb.y + cb.h / 2);
+    pop();
+    this._raidDialogRows = { rows, close: cb, panel: { x: px, y: py, w: pw, h: ph } };
+  }
+
+  _raidDialogClick(mx, my) {
+    if (!this._raidDialogOpen) return;
+    const d = this._raidDialogRows;
+    if (!d) { this._closeRaidDialog(); return; }
+    for (let i = 0; i < d.rows.length; i++) {
+      const r = d.rows[i];
+      if (mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h) { this.attemptRaid(r.site); this._closeRaidDialog(); return; }
+    }
+    const c = d.close;
+    if (c && mx >= c.x && mx <= c.x + c.w && my >= c.y && my <= c.y + c.h) { this._closeRaidDialog(); return; }
+    const p = d.panel;
+    if (p && (mx < p.x || mx > p.x + p.w || my < p.y || my > p.y + p.h)) this._closeRaidDialog();   // click outside
+  }
+
+  // Tap a moa egg on the map → the nearest HUNGRY kea within range flies over to eat
+  // it — a quick, direct nudge, distinct from the strategic site raid.
+  _tryDirectKeaToEgg(mx, my) {
+    const M = (typeof LEVEL_MECHANICS !== 'undefined') ? LEVEL_MECHANICS : {};
+    if (!M.keaTapEgg || !this.simulation) return false;
+    const world = this._pointerWorld(mx, my);
+    const tapR = M.keaTapClickRadius ?? 26;
+    const eggs = this.simulation.getNearbyEggs ? this.simulation.getNearbyEggs(world.x, world.y, tapR) : [];
+    let egg = null, bestSq = Infinity;
+    for (let i = 0; i < eggs.length; i++) {
+      const e = eggs[i];
+      if (!e.alive || e.hatched) continue;
+      if (e.offspringType && e.offspringType !== 'moa') continue;
+      const dx = e.pos.x - world.x, dy = e.pos.y - world.y, d2 = dx * dx + dy * dy;
+      if (d2 < bestSq) { bestSq = d2; egg = e; }
+    }
+    if (!egg) return false;
+    const kea = this.simulation.otherEntities && this.simulation.otherEntities.kea;
+    if (!kea) return false;
+    const eatRSq = (M.keaEatRadius ?? 220) ** 2, hungerGate = M.keaTapHunger ?? 30;
+    let best = null, bSq = Infinity;
+    for (let i = 0; i < kea.length; i++) {
+      const k = kea[i];
+      if (!k.alive || k.hunger < hungerGate) continue;
+      const dx = k.pos.x - egg.pos.x, dy = k.pos.y - egg.pos.y, d2 = dx * dx + dy * dy;
+      if (d2 <= eatRSq && d2 < bSq) { bSq = d2; best = k; }
+    }
+    if (!best) { this.addNotification('No hungry kea close enough to take that egg.', 'info'); return true; }
+    best._directedEgg = egg;
+    if (typeof KERERU_STATE !== 'undefined') best.state = KERERU_STATE.FLYING;
+    this.addNotification('A kea darts in to take the egg.', 'info');
+    return true;
+  }
+
   addNotification(text, type = 'info') {
     this.notifications.push({
       text, type,
@@ -1499,6 +1899,15 @@ class Game {
       this.simulation.spawnEagle();
       this.addNotification("The glacial winter drives a hungry eagle to hunt.", 'error');
     }
+
+    // Endless (= the area entering the LGM): the FIRST winter closes the door on the
+    // warm forest. Kawakawa — a frost-tender lowland plant of the mild opening — can no
+    // longer be established (stripped from the palette for good), and any standing
+    // groves wither out over that winter. One-shot per run; startSeason is spring, so
+    // this fires during Year 1. See _banKawakawa.
+    if (this.currentLevel && this.currentLevel.endless && seasonKey === 'winter' && !this._kawakawaBanned) {
+      this._banKawakawa();
+    }
     if (this.tutorial) {
       this.tutorial.fireEvent(TUTORIAL_EVENTS.SEASON_CHANGE, { season, seasonKey });
     }
@@ -1513,11 +1922,41 @@ class Game {
       setTimeout(() => this.addNotification(migrationMessages.upcoming, 'info'), 2000);
     }
   }
-  
+
+  // First-winter kawakawa lock (endless mode — see onSeasonChange). Removes kawakawa
+  // from the toolbar permanently for this run, drops it if it was the selected tool,
+  // and frost-kills any standing groves so they wither out over the winter.
+  _banKawakawa() {
+    this._kawakawaBanned = true;
+    if (this.activePlaceables && this.activePlaceables.kawakawa) {
+      delete this.activePlaceables.kawakawa;
+      if (this.selectedPlaceable === 'kawakawa') this.selectedPlaceable = null;
+      if (this.ui && this.ui._calculateLayoutPositions) this.ui._calculateLayoutPositions();
+    }
+    if (this.simulation && this.simulation.placeables) {
+      for (const p of this.simulation.placeables) {
+        if (p.type === 'kawakawa' && p.frostKill) p.frostKill();
+      }
+    }
+    this.addNotification("The first true winter closes in — the kawakawa cannot hold, and no more will take root.", 'info');
+  }
+
+  // Leave the current level and return to the habitat-select menu (from the pause
+  // screen's "Exit to Menu" button). Mirrors the WON/LOST "return to menu" path.
+  _exitToMenu() {
+    if (this.encyclopedia) this.encyclopedia.close();
+    this.selectedPlaceable = null;
+    this.movingPlaceable = null;
+    this.state = GAME_STATE.LEVEL_SELECT;
+  }
+
   selectPlaceable(type) {
     if (this.movingPlaceable) this.cancelMove();   // one mode at a time
     // Check against level's active placeables, not global PLACEABLES
     const def = this.activePlaceables[type];
+    // Dialog interactions (Nest Raid) open a chooser instead of entering placement
+    // mode; the mauri cost is charged per raid inside the dialog, not on selection.
+    if (def && def.opensDialog) { this.selectedPlaceable = null; this._openRaidDialog(); return; }
     if (def && this.mauri.canAfford(def.cost)) {
       this.selectedPlaceable = type;
     } else if (!def) {
@@ -1844,6 +2283,10 @@ class Game {
     // A tutorial-tip pause shows only the tip (its own overlay dims the
     // world); the PAUSED dialog is for pauses the player asked for.
     const _tutorialPause = this.tutorial && this.tutorial._pausedByTutorial;
+    // Overlay button hit-rect is rebuilt each frame by _renderOverlay (only the
+    // paused screen sets one); clear it so a stale rect never eats a click.
+    this._overlayBtn = null;
+
     if (this.state === GAME_STATE.PAUSED && !_tutorialPause) {
       this._renderOverlay(...CONFIG.col_UI.slice(0,3), 100, {
         title: "PAUSED",
@@ -1853,7 +2296,8 @@ class Game {
           { text: "Press R to restart", color: [150, 170, 150], size: 14 }
         ],
         boxColor: [30, 45, 35, 240],
-        strokeColor: [70, 110, 80]
+        strokeColor: [70, 110, 80],
+        button: { label: "Exit to Menu", action: () => this._exitToMenu() }
       });
     } else if (this.state === GAME_STATE.WON) {
       // "Thriving" is reserved for a full-clear; a win with unmet goals is
@@ -2067,7 +2511,27 @@ class Game {
       text(line.text, centerX, lineY);
       lineY += line.size + 10;
     }
-    
+
+    // Optional clickable button (e.g. pause-screen "Exit to Menu"). Bounds are
+    // stored in canvas space (accounting for the translate) on this._overlayBtn,
+    // and hit-tested in handleClick.
+    if (opts.button) {
+      const bw = 220, bh = 46;
+      const bx = centerX - bw / 2;
+      const by = lineY + 12;
+      const hovBtn = mouseX > bx && mouseX < bx + bw &&
+                     mouseY > (cy + by) && mouseY < (cy + by + bh);
+      fill(hovBtn ? [70, 110, 85] : [45, 75, 55]);
+      stroke(120, 180, 140);
+      strokeWeight(2);
+      rect(bx, by, bw, bh, 10);
+      noStroke();
+      fill(210, 240, 220);
+      textSize(18);
+      text(opts.button.label, centerX, by + bh / 2);
+      this._overlayBtn = { x: bx, y: cy + by, w: bw, h: bh, action: opts.button.action };
+    }
+
     pop();
   }
 
@@ -2738,12 +3202,23 @@ class Game {
       return;
     }
 
+    // Pause-screen overlay button (e.g. "Exit to Menu") takes precedence while shown.
+    if (this._overlayBtn &&
+        mx > this._overlayBtn.x && mx < this._overlayBtn.x + this._overlayBtn.w &&
+        my > this._overlayBtn.y && my < this._overlayBtn.y + this._overlayBtn.h) {
+      this._overlayBtn.action();
+      return;
+    }
+
     if (this.tutorial && this.tutorial.active && this.tutorial.handleClick(mx, my)) return;
-    
+
     if (this.state === GAME_STATE.PLAYING || this.state === GAME_STATE.PAUSED) {
       if (this.ui.handleClick(mx, my)) return;
+      // Tap a moa egg (when not placing) to send a hungry kea to eat it.
+      if (!this.selectedPlaceable && !this.movingPlaceable &&
+          this.isInGameArea(mx, my) && this._tryDirectKeaToEgg(mx, my)) return;
     }
-    
+
     if (this.state !== GAME_STATE.PLAYING && this.state !== GAME_STATE.PAUSED) return;
 
     if (this.isInGameArea(mx, my)) {
@@ -2925,6 +3400,14 @@ function initializeRegistry() {
     REGISTRY.registerAnimalType('kea', {}, Kea);
     REGISTRY.registerSpecies('kea', 'kea', KEA_SPECIES);
   }
+  if (typeof Kaka !== 'undefined') {
+    REGISTRY.registerAnimalType('kaka', {}, Kaka);
+    REGISTRY.registerSpecies('kaka', 'kaka', KAKA_SPECIES);
+  }
+  if (typeof Kakapo !== 'undefined') {
+    REGISTRY.registerAnimalType('kakapo', {}, Kakapo);
+    REGISTRY.registerSpecies('kakapo', 'kakapo', KAKAPO_SPECIES);
+  }
 
   for (const [key, config] of Object.entries(MOA_SPECIES)) REGISTRY.registerSpecies(key, 'moa', config);
   for (const [key, config] of Object.entries(EAGLE_SPECIES)) REGISTRY.registerSpecies(key, 'eagle', config);
@@ -2980,10 +3463,12 @@ function draw() {
     game.render();
   }
 
-  // Free Play climate gauge + gamewide field guide overlay (screen space, on top).
+  // Free Play climate gauge + raid dialog (screen space, on top). The field guide
+  // is no longer a top overlay — it renders docked in the right bar via GameUI
+  // (renderSidebar / renderFullscreenOverlay), so the sim keeps running behind it.
   if (game) {
     if (game._climateCfg && typeof game._renderClimateGauge === 'function') game._renderClimateGauge();
-    if (game.encyclopedia && game.encyclopedia.open) game.encyclopedia.render(game);
+    if (game._raidDialogOpen && typeof game._renderRaidDialog === 'function') game._renderRaidDialog();
   }
 }
 
@@ -3011,14 +3496,23 @@ function renderFPSCounter() {
 }
 
 function mousePressed() {
-  if (game && game.encyclopedia && game.encyclopedia.open) { game.encyclopedia.handleClick(mouseX, mouseY); return; }
+  // The field guide is docked in the right bar now, not a modal — its clicks are
+  // routed through GameUI (handleSidebarClick / handleFullscreenClick), so it no
+  // longer intercepts every click here.
+  if (game && game._raidDialogOpen) { game._raidDialogClick(mouseX, mouseY); return; }
   game.handleClick(mouseX, mouseY);
 }
 function keyPressed() {
-  // Gamewide field guide: E toggles it, and it swallows keys while open (modal).
+  // Gamewide field guide: E toggles it; while open it consumes only Esc/arrows and
+  // lets gameplay keys through (the sim keeps running behind the docked panel).
   if (game && game.encyclopedia && game.encyclopedia.handleGlobalKey(key, game)) return;
   game.handleKey(key);
 }
 function mouseWheel(e) {
-  if (game && game.encyclopedia && game.encyclopedia.open) { game.encyclopedia.handleWheel(e.delta); return false; }
+  // Scroll the field-guide list only when the pointer is actually over the panel.
+  if (game && game.encyclopedia && game.encyclopedia.open &&
+      game.encyclopedia.pointerOverPanel(mouseX, mouseY)) {
+    game.encyclopedia.handleWheel(e.delta);
+    return false;
+  }
 }

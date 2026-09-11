@@ -593,18 +593,9 @@ class Kereru extends Boid {
 
     translate(offX, -alt + offY);                    // body lifts to altitude + perch offset
 
-    // Species highlight: a soft pulsing halo (the sidebar toggle). Mirrors the
-    // eagle, but drawn AFTER the altitude lift so it centres on the hovering
-    // bird rather than on its ground shadow — correct in both 2D and 3D, since
-    // -alt is applied in both.
-    if (typeof SPECIES_HIGHLIGHT !== 'undefined' && SPECIES_HIGHLIGHT.has(this.speciesKey)) {
-      const _hc = (this.speciesData && this.speciesData.config && this.speciesData.config.highlightColor) || [120, 180, 120];
-      const _pulse = 0.5 + 0.5 * Math.sin(frameCount * 0.12);
-      noStroke();
-      fill(_hc[0], _hc[1], _hc[2], 45 + _pulse * 80);
-      const _d = s * (2.4 + _pulse * 1.0);
-      ellipse(0, 0, _d, _d);
-    }
+    // Species highlight (player toggle) + field-guide selection share ONE
+    // sprite-shaped outline, emitted at the sprite draw site below (after the
+    // flip, so it mirrors with the bird). Replaces the old soft pulsing halo.
 
     const sprite = this._getSprite(perched);
     if (sprite) {
@@ -613,6 +604,12 @@ class Kereru extends Boid {
       noTint();
       imageMode(CENTER);
       scale(this._flip >= 0 ? 1 : -1, 1);            // art faces up-and-right; mirror for leftward
+      // Highlight outline: field-guide selection OR the player's species toggle.
+      // Drawn after the flip so it mirrors with the bird (covers all flyers).
+      const _hlCfg = this.speciesData && this.speciesData.config && this.speciesData.config.highlightColor;
+      const _olCol = (typeof highlightOutlineColor !== 'undefined')
+        ? highlightOutlineColor(this.speciesKey, _hlCfg) : null;
+      if (_olCol) EntitySprites.drawSpriteOutline(sprite, drawW, drawH, _olCol);
       image(sprite, 0, 0, drawW, drawH);
     } else {
       this._renderGlyph(s, perched);

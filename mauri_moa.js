@@ -1192,18 +1192,11 @@ class Moa extends Boid {
     push();
     translate(this.pos.x, this.pos.y);
 
-    // Species highlight: a soft pulsing halo under the moa, driven purely by
-    // the player toggle (population panel / fullscreen focus buttons; focus
-    // species start toggled on). The low-population warning is a separate red
-    // ring drawn in renderIndicators so it sits above trees.
-    if (typeof SPECIES_HIGHLIGHT !== 'undefined' && SPECIES_HIGHLIGHT.has(this.speciesKey)) {
-      const _hc = this.speciesConfig.highlightColor ||
-                  (this._vhl && this._vhl.color) || [255, 235, 120];
-      const _pulse = 0.5 + 0.5 * Math.sin(frameCount * 0.12);
-      noStroke();
-      fill(_hc[0], _hc[1], _hc[2], 55 + _pulse * 95);
-      ellipse(0, 0, this.size * (2.8 + _pulse * 1.4), this.size * (2.8 + _pulse * 1.4));
-    }
+    // Species highlight (player toggle) + field-guide selection now share ONE
+    // sprite-shaped outline, emitted below at the sprite draw site so it lines up
+    // in the rotated/mirrored frame. It replaces the old soft pulsing disc, which
+    // read like an effect radius; the low-population warning stays a separate red
+    // ring (renderLowPopRing) drawn in renderIndicators so it sits above trees.
 
     // Shadow
     noStroke();
@@ -1221,15 +1214,28 @@ class Moa extends Boid {
     
     if (SpriteAngle.shouldMirror(this._displayAngle)) scale(1, -1);
     
-    // Per-species tint (by genus), but skip it for species with their own
-    // dedicated sprite set (e.g. bush moa) so their art shows unaltered. Instead
-    // of calling p5's tint() every draw (a slow per-draw path), fetch a cached
-    // pre-tinted copy of the frame and blit it plainly.
+    // Per-species tint (by genus), skipped for species with their own dedicated
+    // sprite set (e.g. bush moa) so their art shows unaltered.
     const _tint = variant ? null : this.speciesConfig.tint;
-    const _img = _tint ? EntitySprites.getTintedMoaFrame(sprite, _tint) : sprite;
     imageMode(CENTER);
     const _drawSize = this.size * 2.5 * (this.speciesConfig.spriteScale || 1);
-    image(_img, 0, 0, _drawSize, _drawSize);
+    // Highlight outline (field-guide selection OR the player's species toggle),
+    // drawn in this rotated/mirrored frame so it lines up. On GL it's a bake-free
+    // silhouette ring; on 2D a once-baked halo (see EntitySprites.drawSpriteOutline).
+    const _olCol = (typeof highlightOutlineColor !== 'undefined')
+      ? highlightOutlineColor(this.speciesKey, this.speciesConfig.highlightColor) : null;
+    if (_olCol) EntitySprites.drawSpriteOutline(sprite, _drawSize, _drawSize, _olCol);
+    // GL_PORT.md Phase 3: on the GL layer a live tint() is FREE (the batch multiplies
+    // the per-quad colour), so use it and skip the bake; on 2D fall back to the cached
+    // pre-tinted frame (p5's tint() is the slow per-draw path there).
+    if (_tint && typeof GLBatch !== 'undefined' && GLBatch.enabled && GLBatch._open) {
+      tint(_tint[0], _tint[1], _tint[2]);
+      image(sprite, 0, 0, _drawSize, _drawSize);
+      noTint();
+    } else {
+      const _img = _tint ? EntitySprites.getTintedMoaFrame(sprite, _tint) : sprite;
+      image(_img, 0, 0, _drawSize, _drawSize);
+    }
     pop();
   }
 

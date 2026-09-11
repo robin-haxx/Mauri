@@ -228,10 +228,107 @@ const EntitySprites = {
     if (baked === undefined) {
       baked = createGraphics(baseSprite.width, baseSprite.height);
       baked.tint(tint[0], tint[1], tint[2]);
-      baked.image(baseSprite, 0, 0);   // bake the tint once, at native resolution
+      // baseSprite may be an atlas frame (a sub-rect of a shared page), which the
+      // global image() shim can't see on a graphics-method call — go through the
+      // atlas helper so it expands to the 9-arg sub-rect draw. Falls through to a
+      // plain g.image() when the atlas is absent or the arg is a real p5.Image.
+      if (typeof SpriteAtlas !== 'undefined') SpriteAtlas.drawTo(baked, baseSprite, 0, 0);
+      else baked.image(baseSprite, 0, 0);   // bake the tint once, at native resolution
       perTint.set(key, baked);
     }
     return baked;
+  },
+
+  // ---- Sprite-shaped selection outline ---------------------------------------
+  // A coloured halo the exact shape of a sprite's silhouette, baked ONCE per
+  // (base p5.Image → "r,g,b:thickness") and drawn under the real sprite. The
+  // shape never changes, so the halo is computed on first use and is thereafter
+  // a single plain image() blit — no per-frame silhouette work. Same bake-and-
+  // cache idea as getTintedMoaFrame; used for the field-guide species highlight.
+  _outlineCache: null,
+
+  getOutline(baseSprite, col, thickness = 6, steps = 16) {
+    if (!this.isValid(baseSprite)) return null;
+
+    let cache = this._outlineCache || (this._outlineCache = new Map());
+    let perSprite = cache.get(baseSprite);
+    if (!perSprite) { perSprite = new Map(); cache.set(baseSprite, perSprite); }
+
+    const key = col[0] + ',' + col[1] + ',' + col[2] + ':' + thickness;
+    let baked = perSprite.get(key);
+    if (baked === undefined) {
+      const pad = Math.ceil(thickness) + 1;
+
+      // 1) recolour the sprite into a solid silhouette (keeps its alpha shape).
+      const sil = createGraphics(baseSprite.width, baseSprite.height);
+      sil.clear();
+      // Atlas-frame safe (graphics-method draw the global image() shim can't see).
+      if (typeof SpriteAtlas !== 'undefined') SpriteAtlas.drawTo(sil, baseSprite, 0, 0);
+      else sil.image(baseSprite, 0, 0);
+      const sc = sil.drawingContext;
+      sc.globalCompositeOperation = 'source-in';
+      sc.fillStyle = 'rgb(' + col[0] + ',' + col[1] + ',' + col[2] + ')';
+      sc.fillRect(0, 0, sil.width, sil.height);
+
+      // 2) dilate it into a halo by stamping the silhouette around a ring.
+      baked = createGraphics(baseSprite.width + pad * 2, baseSprite.height + pad * 2);
+      baked.clear();
+      for (let i = 0; i < steps; i++) {
+        const a = (i / steps) * TWO_PI;
+        baked.image(sil, pad + Math.cos(a) * thickness, pad + Math.sin(a) * thickness);
+      }
+      baked._pad = pad;
+      sil.remove();
+      perSprite.set(key, baked);
+    }
+    return baked;
+  },
+
+  // Draw a sprite-shaped outline centred under a sprite, in the CURRENT transform.
+  // Call with imageMode(CENTER) set and pass the same drawW/drawH you draw the
+  // sprite at; the outline (and so its thickness) scales with the sprite. Pulses
+  // gently unless an explicit alpha (0..1) is given.
+  //
+  // GL mode (GL_PORT.md Phase 3): emit a ring of pure-colour SILHOUETTE quads — the
+  // batch shader outputs `col` wherever the sprite is opaque, so stacked in a ring
+  // they form the outline. No bake, no cache, ANY colour, essentially free.
+  // 2D mode: fall back to the once-baked, cached halo blit.
+  // thickness is in SOURCE-sprite px (scaled to the draw size), so the outline keeps
+  // a constant *proportion* of the sprite at any zoom — chunky on a big moa, still a
+  // clear rim on a small one. Shared by the field-guide selection and the species
+  // highlight so they read identically (only the colour differs).
+  drawSpriteOutline(baseSprite, drawW, drawH, col, thickness = 6, alpha = null) {
+    const a = (alpha != null) ? alpha : 0.6 + 0.4 * (0.5 + 0.5 * Math.sin(frameCount * 0.12));
+
+    if (typeof GLBatch !== 'undefined' && GLBatch.enabled && GLBatch._open) {
+      // Ring radius in LOCAL units matches the baked halo's dilation (thickness in
+      // source px, scaled to the draw size).
+      const off = thickness * (drawW / (baseSprite.width || drawW));
+      const steps = 16;
+      push();
+      imageMode(CENTER);
+      tint(col[0], col[1], col[2], 255 * a);   // per-quad colour; free on GL, not a bake
+      GLBatch._silhouette = true;
+      for (let i = 0; i < steps; i++) {
+        const ang = (i / steps) * TWO_PI;
+        image(baseSprite, Math.cos(ang) * off, Math.sin(ang) * off, drawW, drawH);
+      }
+      GLBatch._silhouette = false;
+      noTint();
+      pop();
+      return;
+    }
+
+    // 2D fallback: the once-baked, cached halo.
+    const halo = this.getOutline(baseSprite, col, thickness);
+    if (!halo) return;
+    const kx = drawW / baseSprite.width;
+    const ky = drawH / baseSprite.height;
+    const dc = (typeof drawingContext !== 'undefined') ? drawingContext : null;
+    const prev = dc ? dc.globalAlpha : 1;
+    if (dc) dc.globalAlpha = a;                 // cheap per-draw fade — never tint()
+    image(halo, 0, 0, halo.width * kx, halo.height * ky);
+    if (dc) dc.globalAlpha = prev;
   }
 };
 

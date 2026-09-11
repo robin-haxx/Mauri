@@ -126,12 +126,20 @@ const LEVEL_FREEPLAY_KAHURANGI = {
     waterhole: { cost: 35 },
     Storm:     { cost: 40 },
     keaLure:   { cost: 45 },   // Year-1 kea magnet (see freeplaySchedule per-year palettes)
-    nestRaid:  { cost: 0 },    // toolbar interaction → nest-raid dialog (charged per raid)
-    // A global one-shot (not a placement): buy a bumper podocarp year — next year the
-    // forest booms and the fruit-birds (kererū/kōkako) surge. Costs a lot of mauri, so
-    // it's a deliberate warm-year investment. See Game.triggerMastYear / PLACEABLES.
-    mastYear:  { cost: 200 }
+    nestRaid:  { cost: 0 }     // toolbar interaction → nest-raid dialog (charged per raid)
+    // NOTE: the Mast Year is no longer a bought item. It is EARNED — Year 2's mast-mauri
+    // goal (see `mastGoal` below) invokes it a year early (year 3) on success, or lets the
+    // rimu mast fall late (year 4) on a miss. Driven by freeplaySchedule `mast:true` years.
   },
+
+  // ---- Year-2 Mast objective (see Game._beginFreeplayYear / _renderMastGoalPanel) -----
+  // The 2nd year of each 4-year loop (the kākā year) sets a MAST goal: gain this much
+  // mauri DURING that year (by the end of its spring). Reaching it invokes the mast a
+  // year early — year 3, the milder downslope area — so the kākāpō breed there and a
+  // South Island kōkako stretch goal opens in year 4. Missing it delays the rimu mast to
+  // year 4 (the cold upslope), where the kākāpō must be grown the hard way, and no kōkako
+  // stretch is offered. Progress shows as a bar in the Nest-Raid panel's slot.
+  mastGoal: { loopYear: 2, target: 220, reward: 120 },
 
   // Per-species recovery targets for the yearly focus goals (fall back to
   // freeplayDefaultTarget). Big lowland browsers ask for fewer than the smaller,
@@ -145,55 +153,82 @@ const LEVEL_FREEPLAY_KAHURANGI = {
     // Flighted-bird focus targets (kākā/kākāpō land in later slices; harmless until then).
     kea: 8,
     kaka: 8,
-    kakapo: 6
+    kakapo: 6,
+    kokako: 6
   },
 
-  // ---- Authored year schedule (read by Game._beginFreeplayYear) -------------------
-  // Overrides the dynamic "two most-endangered moa" focus with a scripted arc. The
-  // `opening` years play once in order, then `cycle` repeats forever. Each entry:
-  //   focus:     species this year's goals + protection + highlight track (moa OR birds)
-  //   introduce: newcomers to seed this year ([{type, count}]) if not already present
-  //   note:      a line shown at the year's start
-  // Species not yet built (kākā/kākāpō) are skipped gracefully; a scheduled year whose
-  // focus is entirely unbuilt falls back to the dynamic ranker (see _beginFreeplayYear).
-  // Ecological pairing: kea ↔ the alpine upland moa, kākā & kākāpō ↔ the forest bush moa.
+  // How many NEW player-grown nesting sites a "moa focus" year asks for (grow a patch
+  // of the moa's favoured plant to draw them in — see Simulation._updateMoaNestingFormation).
+  freeplayNestingGoal: 2,
+
+  // ---- Authored year schedule (read by Game._scheduledYearEntry / _beginFreeplayYear) --
+  // A repeating 4-YEAR loop, aligned to the 2×2 terrain tour (year 1 = east/alps,
+  // 2 = west/shore, 3 = across/downslope, 4 = back upslope/cold). Each `years[pos]`:
+  //   focus:        species this year's goals + protection + highlight track (moa OR birds)
+  //   moaFocus:     a keystone moa paired in with population + (if nestingGoal) nesting goals
+  //   nestingGoal:  the moaFocus year also asks the player to grow NEW nesting sites
+  //   mast:         force a mast year (rimu bloom) this year
+  //   mastGoalYear: run Year-2's mast-mauri objective this year (see `mastGoal`)
+  //   kokakoStretch: the kōkako goal here is a bonus stretch (only in the reached branch)
+  //   introduce:    newcomers to seed this year ([{type, count}]) if not already present
+  //   note:         a line shown at the year's start
+  //   branch:       { reached, missed } — years 3 & 4 pick a variant by the mast-goal outcome
+  // On the FIRST loop the pos-0/pos-1 moa pairing is withheld (moaFromLoop) so the opening
+  // eases the player in; years 3–4 always carry their own moa focus. Unbuilt species are
+  // skipped gracefully; a year left with no usable focus falls back to the dynamic ranker.
   freeplaySchedule: {
-    opening: [
-      { // Year 1 — the mild opening: protect the kea, bring in the kākā.
+    loopYears: 4,
+    moaFromLoop: 1,   // pos-0/pos-1 moaFocus starts from this 0-based loop index
+    years: [
+      { // pos 0 — Year of the Kea (east / alps). Nest raid; kākā introduced.
         focus: ['kea'],
         introduce: [{ type: 'kaka', count: 4 }],
+        moaFocus: 'upland_moa', nestingGoal: true,
         note: "Year of the Kea — the alpine parrots come down to nest in the podocarp forest below. Kākā are introduced to that forest. Plant kawakawa now while the forest is still warm — it will not survive the first winter.",
-        // The Berry Cache draws kea downslope; forage plots pull the moa out; Storm
-        // clears the eagles for a nesting window. (Mast unlocks next year.)
         // Kawakawa is a frost-tender lowland plant of this warm opening ONLY: it can be
         // planted this year but is stripped from the palette at the first winter and can
-        // never be established again (the LGM closing in — see Game._banKawakawa). Its
-        // grove lasts a full season here so a late-autumn planting reaches that winter
-        // and is seen to wither, rather than expiring in the default 20s.
+        // never be established again (the LGM closing in — see Game._banKawakawa).
         availablePlaceables: { kawakawa: { cost: 25, duration: 3600 }, keaLure: {}, nestRaid: {}, lancewood: {}, speargrass: {}, Storm: {}, waterhole: {} }
       },
-      { // Year 2 — a colder winter closes in; the kākāpō need help.
-        focus: ['kakapo'],
-        introduce: [{ type: 'kakapo', count: 4 }],
-        note: "A colder winter. The kākāpō, ground-dwelling and flightless, now need your protection. The Mast Year is now yours to invoke — it is the only thing that breeds them.",
-        availablePlaceables: { mastYear: {}, nestRaid: {}, lancewood: {}, shelter: {}, waterhole: {}, Storm: {} }
+      { // pos 1 — Year of the Kākā (west / shore). The MAST GOAL runs here; its progress
+        // bar takes the Nest-Raid slot, so this year carries no nest-raid tool.
+        focus: ['kaka'],
+        moaFocus: 'little_bush_moa', nestingGoal: true,
+        mastGoalYear: true,
+        note: "Year of the Kākā — grow the flock in the sheltered lowland forest. Gain enough mauri this year to invoke the Mast: reach it and the rimu mast comes early next year (the milder downslope), so the kākāpō breed there and a kōkako stretch opens after; miss it and the mast falls late, in the cold upslope.",
+        availablePlaceables: { lancewood: {}, shelter: {}, nest: {}, waterhole: {}, Storm: {} }
+      },
+      { // pos 2 — Year 3 (across / downslope). Branches on the mast-goal outcome.
+        branch: {
+          reached: { // the mast came early — breed the kākāpō in the milder downslope forest
+            focus: ['kakapo'], mast: true,
+            introduce: [{ type: 'kakapo', count: 4 }],
+            note: "The Mast came early! The downslope forest blooms with rimu fruit — the kākāpō breed at last. Grow them while the masting holds.",
+            availablePlaceables: { lancewood: {}, nestRaid: {}, shelter: {}, nest: {}, waterhole: {}, Storm: {} }
+          },
+          missed: { // no mast yet — consolidate the bush moa and grow new nesting sites
+            focus: ['little_bush_moa'], moaFocus: 'little_bush_moa', nestingGoal: true,
+            note: "No mast this year. Hold the little bush moa — plant lancewood downslope to draw them into new forest groves and settle fresh nesting sites before the cold upslope year.",
+            availablePlaceables: { lancewood: {}, nestRaid: {}, shelter: {}, nest: {}, waterhole: {}, Storm: {} }
+          }
+        }
+      },
+      { // pos 3 — Year 4 (back upslope / cold). Branches on the mast-goal outcome.
+        branch: {
+          reached: { // kākāpō already secured downslope — a South Island kōkako STRETCH opens
+            focus: ['kokako'], moaFocus: 'little_bush_moa', nestingGoal: true, kokakoStretch: true,
+            introduce: [{ type: 'kokako', count: 3 }],
+            note: "With the kākāpō secured downslope, a stretch: grow the South Island kōkako in the forest refuge, and settle the little bush moa in new groves.",
+            availablePlaceables: { lancewood: {}, nestRaid: {}, shelter: {}, nest: {}, waterhole: {}, Storm: {} }
+          },
+          missed: { // the rimu mast falls late, in the COLD upslope — the hard kākāpō year
+            focus: ['kakapo'], mast: true, moaFocus: 'upland_moa', nestingGoal: true,
+            introduce: [{ type: 'kakapo', count: 4 }],
+            note: "The rimu mast falls late — here, in the cold upslope. The kākāpō must breed in harsher country. Hold the upland moa alongside them; no kōkako can be spared this loop.",
+            availablePlaceables: { speargrass: {}, keaLure: {}, nestRaid: {}, shelter: {}, nest: {}, waterhole: {}, Storm: {} }
+          }
+        }
       }
-    ],
-    // The deepening-glacial rotation (repeats from the top): upland alone, then the
-    // forest bush moa with a forest parrot, then the alpine upland moa with the kea, ...
-    cycle: [
-      { focus: ['upland_moa'],
-        note: "The glacials deepen. Hold the cold-hardy upland moa — the backbone of a frozen world.",
-        availablePlaceables: { speargrass: {}, shelter: {}, nest: {}, waterhole: {}, Storm: {}, mastYear: {}, nestRaid: {} } },
-      { focus: ['little_bush_moa', 'kaka'],
-        note: "Forest year: shelter the little bush moa and the kākā in the shrinking refuge.",
-        availablePlaceables: { lancewood: {}, shelter: {}, nest: {}, waterhole: {}, Storm: {}, mastYear: {}, nestRaid: {} } },
-      { focus: ['upland_moa', 'kea'],
-        note: "Alpine year: the upland moa and the kea against the cold high country.",
-        availablePlaceables: { speargrass: {}, keaLure: {}, nestRaid: {}, shelter: {}, Storm: {}, waterhole: {}, mastYear: {} } },
-      { focus: ['little_bush_moa', 'kakapo'],
-        note: "Forest year: the little bush moa and the kākāpō — invoke a mast year to let the kākāpō breed.",
-        availablePlaceables: { lancewood: {}, mastYear: {}, nestRaid: {}, shelter: {}, nest: {}, Storm: {} } }
     ]
   },
 

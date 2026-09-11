@@ -66,7 +66,16 @@ class HaastsEagle extends Boid {
     this.distractedTimer = 0;
     this.relocateTarget = null;
     this.relocateTimer = 0;
-    
+
+    // Chase-loop (flighted-bird pursuit quirk). Occasionally an eagle chasing a
+    // FLIGHTED bird (kōkako / kākā / kea / kererū) gets stuck in a pursuit loop:
+    // it matches the bird's fleeing pace instead of closing (so the gap holds and
+    // no strike lands), then peels off and turns back, over and over, unable to
+    // commit. Never happens to moa. See _startChaseLoop / _runChaseLoop (mauri_eagle).
+    this._chaseLoop = null;   // { target, phase:'match'|'turn', timer, reps } while active
+    this._chaseLoopChance = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS &&
+      LEVEL_MECHANICS.eagleChaseLoopChance != null) ? LEVEL_MECHANICS.eagleChaseLoopChance : 0.35;
+
     // Visual
     this.wingspan = random(14, 18);
     this.wingPhase = random(TWO_PI);
@@ -186,19 +195,22 @@ class HaastsEagle extends Boid {
     if (this.distractedTimer > 0) {
       this.state = 'distracted';
       this.distractedTimer -= dt;
+      this._chaseLoop = null;
       this.beDistracted();
       return;
     }
-    
+
     if (this.restTimer > 0) {
       this.state = 'resting';
       this.restTimer -= dt;
+      this._chaseLoop = null;
       this.rest();
       return;
     }
-    
+
     if (this.relocateTimer > 0) {
       this.state = 'relocating';
+      this._chaseLoop = null;
       this.relocate(dt);
       return;
     }
@@ -235,6 +247,7 @@ class HaastsEagle extends Boid {
       this.target = null;
       this.huntSearchTimer = 0;
       this._huntEventFired = false;
+      this._chaseLoop = null;
       this.patrol(dt);
     }
     
@@ -493,18 +506,36 @@ class HaastsEagle extends Boid {
         if (audioManager) audioManager.playEagleHunt();
       }
 
-      // Pursue with prediction
-      this._targetVec.set(
-        target.pos.x + target.vel.x * 12,
-        target.pos.y + target.vel.y * 12
-      );
-      this.applyForce(this.seek(this._targetVec, 1.4));
+      // Chase-loop quirk (flighted birds only). On a fresh lock onto a flyer there's
+      // a small chance the eagle falls into a pursuit loop — matching the bird's pace
+      // and repeatedly turning back rather than closing. A moa target ends any loop.
+      if (targetIsFlyer) {
+        if (hadNoTarget && !this._chaseLoop && !inGrace &&
+            this.tutorialGraceTimer <= 0 && Math.random() < this._chaseLoopChance) {
+          this._startChaseLoop(target);
+        }
+      } else if (this._chaseLoop) {
+        this._chaseLoop = null;
+      }
 
-      if (this.huntWindupTimer > 0) this.huntWindupTimer -= dt;
+      if (this._chaseLoop && this._chaseLoop.target === target) {
+        // In a loop: trail-and-turn, and NO strike lands (the eagle never commits).
+        this._runChaseLoop(target, dt);
+        if (this.huntWindupTimer > 0) this.huntWindupTimer -= dt;
+      } else {
+        // Normal pursuit — close in with lead prediction and strike in range.
+        this._targetVec.set(
+          target.pos.x + target.vel.x * 12,
+          target.pos.y + target.vel.y * 12
+        );
+        this.applyForce(this.seek(this._targetVec, 1.4));
 
-      if (targetDistSq < this.catchRadiusSq && !inGrace && this.huntWindupTimer <= 0) {
-        if (targetIsFlyer) simulation.handleEagleCatchFlyer(this, target);
-        else simulation.handleEagleCatch(this, target, mauri);
+        if (this.huntWindupTimer > 0) this.huntWindupTimer -= dt;
+
+        if (targetDistSq < this.catchRadiusSq && !inGrace && this.huntWindupTimer <= 0) {
+          if (targetIsFlyer) simulation.handleEagleCatchFlyer(this, target);
+          else simulation.handleEagleCatch(this, target, mauri);
+        }
       }
     } else {
       this.huntSearchTimer += dt;
@@ -563,7 +594,51 @@ class HaastsEagle extends Boid {
     
     if (this.state !== 'hunting') this._huntEventFired = false;
   }
-  
+
+  // Begin a chase loop against a flighted bird: a few turn-arounds, starting on a
+  // "match pace" leg. Durations are jittered so no two loops read the same.
+  _startChaseLoop(target) {
+    this._chaseLoop = {
+      target,
+      phase: 'match',
+      timer: random(36, 66),               // ~0.6–1.1s trailing at the bird's pace
+      reps: Math.floor(random(2, 5))       // 2–4 turn-arounds before giving up
+    };
+  }
+
+  // Drive one frame of the chase loop. 'match' trails the bird at its OWN fleeing
+  // speed (seeking its actual position, no lead) so the gap holds and no catch can
+  // land; 'turn' peels away from the bird for a beat. Each turn spends a rep; when
+  // they run out (or the bird escapes / dies) the loop ends and normal pursuit — and
+  // the strike — resume next frame.
+  _runChaseLoop(target, dt) {
+    const loop = this._chaseLoop;
+    const dx = target.pos.x - this.pos.x, dy = target.pos.y - this.pos.y;
+    const dSq = dx * dx + dy * dy;
+    const bailR = this.huntRadius * 1.4;
+    if (!target.alive || dSq > bailR * bailR) { this._chaseLoop = null; return; }
+
+    loop.timer -= dt;
+    if (loop.phase === 'match') {
+      // Match the bird's fleeing pace (with a floor so a near-stationary bird is
+      // still trailed), and seek its ACTUAL position — no lead prediction, so the
+      // eagle rides the gap instead of intercepting.
+      const birdSpeed = Math.hypot(target.vel.x, target.vel.y);
+      this.maxSpeed = Math.max(birdSpeed, this.baseSpeed * 0.6);
+      this.applyForce(this.seek(target.pos, 1.0));
+      if (loop.timer <= 0) { loop.phase = 'turn'; loop.timer = random(18, 34); }
+    } else {
+      // Turn around: steer to a point behind the eagle, away from the bird.
+      this.maxSpeed = this.huntSpeed;
+      this.applyForce(this.seekPoint(this.pos.x - dx, this.pos.y - dy, 1.1));
+      if (loop.timer <= 0) {
+        loop.reps -= 1;
+        if (loop.reps <= 0) this._chaseLoop = null;        // give up → normal hunt resumes
+        else { loop.phase = 'match'; loop.timer = random(36, 66); }
+      }
+    }
+  }
+
   searchForPrey() {
     this.maxSpeed = this.huntSpeed * 0.8;
     
@@ -798,16 +873,9 @@ class HaastsEagle extends Boid {
       push();
       translate(this.pos.x, this.pos.y);
 
-      // Species highlight: a soft pulsing halo under the eagle, driven by the
-      // player toggle (the "Total eagles" sidebar row). Mirrors the moa halo.
-      if (typeof SPECIES_HIGHLIGHT !== 'undefined' && SPECIES_HIGHLIGHT.has(this.speciesKey)) {
-        const _hc = (this.speciesData && this.speciesData.highlightColor) || [255, 145, 90];
-        const _pulse = 0.5 + 0.5 * Math.sin(frameCount * 0.12);
-        noStroke();
-        fill(_hc[0], _hc[1], _hc[2], 55 + _pulse * 95);
-        const _d = this.wingspan * (2.2 + _pulse * 1.0);
-        ellipse(0, 0, _d, _d);
-      }
+      // Species highlight (player toggle) + field-guide selection share ONE
+      // sprite-shaped outline, emitted below at the sprite draw site so it lines
+      // up. Replaces the old soft pulsing halo (which read like an effect radius).
 
       // Shadow
       noStroke();
@@ -821,8 +889,14 @@ class HaastsEagle extends Boid {
       if (SpriteAngle.shouldMirror(this._displayAngle)) scale(-1, 1);
       
       imageMode(CENTER);
-      image(sprite, 0, 0, this.wingspan * 2.8, this.wingspan * 2.1);
-      
+      const _eW = this.wingspan * 2.8, _eH = this.wingspan * 2.1;
+      // Highlight outline: field-guide selection OR the player's species toggle.
+      // The eagle's highlightColor lives on its config (ember); fall back to ember.
+      const _olCol = (typeof highlightOutlineColor !== 'undefined')
+        ? highlightOutlineColor(this.speciesKey, (this.config && this.config.highlightColor) || [255, 145, 90]) : null;
+      if (_olCol) EntitySprites.drawSpriteOutline(sprite, _eW, _eH, _olCol);
+      image(sprite, 0, 0, _eW, _eH);
+
       pop();
     }
     

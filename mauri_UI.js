@@ -554,8 +554,14 @@ class GameUI {
     // stack under it in order.
     let colBottom = this._fsFocusBottomY || (fs.goalsY + goalsH + 24);
 
-    // Nest Raid: a NON-MODAL panel below the focus row, above the field guide.
-    if (this.game._raidPanelActive && this.game._raidPanelActive()) {
+    // Nest Raid (or, in the kākā mast-goal year, the Mast Year progress bar in its
+    // place): a NON-MODAL panel below the focus row, above the field guide.
+    if (this.game._mastGoalPanelActive && this.game._mastGoalPanelActive()) {
+      const rh = Math.round(this.layout.eventLogHeight / 2);
+      const ry = colBottom + 12;
+      this.game._renderMastGoalPanel(fs.goalsX, ry, this.layout.sidebarPanelWidth, rh);
+      colBottom = ry + rh;
+    } else if (this.game._raidPanelActive && this.game._raidPanelActive()) {
       const rh = Math.round(this.layout.eventLogHeight / 2);
       const ry = colBottom + 12;
       this.game._renderRaidPanel(fs.goalsX, ry, this.layout.sidebarPanelWidth, rh);
@@ -1425,8 +1431,13 @@ class GameUI {
     y = this.renderGoalsPanel(x + padding, y);
 
     // Section 1b: Nest Raid — a NON-MODAL panel below goals, above population (half the
-    // event log's height). Only present while the tool has toggled it open.
-    if (this.game._raidPanelActive && this.game._raidPanelActive()) {
+    // event log's height). Only present while the tool has toggled it open. In the kākā
+    // mast-goal year the Mast Year progress bar takes this same slot instead.
+    if (this.game._mastGoalPanelActive && this.game._mastGoalPanelActive()) {
+      const rh = Math.round(this.layout.eventLogHeight / 2);
+      this.game._renderMastGoalPanel(x + padding, y + 12, this.layout.sidebarPanelWidth, rh);
+      y = y + 12 + rh;
+    } else if (this.game._raidPanelActive && this.game._raidPanelActive()) {
       const rh = Math.round(this.layout.eventLogHeight / 2);
       this.game._renderRaidPanel(x + padding, y + 12, this.layout.sidebarPanelWidth, rh);
       y = y + 12 + rh;

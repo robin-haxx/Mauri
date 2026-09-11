@@ -440,15 +440,14 @@ class PlaceableObject {
     translate(this.pos.x, this.pos.y);
     
     const lifeRatio = this.life / this.maxLife;
-    const pulse = sin(frameCount * 0.05 + this.pulsePhase) * 0.1 + 1;
-    
+
     if (this.type === 'Storm') {
-      this._renderStorm(lifeRatio, pulse);
+      this._renderStorm(lifeRatio);
       pop();
       return;
     }
-    
-    this._renderStandard(lifeRatio, pulse);
+
+    this._renderStandard(lifeRatio);
     pop();
     
     this.renderParticles();
@@ -463,50 +462,67 @@ class PlaceableObject {
     rect(-10, yPos, 20 * lifeRatio, 3);
   }
   
-  _renderStorm(lifeRatio, pulse) {
+  // A ring at the object's TRUE effect radius. The line is steady — only a soft
+  // outer glow breathes in intensity — so the radius the placeable actually covers
+  // is never ambiguous. (It used to pulse in DIAMETER, which hid the real reach.)
+  //
+  // Drawn with a raw canvas shadow so it renders as a real ring in BOTH paths: the
+  // WebGL layer captures only FILLED ellipses as tinted discs (mauri_glbatch.js),
+  // and now lets a no-fill stroke fall through to 2D, where the shadow blur lives.
+  // The blur is scaled by the current world→device transform so the glow stays
+  // proportional to the ring at any zoom / supersample.
+  _drawRadiusRing(col, lineAlpha, weight, glowAlpha, lifeRatio) {
+    const glow = 0.5 + 0.5 * Math.sin(frameCount * 0.05 + this.pulsePhase);   // 0..1, slow breath
+    const dc = (typeof drawingContext !== 'undefined') ? drawingContext : null;
+    const sc = (dc && dc.getTransform) ? (dc.getTransform().a || 1) : 1;
+    if (dc) {
+      dc.shadowBlur = (3 + glow * 5) * sc;
+      dc.shadowColor = `rgba(${col[0]|0},${col[1]|0},${col[2]|0},${(glowAlpha * (0.55 + 0.45 * glow) * lifeRatio).toFixed(3)})`;
+    }
     noFill();
-    const radiusAlpha = (20 + sin(frameCount * 0.03 + this.pulsePhase) * 10) * lifeRatio;
-    stroke(100, 100, 120, radiusAlpha);
-    strokeWeight(1);
-    ellipse(0, 0, this.radius * 2 * pulse, this.radius * 2 * pulse);
-    
+    stroke(col[0], col[1], col[2], lineAlpha * lifeRatio);
+    strokeWeight(weight);
+    ellipse(0, 0, this.radius * 2, this.radius * 2);   // FIXED — the real effective radius
+    if (dc) { dc.shadowBlur = 0; dc.shadowColor = 'rgba(0,0,0,0)'; }
+  }
+
+  _renderStorm(lifeRatio) {
+    // Filled storm body (a real disc — captured fine by the GL layer)...
     fill(40, 40, 50, 30 * lifeRatio);
     noStroke();
     ellipse(0, 0, this.radius * 1.8, this.radius * 1.8);
-    
+    // ...then the steady, softly-glowing rim at the true radius.
+    this._drawRadiusRing([120, 130, 160], 70, 1, 0.5, lifeRatio);
+
     this._renderThunderstorm(lifeRatio);
     this._renderLifeBar(lifeRatio, this.radius * 0.6);
   }
   
-  _renderStandard(lifeRatio, pulse) {
+  _renderStandard(lifeRatio) {
     const isFeeding = this.feedingMoaCount > 0;
     // Placeables that spawn real plant sprites (lancewood, speargrass, etc.) are
-    // their own visual, so hide their pulsing radius ring unless debug mode is on.
+    // their own visual, so hide their radius ring unless debug mode is on.
     const _plantPlaceable = this.type === 'kawakawa' || this.type === 'harakeke' || this.type === 'lancewood' || this.type === 'speargrass';
     const _showRing = !_plantPlaceable || (typeof CONFIG !== 'undefined' && CONFIG.debugMode);
-    const radiusAlpha = _showRing ? (30 + sin(frameCount * 0.03 + this.pulsePhase) * 15 + (isFeeding ? 15 : 0)) * lifeRatio : 0;
-    
-    // Seasonal ring color
-    noFill();
-    if (this.seasonalMultiplier > 1.2) {
-      stroke(100, 255, 150, radiusAlpha);
-    } else if (this.seasonalMultiplier < 0.7) {
-      stroke(255, 150, 100, radiusAlpha);
-    } else {
-      stroke(255, 255, 255, radiusAlpha);
+
+    if (_showRing) {
+      // Steady ring at the true effect radius; the glow (not the line) breathes.
+      // Seasonal tint: green when boosted, warm when suppressed, else neutral.
+      let rc;
+      if (this.seasonalMultiplier > 1.2) rc = [100, 255, 150];
+      else if (this.seasonalMultiplier < 0.7) rc = [255, 150, 100];
+      else rc = [235, 240, 245];
+      this._drawRadiusRing(rc, isFeeding ? 150 : 95, isFeeding ? 2 : 1.25, isFeeding ? 0.7 : 0.45, lifeRatio);
+
+      // Inner glow when feeding (a filled disc — fine on the GL layer).
+      if (isFeeding) {
+        const col = this.def._parsedColor;
+        fill(red(col), green(col), blue(col), (sin(frameCount * 0.1) * 0.3 + 0.5) * 80);
+        noStroke();
+        ellipse(0, 0, this.radius * 1.5, this.radius * 1.5);
+      }
     }
-    
-    strokeWeight(isFeeding ? 2 : 1);
-    ellipse(0, 0, this.radius * 2 * pulse, this.radius * 2 * pulse);
-    
-    // Inner glow when feeding
-    if (isFeeding && _showRing) {
-      const col = this.def._parsedColor;
-      fill(red(col), green(col), blue(col), (sin(frameCount * 0.1) * 0.3 + 0.5) * 80);
-      noStroke();
-      ellipse(0, 0, this.radius * 1.5, this.radius * 1.5);
-    }
-    
+
     // Types with spawned plants skip the central icon dot
     const hasSpawnedPlants = this.type === 'kawakawa' || this.type === 'harakeke' || this.type === 'lancewood' || this.type === 'speargrass';
     

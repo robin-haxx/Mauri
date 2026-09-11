@@ -96,9 +96,25 @@ const CONFIG = {
   get height() { return this.gameAreaHeight; },
 
   pixelScale: 1,
-  terrainDetail: 1,  // render-only: 1 = single-res terrain buffers (fast world-gen).
-                     // The '2x' toggle bakes at double res (crisper, ~2-3x slower gen —
-                     // now viable thanks to the interpolation/noise/colour perf fixes).
+  terrainDetail: 2,  // render-only: 1 = single-res terrain buffers (fast world-gen), 2 =
+                     // double-res bake (crisper terrain, ~2-3x slower gen — viable thanks
+                     // to the interpolation/noise/colour perf fixes). DEFAULT is now 2x
+                     // (the '2x' end of the menu's TERRAIN RESOLUTION slider).
+
+  // WebGL renderer preference — the "Enhanced graphics" main-menu toggle (renderMenu).
+  // false = Classic 2D (default). Turned on via the menu (setRenderGL, persisted) or a
+  // ?render=gl URL override. Enables the whole GPU path: entity batch + GPU terrain/water.
+  useGL: false,
+
+  // Split-resolution rendering (ported from Te Manawa). The backing canvas is
+  // spriteSupersample× the logical 1080 size, and a single scale(SS) in draw() renders
+  // the sprite cast + HUD at that higher resolution. The terrain OPTS OUT: it composites
+  // into a screen-size offscreen buffer (Game._terrainLayer) and blits up as one quad, so
+  // the ground stays cheap while the cast is crisp. pixelDensity stays 1 (a density of 2
+  // would supersample the WHOLE frame, terrain included, defeating the split).
+  //   SS = 1 → exactly the old single-1080-canvas behaviour (safe fallback).
+  //   SS = 2 → sprites + HUD at 2× detail. ?sprites=1|2|3 overrides at startup.
+  spriteSupersample: 2,
   zoom: 2.5,
   debugMode: false,
 
@@ -877,6 +893,11 @@ class Game {
     this._yearTransition = null;
     this._fadeOutFrames = 36;     // ~0.6s cast fade-out before the pan
     this._fadeInFrames = 42;      // ~0.7s cast fade-in after the new area is populated
+    // Level-start cast fade-in: the cast (fauna/plants/placed items) rises out of the
+    // freshly-drawn terrain instead of popping in. frameCount-based so it advances even
+    // while the opening tutorial tip pauses the sim. See _castRenderAlpha / _initFinalize.
+    this._castFadeStartFrame = null;
+    this._castFadeFrames = 48;    // ~0.8s materialise-in
     this._kawakawaBanned = false; // set at the first winter (endless): kawakawa unplantable for good
     // Mast Year interactable (see triggerMastYear): the cycle a bought mast lands on
     // (-1 = none). Global one-shot cooldowns live here, keyed by placeable type.
@@ -946,31 +967,87 @@ class Game {
     // triggered by the Start Level button.
   }
 
-  // Show the loading screen, then run init() on the following frame.
-  // The one-frame delay lets the browser actually paint the loading screen
-  // before the blocking generation work starts.
+  // Enter the loading screen. The heavy work (terrain gen, sim seed, setup) then
+  // runs one chunk per frame from a plan built lazily on the first loading frame,
+  // so the browser paints the progress bar between chunks instead of freezing on a
+  // single blocking init(). See _buildLoadingPlan + the LOADING branch of render().
   _startLoading() {
     this.state = GAME_STATE.LOADING;
-    this._loadingFramesDrawn = 0;
+    this._loadingPlan = null;         // built on the first painted frame
+    this._loadingStep = 0;
+    this._loadingProgress = 0;        // target fill [0..1] (jumps a notch per chunk)
+    this._loadingShownProgress = 0;   // eased fill actually drawn (smooths the notches)
+    this._loadingLabel = 'Preparing the ecosystem';
   }
-  
+
+  // The ordered chunks that stand up a level: terrain (as sub-steps), then the
+  // simulation object, its seeding, and the finalize pass. Each { label, fn } runs
+  // on its own frame; the label is shown under the bar as it runs.
+  _buildLoadingPlan() {
+    const plan = this.terrain.generateSteps();
+    plan.push({ label: 'Setting up the world', fn: () => this._initCreateSim() });
+    plan.push({ label: 'Seeding the ecosystem', fn: () => this.simulation.init() });
+    plan.push({ label: 'Bringing it to life',   fn: () => this._initFinalize() });
+    return plan;
+  }
+
+  // Advance the loading plan by one chunk per frame. renderLoading() has already
+  // painted THIS frame (with the label of the chunk about to run), so the browser
+  // shows progress before the chunk blocks. Returns when the level is playing.
+  _stepLoading() {
+    // First loading frame: create the (cheap) terrain generator + season manager and
+    // build the plan. The bar shows the first chunk's label; the chunk runs next frame.
+    if (!this._loadingPlan) {
+      if (!this.currentLevel) return;
+      this._initTerrainAndSeason();
+      this._loadingPlan = this._buildLoadingPlan();
+      this._loadingStep = 0;
+      this._loadingLabel = this._loadingPlan[0] ? this._loadingPlan[0].label : '';
+      return;
+    }
+    if (this._loadingStep < this._loadingPlan.length) {
+      this._loadingPlan[this._loadingStep].fn();   // run the chunk whose label was just shown
+      this._loadingStep++;
+      this._loadingProgress = this._loadingStep / this._loadingPlan.length;
+      this._loadingLabel = (this._loadingStep < this._loadingPlan.length)
+        ? this._loadingPlan[this._loadingStep].label : 'Ready';
+    }
+    // _initFinalize (the last chunk) flips state to PLAYING; nothing more to do.
+  }
+
+  // Synchronous full init (used by the benchmark's restart path). The loading
+  // screen runs the SAME pieces stepped across frames — see _buildLoadingPlan.
   init() {
-
     if (!this.currentLevel) return;
+    this._initTerrainAndSeason();
+    this.terrain.generate();
+    this._initCreateSim();
+    this.simulation.init();
+    this._initFinalize();
+  }
 
+  // ---- init pieces (shared by the synchronous init and the stepped loader) ----
+
+  // Terrain generator + season manager (cheap; terrain data is filled afterwards).
+  _initTerrainAndSeason() {
     this.terrain = new TerrainGenerator(CONFIG, this.activeBiomes);
     this.seasonManager = new SeasonManager(CONFIG);
     this.terrain.setSeasonManager(this.seasonManager);
-    this.terrain.generate();
+  }
+
+  // Projection/view (needs the generated map dimensions) + the simulation object.
+  _initCreateSim() {
     this._configureProjection();   // 3D projection depends on the new map dimensions
     this._updateViewTransform();
-
     this.simulation = new Simulation(
       this.terrain, CONFIG, this, this.seasonManager
     );
     this.simulation.setActiveSpecies(this.activeSpecies);
-    this.simulation.init();
-    
+  }
+
+  // Everything after the terrain + simulation exist and are seeded: economy, UI,
+  // per-run state, tutorial, benchmark, audio, and the switch into PLAYING.
+  _initFinalize() {
     this.mauri = new MauriManager(CONFIG.startingMauri);
     // Don't pay population milestones the starting flock already satisfies
     // (removes the ~+100 mauri jump when a level opens above the 10/15 marks).
@@ -990,6 +1067,13 @@ class Game {
     this._yearTransition = null;      // clear any in-flight area transition on (re)load
     this._kawakawaBanned = false;     // re-enable kawakawa for a fresh run (see _banKawakawa)
     this._mastYearTargetCycle = -1;   // reset the pending/active mast per level load
+    // Year-2 mast-mauri objective (see _beginFreeplayYear / _checkFreeplayYear): reset
+    // its latch + accumulator for a fresh run so year-3/4 branch to the "missed" arc
+    // until the goal is genuinely met.
+    this._mastGoalActive = false;
+    this._mastGoalReached = false;
+    this._mastGoalTarget = 0;
+    this._mastGoalStartEarned = 0;
     this._globalCooldownUntil = {};
     this._stormCooldownUntil = 0;   // reset per level load, else a restart starts mid-cooldown
     this._holdCandidate = null;     // stale refs would point into the old simulation
@@ -1001,6 +1085,7 @@ class Game {
       (LEVEL_MECHANICS.vulnerableHighlight ? Object.keys(LEVEL_MECHANICS.vulnerableHighlight) : []);
     for (const _k of _hlDefaults) SPECIES_HIGHLIGHT.add(_k);
     this.state = GAME_STATE.PLAYING;
+    this._castFadeStartFrame = frameCount;   // begin the level-start cast fade-in
     this._tempVec = createVector(0, 0);
     
     for (const goal of this.goals) goal.achieved = false;
@@ -1406,13 +1491,44 @@ class Game {
     return key;
   }
 
-  // The authored schedule entry for a given year (0-based cycle), or null.
-  // level.freeplaySchedule is { opening:[...], cycle:[...] }: the `opening` years play
-  // once in order, then `cycle` repeats forever. Each entry is
-  // { focus:[speciesKey...], introduce:[{type,count}...], note }.
+  // The authored schedule entry for a given year (0-based cycle), fully resolved, or
+  // null. The primary format is level.freeplaySchedule = { years:[...], loopYears }: a
+  // repeating loop where each position may carry a `branch: { reached, missed }` picked
+  // by THIS loop's mast-goal outcome (_mastGoalReached), plus a `moaFocus` pairing that
+  // eases in from `moaFromLoop`. A legacy { opening:[...], cycle:[...] } form is still
+  // honoured. Each resolved entry may carry focus/moaFocus/nestingGoal/mast/mastGoalYear/
+  // kokakoStretch/introduce/note/availablePlaceables (see level_freeplay_kahurangi).
   _scheduledYearEntry(cycle) {
     const sched = this.currentLevel && this.currentLevel.freeplaySchedule;
     if (!sched) return null;
+
+    // Repeating 4-year loop format (years[] + branches + moa pairing). Position in the
+    // loop selects the base entry; years 3 & 4 carry a `branch` resolved by THIS loop's
+    // mast-goal outcome (_mastGoalReached, finalised when year 2 ends).
+    if (sched.years) {
+      const loopYears = sched.loopYears || sched.years.length;
+      const pos = ((cycle % loopYears) + loopYears) % loopYears;
+      const loop = Math.floor(cycle / loopYears);
+      const base = sched.years[pos];
+      if (!base) return null;
+      let entry = base;
+      if (base.branch) {
+        const key = this._mastGoalReached ? 'reached' : 'missed';
+        entry = base.branch[key] || base.branch.missed || base.branch.reached;
+        if (!entry) return null;
+      }
+      const resolved = Object.assign({}, entry);
+      // Ease-in: withhold the pos-0/pos-1 moa pairing until moaFromLoop. Branch years
+      // (3 & 4) always keep their own moa focus.
+      const moaFromLoop = (sched.moaFromLoop != null) ? sched.moaFromLoop : 0;
+      if (!base.branch && loop < moaFromLoop) {
+        resolved.moaFocus = null;
+        resolved.nestingGoal = false;
+      }
+      return resolved;
+    }
+
+    // Legacy opening/cycle format.
     const opening = sched.opening || [];
     const cyc = sched.cycle || [];
     if (cycle < opening.length) return opening[cycle] || null;
@@ -1479,6 +1595,21 @@ class Game {
       this._beginFreeplayYear();
     }
 
+    // Mast-mauri objective (the kākā year): track mauri gained SINCE the year began and
+    // latch success the moment the target is hit — the deadline is the end of this year's
+    // spring, i.e. this year's whole run. A reached goal invokes the mast a year early
+    // (year 3); a miss (never latched by year end) defers it to year 4. See _beginFreeplayYear.
+    if (this._mastGoalActive && this.mauri && !this._mastGoalReached) {
+      const gained = this.mauri.totalEarned - (this._mastGoalStartEarned || 0);
+      if (gained >= (this._mastGoalTarget || Infinity)) {
+        this._mastGoalReached = true;
+        const rew = (this.currentLevel.mastGoal && this.currentLevel.mastGoal.reward) || 0;
+        if (rew) this.mauri.earn(rew, halfWidth, 80, 'goal');
+        this.addNotification(`Mast goal reached! The rimu will mast early — the kākāpō breed downslope next year.${rew ? ' +' + rew + ' mauri' : ''}`, 'success');
+        if (audioManager && audioManager.playMoaMilestone) audioManager.playMoaMilestone();
+      }
+    }
+
     // Soft growth goals: reward when met. There is deliberately NO win path.
     for (const goal of this.goals) {
       if (!goal.achieved && goal.condition && goal.condition()) {
@@ -1508,10 +1639,37 @@ class Game {
     //    years use the ranker too.
     const ranked = this._rankFreeplaySpecies();
     const entry = this._scheduledYearEntry(this.cycle);
+
+    // 1a) Mast-mauri goal lifecycle. STARTING the mast-goal year arms a fresh objective
+    //     (gain `target` mauri during this year). Starting any OTHER year closes it — the
+    //     _mastGoalReached latch then stands as this loop's outcome, which the year-3/4
+    //     branch resolution above already read. (Reached before the deadline stays reached.)
+    const mastGoalCfg = this.currentLevel.mastGoal || null;
+    if (entry && entry.mastGoalYear && mastGoalCfg) {
+      this._mastGoalActive = true;
+      this._mastGoalReached = false;
+      this._mastGoalTarget = mastGoalCfg.target ?? 200;
+      this._mastGoalStartEarned = this.mauri ? this.mauri.totalEarned : 0;
+    } else {
+      this._mastGoalActive = false;
+    }
+
+    // 1b) Force a mast (rimu bloom) this year when the schedule says so — this is how a
+    //     reached goal (mast in year 3) or a missed goal (late mast in year 4) lands.
+    if (entry && entry.mast) this._mastYearTargetCycle = this.cycle;
+
+    // 1c) FOCUS: the schedule's bird/moa focus, plus a paired keystone moa (moaFocus).
+    //     moaFocus is folded into the focus set so it is protected, highlighted, topped
+    //     to its floor, and given a population goal like any focus species.
     let note = null, introduce = null, focus = null;
+    let moaFocus = null, nestingGoal = false, kokakoStretch = false;
     if (entry) {
       const f = (entry.focus || []).filter(k => this._speciesUsable(k));
+      moaFocus = (entry.moaFocus && this._speciesUsable(entry.moaFocus)) ? entry.moaFocus : null;
+      if (moaFocus && !f.includes(moaFocus)) f.push(moaFocus);
       if (f.length) { focus = f; note = entry.note || null; introduce = entry.introduce || null; }
+      nestingGoal = !!entry.nestingGoal && !!moaFocus;
+      kokakoStretch = !!entry.kokakoStretch;
     }
     if (!focus) focus = ranked.slice(0, 2).map(s => s.k);   // dynamic fallback
     this.freeplayFocus = focus;
@@ -1570,17 +1728,43 @@ class Game {
       sim.boomSpecies = null;
     }
 
-    // 8) Build this year's goals: recover each focus species to its target.
-    this.goals = this.freeplayFocus.map(k => {
+    // 7b) Moa nesting-site formation watch: arm it for a nesting-goal year so growing a
+    //     patch of the moa's favoured plant (lancewood / speargrass) settles NEW nesting
+    //     sites; cleared otherwise. See Simulation._updateMoaNestingFormation.
+    const FAVOURED_PLANT = { little_bush_moa: 'lancewood', upland_moa: 'speargrass' };
+    if (sim) {
+      sim.moaNestingWatch = (nestingGoal && moaFocus)
+        ? { speciesKey: moaFocus, plantType: FAVOURED_PLANT[moaFocus] || 'lancewood' }
+        : null;
+    }
+
+    // 8) Build this year's goals: a population goal per focus species, plus — for a
+    //    nesting-goal year — a "settle N new nesting sites" goal for the paired moa. A
+    //    kōkako goal in the reached branch is a bonus STRETCH (worth more, opt-in).
+    const goalReward = Math.round((M.freeplayGoalReward ?? 80) * (1 + this.coldIndex));
+    const nestTarget = this.currentLevel.freeplayNestingGoal ?? M.freeplayNestingGoal ?? 2;
+    const goals = [];
+    for (const k of this.freeplayFocus) {
       const target = targets[k] || defaultTarget;
-      const reward = Math.round((M.freeplayGoalReward ?? 80) * (1 + this.coldIndex));
-      return {
-        name: `${this._freeplaySpeciesName(k)} ≥ ${target}`,
+      const stretch = kokakoStretch && k === 'kokako';
+      goals.push({
+        name: `${stretch ? 'Stretch: ' : ''}${this._freeplaySpeciesName(k)} ≥ ${target}`,
         condition: () => this.simulation.getSpeciesCount(k) >= target,
-        reward,
+        reward: stretch ? Math.round(goalReward * 1.5) : goalReward,
+        stretch,
         achieved: false
-      };
-    });
+      });
+    }
+    if (nestingGoal && moaFocus) {
+      const base = (sim.stats && sim.stats.nestingSitesMade) || 0;
+      goals.push({
+        name: `Settle ${nestTarget} new ${this._freeplaySpeciesName(moaFocus)} nests`,
+        condition: () => (((this.simulation.stats && this.simulation.stats.nestingSitesMade) || 0) - base) >= nestTarget,
+        reward: goalReward,
+        achieved: false
+      });
+    }
+    this.goals = goals;
 
     // 9) Announce the year — the schedule's own note if it has one, else the generic
     //    "protect X & Y".
@@ -1685,6 +1869,20 @@ class Game {
     if (tr.phase === 'fadeOut') return Math.max(0, 1 - tr.timer / this._fadeOutFrames);
     if (tr.phase === 'fadeIn')  return Math.min(1, tr.timer / this._fadeInFrames);
     return 0;   // pan phase: the cast is unloaded
+  }
+
+  // Combined render alpha [0..1] for the whole cast: the smaller of the year-transition
+  // fade (above) and the one-shot level-start fade-in. frameCount-based so the intro
+  // fade plays even while the opening tutorial tip holds the sim paused. Multiplies
+  // drawingContext.globalAlpha in render(), which GL honours too (tryCapture reads it).
+  _castRenderAlpha() {
+    let a = this._transitionEntityAlpha();
+    if (this._castFadeStartFrame != null) {
+      const f = (frameCount - this._castFadeStartFrame) / this._castFadeFrames;
+      if (f >= 1) { this._castFadeStartFrame = null; }
+      else { const e = Math.max(0, f); a = Math.min(a, e * e * (3 - 2 * e)); }  // smoothstep ease
+    }
+    return a;
   }
 
   // Endless eagle-loss consequence: with no apex predator, the current dominant
@@ -1842,6 +2040,68 @@ class Game {
 
   // Should the panel render? Open AND this level has the raid mechanic.
   _raidPanelActive() { return !!this._raidPanelOpen && !!this._keaRaidCfg(); }
+
+  // ============================================
+  // MAST-MAURI GOAL PANEL (the kākā year's objective; takes the Nest-Raid slot)
+  // ============================================
+
+  // Live progress of the year-2 mast objective. gained = mauri earned since the year
+  // began; frac clamps to [0,1]; reached latches once the target is met.
+  _mastGoalProgress() {
+    const target = this._mastGoalTarget || 0;
+    const gained = this.mauri ? Math.max(0, this.mauri.totalEarned - (this._mastGoalStartEarned || 0)) : 0;
+    const frac = target > 0 ? Math.max(0, Math.min(1, gained / target)) : 0;
+    return { gained: Math.round(gained), target, frac, reached: !!this._mastGoalReached };
+  }
+
+  // The mast-goal bar shows in place of the Nest-Raid panel during the (active) kākā
+  // mast-goal year. They never both apply — that year carries no nest-raid tool.
+  _mastGoalPanelActive() { return !!this._mastGoalActive; }
+
+  // Draw the mast objective as a progress bar (non-modal, no clicks): a title, the fill
+  // toward the target, the running total, and a one-line hint of what's at stake.
+  _renderMastGoalPanel(x, y, w, h) {
+    const p = this._mastGoalProgress();
+    push();
+    fill(28, 36, 30, 238); stroke(120, 92, 70); strokeWeight(1.5);
+    rect(x, y, w, h, 10); noStroke();
+
+    const headH = 22;
+    fill(232, 208, 150); textAlign(LEFT, CENTER); textStyle(BOLD); textSize(14);
+    push(); if (typeof FreckleFace !== 'undefined') textFont(FreckleFace);
+    text('Mast Year', x + 12, y + headH / 2 + 3); pop();
+    textStyle(NORMAL);
+
+    // Status chip, right-aligned in the header.
+    const chip = p.reached ? 'REACHED' : 'in progress';
+    textAlign(RIGHT, CENTER); textSize(10); textStyle(BOLD);
+    fill(p.reached ? 242 : 200, p.reached ? 224 : 180, p.reached ? 140 : 130);
+    text(chip, x + w - 12, y + headH / 2 + 3);
+    textStyle(NORMAL);
+
+    // Progress bar.
+    const barX = x + 12, barW = w - 24, barH = 12;
+    const barY = y + headH + 8;
+    fill(20, 26, 22); rect(barX, barY, barW, barH, 6);
+    const col = p.reached ? [120, 210, 130] : [214, 176, 96];
+    fill(col[0], col[1], col[2]);
+    rect(barX, barY, Math.max(barH, barW * p.frac), barH, 6);
+
+    // Running total under the bar.
+    fill(228, 236, 224); textAlign(LEFT, CENTER); textSize(12); textStyle(BOLD);
+    text(`${p.gained} / ${p.target} mauri gained`, barX, barY + barH + 14);
+    textStyle(NORMAL);
+
+    // Hint line (wraps within the panel if there's room).
+    if (h > barY + barH + 40) {
+      fill(168, 184, 168); textSize(10); textAlign(LEFT, TOP);
+      const hint = p.reached
+        ? 'The rimu will mast early — kākāpō breed downslope next year.'
+        : 'Reach it by year end to mast early (year 3), else the mast falls late in the cold upslope.';
+      text(hint, barX, barY + barH + 26, barW);
+    }
+    pop();
+  }
 
   // Draw the panel at (x,y,w,h). Non-modal: no backdrop, records row rects for clicks,
   // and sets each live site's _raidHover from the mouse so the play area echoes the hover.
@@ -2285,8 +2545,65 @@ class Game {
     return this._mastYearTargetCycle >= 0 && this.cycle === this._mastYearTargetCycle;
   }
 
+  // ---- split-resolution ground tier ---------------------------------------
+  // The screen-size offscreen buffer the terrain is composited into. Lazily
+  // (re)allocated to the LOGICAL canvas size (never × SS) so terrain work stays cheap.
+  // A p5 createGraphics is a real canvas — remove() the old one on resize.
+  _ensureTerrainLayer() {
+    const w = CONFIG.canvasWidth, h = CONFIG.canvasHeight;
+    let tg = this._terrainLayer;
+    if (!tg || tg.width !== w || tg.height !== h) {
+      if (tg && tg.remove) tg.remove();
+      tg = this._terrainLayer = createGraphics(w, h);
+      if (tg.pixelDensity) tg.pixelDensity(1);   // the manual supersample lives on the MAIN canvas only
+    }
+    return this._terrainLayer;
+  }
+
+  // Drop the buffer on resize; _ensureTerrainLayer rebuilds it next frame.
+  _resizeTerrainLayer() {
+    if (this._terrainLayer && this._terrainLayer.remove) this._terrainLayer.remove();
+    this._terrainLayer = null;
+  }
+
+  // Paint the ground into the screen-size buffer `tg` under the same camera transform
+  // and footprint clip the cast uses, so the blit up (in render) lands pixel-aligned
+  // with the entities. Cleared each frame — its letterbox stays transparent, so the
+  // canvas background shows through when blitted.
+  _composeTerrainLayer(tg, clipW, clipH) {
+    tg.clear();
+    tg.push();
+    const _dc = tg.drawingContext;
+    _dc.save();
+    _dc.beginPath();
+    _dc.rect(CONFIG.viewX, CONFIG.viewY, clipW, clipH);
+    _dc.clip();
+    tg.translate(CONFIG.viewX, CONFIG.viewY);
+    tg.scale(CONFIG.viewZoom);
+    this.terrain.render(tg);
+    // GL mode: the main canvas is the transparent top layer, so ground overlays that
+    // must sit UNDER the animals (winter frost) are drawn into this bottom buffer
+    // rather than on main (where render() skips them when _domGL).
+    if (typeof GLBatch !== 'undefined' && GLBatch.domStack) {
+      const _frost = (this.seasonManager && this.seasonManager.getWinterness)
+        ? this.seasonManager.getWinterness() : 0;
+      if (_frost > 0.001) {
+        tg.noStroke();
+        tg.rectMode(CORNER);
+        tg.fill(216, 232, 245, 72 * _frost);
+        tg.rect(0, 0, this.terrain.mapWidth, this.terrain.mapHeight);
+      }
+    }
+    _dc.restore();
+    tg.pop();
+  }
+
   render() {
-    background(20, 30, 25);
+    // GL_PORT.md Phase 2: in DOM-stacked GL mode the main canvas is the TOP layer
+    // (indicators + HUD) and must be transparent so the terrain (bottom) and GL
+    // sprites (middle) show through — clear() instead of an opaque background().
+    const _domGL = (typeof GLBatch !== 'undefined' && GLBatch.domStack);
+    if (_domGL) clear(); else background(20, 30, 25);
 
     if (this.state === GAME_STATE.LEVEL_SELECT){
       this.renderLevelSelect();
@@ -2299,12 +2616,8 @@ class Game {
     }
 
     if (this.state === GAME_STATE.LOADING) {
-      this.renderLoading();
-      if (this._loadingFramesDrawn >= 1) {
-        this.init();   // blocking; the loading frame painted last frame stays visible
-      } else {
-        this._loadingFramesDrawn++;
-      }
+      this.renderLoading();   // paints the bar with the CURRENT chunk's label…
+      this._stepLoading();    // …then runs that chunk (browser already showed the bar)
       return;
     }
 
@@ -2314,25 +2627,59 @@ class Game {
     // bar so the near over-scan continues off-frame instead of ending in a hard
     // cut at the game-area edge; the bar is redrawn opaque over it after the world.
     const _clip3D = CONFIG.view3D && !CONFIG.fullscreen && this.terrain;
-
-    push();
-    drawingContext.save();
-    drawingContext.beginPath();
     const _clipW = CONFIG.fullscreen ? this.terrain.mapWidth * CONFIG.viewZoom : CONFIG.gameAreaWidth;
     const _clipH = CONFIG.fullscreen ? this.terrain.mapHeight * CONFIG.viewZoom
                  : (_clip3D ? CONFIG.canvasHeight - CONFIG.viewY : CONFIG.gameAreaHeight);
+
+    // ---- GROUND TIER (screen res) --------------------------------------------
+    // The terrain is composited into a screen-size offscreen buffer and blitted up as one
+    // quad, so the season blits stay cheap however large the backing canvas is
+    // (CONFIG.spriteSupersample). Everything ABOVE the ground is drawn straight onto the
+    // supersampled canvas below.
+    // GL_PORT.md Phase 5: when the GPU height-field terrain is active, the terrain is drawn
+    // as a lit mesh INSIDE the GL canvas (after GLBatch.begin(), below), so the CPU relief
+    // bake + DOM bottom layer are skipped entirely. Frost + haze move into the terrain shader.
+    const _glTerrain = _domGL && typeof GLTerrain !== 'undefined' && GLTerrain.enabled &&
+                       CONFIG.view3D && typeof Projection !== 'undefined' && Projection.relief && this.terrain;
+    if (_glTerrain) {
+      // Ensure no stale DOM bottom layer shows under the GL terrain.
+      if (GLBatch._bottomEl && GLBatch._bottomEl.style) GLBatch._bottomEl.style.display = 'none';
+    } else {
+    const tg = this._ensureTerrainLayer();
+    this._composeTerrainLayer(tg, _clipW, _clipH);
+    if (_domGL) {
+      // The terrain buffer IS the bottom DOM layer (it also carries the winter-frost
+      // ground overlay in this mode, drawn into it by _composeTerrainLayer) — no blit
+      // to the main canvas, which stays a transparent top layer.
+      GLBatch.setBottom(tg.canvas || tg.elt);
+    } else {
+      push();
+      // Soft (bilinear) upscale of the screen-res ground onto the supersampled backing —
+      // the same enlargement the browser used to do when it CSS-scaled the whole canvas.
+      if ('imageSmoothingEnabled' in drawingContext) drawingContext.imageSmoothingEnabled = true;
+      image(tg, 0, 0, CONFIG.canvasWidth, CONFIG.canvasHeight);
+      pop();
+    }
+    }   // end !_glTerrain (CPU terrain compose/blit)
+
+    // ---- ABOVE THE GROUND (supersampled) -------------------------------------
+    // Frost, every entity and the placement previews — clipped to the same footprint and
+    // drawn in the same camera transform, straight onto the high-res backing.
+    push();
+    drawingContext.save();
+    drawingContext.beginPath();
     drawingContext.rect(CONFIG.viewX, CONFIG.viewY, _clipW, _clipH);
     drawingContext.clip();
 
     translate(CONFIG.viewX, CONFIG.viewY);
     scale(CONFIG.viewZoom);
-    
-    this.terrain.render();
 
     // Winter frost: a single cool haze laid over the ground (under the animals),
     // fading in through late autumn and out into spring. One rect — no perf cost.
+    // In GL mode this ground overlay is drawn into the terrain (bottom) buffer by
+    // _composeTerrainLayer instead, so it stays UNDER the GL sprites; skip it here.
     const _frost = this.seasonManager.getWinterness ? this.seasonManager.getWinterness() : 0;
-    if (_frost > 0.001) {
+    if (_frost > 0.001 && !_domGL) {
       push();
       noStroke();
       rectMode(CORNER);
@@ -2344,9 +2691,19 @@ class Game {
     // Year transition: fade the whole cast (plants + placed items + fauna) out/in around
     // the camera pan. globalAlpha multiplies every fill AND image the sim draws, so the
     // fade is uniform; the terrain (drawn above) stays opaque and pans underneath.
-    const _castAlpha = this._transitionEntityAlpha();
+    const _castAlpha = this._castRenderAlpha();
     if (_castAlpha < 1) drawingContext.globalAlpha = _castAlpha;
+    // GL_PORT.md Phase 2: open a batch span so the sprite image()/ellipse() calls in
+    // simulation.render() enqueue GPU quads. It composites at the seam before the
+    // indicator over-pass (see Simulation.render). The safety composite below closes
+    // the span if that seam was ever missed, so an open span can't swallow later draws.
+    if (typeof GLBatch !== 'undefined' && GLBatch.enabled) GLBatch.begin();
+    // GL_PORT.md Phase 5: draw the GPU height-field terrain into the GL canvas AFTER the
+    // clear (in begin) but BEFORE the sprite quads, so sprites composite on top. build()
+    // is a no-op once the mesh exists for this land; draw() restores the sprite program.
+    if (_glTerrain) { GLTerrain.build(this.terrain); GLTerrain.draw(this, CONFIG.viewX, CONFIG.viewY, _clipW, _clipH); }
     this.simulation.render();
+    if (typeof GLBatch !== 'undefined' && GLBatch.enabled && GLBatch._open) GLBatch.composite(drawingContext);
     this.mauri.renderFloatingTexts();
     if (_castAlpha < 1) drawingContext.globalAlpha = 1;
 
@@ -2357,7 +2714,11 @@ class Game {
         (this.state === GAME_STATE.PLAYING || this.state === GAME_STATE.PAUSED)) {
       this.renderMovePreview();
     }
-    
+
+    // Debug lenses: world-space balance overlays, on TOP of the cast, still inside the
+    // game-area clip + camera transform (so they align with the world). Inert unless on.
+    if (typeof Lens !== 'undefined') Lens.renderWorld(this);
+
     drawingContext.restore();
     pop();
 
@@ -2464,7 +2825,7 @@ class Game {
     }
   }
 
-  // Re-draws every moa of a highlighted species (halo + sprite) in world
+  // Re-draws every moa of a highlighted species (outline + sprite) in world
   // space, above the tutorial overlay (same clip + view transform as the main
   // game-area pass). Used by tips flagged speciesHighlightAboveUI.
   renderHighlightedMoaAboveUI() {
@@ -2630,6 +2991,54 @@ class Game {
     pop();
   }
 
+  // Render settings shared by the gamemode-select screen: the terrain-resolution
+  // slider + the Enhanced/Classic graphics toggle. Sets _detailSliderBounds and
+  // _glToggleBounds (handled in handleClick's LEVEL_SELECT branch). Returns bottom Y.
+  _renderRenderSettings(cx, topY, w) {
+    const opts = TERRAIN_DETAIL_OPTIONS;
+    const sliderX = cx - w / 2, sliderW = w, sliderY = topY;
+    const trackPad = 16, trackY = sliderY + 22;
+    let selIdx = 1;
+    for (let i = 0; i < opts.length; i++) {
+      if (CONFIG.pixelScale === opts[i].pixelScale && CONFIG.terrainDetail === opts[i].detail) selIdx = i;
+    }
+    push();
+    textAlign(CENTER, CENTER);
+    fill(CACHED_COLORS.menuText); noStroke(); smallTextSize(12);
+    text("[TERRAIN RESOLUTION]", cx, sliderY + 4);
+    stroke(CACHED_COLORS.btnStroke); strokeWeight(3);
+    line(sliderX + trackPad, trackY, sliderX + sliderW - trackPad, trackY);
+    const stepW = (sliderW - trackPad * 2) / (opts.length - 1);
+    for (let i = 0; i < opts.length; i++) {
+      const tx = sliderX + trackPad + i * stepW;
+      stroke(CACHED_COLORS.btnStroke); strokeWeight(2); line(tx, trackY - 5, tx, trackY + 5);
+      noStroke(); fill(i === selIdx ? [200, 240, 210] : CACHED_COLORS.menuText); smallTextSize(12);
+      text(opts[i].label, tx, trackY + 18);
+    }
+    const hx = sliderX + trackPad + selIdx * stepW;
+    fill(CACHED_COLORS.btnNormal); stroke(200, 240, 210); strokeWeight(2); ellipse(hx, trackY, 16, 16); noStroke();
+    this._detailSliderBounds = { x: sliderX, y: sliderY, w: sliderW, h: trackY + 12 - sliderY, trackPad, stepW };
+
+    // Graphics toggle
+    const glOn = !!CONFIG.useGL;
+    const tglW = w, tglH = 34, tglX = cx - w / 2, tglY = trackY + 30;
+    const tglHover = mouseX > tglX && mouseX < tglX + tglW && mouseY > tglY && mouseY < tglY + tglH;
+    noStroke();
+    fill(glOn ? (tglHover ? [50, 85, 66] : [40, 70, 55]) : (tglHover ? [56, 60, 70] : [44, 48, 56]));
+    rect(tglX, tglY, tglW, tglH, 10);
+    noFill(); stroke(glOn ? 90 : 88, glOn ? 170 : 96, glOn ? 120 : 108); strokeWeight(1.5);
+    rect(tglX, tglY, tglW, tglH, 10);
+    noStroke();
+    fill(glOn ? [120, 230, 150] : [110, 118, 130]);
+    circle(tglX + 16, tglY + tglH / 2, 10);
+    fill(glOn ? [212, 240, 222] : [176, 183, 193]);
+    textAlign(LEFT, CENTER); smallTextSize(13);
+    text(glOn ? 'Graphics: Enhanced 3D' : 'Graphics: Classic 2D', tglX + 30, tglY + tglH / 2 + 1);
+    pop();
+    this._glToggleBounds = { x: tglX, y: tglY, w: tglW, h: tglH };
+    return tglY + tglH;
+  }
+
     renderLevelSelect() {
     const cw = CONFIG.canvasWidth;
     const ch = CONFIG.canvasHeight;
@@ -2747,11 +3156,15 @@ class Game {
       });
     }
 
+    // Render settings (terrain resolution + Enhanced/Classic graphics), below the cards.
+    this._renderRenderSettings(centerX, cardY + cardH + 34, 240);
+
     fill(CACHED_COLORS.menuFooter);
     smallTextSize(11);
+    textAlign(CENTER, CENTER);
     text(`Version: ${CONFIG.version}`, centerX, ch - 40);
   }
-  
+
   renderLoading() {
     const cw = CONFIG.canvasWidth;
     const ch = CONFIG.canvasHeight;
@@ -2767,12 +3180,46 @@ class Game {
     fill(CACHED_COLORS.menuTitle);
     textSize(42);
     push(); textFont(FreckleFace);
-    text(this.currentLevel?.name || "Loading", centerX, centerY - 40);
+    text(this.currentLevel?.name || "Loading", centerX, centerY - 64);
     pop();
 
     fill(CACHED_COLORS.menuSubtitle);
     textSize(18);
-    text("Preparing the ecosystem...", centerX, centerY + 20);
+    text("Preparing the ecosystem", centerX, centerY - 18);
+
+    // Progress bar. The eased "shown" fill chases the target so the per-chunk
+    // notches read as one smooth sweep rather than stepping. (Guarded so a stray
+    // pre-plan frame still draws an empty bar.)
+    const target = this._loadingProgress || 0;
+    if (this._loadingShownProgress == null) this._loadingShownProgress = 0;
+    this._loadingShownProgress += (target - this._loadingShownProgress) * 0.35;
+    const shown = this._loadingShownProgress;
+
+    const barW = Math.min(420, cw * 0.6);
+    const barH = 12;
+    const barX = centerX - barW / 2;
+    const barY = centerY + 14;
+    const r = barH / 2;
+
+    // Track
+    noStroke();
+    fill(255, 255, 255, 30);
+    rect(barX, barY, barW, barH, r);
+    // Fill
+    fill(CACHED_COLORS.menuTitle);
+    const fw = Math.max(barH, barW * Math.max(0, Math.min(1, shown)));
+    rect(barX, barY, fw, barH, r);
+    // Thin border
+    noFill();
+    stroke(255, 255, 255, 40);
+    strokeWeight(1);
+    rect(barX, barY, barW, barH, r);
+    noStroke();
+
+    // Sub-caption: what is being generated right now (smaller, below the bar).
+    fill(CACHED_COLORS.menuSubtitle);
+    textSize(13);
+    text((this._loadingLabel || '') + '…', centerX, barY + barH + 22);
   }
 
     renderMenu() {
@@ -2887,60 +3334,10 @@ class Game {
     text("Start Level", centerX, btnY + btnH * 0.5);
     pop();
 
-    // Terrain resolution slider (same width as Start Level button)
-    const sliderW = btnW;
-    const sliderX = btnX;
-    const sliderY = btnY + btnH + 18;
-    const trackPad = 16;
-    const trackY = sliderY + 22;
-    const opts = TERRAIN_DETAIL_OPTIONS;
-
-    let selIdx = 0;
-    for (let i = 0; i < opts.length; i++) {
-      if (CONFIG.pixelScale === opts[i].pixelScale &&
-          CONFIG.terrainDetail === opts[i].detail) selIdx = i;
-    }
-
-    fill(CACHED_COLORS.menuText);
-    noStroke();
-    smallTextSize(12);
-    text("[TERRAIN RESOLUTION]", centerX, sliderY + 4);
-
-    // Track
-    stroke(CACHED_COLORS.btnStroke);
-    strokeWeight(3);
-    line(sliderX + trackPad, trackY, sliderX + sliderW - trackPad, trackY);
-
-    // Ticks + labels
-    const stepW = (sliderW - trackPad * 2) / (opts.length - 1);
-    for (let i = 0; i < opts.length; i++) {
-      const tx = sliderX + trackPad + i * stepW;
-      stroke(CACHED_COLORS.btnStroke);
-      strokeWeight(2);
-      line(tx, trackY - 5, tx, trackY + 5);
-      noStroke();
-      fill(i === selIdx ? [200, 240, 210] : CACHED_COLORS.menuText);
-      smallTextSize(12);
-      text(opts[i].label, tx, trackY + 18);
-    }
-
-    // Handle
-    const hx = sliderX + trackPad + selIdx * stepW;
-    fill(CACHED_COLORS.btnNormal);
-    stroke(200, 240, 210);
-    strokeWeight(2);
-    ellipse(hx, trackY, 16, 16);
-    noStroke();
-
-    this._detailSliderBounds = {
-      x: sliderX, y: sliderY, w: sliderW, h: trackY + 12 - sliderY,
-      trackPad, stepW
-    };
-
-    // Back button
+    // Back button (terrain-resolution + graphics settings moved to the gamemode-select screen)
     const backW = 120, backH = 40;
     const backX = centerX - backW / 2;
-    const backY = trackY + 48;
+    const backY = btnY + btnH + 24;
     const backHover = mouseX > backX && mouseX < backX + backW
                    && mouseY > backY && mouseY < backY + backH;
 
@@ -3229,6 +3626,28 @@ class Game {
     }
   }
   
+  // Shared click handling for the gamemode-select render settings (resolution + graphics).
+  _handleRenderSettingsClick(mx, my) {
+    if (this._detailSliderBounds) {
+      const s = this._detailSliderBounds;
+      if (mx > s.x && mx < s.x + s.w && my > s.y && my < s.y + s.h) {
+        const t = (mx - (s.x + s.trackPad)) / s.stepW;
+        const idx = Math.max(0, Math.min(TERRAIN_DETAIL_OPTIONS.length - 1, Math.round(t)));
+        CONFIG.pixelScale = TERRAIN_DETAIL_OPTIONS[idx].pixelScale;
+        CONFIG.terrainDetail = TERRAIN_DETAIL_OPTIONS[idx].detail;
+        return true;
+      }
+    }
+    if (this._glToggleBounds) {
+      const t = this._glToggleBounds;
+      if (mx > t.x && mx < t.x + t.w && my > t.y && my < t.y + t.h) {
+        setRenderGL(!CONFIG.useGL);   // flip Enhanced/Classic live + persist
+        return true;
+      }
+    }
+    return false;
+  }
+
   handleClick(mx, my) {
     // Level select screen
     if (this.state === GAME_STATE.LEVEL_SELECT) {
@@ -3243,6 +3662,7 @@ class Game {
           }
         }
       }
+      if (this._handleRenderSettingsClick(mx, my)) return;
       return;
     }
     
@@ -3274,18 +3694,6 @@ class Game {
           return;
         }
       }
-      if (this._detailSliderBounds) {
-        const s = this._detailSliderBounds;
-        if (mx > s.x && mx < s.x + s.w &&
-            my > s.y && my < s.y + s.h) {
-          const t = (mx - (s.x + s.trackPad)) / s.stepW;
-          const idx = Math.max(0, Math.min(TERRAIN_DETAIL_OPTIONS.length - 1,
-                                           Math.round(t)));
-          CONFIG.pixelScale = TERRAIN_DETAIL_OPTIONS[idx].pixelScale;
-          CONFIG.terrainDetail = TERRAIN_DETAIL_OPTIONS[idx].detail;
-          return;
-        }
-      }
       if (this._backBtnBounds) {
         const btn = this._backBtnBounds;
         if (mx > btn.x && mx < btn.x + btn.w &&
@@ -3308,6 +3716,8 @@ class Game {
     if (this.tutorial && this.tutorial.active && this.tutorial.handleClick(mx, my)) return;
 
     if (this.state === GAME_STATE.PLAYING || this.state === GAME_STATE.PAUSED) {
+      // Lens legend takes clicks first, so toggling a lens never also places an item.
+      if (typeof Lens !== 'undefined' && Lens.handleClick(mx, my)) return;
       if (this.ui.handleClick(mx, my)) return;
       // Tap a moa egg (when not placing) to send a hungry kea to eat it.
       if (!this.selectedPlaceable && !this.movingPlaceable &&
@@ -3345,6 +3755,15 @@ class Game {
     }
 
     if (key === 'd' || key === 'D') { CONFIG.debugMode = !CONFIG.debugMode; return; }
+
+    // Debug lenses: L toggles the overlay + its clickable legend (see mauri_lens.js).
+    if (key === 'l' || key === 'L') {
+      if (typeof Lens !== 'undefined') {
+        const on = Lens.toggleMaster();
+        this.addNotification(on ? 'Lens overlay ON (click the legend to pick lenses)' : 'Lens overlay OFF', 'info');
+      }
+      return;
+    }
 
     if ((key === 'f' || key === 'F') &&
         (this.state === GAME_STATE.PLAYING || this.state === GAME_STATE.PAUSED)) {
@@ -3408,14 +3827,21 @@ class Game {
 let game;
 
 let _needsInitialResize = true;
+// The p5 main canvas element, stored so scaleCanvasToFit can style THIS one.
+let _mainCanvasEl = null;
 
 function setup() {
   if (!audioManager) audioManager = initAudioManager();
 
   CONFIG.recalculateLayout(windowWidth, windowHeight);
+  applySpriteSupersampleFromURL();   // sets CONFIG.spriteSupersample before the canvas is made
 
-  pixelDensity(1); // must run BEFORE scaleCanvasToFit: it resets the canvas's inline CSS size
-  let cnv = createCanvas(CONFIG.canvasWidth, CONFIG.canvasHeight);
+  pixelDensity(1); // must run BEFORE scaleCanvasToFit: it resets the canvas's inline CSS size.
+                   // pixelDensity stays 1 — we supersample MANUALLY (backing = logical × SS)
+                   // so the terrain can opt out of it via the screen-size offscreen layer.
+  const _ss = spriteSS();
+  let cnv = createCanvas(CONFIG.canvasWidth * _ss, CONFIG.canvasHeight * _ss);
+  _mainCanvasEl = (cnv && cnv.elt) ? cnv.elt : document.querySelector('canvas');
   cnv.style('display', 'block');
   document.body.style.margin = '0';
   document.body.style.overflow = 'hidden';
@@ -3431,6 +3857,19 @@ function setup() {
   initPortraitPlantSprites(portraitPlantSprites);
   initializeRegistry();
 
+  // WebGL port (GL_PORT.md), Phase 1: consolidate every loaded sprite PNG into
+  // shared GPU atlas pages now that preload() has resolved them all and the plant
+  // sprite globals are wired. Transparent to the render code (mauri_spriteatlas.js);
+  // a no-op if the module is absent or nothing is packable.
+  if (typeof SpriteAtlas !== 'undefined') SpriteAtlas.build();
+
+  // WebGL renderer (GL_PORT.md §12) — the whole GPU path (entity batch + GPU terrain/
+  // water & ecology lighting) behind ONE switch, now a main-menu setting (renderMenu).
+  // Apply the saved/URL/default preference: this lazily creates + mounts the GL context
+  // at the BACKING resolution only if Enhanced is on; Classic 2D leaves the untouched
+  // 2D path running and never spins up a context. Live-toggleable via setRenderGL.
+  setRenderGL(resolveUseGLPreference(), false);
+
   PROGRESS.init();
 
   game = new Game();
@@ -3444,23 +3883,34 @@ function windowResized() {
   // Recalculate layout for actual window dimensions
   CONFIG.recalculateLayout(windowWidth, windowHeight);
 
-  // Resize the p5 canvas to the new computed dimensions
-  resizeCanvas(CONFIG.canvasWidth, CONFIG.canvasHeight);
+  // Resize the p5 canvas to the new computed dimensions (backing = logical × SS)
+  const _ss = spriteSS();
+  resizeCanvas(CONFIG.canvasWidth * _ss, CONFIG.canvasHeight * _ss);
 
-  // Apply CSS scaling to fill the window
+  // Apply CSS scaling to fill the window (uses the LOGICAL size, so the on-screen
+  // footprint is unchanged; the extra backing pixels are the crispness)
   scaleCanvasToFit();
+
+  // Keep the WebGL entity canvas matched to the backing resolution (GL_PORT.md).
+  if (typeof GLBatch !== 'undefined' && GLBatch.enabled) {
+    GLBatch.resize(CONFIG.canvasWidth * _ss, CONFIG.canvasHeight * _ss);
+  }
 
   // Update UI panel positions if game is running
   if (game && game.ui) {
     game.ui.recalculate();
     game._updateViewTransform();
+    game._resizeTerrainLayer();   // the screen-size terrain buffer follows the logical size
   }
 }
 
 function scaleCanvasToFit() {
-  const cnv = document.querySelector('canvas');
-  if (!cnv) return;
+  const cnv = _mainCanvasEl || document.querySelector('canvas');
+  if (!cnv || !cnv.style) return;
 
+  // CSS size uses the LOGICAL dimensions, so the on-screen footprint is unchanged
+  // however large the backing canvas is (backing = logical × SS); the extra backing
+  // pixels are what give the sprites their crispness.
   const cw = CONFIG.canvasWidth;
   const ch = CONFIG.canvasHeight;
 
@@ -3474,6 +3924,83 @@ function scaleCanvasToFit() {
   cnv.style.position = 'absolute';
   cnv.style.left = ((windowWidth - cw * scale) / 2) + 'px';
   cnv.style.top = ((windowHeight - ch * scale) / 2) + 'px';
+
+  // Match the stacked WebGL/terrain layers to the main canvas's on-screen box.
+  if (typeof GLBatch !== 'undefined' && GLBatch.domStack) GLBatch.layout();
+}
+
+// Backing-canvas supersample factor, clamped. 1 = logical 1080 (old behaviour);
+// 2 = 2× sprites/HUD. The one place SS is read, so the clamp lives here.
+function spriteSS() {
+  const s = Math.round((typeof CONFIG !== 'undefined' && CONFIG.spriteSupersample) || 1);
+  return Math.max(1, Math.min(3, s));
+}
+
+// ?sprites=1|2|3 startup override. Must run BEFORE createCanvas, since it sets the
+// backing resolution.
+function applySpriteSupersampleFromURL() {
+  if (typeof window === 'undefined' || !window.location) return;
+  const q = new URLSearchParams(window.location.search).get('sprites');
+  if (q == null) return;
+  const n = parseInt(q, 10);
+  if (n >= 1 && n <= 3) {
+    CONFIG.spriteSupersample = n;
+    console.log(`[Render] sprite supersample ${n}× from URL`);
+  }
+}
+
+// ---- WebGL renderer switch (main-menu "Enhanced graphics" toggle) --------------
+// GL_PORT.md §12. One switch drives the whole GPU path (entity batch + GPU terrain/
+// water & ecology lighting). It lives as a MAIN-MENU setting (renderMenu), persisted in
+// localStorage and live-toggleable, replacing the old ?render=/?terrain= URL flags.
+// The URL flags still work as a dev override. Enhanced (WebGL) is the out-of-box
+// default; a saved menu choice or ?render=2d override still wins. Flip to false to
+// ship Classic 2D by default.
+const GL_DEFAULT_ON = true;
+const GL_PREF_KEY = 'mauri_useGL';
+
+function resolveUseGLPreference() {
+  // URL override wins (dev/testing), then the saved menu choice, then the default.
+  try {
+    const q = (typeof window !== 'undefined' && window.location)
+      ? new URLSearchParams(window.location.search).get('render') : null;
+    if (q === 'gl' || q === 'webgl' || q === 'on') return true;
+    if (q === '2d' || q === 'canvas' || q === 'off') return false;
+  } catch (_) {}
+  try {
+    const s = localStorage.getItem(GL_PREF_KEY);
+    if (s === '1') return true;
+    if (s === '0') return false;
+  } catch (_) {}
+  return GL_DEFAULT_ON;
+}
+
+// Apply the renderer choice live. Lazily creates + mounts the GL context the first time
+// it's turned on (so a Classic-2D session never spins one up), then just flips the
+// enable flags. GPU terrain rides the same switch. `persist` writes the menu choice.
+// Sets CONFIG.useGL to the ACHIEVED state (stays false if WebGL is unavailable).
+function setRenderGL(on, persist = true) {
+  on = !!on;
+  if (persist) { try { localStorage.setItem(GL_PREF_KEY, on ? '1' : '0'); } catch (_) {} }
+  if (typeof GLBatch === 'undefined') { CONFIG.useGL = false; return false; }
+
+  if (on) {
+    if (!GLBatch.gl) {
+      // First enable this session — create the context at the backing resolution + mount.
+      GLBatch.requested = true;
+      const ss = (typeof spriteSS === 'function') ? spriteSS() : 1;
+      if (!GLBatch.init(CONFIG.canvasWidth * ss, CONFIG.canvasHeight * ss)) { CONFIG.useGL = false; return false; }
+      GLBatch.mount(_mainCanvasEl || document.querySelector('canvas'));
+    } else {
+      GLBatch.enabled = true; GLBatch.domStack = true;
+    }
+    if (typeof GLTerrain !== 'undefined') { GLTerrain.requested = true; GLTerrain.enabled = GLBatch.enabled; }
+  } else {
+    GLBatch.enabled = false; GLBatch.domStack = false;
+    if (typeof GLTerrain !== 'undefined') GLTerrain.enabled = false;
+  }
+  CONFIG.useGL = !!(GLBatch.enabled);
+  return CONFIG.useGL;
 }
 
 function initializeRegistry() {
@@ -3541,30 +4068,48 @@ function draw() {
 
   if (typeof BENCHMARK !== 'undefined') BENCHMARK.tick();
 
-  if (CONFIG.debugMode) {
-    let t0 = performance.now();
-    game.update(deltaMultiplier);
-    let t1 = performance.now();
-    game.render();
-    let t2 = performance.now();
+  // mouseX/mouseY are in BACKING pixels (logical × SS); all hit-testing/hover is in
+  // 1080-space, so convert to logical for the whole frame and restore after. p5 only
+  // refreshes these on movement, so dividing in place would compound on a still frame.
+  const _ss = spriteSS();
+  const _mbx = mouseX, _mby = mouseY;
+  if (_ss !== 1) { mouseX = _mbx / _ss; mouseY = _mby / _ss; }
 
-    fill(255);
-    smallTextSize(10);
-    text(`Update: ${(t1-t0).toFixed(1)}ms`, 85, 38);
-    text(`Render: ${(t2-t1).toFixed(1)}ms`, 85, 52);
-    text(`Canvas: ${CONFIG.canvasWidth}×${CONFIG.canvasHeight}`, 85, 70);
-    text(`Version: ${CONFIG.version}`, 85, 84);
-  } else {
-    game.update(deltaMultiplier);
-    game.render();
-  }
+  const _dbg = CONFIG.debugMode;
+  const t0 = _dbg ? performance.now() : 0;
+  game.update(deltaMultiplier);
+  const t1 = _dbg ? performance.now() : 0;
+
+  // Split-resolution: a single scale(SS) lets every drawer keep authoring in 1080-space
+  // and land on the high-res backing (sprites + HUD gain the resolution). The terrain
+  // opts out inside Game.render() (composited at screen res and blitted up as one quad).
+  // background() in render() ignores the transform, so it still clears the whole canvas.
+  push();
+  if (_ss !== 1) scale(_ss);
+  game.render();
+  const t2 = _dbg ? performance.now() : 0;
 
   // Free Play climate gauge (screen space, on top). The Nest Raid panel and the field
   // guide are NOT top overlays — they render docked in the right column via GameUI
   // (renderSidebar / renderFullscreenOverlay), so the sim keeps running behind them.
-  if (game) {
-    if (game._climateCfg && typeof game._renderClimateGauge === 'function') game._renderClimateGauge();
+  if (game && game._climateCfg && typeof game._renderClimateGauge === 'function') {
+    game._renderClimateGauge();
   }
+
+  // Debug lenses: screen-space legend (clickable) + per-lens readouts, over the HUD.
+  if (typeof Lens !== 'undefined' && game) Lens.renderScreen(game);
+
+  if (_dbg) {
+    fill(255);
+    smallTextSize(10);
+    text(`Update: ${(t1-t0).toFixed(1)}ms`, 85, 38);
+    text(`Render: ${(t2-t1).toFixed(1)}ms`, 85, 52);
+    text(`Canvas: ${CONFIG.canvasWidth}×${CONFIG.canvasHeight} @${_ss}×`, 85, 70);
+    text(`Version: ${CONFIG.version}`, 85, 84);
+  }
+  pop();
+
+  if (_ss !== 1) { mouseX = _mbx; mouseY = _mby; }
 }
 
 function updateFPS() {
@@ -3591,13 +4136,16 @@ function renderFPSCounter() {
 }
 
 function mousePressed() {
+  // mouseX/mouseY are in BACKING pixels (logical × SS); hit-testing is in 1080-space.
+  const s = spriteSS();
+  const mx = mouseX / s, my = mouseY / s;
   // The field guide is docked in the right bar now, not a modal — its clicks are
   // routed through GameUI (handleSidebarClick / handleFullscreenClick), so it no
   // longer intercepts every click here.
   // Non-modal Nest Raid panel: consume only clicks that land ON the panel; anything
   // else falls through to the game so the play area stays interactive.
-  if (game && game._raidPanelOpen && game._raidPanelClick(mouseX, mouseY)) return;
-  game.handleClick(mouseX, mouseY);
+  if (game && game._raidPanelOpen && game._raidPanelClick(mx, my)) return;
+  game.handleClick(mx, my);
 }
 function keyPressed() {
   // Gamewide field guide: E toggles it; while open it consumes only Esc/arrows and
@@ -3606,9 +4154,10 @@ function keyPressed() {
   game.handleKey(key);
 }
 function mouseWheel(e) {
+  const s = spriteSS();
   // Scroll the field-guide list only when the pointer is actually over the panel.
   if (game && game.encyclopedia && game.encyclopedia.open &&
-      game.encyclopedia.pointerOverPanel(mouseX, mouseY)) {
+      game.encyclopedia.pointerOverPanel(mouseX / s, mouseY / s)) {
     game.encyclopedia.handleWheel(e.delta);
     return false;
   }

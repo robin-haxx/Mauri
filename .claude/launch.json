@@ -6,6 +6,12 @@
       "runtimeExecutable": "node",
       "runtimeArgs": ["tools/serve.js"],
       "port": 8081
+    },
+    {
+      "name": "mauri-8090",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["tools/serve.js", "8090"],
+      "port": 8090
     }
   ]
 }

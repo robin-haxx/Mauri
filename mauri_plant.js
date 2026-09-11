@@ -451,7 +451,28 @@ class Plant {
     const displaySize = this.size * this.growth * dormantMult;
     
     if (displaySize < 2) return;
-    
+
+    // Food-value fade (GL only — 2D's tint() is the slow per-draw path): a plant dims
+    // toward drab as its LIVE nutrition falls, so "standing food with nothing in it"
+    // becomes visible. Beech holds its winter value and stays green while rimu/tussock
+    // grey out around it — the forest refuge reads as the last green in a hard winter.
+    // Skipped for dormant plants (they already render frosted). See GL_PORT.md.
+    let _faded = false;
+    if (!dormant && typeof GLBatch !== 'undefined' && GLBatch.enabled && GLBatch._open) {
+      // Fade by ABSOLUTE current food value against a "worthwhile browse" band, not by
+      // fraction-of-own-max — so a plant that HOLDS its winter value (beech) stays green
+      // while one whose value collapses (rimu, tussock in the cold) greys out, and every
+      // healthy summer plant stays vivid. GOOD_HI≈a decent feed, GOOD_LO≈near inedible.
+      const GOOD_LO = 1.5, GOOD_HI = 6.5;
+      let fade = Math.max(0, Math.min(1, (GOOD_HI - (this.nutrition || 0)) / (GOOD_HI - GOOD_LO)));
+      if (this.winterInedible) fade = Math.max(fade, 0.85);
+      fade *= 0.72;                                  // cap: never fully grey
+      if (fade > 0.03) {
+        tint(255 + (150 - 255) * fade, 255 + (152 - 255) * fade, 255 + (135 - 255) * fade);
+        _faded = true;
+      }
+    }
+
     // Route to appropriate rendering method
     if (this.usesPortraitSprite && PORTRAIT_PLANT_SPRITES && PORTRAIT_PLANT_SPRITES[this.type]) {
       this._renderPortraitSprite(px, py, displaySize, dormant);
@@ -462,6 +483,7 @@ class Plant {
     } else {
       this._renderGenericPlant(px, py, displaySize, dormant);
     }
+    if (_faded) noTint();
   }
   
   // ============================================
@@ -472,23 +494,40 @@ class Plant {
     const spriteState = this._getSpriteState();
     const sprites = PLANT_SPRITES[this.type];
     const sprite = sprites ? sprites[spriteState] : null;
-    
+
     if (!sprite) {
       this._renderGenericPlant(px, py, displaySize, dormant);
       return;
     }
-    
+
+    // Crossfade on a sprite-state change (mature↔wilting↔thriving as the season turns) so
+    // trees don't hard-flick between frames. Keep the OUTGOING sprite and blend it out
+    // under the incoming one over ~0.5s; frameCount-based so it advances once per frame.
+    if (spriteState !== this._spriteState) {
+      if (this._spriteState !== undefined && this._lastSprite && this._lastSprite !== sprite) {
+        this._fadeSprite = this._lastSprite;
+        this._fadeStart = frameCount;
+      }
+      this._spriteState = spriteState;
+    }
+    this._lastSprite = sprite;
+    let fadeT = 1;
+    if (this._fadeSprite) {
+      fadeT = (frameCount - this._fadeStart) / 30;
+      if (fadeT >= 1) { this._fadeSprite = null; fadeT = 1; }
+    }
+
     // Shadow - draw directly without transform
     noStroke();
     fill(0, 0, 0, dormant ? 10 : 20);
     ellipse(px + 1, py + 1, displaySize * 1.2, displaySize * 0.6);
-    
+
     // Calculate sprite size for growing plants
     let spriteSize = displaySize;
     if (this.growth < 0.5) {
       spriteSize = displaySize * (0.5 + this.growth);
     }
-    
+
     const halfSize = spriteSize * 0.5;
 
     // Sway as a cheap sub-pixel horizontal offset rather than a per-plant
@@ -499,8 +538,19 @@ class Plant {
     if (!dormant && this.seasonalModifier > 0.1) {
       drawX += PlantStatics.getSway(frameCount, this.swayPhase, this.seasonalModifier) * halfSize;
     }
-    image(sprite, drawX, py - halfSize, spriteSize, spriteSize);
-    
+    const dy = py - halfSize;
+    if (this._fadeSprite && fadeT < 1) {
+      // Outgoing sprite fades out beneath the incoming one fading in (a true crossfade).
+      // (During the ~0.5s blend the per-plant food-value tint is momentarily skipped.)
+      tint(255, (1 - fadeT) * 255);
+      image(this._fadeSprite, drawX, dy, spriteSize, spriteSize);
+      tint(255, fadeT * 255);
+      image(sprite, drawX, dy, spriteSize, spriteSize);
+      noTint();
+    } else {
+      image(sprite, drawX, dy, spriteSize, spriteSize);
+    }
+
     // Dormant indicator
     if (dormant) {
       this._drawDormantIndicator(px, py - displaySize * 0.5);

@@ -30,7 +30,8 @@ class Simulation {
       deathsBySpecies: {},
       anySpeciesExtinct: false,
       eagleBirths: 0,
-      eagleDeaths: 0
+      eagleDeaths: 0,
+      nestingSitesMade: 0   // player-grown moa nesting sites (running total; see moaNestingWatch)
 
     };
 
@@ -134,6 +135,13 @@ class Simulation {
     // opts in (LEVEL_MECHANICS.nestingSites); moa lay at their nearest site.
     this.nestingSites = [];
     this._nestingRecomputeTimer = 0;
+
+    // Player-grown moa nesting sites (endless "moa focus" year goal). While
+    // moaNestingWatch is set (by Game._beginFreeplayYear) to { speciesKey, plantType },
+    // a dense patch of the moa's favoured plant (lancewood / speargrass) with that moa
+    // drawn to it forms a NEW nesting site. Off (null) outside a nesting-goal year.
+    this.moaNestingWatch = null;
+    this._moaNestTimer = 0;
   }
 
   init() {
@@ -1284,6 +1292,69 @@ class Simulation {
 
     this._decayDisturbances(dt);   // LINK 2 — age out raided-nest disturbance
     this._updateNestingSites(dt);  // refresh site egg tallies (raid indicator)
+    this._updateMoaNestingFormation(dt);   // grow player nesting sites (moa focus year)
+  }
+
+  // Endless "moa focus" year: form a NEW nesting site where the player has grown a
+  // patch of the focus moa's favoured plant (lancewood → little bush moa, speargrass →
+  // upland moa) and that moa has been drawn in. One site per throttle tick; each counts
+  // toward the year's nesting goal (stats.nestingSitesMade). Inert when moaNestingWatch
+  // is null (every non-focus year). See Game._beginFreeplayYear.
+  _updateMoaNestingFormation(dt) {
+    const watch = this.moaNestingWatch;
+    if (!watch || typeof NestingSite === 'undefined') return;
+    this._moaNestTimer -= dt;
+    if (this._moaNestTimer > 0) return;
+    this._moaNestTimer = 90;   // ~1.5s between attempts
+
+    const M = (typeof LEVEL_MECHANICS !== 'undefined') ? LEVEL_MECHANICS : {};
+    const nc = M.nestingSites || {};
+    const radius = nc.radius ?? 46;
+    const minGap = (nc.minGap != null) ? nc.minGap : radius * 2.6;
+    const patchRadius = watch.patchRadius ?? 70;
+    const patchMinPlants = watch.patchMinPlants ?? 3;
+    const drawRadius = watch.drawRadius ?? 160;
+    const forestBand = nc.forestBand || { min: 0.36, max: 0.48 };
+
+    const plants = this.plants;
+    for (let i = 0; i < plants.length; i++) {
+      const p = plants[i];
+      if (!p.alive || p.type !== watch.plantType || (p.growth != null && p.growth < 0.5)) continue;
+
+      // A real patch: enough grown favoured plants clustered here.
+      const near = this.getNearbyPlants(p.pos.x, p.pos.y, patchRadius);
+      let n = 0;
+      for (let j = 0; j < near.length; j++) {
+        const q = near[j];
+        if (q.alive && q.type === watch.plantType && (q.growth == null || q.growth >= 0.5)) n++;
+      }
+      if (n < patchMinPlants) continue;
+
+      // Don't crowd an existing site.
+      if (this.getNearestNestingSite(p.pos.x, p.pos.y, minGap)) continue;
+
+      // The focus moa must actually be drawn to the patch.
+      let moaNear = false;
+      const moas = this.getNearbyMoas(p.pos.x, p.pos.y, drawRadius);
+      for (let j = 0; j < moas.length; j++) {
+        if (moas[j].alive && moas[j].speciesKey === watch.speciesKey) { moaNear = true; break; }
+      }
+      if (!moaNear) continue;
+
+      const e = this.terrain.getElevationAt(p.pos.x, p.pos.y);
+      const habitat = (e >= forestBand.min && e < forestBand.max) ? 'forest' : 'open';
+      const site = new NestingSite(p.pos.x, p.pos.y, { radius, habitat });
+      site.playerMade = true;
+      site.forSpecies = watch.speciesKey;
+      site.createdCycle = this.game ? this.game.cycle : 0;
+      this.nestingSites.push(site);
+      this.stats.nestingSitesMade = (this.stats.nestingSitesMade || 0) + 1;
+      if (this.game && this.game.addNotification) {
+        const name = this.game._freeplaySpeciesName ? this.game._freeplaySpeciesName(watch.speciesKey) : 'moa';
+        this.game.addNotification(`The ${name} settle a new nesting site in the grove.`, 'success');
+      }
+      return;   // one new site per tick
+    }
   }
 
   _updateOtherEntities(mauri, dt) {
@@ -1710,7 +1781,15 @@ class Simulation {
 
     // Layer 7: Storms
     this._renderFiltered(placeables, 80, p => p.type === 'Storm', true, inView);
-    
+
+    // GL_PORT.md Phase 2: every sprite pass above enqueued GPU quads. Composite the
+    // WebGL entity layer HERE — after all sprites, before the indicator over-pass —
+    // so hearts/rings (and the HUD, later) stay on top. No-op when GL is off; when
+    // on it also drew the shadow/halo discs underneath during the passes above.
+    if (typeof GLBatch !== 'undefined' && GLBatch.enabled && GLBatch._open) {
+      GLBatch.composite(drawingContext);
+    }
+
     // Layer 8: Moa indicators
     this._renderFiltered(moas, 0, null, true, inView, 'renderIndicators');
 

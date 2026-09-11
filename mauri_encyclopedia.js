@@ -190,6 +190,43 @@ const ENCYCLOPEDIA = [
 const ENCYCLOPEDIA_BY_ID = {};
 for (const e of ENCYCLOPEDIA) ENCYCLOPEDIA_BY_ID[e.id] = e;
 
+// Field-guide selection highlight. When the guide is open, the currently
+// selected entry's species gets a bright, light-green sprite-shaped outline in
+// the world (drawn by EntitySprites.drawSpriteOutline in each entity's render).
+// Returns [r,g,b] for a species to outline, or null. Cheap — just an id compare
+// against the selected entry, evaluated once per entity per frame.
+const GUIDE_OUTLINE_COLOR = [150, 255, 130];
+function guideOutlineColor(speciesKey) {
+  if (!speciesKey || typeof game === 'undefined' || !game || !game.encyclopedia) return null;
+  const enc = game.encyclopedia;
+  if (!enc.open) return null;                       // only while the guide is showing
+  const entry = ENCYCLOPEDIA[enc.index];
+  if (!entry) return null;
+  // Animal speciesKey === encyclopedia id (moa species, kereru, kokako, haasts_eagle).
+  if (entry.id === speciesKey) return GUIDE_OUTLINE_COLOR;
+  // The single eagle entry covers every eagle species (adult + juvenile).
+  if (entry.id === 'haasts_eagle' && speciesKey.indexOf('haasts_eagle') !== -1) return GUIDE_OUTLINE_COLOR;
+  return null;
+}
+
+// Unified in-world highlight colour for an animal sprite. Both the field-guide
+// selection AND the player's SPECIES_HIGHLIGHT toggle now draw as the SAME
+// sprite-shaped outline (EntitySprites.drawSpriteOutline) — the field guide's
+// bright green (a deliberate, transient focus) wins over a toggled species' own
+// highlightColor. Returns [r,g,b] or null.
+//
+// This replaces the old soft pulsing DISC that sat under the sprite: an outline
+// hugs the silhouette, so it always reads as "this animal", never as an effect
+// radius, and stays legible on a crowded map. The gentle attention pulse lives in
+// drawSpriteOutline's ALPHA (never its size), so nothing appears to grow/shrink.
+function highlightOutlineColor(speciesKey, highlightColor) {
+  const g = guideOutlineColor(speciesKey);
+  if (g) return g;
+  if (typeof SPECIES_HIGHLIGHT !== 'undefined' && SPECIES_HIGHLIGHT.has(speciesKey))
+    return highlightColor || [255, 235, 120];
+  return null;
+}
+
 // Docked field guide. Lives in the right-bar column (below the other panels) in
 // both the windowed (full) UI and the fullscreen (focus) overlay — it does NOT
 // pause the sim, so the world keeps running while you read. One view at a time:

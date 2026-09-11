@@ -550,15 +550,28 @@ class TerrainGenerator {
     // the new land the next time the 3D view is used.
     this._disposeReliefBuffers();
 
+    this._genHeightMap();
+    this._genBiomeMap();
+
+    // Build high-resolution maps used only for rendering
+    this._buildRenderMaps();
+
+    this._initSnowColors();
+
+    // Compute base cell colors (without snow)
+    this._computeBaseCellColors();
+
+    // Pre-bake all 4 seasonal buffers
+    this._bakeAllSeasonBuffers();
+  }
+
+  // Allocate + fill the coarse gameplay height map. Split out of generate() so the
+  // stepped loader (generateSteps) can run it as its own frame.
+  _genHeightMap() {
     const gridCols = this.gridCols;
     const gridRows = this.gridRows;
-    const totalCells = gridCols * gridRows;
     const scale = this.scale;
-    
-    this.heightMap = new Float32Array(totalCells);
-    this.biomeIndexMap = new Uint8Array(totalCells);
-    
-    // Generate height map
+    this.heightMap = new Float32Array(gridCols * gridRows);
     let idx = 0;
     for (let row = 0; row < gridRows; row++) {
       const y = row * scale;
@@ -567,9 +580,15 @@ class TerrainGenerator {
         idx++;
       }
     }
-    
-    // Generate biome map
-    idx = 0;
+  }
+
+  // Classify each coarse cell into a biome (depends on the height map). Split out of
+  // generate() for the stepped loader.
+  _genBiomeMap() {
+    const gridCols = this.gridCols;
+    const gridRows = this.gridRows;
+    this.biomeIndexMap = new Uint8Array(gridCols * gridRows);
+    let idx = 0;
     for (let row = 0; row < gridRows; row++) {
       for (let col = 0; col < gridCols; col++) {
         const elevation = this.heightMap[idx];
@@ -580,24 +599,31 @@ class TerrainGenerator {
             biome = this._fallbackBiome;
           }
         }
-        
         this.biomeIndexMap[idx] = this.biomeIndexByKey[biome.key];
         idx++;
       }
     }
-    
-    // Build high-resolution maps used only for rendering
-    this._buildRenderMaps();
-
-    this._initSnowColors();
-
-    // Compute base cell colors (without snow)
-    this._computeBaseCellColors();
-    
-    // Pre-bake all 4 seasonal buffers
-    this._bakeAllSeasonBuffers();
   }
-  
+
+  // The same work as generate(), but as an ordered list of { label, fn } chunks a
+  // caller can run one-per-frame while painting a progress bar between them (see
+  // Game's LOADING flow). generate() stays the synchronous path (regenerate, area
+  // rebakes, the benchmark). Labels describe what is being built, for the loading
+  // screen's sub-caption.
+  generateSteps() {
+    const steps = [
+      { label: 'Shaping the land', fn: () => { this._disposeReliefBuffers(); this._genHeightMap(); } },
+      { label: 'Mapping the habitats', fn: () => this._genBiomeMap() },
+      { label: 'Detailing the terrain', fn: () => { this._buildRenderMaps(); this._initSnowColors(); this._computeBaseCellColors(); } }
+    ];
+    const seasonLabels = { summer: 'Warming the summer hills', autumn: 'Turning the autumn leaves',
+                           winter: 'Drawing down the winter snow', spring: 'Greening the spring valleys' };
+    for (const season of ['summer', 'autumn', 'winter', 'spring']) {
+      steps.push({ label: seasonLabels[season], fn: () => { this.seasonBuffers[season] = this._bakeSeasonBuffer(season); } });
+    }
+    return steps;
+  }
+
   /**
    * Build render-resolution height/biome maps (detail x the gameplay grid).
    * Used only for baking terrain buffers — gameplay lookups stay on the
@@ -1044,9 +1070,9 @@ class TerrainGenerator {
     // only genuinely tall rises get it — gentle and moderate slopes stay lit,
     // which stops steep cel-faces (bright snow especially) from reading as
     // vertical streaks. TOPBAND is the lit cap above a real face.
-    const SHADE = 4.0;                 // directional NW slope-shading strength
-    const SHLO = 0.76, SHHI = 1.06;    // clamp for the shade multiplier
-    const FACE = 0.72;                 // cliff-face brightness vs the top
+    const SHADE = 6.0;                 // directional NW slope-shading strength (more defined relief)
+    const SHLO = 0.55, SHHI = 1.18;    // wider clamp: deeper shaded slopes, brighter lit slopes
+    const FACE = 0.60;                 // cliff-face brightness vs the top (darker face = more depth)
     const TOPBAND = Math.max(1, Math.round(3 * d));
     const FACEMIN = Math.max(2, Math.round(9 * d));   // min span (px) before a face is drawn at all
     const CLIFF = Math.max(2, Math.round(12 * d));    // min span (px) to ink a silhouette
@@ -1227,7 +1253,14 @@ class TerrainGenerator {
    * one window and scroll is 0, so this is the old behaviour. On a world grid the year
    * pan animates the scroll across the continuous land. Season crossfade preserved.
    */
-  render() {
+  render(g) {
+    // Split-resolution pipeline: draw the ground into the target buffer `g`
+    // (Game._terrainLayer, a screen-size offscreen) rather than the live canvas, so the
+    // season blits stay at screen res while the main canvas is supersampled for sprites.
+    // R = g || window, so an omitted target falls back to the global canvas.
+    const R = g || (typeof window !== 'undefined' ? window : this);
+    const _dc = R.drawingContext;
+
     const use3D = (typeof CONFIG !== 'undefined' && CONFIG.view3D &&
                    typeof Projection !== 'undefined' && Projection.relief);
     if (use3D) this._ensureReliefBuffers();
@@ -1247,25 +1280,29 @@ class TerrainGenerator {
     // an E–W pan is an X source-crop and the row's depth is fixed (Y not scrolled).
     const dt = this.detail;
     const blit = (img, alpha) => {
-      if (alpha != null) { push(); tint(255, alpha); }
+      // Opaque buffers, so a partial blit uses globalAlpha (0..1), NOT tint() — tint()
+      // forces a per-call tinted-canvas composite in p5; globalAlpha is identical here
+      // and much cheaper. alpha arrives 0..255, so scale it.
+      const _ga = _dc.globalAlpha;
+      if (alpha != null) _dc.globalAlpha = alpha / 255;
       if (this.hasWorldGrid) {
         if (isRelief) {
           // Per-row relief fills the frame (one window's depth), full width → an E–W
           // pan is just an X source-crop; the row's depth is fixed (Y not scrolled).
           const pxPerWorld = img.width / this.worldW;   // relief buffer is renderCols wide
-          image(img, 0, this._reliefDrawY || 0,
+          R.image(img, 0, this._reliefDrawY || 0,
                 this.viewW, this._reliefWorldH || this.worldH,
                 sx * pxPerWorld, 0, this.viewW * pxPerWorld, img.height);
         } else {
-          image(img, 0, 0, this.viewW, this.viewH,
+          R.image(img, 0, 0, this.viewW, this.viewH,
                 sx * dt, sy * dt, this.viewW * dt, this.viewH * dt);
         }
       } else {
         const h = isRelief ? (this._reliefWorldH || this.mapHeight) : this.mapHeight;
         const oy = isRelief ? (this._reliefDrawY || 0) : 0;
-        image(img, 0, oy, this.worldW, h);
+        R.image(img, 0, oy, this.worldW, h);
       }
-      if (alpha != null) { noTint(); pop(); }
+      if (alpha != null) _dc.globalAlpha = _ga;
     };
 
     // N–S year move (3D): crossfade the OLD row's relief into the new one across the pan

@@ -67,6 +67,17 @@
     <!-- Debug tools -->
     <script src="mauri_benchmark.js"></script>
 
+    <!-- Rendering (WebGL port, see GL_PORT.md). Atlas packs loaded sprite PNGs into
+         shared GPU pages and wraps image(); glbatch is the opt-in (?render=gl)
+         DOM-stacked WebGL entity layer. Both load before sketch.js (which brings
+         them up in setup()); inert with no effect until then. -->
+    <script src="mauri_spriteatlas.js"></script>
+    <script src="mauri_glbatch.js"></script>
+    <script src="mauri_glterrain.js"></script>  <!-- Phase 5: GPU height-field terrain (?terrain=gl) -->
+
+    <!-- Debug lenses: world-space balance-tuning overlays (toggle with L in debug). -->
+    <script src="mauri_lens.js"></script>
+
     <!-- Main game (last) -->
     <script src="mauri_sketch.js"></script>
   </body>

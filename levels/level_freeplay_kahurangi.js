@@ -25,7 +25,13 @@ const LEVEL_FREEPLAY_KAHURANGI = {
   endless: true,
 
   zoom: 1.667,
-  startSeason: 'spring',
+  // Endless years run SUMMER → autumn → winter → SPRING, so a year opens on summer and
+  // closes on spring's nesting season. The camera pans to the next 2×2 area only at the
+  // year boundary (spring→summer), so a whole year — including spring breeding and its
+  // hatch — plays out in ONE quadrant before you move on, and you see the results of the
+  // breeding season as that area's year-end population. (Classic levels stay spring-start;
+  // the season↔year lock that keeps the pan on this boundary lives in mauri_seasons.js.)
+  startSeason: 'summer',
 
   terrain: {
     noiseScale: 0.005, octaves: 3, persistence: 0.32, lacunarity: 3.0,

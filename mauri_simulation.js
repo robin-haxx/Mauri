@@ -203,6 +203,10 @@ class Simulation {
     this.treePlants.length = 0;
     for (const type in this.otherEntities) this.otherEntities[type].length = 0;
     if (this.nestingSites) this.nestingSites.length = 0;
+    // Placed items don't travel with the flock — each new area is a fresh country, so
+    // the player's placements (caches, shelters, storms …) are cleared too. The placeable
+    // grid is a per-frame "moving" grid, so it rebuilds empty on its own next frame.
+    this.placeables.length = 0;
     this.markPlantGridDirty();
     this.markEggGridDirty();
   }
@@ -1709,7 +1713,10 @@ class Simulation {
     
     // Layer 8: Moa indicators
     this._renderFiltered(moas, 0, null, true, inView, 'renderIndicators');
-    
+
+    // Layer 9: Nest-raid hover overlay (tint + success%) — on TOP so foliage never hides it.
+    this._renderFiltered(this.nestingSites, 100, s => s._raidHover, true, inView, 'renderRaidOverlay');
+
     if (CONFIG.debugMode && CONFIG.showGridStats) this.renderGridStats();
   }
   
@@ -1773,9 +1780,11 @@ class Simulation {
       pop();
     }
 
-    // Overlays on top: storms, then moa indicators (hunger bars / halos).
+    // Overlays on top: storms, then moa indicators (hunger bars / halos), then the
+    // nest-raid hover cue (tint + success%) so it reads above the foliage.
     this._billboardList(this.placeables, 80, p => p.type === 'Storm', inView, lift, 'render');
     this._billboardList(this.moas, 0, null, inView, lift, 'renderIndicators');
+    this._billboardList(this.nestingSites, 100, s => s._raidHover, inView, lift, 'renderRaidOverlay');
   }
 
   // Draw a list billboarded (feet on the relief) in its existing order.

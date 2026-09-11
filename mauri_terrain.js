@@ -1159,12 +1159,24 @@ class TerrainGenerator {
     const hazeFade = cfg.view3DHazeFade != null ? cfg.view3DHazeFade : 0.72;
     // Re-bake on a knob change OR (world grid) when the camera has moved to a new ROW,
     // since the relief is baked per-row (one window's depth) to fill the frame.
-    if (this.reliefBuffers.summer &&
-        (this._reliefBakedK !== Projection.K || this._reliefBakedLift !== Projection.liftFrac ||
-         this._reliefBakedOverFar !== overFar || this._reliefBakedOverNear !== overNear ||
-         this._reliefBakedFade !== hazeFade ||
-         (this.hasWorldGrid && this._reliefBakedRow !== this.activeRow))) {
-      this._disposeReliefBuffers();
+    const knobChanged = this._reliefBakedK !== Projection.K || this._reliefBakedLift !== Projection.liftFrac ||
+      this._reliefBakedOverFar !== overFar || this._reliefBakedOverNear !== overNear ||
+      this._reliefBakedFade !== hazeFade;
+    const rowChanged = this.hasWorldGrid && this._reliefBakedRow !== this.activeRow;
+    if (this.reliefBuffers.summer && (knobChanged || rowChanged)) {
+      // An N–S year move re-bakes the relief for the new row (it's baked one window's
+      // depth at a time). During the pan, KEEP the old row's buffers as _reliefPrev so
+      // render() can CROSSFADE old→new — a clean row transition, since a literal vertical
+      // pan can't be geometrically clean in per-row plan-oblique relief. Any other re-bake
+      // (a knob change, or a row set with no pan) just disposes as before.
+      if (rowChanged && !knobChanged && this._pan) {
+        this._disposeReliefPrev();               // drop any stale prev first
+        this._reliefPrev = this.reliefBuffers;    // hand the old row's buffers off (don't dispose)
+        this._reliefPrevRow = this._reliefBakedRow;
+        this.reliefBuffers = { summer: null, autumn: null, winter: null, spring: null };
+      } else {
+        this._disposeReliefBuffers();
+      }
     }
     if (this.reliefBuffers.summer) return;
 
@@ -1190,6 +1202,17 @@ class TerrainGenerator {
       if (b && typeof b.remove === 'function') b.remove();   // free the GPU-backed canvas
       this.reliefBuffers[key] = null;
     }
+  }
+
+  // Free the previous-row relief buffers held for an N–S crossfade (see _ensureReliefBuffers).
+  _disposeReliefPrev() {
+    if (!this._reliefPrev) return;
+    for (const key in this._reliefPrev) {
+      const b = this._reliefPrev[key];
+      if (b && typeof b.remove === 'function') b.remove();
+    }
+    this._reliefPrev = null;
+    this._reliefPrevRow = null;
   }
 
   regenerate() {
@@ -1245,6 +1268,18 @@ class TerrainGenerator {
       if (alpha != null) { noTint(); pop(); }
     };
 
+    // N–S year move (3D): crossfade the OLD row's relief into the new one across the pan
+    // so the row change dissolves smoothly instead of snapping. _reliefPrev is only held
+    // for a row-change pan (see _ensureReliefBuffers); it's dropped when the pan settles.
+    if (this._reliefPrev && !this._pan) this._disposeReliefPrev();
+    if (isRelief && this._reliefPrev && this._pan) {
+      const cf = this._smoothstep(0, 1, this._pan.t);       // 0 → old row, 1 → new row
+      const prevCur = this._reliefPrev[curKey] || this._reliefPrev.summer;
+      if (prevCur) blit(prevCur, (1 - cf) * 255);
+      blit(cur, cf * 255);
+      return;   // skip the season blend during the row transition (season is steady here)
+    }
+
     const tp = this.seasonManager ? this.seasonManager.transitionProgress : 0;
     blit(cur, null);
     if (tp >= 0.01) {
@@ -1299,7 +1334,11 @@ class TerrainGenerator {
     const e = p.t >= 1 ? 1 : this._smoothstep(0, 1, p.t);   // ease in/out
     this.scrollX = this._lerp(p.fromX, p.toX, e);
     this.scrollY = this._lerp(p.fromY, p.toY, e);
-    if (p.t >= 1) { this.scrollX = p.toX; this.scrollY = p.toY; this._pan = null; return false; }
+    if (p.t >= 1) {
+      this.scrollX = p.toX; this.scrollY = p.toY; this._pan = null;
+      this._disposeReliefPrev();   // pan done — drop the crossfade's old-row buffers
+      return false;
+    }
     return true;
   }
 

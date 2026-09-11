@@ -51,6 +51,16 @@ class Kea extends Kereru {
     this._raidNutrition = M.keaRaidNutrition ?? 46;
     this._raidCooldownFrames = (M.keaRaidCooldownSec ?? 5) * 60;
     this._raidCooldown = Math.random() * this._raidCooldownFrames;
+
+    // Berry Cache choice (emergent flock spread). A kea doesn't blindly seek the NEAREST
+    // cache; it COMMITS to one for a beat, chosen by relative nutrition-per-bird and
+    // distance (see _chooseLure). Committing damps flapping; staggered timers + the
+    // crowd term let the flock rebalance across caches instead of piling on one.
+    this._lureChoice = null;
+    this._lureChoiceTimer = Math.random() * 90;         // stagger the first pick across the flock
+    this._lureChoiceFrames = (sp.lureChoiceSec ?? 2.5) * 60;
+    this._lureBaseNutrition = sp.lureBaseNutrition ?? 6; // a placed cache attracts even before its berries grow
+    this._lureCrowdWeight   = sp.lureCrowdWeight ?? 1.0; // ↑ = the flock spreads harder off a crowded cache
   }
 
   // Stash the season manager so _preferredElevBand (reached deep in the base state
@@ -78,10 +88,18 @@ class Kea extends Kereru {
     super.behave(sim, mauri, seasonManager, dt);
     if (!this._grounded && this.state === KERERU_STATE.FLYING) {
       // A Berry Cache (kea lure) placed downslope outranks everything — it pulls the
-      // flock onto the forest patch to settle. Else, if the bird has no perch yet,
-      // drift toward the elevation band to go find forest. With a perch, the anchor
-      // (via _anchorPoint) keeps it home — no extra force needed.
-      const lure = this._nearestLure(sim);
+      // flock onto the forest patch to settle. The bird holds a COMMITTED choice of
+      // cache (re-picked on a jittered timer, or when the choice dies / leaves range),
+      // so the flock spreads across caches by relative nutrition + distance rather than
+      // all chasing the nearest one. Else, if the bird has no perch yet, drift toward
+      // the elevation band to go find forest. With a perch, the anchor (via _anchorPoint)
+      // keeps it home — no extra force needed.
+      this._lureChoiceTimer -= dt;
+      if (!this._lureValid() || this._lureChoiceTimer <= 0) {
+        this._lureChoice = this._chooseLure(sim);
+        this._lureChoiceTimer = this._lureChoiceFrames * (0.75 + Math.random() * 0.5);
+      }
+      const lure = this._lureChoice;
       if (lure) {
         this.applyForce(this.seekPoint(lure.pos.x, lure.pos.y, 0.85, (lure.def && lure.def.radius) || 70));
       } else if (!this._perchValid()) {
@@ -124,20 +142,84 @@ class Kea extends Kereru {
     if (best) this._perchTree = best;
   }
 
-  // Nearest active Berry Cache whose pull reaches this kea (placeables list is tiny).
-  _nearestLure(sim) {
+  // Is the committed cache still a valid target — alive, a cache, and within pull range?
+  _lureValid() {
+    const c = this._lureChoice;
+    if (!c || !c.alive || c.type !== 'keaLure') return false;
+    const r = (c.def && c.def.keaAttractRadius) || 520;
+    const dx = c.pos.x - this.pos.x, dy = c.pos.y - this.pos.y;
+    return dx * dx + dy * dy <= r * r;
+  }
+
+  // Choose which in-range Berry Cache to head for. Emergent flock spread: each cache is
+  // scored by its RELATIVE NUTRITION PER BIRD (available food ÷ how many kea are already
+  // committed to it) times a DISTANCE falloff (closer is better). So the nearest cache
+  // usually wins — but as it crowds, its per-bird share drops, and a re-picking kea will
+  // prefer a less-crowded (or richer, or nearer) cache instead: some peel off to the
+  // others. A freshly placed cache starts empty (crowd 0) with a base draw, so nearby
+  // kea migrate onto it even before its berries grow. (placeables/flock lists are tiny.)
+  _chooseLure(sim) {
     const list = sim.placeables;
     if (!list) return null;
     const px = this.pos.x, py = this.pos.y;
-    let best = null, bestSq = Infinity;
+    const caches = [];
     for (let i = 0; i < list.length; i++) {
       const p = list[i];
       if (!p.alive || p.type !== 'keaLure') continue;
-      const r = (p.def && p.def.keaAttractRadius) || 520, rSq = r * r;
+      const r = (p.def && p.def.keaAttractRadius) || 520;
       const dx = p.pos.x - px, dy = p.pos.y - py, d2 = dx * dx + dy * dy;
-      if (d2 <= rSq && d2 < bestSq) { bestSq = d2; best = p; }
+      if (d2 <= r * r) caches.push({ c: p, d: Math.sqrt(d2), r });
+    }
+    if (!caches.length) return null;
+    if (caches.length === 1) return caches[0].c;   // one cache in reach — no balancing to do
+
+    // Crowd = kea currently committed to each cache (assignment-based, so a kea still
+    // EN ROUTE already counts — this pre-empts everyone piling on before arrivals show).
+    const flock = (sim.otherEntities && sim.otherEntities.kea) || [];
+    const crowd = new Map();
+    for (let i = 0; i < flock.length; i++) {
+      const k = flock[i];
+      if (!k.alive) continue;
+      const c = k._lureChoice;
+      if (c && c.alive) crowd.set(c, (crowd.get(c) || 0) + 1);
+    }
+
+    let best = null, bestScore = -Infinity;
+    for (let i = 0; i < caches.length; i++) {
+      const cand = caches[i], c = cand.c;
+      this._refreshLureFood(sim, c);
+      const base = (c.def && c.def.keaLureNutrition != null) ? c.def.keaLureNutrition : this._lureBaseNutrition;
+      const nutrition = base + (c._keaFood || 0);
+      let n = crowd.get(c) || 0;
+      if (c === this._lureChoice && n > 0) n--;             // don't let self count against staying put
+      const perCapita = nutrition / (1 + this._lureCrowdWeight * n);
+      const distFactor = Math.max(0.08, 1 - cand.d / cand.r); // near → ~1, edge of range → 0.08
+      let score = perCapita * distFactor;
+      if (c === this._lureChoice) score *= 1.15;            // stickiness: only switch if clearly better
+      if (score > bestScore) { bestScore = score; best = c; }
     }
     return best;
+  }
+
+  // Available nutrition at a cache = grown, unconsumed food (kea browse coprosma berries
+  // and forest fruit) within its radius. Counted at most ~twice a second and cached ON
+  // the placeable, so the whole flock shares one count and depletion (kea eating it down)
+  // lowers the cache's draw on its own — an emergent second reason to spread out.
+  _refreshLureFood(sim, cache) {
+    if (!sim.getNearbyPlants) { cache._keaFood = 0; return; }
+    const now = (typeof frameCount !== 'undefined') ? frameCount : 0;
+    if (cache._keaFoodFrame != null && now - cache._keaFoodFrame < 30) return;
+    cache._keaFoodFrame = now;
+    const rad = ((cache.def && cache.def.radius) || 70) * 1.5;
+    const near = sim.getNearbyPlants(cache.pos.x, cache.pos.y, rad);
+    const isForest = (typeof FOREST_TREES !== 'undefined') ? FOREST_TREES : null;
+    let food = 0;
+    for (let i = 0; i < near.length; i++) {
+      const q = near[i];
+      if (!q.alive || q._consumed || q.dormant || q.growth < 0.4) continue;
+      if (q.type === 'coprosma' || (isForest && isForest.has(q.type))) food++;
+    }
+    cache._keaFood = food;
   }
 
   // Raiding is an alternative to the base "fly to a plant" action: while airborne and
@@ -344,7 +426,15 @@ const KEA_SPECIES = {
   bandWarm:   { lo: 0.48, hi: 0.66 },   // subalpine tussock & scrub
   bandCold:   { lo: 0.34, hi: 0.50 },   // dropped down into the forest refuge
   descendFromWinter: 0.7,               // how much seasonal winter pulls it down
-  descendFromCold:   0.6                //   ... and how much the glacial coldIndex does
+  descendFromCold:   0.6,               //   ... and how much the glacial coldIndex does
+
+  // Berry Cache choice — how the flock spreads across MULTIPLE caches (mauri_kea.js
+  // _chooseLure). Each in-range cache scores as (lureBaseNutrition + food) ÷
+  // (1 + lureCrowdWeight · kea already committed), times a distance falloff, so the
+  // nearest usually wins but a crowded one sheds birds to emptier/richer/nearer caches.
+  lureChoiceSec:     2.5,               // re-pick a cache at most this often (jittered per bird)
+  lureBaseNutrition: 6,                 // a freshly placed cache draws kea even before its berries grow
+  lureCrowdWeight:   1.0                // ↑ = the flock balances harder off a crowded cache
 };
 
 // Register the kea as a flighted-bird type (routes egg hatch + the render pass).

@@ -3,6 +3,7 @@ let tutorialMantisSprite = null;
 let splashScreenMoa = null;
 
 let plantSprites = {};
+let portraitPlantSprites = {};
 // Delta time management
 let lastFrameTime = 0;
 let deltaTime = 16.667;
@@ -27,6 +28,19 @@ function preload(){
     for (const state of states) {
       plantSprites[key][state.toLowerCase()] = loadImage(`sprites/${plant}_${state}.png`);
     }
+  }
+
+  // Portrait plant variants: each of these plants has 2 alternate sprites in its
+  // own sprites/<Plant>/ folder. They're portrait-oriented and anchored at
+  // bottom-centre (x = w*0.5, y = 0 measured from the base) rather than dead
+  // centre, so they're rendered by a dedicated path (see mauri_plant.js).
+  const portraitPlants = ['Rimu', 'Beech', 'Dracophyllum', 'Matagouri'];
+  for (const plant of portraitPlants) {
+    const key = plant.toLowerCase();
+    portraitPlantSprites[key] = [
+      loadImage(`sprites/${plant}/${key}1.png`),
+      loadImage(`sprites/${plant}/${key}2.png`)
+    ];
   }
 
   splashScreenMoa = loadImage('sprites/moa_idle.png')
@@ -92,7 +106,7 @@ const CONFIG = {
   // The transform the world actually renders through. Normal mode mirrors
   // gameAreaX/Y + zoom; fullscreen mode scales the map to fill the canvas.
   // Written by Game._updateViewTransform() — read, never set, elsewhere.
-  fullscreen: false,
+  fullscreen: true,   // default view: maximised play area with the overlay HUD (toggle with F)
   viewX: 0,
   viewY: 180,
   viewZoom: 2.5,
@@ -572,9 +586,9 @@ const PLACEABLES = {
     seasonalBonus: { summer: 1.0, autumn: 1.0, winter: 1.0, spring: 1.0 }
   },
 
-  // A toolbar INTERACTION (not a placement): selecting it opens the nest-raid dialog
-  // (Game._openRaidDialog) to pick a moa nesting site to raid. The mauri cost is
-  // charged per raid inside the dialog (mechanics.keaRaid.cost), so this shows 0 and
+  // A toolbar INTERACTION (not a placement): selecting it TOGGLES the non-modal nest-raid
+  // panel (Game._openRaidPanel) that lists the moa nesting sites to raid. The mauri cost is
+  // charged per raid from the panel (mechanics.keaRaid.cost), so this shows 0 and
   // opensDialog routes it past selection's affordability check.
   nestRaid: {
     name: "Nest Raid",
@@ -857,6 +871,12 @@ class Game {
     this._freeplayYear = -1;      // which year's goals are currently built
     this.freeplayFocus = [];      // the two species this year's goals protect
     this._yearsSurvived = 0;
+    // World-grid year transition (endless): a phased fade-out → camera pan → fade-in
+    // when the year moves to a new area. Null when no transition is running. See
+    // _scrollWorldGrid / _updateWorldGridPan / _transitionEntityAlpha.
+    this._yearTransition = null;
+    this._fadeOutFrames = 36;     // ~0.6s cast fade-out before the pan
+    this._fadeInFrames = 42;      // ~0.7s cast fade-in after the new area is populated
     this._kawakawaBanned = false; // set at the first winter (endless): kawakawa unplantable for good
     // Mast Year interactable (see triggerMastYear): the cycle a bought mast lands on
     // (-1 = none). Global one-shot cooldowns live here, keyed by placeable type.
@@ -967,6 +987,7 @@ class Game {
     this._freeplayYear = -1;
     this.freeplayFocus = [];
     this._yearsSurvived = 0;
+    this._yearTransition = null;      // clear any in-flight area transition on (re)load
     this._kawakawaBanned = false;     // re-enable kawakawa for a fresh run (see _banKawakawa)
     this._mastYearTargetCycle = -1;   // reset the pending/active mast per level load
     this._globalCooldownUntil = {};
@@ -1181,8 +1202,7 @@ class Game {
     // While the world grid is panning between areas (or waiting to repopulate the
     // new one), the cast is unloaded — an empty map then is a transition, not a wipe,
     // so hold the loss / fail / apex-extinction verdicts until it settles.
-    const _areaTransition = this.terrain && this.terrain.hasWorldGrid &&
-      ((this.terrain.isPanning && this.terrain.isPanning()) || this._pendingAreaSpawn);
+    const _areaTransition = this.terrain && this.terrain.hasWorldGrid && !!this._yearTransition;
 
     if (!_areaTransition && this._cachedMoaCount === 0 && this._cachedEggCount === 0) {
       this.state = GAME_STATE.LOST;
@@ -1586,10 +1606,11 @@ class Game {
     this._scrollWorldGrid();
   }
 
-  // World grid (endless years): at each year boundary, PAN the camera across the one
-  // continuous landmass to this year's area, unloading the old area's plants/fauna and
-  // regenerating them for the new one. Year 1 (cycle 0) opens on the start area (east /
-  // alps→podocarp) with no pan. A full loop back to the start deepens the glacial share.
+  // World grid (endless years): at each year boundary, move to this year's area of the
+  // one continuous landmass via a staged transition — the cast FADES OUT, the camera PANS
+  // (unloading the old area's plants/fauna/placed items), then the new area's cast is
+  // computed and FADES IN. Kicks off the transition here; _updateWorldGridPan drives its
+  // phases. Year 1 (cycle 0) opens on the start area (east / alps→podocarp) with no move.
   _scrollWorldGrid() {
     const t = this.terrain;
     if (!t || !t.hasWorldGrid) return;
@@ -1598,20 +1619,10 @@ class Game {
     const q = t.quadrantForCycle(this.cycle);
     if (q[0] === t.activeCol && q[1] === t.activeRow) return;   // already here
 
-    // Glacial deepening: once per full loop (returning to the tour's start), reshape
-    // the SAME land colder so glacial habitats climb higher over the run.
-    const wg = (this.currentLevel && this.currentLevel.worldGrid) || {};
-    const perLoop = (wg.glacialPerLoop != null) ? wg.glacialPerLoop : 0;
-    const cap = (wg.glacialCap != null) ? wg.glacialCap : 0.6;
-    if (perLoop > 0 && t._quadIndexForCycle(this.cycle) === 0) {
-      const loops = Math.floor(this.cycle / t._quadOrder.length);
-      t.setGlacialAdvance(Math.min(cap, loops * perLoop));   // heavy: rebakes the world
-    }
-
+    // Begin the transition on the still-living area; nothing is unloaded until the
+    // fade-out completes (see _updateWorldGridPan).
     const fromCol = t.activeCol;
-    t.panToArea(q[0], q[1]);          // start the camera pan
-    this._pendingAreaSpawn = true;    // repopulate when the pan settles
-    if (this.simulation && this.simulation.unloadAreaEntities) this.simulation.unloadAreaEntities();
+    this._yearTransition = { phase: 'fadeOut', timer: 0, col: q[0], row: q[1] };
 
     const dir = q[0] < fromCol ? 'downslope to the west (toward the shore)'
               : q[0] > fromCol ? 'back upslope to the east (the high alps)'
@@ -1619,16 +1630,61 @@ class Game {
     this.addNotification(`The kāhui moves ${dir} — a new country for the year.`, 'info');
   }
 
-  // Per-frame: advance the camera pan; when it settles, regenerate the new area's cast.
+  // Glacial deepening: once per full loop (returning to the tour's start), reshape the
+  // SAME land colder so glacial habitats climb higher over the run. Heavy (rebakes the
+  // world), so it's run during the faded pan window where the hitch is hidden.
+  _maybeGlacialDeepen() {
+    const t = this.terrain;
+    const wg = (this.currentLevel && this.currentLevel.worldGrid) || {};
+    const perLoop = (wg.glacialPerLoop != null) ? wg.glacialPerLoop : 0;
+    const cap = (wg.glacialCap != null) ? wg.glacialCap : 0.6;
+    if (perLoop > 0 && t._quadIndexForCycle(this.cycle) === 0) {
+      const loops = Math.floor(this.cycle / t._quadOrder.length);
+      t.setGlacialAdvance(Math.min(cap, loops * perLoop));
+    }
+  }
+
+  // Per-frame: drive the year transition. fadeOut → (unload + pan) → fadeIn. The cast's
+  // render alpha comes from _transitionEntityAlpha; the loss checks are held while a
+  // transition runs (the empty pan window is not a wipe).
   _updateWorldGridPan(dt) {
     const t = this.terrain;
     if (!t || !t.hasWorldGrid) return;
-    const wasPanning = t.isPanning();
-    if (wasPanning) t.updatePan(dt);
-    if (this._pendingAreaSpawn && !t.isPanning()) {
-      this._pendingAreaSpawn = false;
-      if (this.simulation && this.simulation.spawnAreaEntities) this.simulation.spawnAreaEntities();
+    const tr = this._yearTransition;
+    if (!tr) return;
+
+    if (tr.phase === 'fadeOut') {
+      tr.timer += dt;
+      if (tr.timer >= this._fadeOutFrames) {
+        // Faded out: snapshot + unload the old area's cast and clear placed items, deepen
+        // the glacial if this loop is due (rebake hidden by the fade), then start the pan.
+        if (this.simulation && this.simulation.unloadAreaEntities) this.simulation.unloadAreaEntities();
+        this._maybeGlacialDeepen();
+        t.panToArea(tr.col, tr.row);
+        tr.phase = 'pan';
+      }
+    } else if (tr.phase === 'pan') {
+      if (t.isPanning()) t.updatePan(dt);
+      if (!t.isPanning()) {
+        // Pan settled: compute the new area's distributions, then fade the cast back in.
+        if (this.simulation && this.simulation.spawnAreaEntities) this.simulation.spawnAreaEntities();
+        tr.phase = 'fadeIn';
+        tr.timer = 0;
+      }
+    } else {   // fadeIn
+      tr.timer += dt;
+      if (tr.timer >= this._fadeInFrames) this._yearTransition = null;
     }
+  }
+
+  // Render alpha [0..1] for the whole cast (plants + placed items + fauna) during a year
+  // transition: fades out before the pan, is 0 across the (empty) pan, fades in after.
+  _transitionEntityAlpha() {
+    const tr = this._yearTransition;
+    if (!tr) return 1;
+    if (tr.phase === 'fadeOut') return Math.max(0, 1 - tr.timer / this._fadeOutFrames);
+    if (tr.phase === 'fadeIn')  return Math.min(1, tr.timer / this._fadeInFrames);
+    return 0;   // pan phase: the cast is unloaded
   }
 
   // Endless eagle-loss consequence: with no apex predator, the current dominant
@@ -1764,82 +1820,115 @@ class Game {
     }
   }
 
-  // Draw a clickable indicator over each raidable nest; records screen rects for
-  // handleClick. Screen space, HUD layer (endless only).
-  // The raid is a toolbar interaction (Nest Raid): selecting it opens this dialog,
-  // which lists the moa nesting sites with their stationed-kea count + success%, and
-  // lets the player pick one to raid. (Replaces the old per-site on-map indicators.)
-  _openRaidDialog() { this._raidDialogOpen = true; this._raidDialogRows = null; }
-  _closeRaidDialog() { this._raidDialogOpen = false; this._raidDialogRows = null; }
+  // Nest Raid is a NON-MODAL side panel (it does NOT grey out the play area). The UI
+  // draws it in the right column — in fullscreen below the focus-species row and above
+  // the field guide; in the docked view below the goals panel and above the population
+  // panel (half the event log's height). It lists the moa nesting sites with their
+  // stationed-kea count + live success%; HOVERING a row tints that nest in the play area
+  // (green = raidable, red = not) and shows its success% at the nest's centre (see
+  // NestingSite.render). Selecting the Nest Raid tool toggles the panel.
+  _openRaidPanel() {
+    this._raidPanelOpen = !this._raidPanelOpen;   // the tool toggles it
+    this._raidPanelRows = null;
+    if (!this._raidPanelOpen) this._clearRaidHover();
+  }
+  _closeRaidPanel() { this._raidPanelOpen = false; this._raidPanelRows = null; this._clearRaidHover(); }
 
-  _renderRaidDialog() {
-    if (!this._raidDialogOpen) return;
+  // Clear the per-site hover cue so the play-area tint/percent doesn't linger.
+  _clearRaidHover() {
+    const sites = this.simulation && this.simulation.nestingSites;
+    if (sites) for (let i = 0; i < sites.length; i++) sites[i]._raidHover = null;
+  }
+
+  // Should the panel render? Open AND this level has the raid mechanic.
+  _raidPanelActive() { return !!this._raidPanelOpen && !!this._keaRaidCfg(); }
+
+  // Draw the panel at (x,y,w,h). Non-modal: no backdrop, records row rects for clicks,
+  // and sets each live site's _raidHover from the mouse so the play area echoes the hover.
+  _renderRaidPanel(x, y, w, h) {
     const cfg = this._keaRaidCfg();
-    const W = CONFIG.canvasWidth, H = CONFIG.canvasHeight;
     const sites = (this.simulation && this.simulation.nestingSites)
       ? this.simulation.nestingSites.filter(s => s.alive) : [];
     const need = cfg ? (cfg.stationCount ?? 3) : 3;
     const cost = cfg ? (cfg.cost ?? 60) : 60;
+    this._clearRaidHover();
 
     push();
-    noStroke(); fill(10, 14, 18, 180); rect(0, 0, W, H);          // dim backdrop
-    const pw = Math.min(470, W - 80), rowH = 46, headH = 62, footH = 34;
-    const ph = headH + Math.max(1, sites.length) * (rowH + 8) + footH;
-    const px = (W - pw) / 2, py = Math.max(40, (H - ph) / 2);
-    fill(28, 36, 30, 246); stroke(90, 130, 100); strokeWeight(2);
-    rect(px, py, pw, ph, 12); noStroke();
-    fill(226, 240, 226); textAlign(LEFT, TOP); textStyle(BOLD); textSize(18);
-    push(); if (typeof FreckleFace !== 'undefined') textFont(FreckleFace); text('Loose the kea — raid a nest', px + 18, py + 14); pop();
-    textStyle(NORMAL); textSize(11); fill(150, 180, 158);
-    text(`Needs ${need} kea stationed · costs ${cost} mauri · clear the moa first (they drive the kea off).`, px + 18, py + 40);
+    fill(28, 36, 30, 238); stroke(120, 92, 70); strokeWeight(1.5);
+    rect(x, y, w, h, 10); noStroke();
+
+    const headH = 22;
+    fill(232, 208, 150); textAlign(LEFT, CENTER); textStyle(BOLD); textSize(14);
+    push(); if (typeof FreckleFace !== 'undefined') textFont(FreckleFace);
+    text('Nest Raid', x + 12, y + headH / 2 + 3); pop();
+    textStyle(NORMAL);
+    const close = { x: x + w - 24, y: y + 5, w: 18, h: 18 };
+    fill(60, 46, 40); rect(close.x, close.y, close.w, close.h, 4);
+    fill(220, 200, 190); textAlign(CENTER, CENTER); textSize(14);
+    text('×', close.x + close.w / 2, close.y + close.h / 2 - 1);
 
     const rows = [];
-    let ry = py + headH;
+    const bodyTop = y + headH + 4;
+    const bodyH = Math.max(0, h - headH - 10);
     if (sites.length === 0) {
-      fill(180, 160, 120); textAlign(CENTER, CENTER); textSize(13);
-      text('No moa nesting sites remain.', px + pw / 2, ry + rowH / 2);
+      fill(180, 160, 120); textAlign(CENTER, CENTER); textSize(12);
+      text('No nesting sites remain.', x + w / 2, bodyTop + bodyH / 2);
+    } else {
+      const rowH = Math.max(18, Math.min(32, bodyH / sites.length));
+      const mx = (typeof mouseX !== 'undefined') ? mouseX : -1;
+      const my = (typeof mouseY !== 'undefined') ? mouseY : -1;
+      for (let i = 0; i < sites.length; i++) {
+        const s = sites[i];
+        const ry = bodyTop + i * rowH;
+        if (ry + rowH - 4 > y + h - 2) break;   // clip overflow rather than spill
+        const stationed = this.keaStationedCount(s);
+        const ready = stationed >= need;
+        const afford = this.mauri.mauri >= cost;
+        const raidable = ready && afford;
+        const pct = Math.round(this._raidSuccessChance(s) * 100);
+        const rx = x + 7, rw = w - 14, rh = rowH - 4;
+        const hovered = mx >= rx && mx <= rx + rw && my >= ry && my <= ry + rh;
+
+        fill(raidable ? (hovered ? 72 : 54) : 46, raidable ? (hovered ? 100 : 78) : 54,
+             raidable ? (hovered ? 66 : 56) : 48, 236);
+        stroke(raidable ? 130 : 82, raidable ? 182 : 104, 120, 190); strokeWeight(1);
+        rect(rx, ry, rw, rh, 5); noStroke();
+
+        fill(230, 240, 230); textAlign(LEFT, CENTER); textStyle(BOLD); textSize(11);
+        text(`${s.habitat === 'forest' ? 'Forest' : 'Open'} · ${s.eggCount}`, rx + 8, ry + rh / 2);
+        textStyle(NORMAL); textAlign(RIGHT, CENTER); textSize(10);
+        let tag, tc;
+        if (!ready)       { tag = `${stationed}/${need} kea`; tc = [200, 150, 120]; }
+        else if (!afford) { tag = `need ${cost}`;            tc = [200, 150, 120]; }
+        else              { tag = `RAID · ${pct}%`;          tc = [242, 212, 120]; }
+        fill(tc[0], tc[1], tc[2]); textStyle(raidable ? BOLD : NORMAL);
+        text(tag, rx + rw - 8, ry + rh / 2); textStyle(NORMAL);
+
+        rows.push({ x: rx, y: ry, w: rw, h: rh, site: s, clickable: raidable });
+        if (hovered) s._raidHover = { raidable, pct };
+      }
     }
-    for (let i = 0; i < sites.length; i++) {
-      const s = sites[i];
-      const stationed = this.keaStationedCount(s);
-      const ready = stationed >= need;
-      const afford = this.mauri.mauri >= cost;
-      const chance = Math.round(this._raidSuccessChance(s) * 100);
-      const clickable = ready && afford;
-      const rx = px + 14, rw = pw - 28;
-      fill(clickable ? 58 : 40, clickable ? 80 : 48, clickable ? 56 : 44, 235);
-      stroke(clickable ? 120 : 70, clickable ? 170 : 92, 120, 200); strokeWeight(1.4);
-      rect(rx, ry, rw, rowH, 8); noStroke();
-      fill(232, 242, 232); textAlign(LEFT, CENTER); textStyle(BOLD); textSize(13);
-      text(`${s.habitat === 'forest' ? 'Forest nest' : 'Open nest'} · ${s.eggCount} egg${s.eggCount === 1 ? '' : 's'}`, rx + 12, ry + 15);
-      textStyle(NORMAL); textSize(11); fill(ready ? 168 : 205, ready ? 198 : 150, 160);
-      text(ready ? `${stationed}/${need} kea · raid ${chance}%` : `${stationed}/${need} kea stationed — gather more`, rx + 12, ry + 32);
-      textAlign(RIGHT, CENTER); textSize(12);
-      if (!ready) { fill(200, 140, 120); text('not ready', rx + rw - 12, ry + rowH / 2); }
-      else if (!afford) { fill(200, 140, 120); text(`need ${cost}`, rx + rw - 12, ry + rowH / 2); }
-      else { fill(240, 210, 120); textStyle(BOLD); text(`RAID (${cost})`, rx + rw - 12, ry + rowH / 2); textStyle(NORMAL); }
-      if (clickable) rows.push({ x: rx, y: ry, w: rw, h: rowH, site: s });
-      ry += rowH + 8;
-    }
-    const cb = { x: px + pw / 2 - 44, y: py + ph - 28, w: 88, h: 22 };
-    fill(50, 62, 54); rect(cb.x, cb.y, cb.w, cb.h, 6);
-    fill(210, 224, 212); textAlign(CENTER, CENTER); textSize(12); text('Close', cb.x + cb.w / 2, cb.y + cb.h / 2);
     pop();
-    this._raidDialogRows = { rows, close: cb, panel: { x: px, y: py, w: pw, h: ph } };
+    this._raidPanelRows = { rows, close, panel: { x, y, w, h } };
   }
 
-  _raidDialogClick(mx, my) {
-    if (!this._raidDialogOpen) return;
-    const d = this._raidDialogRows;
-    if (!d) { this._closeRaidDialog(); return; }
+  // Non-modal click routing: consume clicks that land on the panel (raiding a clickable
+  // row, or the × close); return false for anything else so the play area stays live.
+  _raidPanelClick(mx, my) {
+    if (!this._raidPanelOpen) return false;
+    const d = this._raidPanelRows;
+    if (!d) return false;
+    const c = d.close;
+    if (c && mx >= c.x && mx <= c.x + c.w && my >= c.y && my <= c.y + c.h) { this._closeRaidPanel(); return true; }
     for (let i = 0; i < d.rows.length; i++) {
       const r = d.rows[i];
-      if (mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h) { this.attemptRaid(r.site); this._closeRaidDialog(); return; }
+      if (mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h) {
+        if (r.clickable) this.attemptRaid(r.site);
+        return true;   // consume clicks on any row (the panel is non-modal only OUTSIDE it)
+      }
     }
-    const c = d.close;
-    if (c && mx >= c.x && mx <= c.x + c.w && my >= c.y && my <= c.y + c.h) { this._closeRaidDialog(); return; }
     const p = d.panel;
-    if (p && (mx < p.x || mx > p.x + p.w || my < p.y || my > p.y + p.h)) this._closeRaidDialog();   // click outside
+    return !!(p && mx >= p.x && mx <= p.x + p.w && my >= p.y && my <= p.y + p.h);   // swallow clicks on the panel body
   }
 
   // Tap a moa egg on the map → the nearest HUNGRY kea within range flies over to eat
@@ -1903,8 +1992,8 @@ class Game {
     // Endless (= the area entering the LGM): the FIRST winter closes the door on the
     // warm forest. Kawakawa — a frost-tender lowland plant of the mild opening — can no
     // longer be established (stripped from the palette for good), and any standing
-    // groves wither out over that winter. One-shot per run; startSeason is spring, so
-    // this fires during Year 1. See _banKawakawa.
+    // groves wither out over that winter. One-shot per run; the endless year opens on
+    // summer, so the first winter (and this ban) still falls within Year 1. See _banKawakawa.
     if (this.currentLevel && this.currentLevel.endless && seasonKey === 'winter' && !this._kawakawaBanned) {
       this._banKawakawa();
     }
@@ -1956,7 +2045,7 @@ class Game {
     const def = this.activePlaceables[type];
     // Dialog interactions (Nest Raid) open a chooser instead of entering placement
     // mode; the mauri cost is charged per raid inside the dialog, not on selection.
-    if (def && def.opensDialog) { this.selectedPlaceable = null; this._openRaidDialog(); return; }
+    if (def && def.opensDialog) { this.selectedPlaceable = null; this._openRaidPanel(); return; }
     if (def && this.mauri.canAfford(def.cost)) {
       this.selectedPlaceable = type;
     } else if (!def) {
@@ -2252,9 +2341,15 @@ class Game {
       pop();
     }
 
+    // Year transition: fade the whole cast (plants + placed items + fauna) out/in around
+    // the camera pan. globalAlpha multiplies every fill AND image the sim draws, so the
+    // fade is uniform; the terrain (drawn above) stays opaque and pans underneath.
+    const _castAlpha = this._transitionEntityAlpha();
+    if (_castAlpha < 1) drawingContext.globalAlpha = _castAlpha;
     this.simulation.render();
     this.mauri.renderFloatingTexts();
-    
+    if (_castAlpha < 1) drawingContext.globalAlpha = 1;
+
     if (this.selectedPlaceable &&
         (this.state === GAME_STATE.PLAYING || this.state === GAME_STATE.PAUSED)) {
       this.renderPlacementPreview();
@@ -3333,6 +3428,7 @@ function setup() {
   initCachedColors();
   initPlaceableColors();
   initPlantSprites(plantSprites);
+  initPortraitPlantSprites(portraitPlantSprites);
   initializeRegistry();
 
   PROGRESS.init();
@@ -3463,12 +3559,11 @@ function draw() {
     game.render();
   }
 
-  // Free Play climate gauge + raid dialog (screen space, on top). The field guide
-  // is no longer a top overlay — it renders docked in the right bar via GameUI
-  // (renderSidebar / renderFullscreenOverlay), so the sim keeps running behind it.
+  // Free Play climate gauge (screen space, on top). The Nest Raid panel and the field
+  // guide are NOT top overlays — they render docked in the right column via GameUI
+  // (renderSidebar / renderFullscreenOverlay), so the sim keeps running behind them.
   if (game) {
     if (game._climateCfg && typeof game._renderClimateGauge === 'function') game._renderClimateGauge();
-    if (game._raidDialogOpen && typeof game._renderRaidDialog === 'function') game._renderRaidDialog();
   }
 }
 
@@ -3499,7 +3594,9 @@ function mousePressed() {
   // The field guide is docked in the right bar now, not a modal — its clicks are
   // routed through GameUI (handleSidebarClick / handleFullscreenClick), so it no
   // longer intercepts every click here.
-  if (game && game._raidDialogOpen) { game._raidDialogClick(mouseX, mouseY); return; }
+  // Non-modal Nest Raid panel: consume only clicks that land ON the panel; anything
+  // else falls through to the game so the play area stays interactive.
+  if (game && game._raidPanelOpen && game._raidPanelClick(mouseX, mouseY)) return;
   game.handleClick(mouseX, mouseY);
 }
 function keyPressed() {

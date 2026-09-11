@@ -218,7 +218,14 @@ class SeasonManager {
       : 0;
     
     if (this.timer >= this.config.seasonDuration) {
-      this.timer = 0;
+      // Carry the overshoot instead of resetting to 0. dt is a variable frame-time
+      // multiplier (see draw()), so a season nearly always ends a fraction PAST its
+      // duration. Zeroing the timer discarded that fraction every season, so the season
+      // clock drifted behind Game.playTime — and the endless year boundary (and its
+      // camera pan) is driven off playTime (cycle = playTime / 4 seasons). Carrying the
+      // remainder keeps the season index locked to playTime for the whole run, so the
+      // pan always lands exactly on the spring→summer boundary, year after year.
+      this.timer -= this.config.seasonDuration;
       this.currentSeasonIndex = (this.currentSeasonIndex + 1) % 4;
       this.transitionProgress = 0;
       this.justChanged = true;

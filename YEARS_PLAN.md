@@ -168,6 +168,36 @@ Let new forest sites FORM where the player grows forest (decision A's "grow with
 `isForestPatch` helper is ready for it); balance station/cost/penalty and the site count vs
 min-gap on the real map; the mauri spend on a FAILED raid is intentional.
 
+### Refinements (2026-09-11) — verified
+- **Berry Caches spread the flock emergently** (`mauri_kea.js` `_chooseLure`/`_refreshLureFood`).
+  A kea no longer just seeks the NEAREST cache: it holds a COMMITTED choice (re-picked on a jittered
+  ~2.5s timer, or when the choice dies / leaves range), scored per cache as
+  `(lureBaseNutrition + food) ÷ (1 + lureCrowdWeight · kea committed)` × a distance falloff. So the
+  nearest usually wins, but as a cache crowds its per-bird share drops and re-picking kea peel off to
+  emptier/richer/nearer caches — and a freshly placed cache (crowd 0 + base draw) pulls nearby kea
+  onto it even before its berries grow. Food is counted ≤2×/sec and cached on the placeable (shared),
+  so kea eating a patch down also lowers its draw. Tunables on `KEA_SPECIES` (`lureChoiceSec`,
+  `lureBaseNutrition`, `lureCrowdWeight`). *Verified:* nearest when uncrowded, spreads to the far
+  cache when the near one is crowded, holds on mild crowding, single-cache unchanged.
+- **Fullscreen highlight dialog shows the keystone SURVIVAL moa** (`mauri_UI.js`
+  `renderFocusSpeciesButtons`). Endless loss fires only when EVERY moa is gone, but the year's focus
+  rotates onto birds (kea/kākāpō) that never trigger it — so the dialog now ALWAYS appends the
+  keystone moa (upland + little bush = `focalSpecies`) as a warm-amber "!" survival group, de-duped
+  against any already shown as this year's focus. *Verified:* Year-1 tiles = kea + upland + bush; a
+  moa-focus year shows upland, kea, then only bush (no dup).
+- **Nest Raid is now a NON-MODAL side panel** (was a centred modal that greyed the play area).
+  `Game._renderRaidPanel`/`_raidPanelClick` (selecting the tool TOGGLES it). The UI docks it in the
+  right column: **fullscreen** — below the focus-species row, above the field guide (`mauri_UI.js`
+  `renderFullscreenOverlay`); **docked** — below Goals, above Population, at half the event log's
+  height (`renderSidebar`), which also **swaps Population above the Event Log**. It never dims the play
+  area, and clicks off the panel fall through (only panel clicks are consumed). HOVERING a nest row
+  echoes into the play area: that nest is drawn with a **green (raidable) / red (not) tint + the raid
+  success% at its centre**, via a LATE overlay pass (`NestingSite.renderRaidOverlay`, added on top of
+  the cast in both the 2D and 3D sim render so foliage never hides it). **Fullscreen is now the default
+  view** (`CONFIG.fullscreen: true`). *Verified:* panel renders in both views, hover sets the correct
+  site's green/red + %, the tint/% paint on top (pixel-sampled), row clicks raid without closing,
+  off-panel clicks fall through, and the docked order is Goals → Nest Raid → Population → Event Log.
+
 ## 2×2 continuous terrain grid — the camera pans a new area each year (built 2026-09-10)
 
 The endless world is now **ONE continuous landmass** generated once at init, spanning cols×rows
@@ -205,6 +235,16 @@ Gated behind a level `worldGrid` block; classic levels are byte-for-byte unchang
   so the empty transition never trips the all-moa-gone loss — which is also guarded by `_areaTransition`).
   Nesting sites now reject `findWalkablePosition`'s centre-of-map fallback (`_seedNestingSites` checks
   in-band + walkable) so a nest never seeds on scree/ice.
+- **Staged transition (2026-09-11): fade out → pan → fade in.** The move is no longer an instant
+  unload+pan. `Game._yearTransition` runs three phases (`_updateWorldGridPan`): **fadeOut** (~0.6s,
+  the living cast fades as `_transitionEntityAlpha` drops 1→0 — applied as `drawingContext.globalAlpha`
+  around `simulation.render()`, so every plant/placed-item/bird fades uniformly while the terrain stays
+  opaque) → **pan** (unload + the camera pan; the once-per-loop glacial rebake `_maybeGlacialDeepen`
+  runs here, hidden by the empty frame) → **fadeIn** (~0.7s, the new area's freshly-distributed cast
+  fades 0→1). The loss checks are held for the whole transition (`_areaTransition = !!_yearTransition`).
+- **Placed items are cleared on the move (2026-09-11).** `unloadAreaEntities()` now also clears
+  `this.placeables` — a new area is a fresh country, so caches/shelters/storms don't travel. (The
+  placeable grid is a per-frame moving grid, so it rebuilds empty on its own.)
 
 **"Less drastic alps, more podo forest; glacial dominates over the years."** `_applyGridProfile` SCALES
 the land elevation toward the coast at the opening (`openLandScale` 0.58, seed-independent) so the whole
@@ -216,11 +256,28 @@ wall-to-wall ice); west window 35% sea → shore/lowland/forest.
 
 **Wiring.** `CONFIG.worldGrid` piped in `applyLevelToConfig`; `Game.update` ticks `_updateWorldGridPan`.
 
+**Year arc = SUMMER → autumn → winter → SPRING (2026-09-10).** The endless level now opens on
+summer (`startSeason: 'summer'`, was `'spring'`), so a year runs summer → autumn → winter → spring
+and the camera pans to the next quadrant only at the year boundary (spring→summer). A whole year —
+including spring nesting and its ~10s-incubation hatch — plays out in ONE quadrant, so the year-end
+population *shows the breeding season's result* before you move on. Classic levels stay spring-start.
+- **Season↔year lock (the clean pan).** The pan fires off the `playTime`-based `cycle`
+  (`playTime / 4 seasons`) while the visible season is `SeasonManager`'s own timer. That timer used
+  to **reset to 0** on each change, discarding the frame-time overshoot (`dt` = a variable
+  `deltaMultiplier`), so the season clock drifted behind `playTime` and the pan crept off the
+  spring→summer edge over a long run. `update()` now **carries the overshoot** (`timer -= duration`),
+  keeping the season index `== floor(playTime/seasonDuration) % 4` for the whole run. Verified: over
+  6 sim-years of jittery `dt`, 0 season/playTime mismatches and every year boundary lands on summer;
+  the old reset-to-0 logic missed the summer edge on every boundary under the same jitter.
+
 **Follow-ups (known, not yet done).**
 - **Resolution:** `pixelScaleMult` 2 halves terrain detail (blocky). Lower it (≈1.4) for finer land
   at a higher init bake; or interpolate the heightmap for the render maps at a finer detail.
-- **N–S in 3D snaps** (the per-row relief re-bakes at the row change) while 2D pans smoothly; E–W is
-  smooth in both. A crossfade on the row-change re-bake would smooth it.
+- **N–S in 3D snaps — FIXED (2026-09-11), now a crossfade.** The per-row relief re-bake at a row
+  change used to snap. Now the old row's relief buffers are held (`_reliefPrev`) while the new row
+  bakes, and `render()` CROSSFADES old→new across the pan (`_pan.t`), disposed on settle. E–W (X
+  source-crop) and 2D (X+Y crop) still pan smoothly; only the 3D row change dissolves (a literal
+  vertical pan can't be geometrically clean in per-row plan-oblique relief). See the transition below.
 - **Perf on this VM is misleading** (software pixel ops ~20× slower than real HW): init ~4.8s, per-row
   3D bake ~0.8s, render ~55ms here → sub-second / smooth on real hardware. (Classic relief bake also
   reads ~10s on this VM — same cause, not a regression.) Longer term: chunked/async world-gen.

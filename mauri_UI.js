@@ -550,9 +550,21 @@ class GameUI {
     // Focus-species population toggles sit directly below the goals panel.
     this.renderFocusSpeciesButtons();
 
-    // Field guide docks below the focus-species row (translucent over the play area).
+    // Right-column bottom so far (below the focus row); the raid panel + field guide
+    // stack under it in order.
+    let colBottom = this._fsFocusBottomY || (fs.goalsY + goalsH + 24);
+
+    // Nest Raid: a NON-MODAL panel below the focus row, above the field guide.
+    if (this.game._raidPanelActive && this.game._raidPanelActive()) {
+      const rh = Math.round(this.layout.eventLogHeight / 2);
+      const ry = colBottom + 12;
+      this.game._renderRaidPanel(fs.goalsX, ry, this.layout.sidebarPanelWidth, rh);
+      colBottom = ry + rh;
+    }
+
+    // Field guide docks below (the focus row, or the raid panel when it's open).
     if (this.game.encyclopedia && this.game.encyclopedia.open) {
-      const gy = (this._fsFocusBottomY || (fs.goalsY + goalsH + 24)) + 12;
+      const gy = colBottom + 12;
       const gh = this.config.canvasHeight - gy - 20;
       this.game.encyclopedia.renderDocked(
         fs.goalsX, gy, this.layout.sidebarPanelWidth, gh, { translucent: true }
@@ -578,12 +590,31 @@ class GameUI {
       focal = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.focalSpecies) ||
         ((this.simulation.activeSpecies && this.simulation.activeSpecies.moa) || null);
     }
-    if (!focal || !focal.length) {
+
+    // Endless keystone moa: a Free Play run ends only when EVERY moa is gone, so the
+    // keystone moa (upland + little bush — the level's focalSpecies) are what actually
+    // gate a game over. The year's focus rotates onto birds (kea/kākāpō), which never
+    // trigger a loss, so ALWAYS surface these moa here too — as a survival group, and
+    // de-duplicated against any already shown as this year's focus.
+    let survival = [];
+    if (this.game && this.game.currentLevel && this.game.currentLevel.endless) {
+      const M = (typeof LEVEL_MECHANICS !== 'undefined') ? LEVEL_MECHANICS : {};
+      const keystone = (M.focalSpecies || ['upland_moa', 'little_bush_moa'])
+        .filter(k => typeof MOA_SPECIES !== 'undefined' && !!MOA_SPECIES[k]);
+      survival = keystone.filter(k => !focal || !focal.includes(k));
+    }
+
+    if ((!focal || !focal.length) && !survival.length) {
       // No focus row — the guide (if open) docks straight below the goals panel.
       const goalsH0 = 30 + this.game.goals.length * 26;
       this._fsFocusBottomY = this.layout.fs.goalsY + goalsH0 + 24;
       return;
     }
+
+    // Tiles to draw: the year's rotating focus first, then the keystone survival moa
+    // (flagged so they draw distinctly, separated by a small gap).
+    const tiles = (focal || []).map(k => ({ key: k, survival: false }))
+      .concat(survival.map(k => ({ key: k, survival: true })));
 
     // Sit the row just below the goals panel, left-aligned to the same column.
     // The goals panel has a 12px translucent backing skirt around it, so start
@@ -593,8 +624,11 @@ class GameUI {
     const size = 70, gap = 10;
     let x = fs.goalsX;
     const y = fs.goalsY + goalsH + 24;
+    let sepAdded = false;
 
-    for (const key of focal) {
+    for (const t of tiles) {
+      const key = t.key, isSurvival = t.survival;
+      if (isSurvival && !sepAdded) { x += gap; sepAdded = true; }   // separate the survival group
       const isMoa = (typeof MOA_SPECIES !== 'undefined' && !!MOA_SPECIES[key]);
       const regSp = (!isMoa && typeof REGISTRY !== 'undefined' && REGISTRY.getSpecies) ? REGISTRY.getSpecies(key) : null;
       const cfg = isMoa ? MOA_SPECIES[key] : ((regSp && regSp.config) || {});
@@ -605,6 +639,11 @@ class GameUI {
         fill(hc[0] * 0.25, hc[1] * 0.25, hc[2] * 0.25, 225);
         stroke(hc[0], hc[1], hc[2]);
         strokeWeight(3);
+      } else if (isSurvival) {
+        // Warm amber frame marks the keystone-survival group (lose all and it's game over).
+        fill(58, 42, 30, 210);
+        stroke(220, 138, 74);
+        strokeWeight(2);
       } else {
         fill(35, 55, 40, 200);
         stroke(70, 110, 80);
@@ -662,6 +701,21 @@ class GameUI {
       textFont(FreckleFace);
       text(count, x + size / 2, y + size - 2);
       pop();
+
+      // Keystone badge — a small amber "!" disc so the survival group reads at a glance
+      // as "lose all of these and the run ends", distinct from the year's focus tiles.
+      if (isSurvival) {
+        push();
+        noStroke();
+        fill(220, 138, 74);
+        ellipse(x + size - 11, y + 11, 16, 16);
+        fill(30, 22, 14);
+        textAlign(CENTER, CENTER); textSize(12);
+        push(); textFont(FreckleFace);
+        text('!', x + size - 11, y + 10);
+        pop();
+        pop();
+      }
 
       this._fsFocusBtnBounds.push({ key, x, y, size });
       x += size + gap;
@@ -1370,11 +1424,19 @@ class GameUI {
     // Section 1: Goals (top)
     y = this.renderGoalsPanel(x + padding, y);
 
-    // Section 2: Event Log
-    y = this.renderEventLog(x + padding, y + 12);
+    // Section 1b: Nest Raid — a NON-MODAL panel below goals, above population (half the
+    // event log's height). Only present while the tool has toggled it open.
+    if (this.game._raidPanelActive && this.game._raidPanelActive()) {
+      const rh = Math.round(this.layout.eventLogHeight / 2);
+      this.game._renderRaidPanel(x + padding, y + 12, this.layout.sidebarPanelWidth, rh);
+      y = y + 12 + rh;
+    }
 
-    // Section 3: Species Info (with population stats)
+    // Section 2: Species Info (population) — swapped ABOVE the event log.
     y = this.renderSpeciesInfo(x + padding, y + 12);
+
+    // Section 3: Event Log — swapped BELOW the population panel.
+    y = this.renderEventLog(x + padding, y + 12);
 
     // Section 4: Mini Map
     this.renderMiniMap(x + padding, y + 12);

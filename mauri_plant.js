@@ -39,6 +39,17 @@ function initPlantSprites(sprites) {
   PLANT_SPRITES = sprites;
 }
 
+// Portrait-sprite plants: each has 2 alternate sprites (in PORTRAIT_PLANT_SPRITES[type]),
+// one picked at random per plant. Unlike the state-based sprites above these are
+// portrait-oriented and anchored at bottom-centre (the base sits on the ground point),
+// so they get a dedicated render path.
+const PORTRAIT_PLANTS = new Set(['rimu', 'beech', 'dracophyllum', 'matagouri']);
+let PORTRAIT_PLANT_SPRITES = null;
+
+function initPortraitPlantSprites(sprites) {
+  PORTRAIT_PLANT_SPRITES = sprites;
+}
+
 // Pre-computed values shared across all plants
 const PlantStatics = {
   kawakawaAngles: null,
@@ -201,6 +212,11 @@ class Plant {
     
     // Check if this plant uses sprites
     this.usesSprites = SPRITE_PLANTS.has(type);
+
+    // Portrait-sprite plants pick one of their 2 variants at random (fixed for
+    // the plant's lifetime) and render via the dedicated bottom-centre path.
+    this.usesPortraitSprite = PORTRAIT_PLANTS.has(type);
+    this.portraitVariant = this.usesPortraitSprite ? floor(random(2)) : 0;
     
     const plantDef = PLANT_TYPES[type];
     this.baseNutrition = plantDef.nutrition;
@@ -437,7 +453,9 @@ class Plant {
     if (displaySize < 2) return;
     
     // Route to appropriate rendering method
-    if (this.typeId === PLANT_TYPE_ID.kawakawa) {
+    if (this.usesPortraitSprite && PORTRAIT_PLANT_SPRITES && PORTRAIT_PLANT_SPRITES[this.type]) {
+      this._renderPortraitSprite(px, py, displaySize, dormant);
+    } else if (this.typeId === PLANT_TYPE_ID.kawakawa) {
       this._renderKawakawa(px, py, displaySize, dormant);
     } else if (this.usesSprites && PLANT_SPRITES && PLANT_SPRITES[this.type]) {
       this._renderSprite(px, py, displaySize, dormant);
@@ -489,6 +507,51 @@ class Plant {
     }
   }
   
+  // ============================================
+  // PORTRAIT SPRITE RENDERING
+  // Bottom-centre anchored, aspect-ratio preserved. The world point (px, py)
+  // sits at the base of the sprite (x = w*0.5, y = 0 from the base) so the
+  // plant stands up from the ground rather than being centred on it.
+  // ============================================
+
+  _renderPortraitSprite(px, py, displaySize, dormant) {
+    const variants = PORTRAIT_PLANT_SPRITES[this.type];
+    const sprite = variants ? variants[this.portraitVariant] : null;
+
+    if (!sprite) {
+      this._renderGenericPlant(px, py, displaySize, dormant);
+      return;
+    }
+
+    // Shadow at the base
+    noStroke();
+    fill(0, 0, 0, dormant ? 10 : 20);
+    ellipse(px + 1, py + 1, displaySize * 1.2, displaySize * 0.6);
+
+    // Width follows displaySize (footprint), height follows the sprite's aspect
+    // ratio so portrait art keeps its proportions.
+    let spriteW = displaySize;
+    if (this.growth < 0.5) {
+      spriteW = displaySize * (0.5 + this.growth);
+    }
+    const aspect = sprite.height / sprite.width || 1;
+    const spriteH = spriteW * aspect;
+    const halfW = spriteW * 0.5;
+
+    // Cheap sub-pixel sway offset (see _renderSprite) — no per-plant matrix ops.
+    let drawX = px - halfW;
+    if (!dormant && this.seasonalModifier > 0.1) {
+      drawX += PlantStatics.getSway(frameCount, this.swayPhase, this.seasonalModifier) * halfW;
+    }
+    // Bottom of the sprite sits on the ground point (py).
+    image(sprite, drawX, py - spriteH, spriteW, spriteH);
+
+    // Dormant indicator
+    if (dormant) {
+      this._drawDormantIndicator(px, py - spriteH * 0.5);
+    }
+  }
+
   // ============================================
   // KAWAKAWA RENDERING (Pre-rendered buffer)
   // ============================================

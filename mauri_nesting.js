@@ -65,6 +65,31 @@ class NestingSite {
     }
     pop();
   }
+
+  // Raid-hover cue, drawn in a LATE pass (ON TOP of the cast) so foliage never hides it —
+  // set by Game._renderRaidPanel while a nest row is hovered. Tints the nest green
+  // (raidable) or red (not) and prints the raid success% at its centre: a play-area echo
+  // of the panel row under the cursor. Same local frame as render() (own translate to
+  // pos), so it billboards correctly in 3D.
+  renderRaidOverlay() {
+    if (!this._raidHover) return;
+    const r = this.radius;
+    push();
+    translate(this.pos.x, this.pos.y);
+    const ok = this._raidHover.raidable;
+    noStroke();
+    fill(ok ? 70 : 210, ok ? 200 : 66, ok ? 96 : 60, 115);
+    ellipse(0, 0, r * 1.7, r * 1.05);
+    stroke(ok ? 130 : 240, ok ? 235 : 100, ok ? 140 : 92, 225); strokeWeight(2.5); noFill();
+    ellipse(0, 0, r * 1.7, r * 1.05);
+    noStroke();
+    fill(255, 255, 255, 248);
+    textAlign(CENTER, CENTER); textSize(r * 0.5); textStyle(BOLD);
+    if (typeof FreckleFace !== 'undefined') textFont(FreckleFace);
+    text(`${this._raidHover.pct}%`, 0, 0);
+    textStyle(NORMAL);
+    pop();
+  }
 }
 NestingSite._nextId = 1;
 

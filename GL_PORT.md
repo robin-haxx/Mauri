@@ -386,6 +386,22 @@ GL/terrain‑gl, every hook `typeof`‑guarded; `?render=2d` and `?render=gl`(no
   trains summed as SLOPES → one coherent surface normal; **Fresnel sky (haze) reflection** for the
   sparkle; a depth colour ramp (deep blue → teal shallows); a sharp moving sun glint; deeper base
   tint. Reads as calm water with swell + reflection.
+- **Distant terrain no longer streaks — a real receding SKIRT fills the distance (2026‑09‑12).**
+  The far/near over‑scan was a SINGLE row that copied the world's edge row and sat marginFar/Near
+  away in Y, so that one quad‑row stretched the edge colours into **vertical streaks up to the top
+  of the frame** (worst down the low‑elevation coast, where the curtain hangs into view). Replaced
+  with a **band of freshly‑sampled rows** above (worldY<0) and below (worldY>worldH) the world —
+  `terrain.getElevation/getBiomeFromElevation/getColor`, exactly as the 2D relief's
+  `_buildReliefSource` does — so the distance recedes as genuine terrain. The mesh now builds an
+  **extended source** (world rows verbatim + skirt) and the per‑season vertex colours come straight
+  from `_computeSeasonCellColors(seasonKey, extSrc)` (same snow‑line/contour logic as 2D, now over
+  the skirt → distant snow/sea/forest colour correctly). Full column width (uniform quad grid, no
+  side seam); skirt row pitch coarsened by `SKIRT_STEP=2` (hazed distance hides it) so the added
+  mesh stays modest: **+36% rows single‑window (608→830), +18% world‑grid (912→1078)**. `draw()` is
+  unchanged per‑frame (build cached, colours cached+pre‑warmed). Verified with a red/blue skirt‑tint
+  diagnostic (far skirt now a coherent receding band behind the ridge, not coastal streaks), plus a
+  live winter season change and the freeplay 2×2 world grid; 0 GL/JS errors. Knob: raise
+  `view3DOverscan` for a deeper haze vista.
 - Verified across `?render=2d` (default is Enhanced now, but Classic still pixel‑correct), Enhanced
   3D, and Enhanced flat‑2D; 0 GL/JS errors. **Note:** the 2× terrain default makes the GPU mesh
   ~1 M triangles and world‑gen ~2–3× slower (build also pre‑warms 4 season colours, ~330 ms once) —

@@ -781,8 +781,12 @@ class Moa extends Boid {
       simulation.game.tutorial.fireEvent(TUTORIAL_EVENTS.FIRST_EGG, { egg });
     }
     
-    mauri.earn(mauri.onEggLaid, this.pos.x, this.pos.y, 'egg');
-    
+    // Laying earns mauri unless the level opts out (Free Play: breeding income is the
+    // small per-hatch bonus + the steady ecosystem stream, not a per-egg payout).
+    if (!(typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.noEggLaidMauri)) {
+      mauri.earn(mauri.onEggLaid, this.pos.x, this.pos.y, 'egg');
+    }
+
     this.isPregnant = false;
     this.pregnancyTimer = 0;
     this.hunger += 15;
@@ -1198,10 +1202,10 @@ class Moa extends Boid {
     // read like an effect radius; the low-population warning stays a separate red
     // ring (renderLowPopRing) drawn in renderIndicators so it sits above trees.
 
-    // Shadow
-    noStroke();
-    fill(0, 0, 0, 25);
-    ellipse(1.5, 1.5, this.size * 1.0, this.size * 0.5);
+    // Shadow — sprite-shaped on GL (bake-free silhouette), ellipse blob on 2D.
+    const _shW = this.size * 2.5 * (this.speciesConfig.spriteScale || 1);
+    EntitySprites.drawSpriteShadow(sprite, 1.5, 1.5, _shW, _shW,
+      { alpha: 0.11, squash: 0.34, wide: 0.72, fbW: this.size * 1.0, fbH: this.size * 0.5 });
     
     // Only update facing while actually moving: heading() of a near-zero
     // velocity is pure noise and made stationary moa spin on the spot
@@ -1239,17 +1243,12 @@ class Moa extends Boid {
     pop();
   }
 
-  // Pulsing red vulnerable-founder ring. Called from renderIndicators, and
-  // re-drawn above the tutorial overlay for tips flagged ringsAboveUI.
-  renderLowPopRing() {
-    if (!this._highlightActive) return;
-    const _pulse = 0.5 + 0.5 * Math.sin(frameCount * 0.12);
-    const _d = this.size * (2.8 + _pulse * 1.4);
-    noFill();
-    stroke(255, 70, 60, 120 + _pulse * 120);
-    strokeWeight(1.5);
-    ellipse(this.pos.x, this.pos.y, _d, _d);
-  }
+  // Vulnerable-founder marker. The red pulsing ring was removed (it read as a harsh
+  // "red circle" over the highlighted/focus species); the species highlight now shows
+  // ONLY as the coloured sprite-silhouette outline (highlightOutlineColor), which the
+  // focus/vulnerable species already carry via SPECIES_HIGHLIGHT. Kept as a no-op so the
+  // renderIndicators / tutorial-overlay callers need no change.
+  renderLowPopRing() {}
 
   renderIndicators() {
     const px = this.pos.x, py = this.pos.y, s = this.size;

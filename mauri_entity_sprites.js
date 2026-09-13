@@ -329,6 +329,40 @@ const EntitySprites = {
     if (dc) dc.globalAlpha = a;                 // cheap per-draw fade — never tint()
     image(halo, 0, 0, halo.width * kx, halo.height * ky);
     if (dc) dc.globalAlpha = prev;
+  },
+
+  // Sprite-SHAPED ground shadow, reusing the bake-free silhouette path (the same one
+  // the highlight outline uses). On GL the sprite's own alpha shape is stamped ONCE as a
+  // dark, flattened, translucent pool — one quad, no bake, the same cost as the old
+  // ellipse but shaped like the creature/plant instead of a blob. On the 2D path (no
+  // cheap silhouette) it falls back to the original ellipse.
+  //   (cx,cy)      shadow centre in the CURRENT transform (usually the entity's base)
+  //   drawW,drawH  the sprite's on-screen draw size (the silhouette is sized from this)
+  //   opts.alpha   darkness 0..1                       (default 0.12)
+  //   opts.squash  vertical flatten of the silhouette  (default 0.42 — lies on the ground)
+  //   opts.wide    horizontal scale of the silhouette  (default 0.9)
+  //   opts.mirror  <0 flips it (match a mirrored sprite)
+  //   opts.fbW/fbH ellipse size for the 2D fallback    (default the sprite box × squash)
+  drawSpriteShadow(sprite, cx, cy, drawW, drawH, opts) {
+    const o = opts || {};
+    const alpha = (o.alpha != null) ? o.alpha : 0.12;
+    const squash = (o.squash != null) ? o.squash : 0.42;
+    if (sprite && typeof GLBatch !== 'undefined' && GLBatch.enabled && GLBatch._open) {
+      push();
+      imageMode(CENTER);
+      if (o.mirror < 0) { translate(cx, cy); scale(-1, 1); translate(-cx, -cy); }
+      tint(0, 0, 0, 255 * alpha);
+      GLBatch._silhouette = true;
+      image(sprite, cx, cy, drawW * (o.wide != null ? o.wide : 0.9), drawH * squash);
+      GLBatch._silhouette = false;
+      noTint();
+      pop();
+      return;
+    }
+    // 2D fallback: the original soft ellipse blob.
+    noStroke();
+    fill(0, 0, 0, 255 * alpha);
+    ellipse(cx, cy, (o.fbW != null ? o.fbW : drawW), (o.fbH != null ? o.fbH : drawH * squash));
   }
 };
 

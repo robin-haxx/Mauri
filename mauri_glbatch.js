@@ -366,40 +366,48 @@ const GLBatch = {
     return true;
   },
 
+  // Edge fade: 1 in the interior, smoothstep down to 0 at the very edge across the
+  // outer _edgeMarginPx px. Nearest of the four screen edges wins. A method (not a
+  // per-_emit closure) so the hot capture path allocates nothing — see _emit.
+  _edgeAlpha(sx, sy, a) {
+    const mp = this._edgeMarginPx;
+    if (mp <= 0) return a;
+    const W = this.W, H = this.H;
+    let d = sx; const rr = W - sx; if (rr < d) d = rr;
+    if (sy < d) d = sy; const bb = H - sy; if (bb < d) d = bb;
+    if (d >= mp) return a;
+    if (d <= 0) return 0;
+    const t = d / mp;
+    return a * t * t * (3 - 2 * t);
+  },
+
   // Map a local rect through the CTM to clip space and push two triangles.
   // sil: 1 = silhouette (pure-colour) quad, 0 = normal textured quad.
+  // Fully inlined (no per-call closures): this runs once per sprite AND once per shadow
+  // disc — hundreds of times a frame — so any allocation here becomes GC-pause churn.
   _emit(te, m, lx0, ly0, lx1, ly1, u0, v0, u1, v1, r, g, b, a, sil) {
     if (te.tex !== this._curTex) { this._flush(); this._curTex = te.tex; }
     if (this._n + 6 > this._cap) this._flush();
     const W = this.W, H = this.H;
     const ma = m.a, mb = m.b, mc = m.c, md = m.d, me = m.e, mf = m.f;
-    // Each corner: map local → screen pixels (for both the clip position and the
-    // per-vertex edge-fade alpha), then pixels → clip space.
-    const SX = (lx, ly) => ma * lx + mc * ly + me;
-    const SY = (lx, ly) => mb * lx + md * ly + mf;
-    const mp = this._edgeMarginPx;
-    // Edge fade: 1 in the interior, smoothstep down to 0 at the very edge across the
-    // outer mp px. Nearest of the four edges wins, so a corner near two edges is dimmest.
-    const edgeA = (sx, sy) => {
-      if (mp <= 0) return a;
-      let d = sx; const rr = W - sx; if (rr < d) d = rr;
-      if (sy < d) d = sy; const bb = H - sy; if (bb < d) d = bb;
-      if (d >= mp) return a;
-      if (d <= 0) return 0;
-      const t = d / mp;
-      return a * t * t * (3 - 2 * t);
-    };
-    const sxTL = SX(lx0, ly0), syTL = SY(lx0, ly0);
-    const sxTR = SX(lx1, ly0), syTR = SY(lx1, ly0);
-    const sxBR = SX(lx1, ly1), syBR = SY(lx1, ly1);
-    const sxBL = SX(lx0, ly1), syBL = SY(lx0, ly1);
-    const V = this._verts; let o = this._n * this.FLOATS_PER_VERT;
-    const put = (sx, sy, u, v) => {
-      const x = (sx / W) * 2 - 1, y = 1 - (sy / H) * 2, va = edgeA(sx, sy);
-      V[o]=x; V[o+1]=y; V[o+2]=u; V[o+3]=v; V[o+4]=r; V[o+5]=g; V[o+6]=b; V[o+7]=va; V[o+8]=sil; o+=9;
-    };
-    put(sxTL, syTL, u0, v0); put(sxTR, syTR, u1, v0); put(sxBR, syBR, u1, v1);
-    put(sxTL, syTL, u0, v0); put(sxBR, syBR, u1, v1); put(sxBL, syBL, u0, v1);
+    // Four corners → screen px (for both clip position and edge-fade alpha).
+    const sxTL = ma * lx0 + mc * ly0 + me, syTL = mb * lx0 + md * ly0 + mf;
+    const sxTR = ma * lx1 + mc * ly0 + me, syTR = mb * lx1 + md * ly0 + mf;
+    const sxBR = ma * lx1 + mc * ly1 + me, syBR = mb * lx1 + md * ly1 + mf;
+    const sxBL = ma * lx0 + mc * ly1 + me, syBL = mb * lx0 + md * ly1 + mf;
+    // → clip space + per-corner edge alpha.
+    const cxTL = (sxTL / W) * 2 - 1, cyTL = 1 - (syTL / H) * 2, aTL = this._edgeAlpha(sxTL, syTL, a);
+    const cxTR = (sxTR / W) * 2 - 1, cyTR = 1 - (syTR / H) * 2, aTR = this._edgeAlpha(sxTR, syTR, a);
+    const cxBR = (sxBR / W) * 2 - 1, cyBR = 1 - (syBR / H) * 2, aBR = this._edgeAlpha(sxBR, syBR, a);
+    const cxBL = (sxBL / W) * 2 - 1, cyBL = 1 - (syBL / H) * 2, aBL = this._edgeAlpha(sxBL, syBL, a);
+    const V = this._verts, FP = this.FLOATS_PER_VERT; let o = this._n * FP;
+    // 6 verts: TL, TR, BR, TL, BR, BL.
+    V[o]=cxTL;V[o+1]=cyTL;V[o+2]=u0;V[o+3]=v0;V[o+4]=r;V[o+5]=g;V[o+6]=b;V[o+7]=aTL;V[o+8]=sil;o+=FP;
+    V[o]=cxTR;V[o+1]=cyTR;V[o+2]=u1;V[o+3]=v0;V[o+4]=r;V[o+5]=g;V[o+6]=b;V[o+7]=aTR;V[o+8]=sil;o+=FP;
+    V[o]=cxBR;V[o+1]=cyBR;V[o+2]=u1;V[o+3]=v1;V[o+4]=r;V[o+5]=g;V[o+6]=b;V[o+7]=aBR;V[o+8]=sil;o+=FP;
+    V[o]=cxTL;V[o+1]=cyTL;V[o+2]=u0;V[o+3]=v0;V[o+4]=r;V[o+5]=g;V[o+6]=b;V[o+7]=aTL;V[o+8]=sil;o+=FP;
+    V[o]=cxBR;V[o+1]=cyBR;V[o+2]=u1;V[o+3]=v1;V[o+4]=r;V[o+5]=g;V[o+6]=b;V[o+7]=aBR;V[o+8]=sil;o+=FP;
+    V[o]=cxBL;V[o+1]=cyBL;V[o+2]=u0;V[o+3]=v1;V[o+4]=r;V[o+5]=g;V[o+6]=b;V[o+7]=aBL;V[o+8]=sil;o+=FP;
     this._n += 6;
   },
 
@@ -436,10 +444,17 @@ const GLBatch = {
   // ---- fill parsing -----------------------------------------------------------
   // Read the disc colour from the live fillStyle p5 set with fill(). p5 emits
   // 'rgba(r,g,b,a)' / 'rgb(r,g,b)' / '#rrggbb'. Cached on the exact string.
-  _fillCacheKey: null, _fillCacheVal: { r: 0, g: 0, b: 0, a: 1 },
+  // MULTI-ENTRY cache: a single entry thrashed in the real mixed render order (plant
+  // shadows at alpha 20, moa shadows at 25, dormant at 10, UI dots…), re-parsing — and
+  // re-allocating — a colour object every frame. Keyed on the exact fillStyle string,
+  // each distinct colour is parsed once; steady state allocates nothing. Bounded so an
+  // unusual spread of colours can't grow it without limit.
+  _fillCache: null, _fillCacheN: 0, _fillCacheVal: { r: 0, g: 0, b: 0, a: 1 },
   _parseFill(style) {
     if (typeof style !== 'string') return this._fillCacheVal;
-    if (style === this._fillCacheKey) return this._fillCacheVal;
+    let cache = this._fillCache || (this._fillCache = {});
+    const hit = cache[style];
+    if (hit) { this._fillCacheVal = hit; return hit; }
     let r = 0, g = 0, b = 0, a = 1;
     const m = style.match(/rgba?\(([^)]+)\)/i);
     if (m) { const p = m[1].split(',').map(s => parseFloat(s));
@@ -448,9 +463,11 @@ const GLBatch = {
       let h = style.slice(1); if (h.length === 3) h = h.split('').map(c => c + c).join('');
       r = parseInt(h.slice(0, 2), 16) / 255; g = parseInt(h.slice(2, 4), 16) / 255; b = parseInt(h.slice(4, 6), 16) / 255;
     }
-    this._fillCacheKey = style;
-    this._fillCacheVal = { r, g, b, a };
-    return this._fillCacheVal;
+    if (this._fillCacheN >= 64) { cache = this._fillCache = {}; this._fillCacheN = 0; }  // bound it
+    const val = { r, g, b, a };
+    cache[style] = val; this._fillCacheN++;
+    this._fillCacheVal = val;
+    return val;
   },
 
   // Wrap ellipse()/circle() so a captured shadow/halo becomes a disc quad while the

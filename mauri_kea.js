@@ -61,6 +61,16 @@ class Kea extends Kereru {
     this._lureChoiceFrames = (sp.lureChoiceSec ?? 2.5) * 60;
     this._lureBaseNutrition = sp.lureBaseNutrition ?? 6; // a placed cache attracts even before its berries grow
     this._lureCrowdWeight   = sp.lureCrowdWeight ?? 1.0; // ↑ = the flock spreads harder off a crowded cache
+
+    // Perch-tree spread (Slice C): kea don't all pile onto the single richest tree by a
+    // cache — they penalise a tree already crowded with kea, and favour trees near a moa
+    // nesting site, so the flock fans out across the forest and stations where a raid can
+    // actually happen (rather than clumping at the cache and softlocking the raid).
+    this._perchCrowdWeight = sp.perchCrowdWeight ?? 4.0; // ↑ = spread harder off a crowded tree
+    this._perchSiteBonus   = sp.perchSiteBonus ?? 6;     // score bonus for a tree near a nesting site
+    // A tree counts as "near a site" out to the RAID station radius, so a preferred perch
+    // is always one that also counts as stationed (they were settling just outside it).
+    this._perchSiteRadius  = sp.perchSiteRadius ?? ((M.keaRaid && M.keaRaid.stationRadius) || 240);
   }
 
   // Stash the season manager so _preferredElevBand (reached deep in the base state
@@ -101,7 +111,14 @@ class Kea extends Kereru {
       }
       const lure = this._lureChoice;
       if (lure) {
-        this.applyForce(this.seekPoint(lure.pos.x, lure.pos.y, 0.85, (lure.def && lure.def.radius) || 70));
+        const lr = (lure.def && lure.def.radius) || 70;
+        const dx = lure.pos.x - this.pos.x, dy = lure.pos.y - this.pos.y;
+        // Only pull toward the cache while still ARRIVING; once on the patch, let the perch
+        // anchor + crowd-spread fan the flock across the trees (don't pile on the centre —
+        // that clumping was leaving too few kea stationed at a nest to raid).
+        if (dx * dx + dy * dy > lr * lr) {
+          this.applyForce(this.seekPoint(lure.pos.x, lure.pos.y, 0.85, lr));
+        }
       } else if (!this._perchValid()) {
         const pt = this._bandwardPoint();
         if (pt) this.applyForce(this.seekPoint(pt.x, pt.y, 0.6));
@@ -126,18 +143,40 @@ class Kea extends Kereru {
     if (!sim.getNearbyPlants) return;
     const isForest = (typeof FOREST_TREES !== 'undefined') ? FOREST_TREES : null;
     if (!isForest) return;
-    const trees = sim.getNearbyPlants(this.pos.x, this.pos.y, this._feedRadius * 1.6);
-    let best = null, bestScore = -1;
+    // Search a bit wider than before so a kea can reach a spread-out or site-adjacent tree.
+    const trees = sim.getNearbyPlants(this.pos.x, this.pos.y, this._feedRadius * 2.0);
+    const flock = (sim.otherEntities && sim.otherEntities.kea) || [];
+    const sites = sim.nestingSites || [];
+    const crowdR2 = 55 * 55, siteR2 = this._perchSiteRadius * this._perchSiteRadius;
+    let best = null, bestScore = -Infinity;
     for (let i = 0; i < trees.length; i++) {
       const p = trees[i];
       if (!p.alive || p._consumed || p.dormant || p.growth < 0.5 || !isForest.has(p.type)) continue;
+      // Food around the tree.
       const near = sim.getNearbyPlants(p.pos.x, p.pos.y, 60);
       let food = 0;
       for (let j = 0; j < near.length; j++) {
         const q = near[j];
         if (q.alive && q.growth >= 0.4 && (isForest.has(q.type) || q.type === 'coprosma')) food++;
       }
-      if (food > bestScore) { bestScore = food; best = p; }
+      // Crowd term: other kea already perched on/near this tree — spread off crowded trees.
+      let crowd = 0;
+      for (let k = 0; k < flock.length; k++) {
+        const o = flock[k];
+        if (o === this || !o.alive || !o._perchTree) continue;
+        const dx = o._perchTree.pos.x - p.pos.x, dy = o._perchTree.pos.y - p.pos.y;
+        if (dx * dx + dy * dy < crowdR2) crowd++;
+      }
+      // Site bonus: favour trees near a moa nesting site (so the flock stations to raid).
+      let siteBonus = 0;
+      for (let s = 0; s < sites.length; s++) {
+        const st = sites[s];
+        if (!st.alive) continue;
+        const dx = st.pos.x - p.pos.x, dy = st.pos.y - p.pos.y;
+        if (dx * dx + dy * dy < siteR2) { siteBonus = this._perchSiteBonus; break; }
+      }
+      const score = food + siteBonus - crowd * this._perchCrowdWeight;
+      if (score > bestScore) { bestScore = score; best = p; }
     }
     if (best) this._perchTree = best;
   }

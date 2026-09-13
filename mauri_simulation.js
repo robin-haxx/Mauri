@@ -224,7 +224,19 @@ class Simulation {
   spawnAreaEntities() {
     const snap = this._areaSnapshot;
     this.spawnPlants();
-    if (snap) {
+    this._restoreForestLegacy();   // partly re-grow the forest you cultivated here last visit
+    const yp = this._yearStartPops;
+    if (yp) {
+      // Reset-to-default (+ per-area nudge): populations don't haul across areas — Game
+      // computed this year's starting counts (defaults nudged by past performance here),
+      // so spawn exactly those on the fresh ground.
+      if (yp.moa && Object.keys(yp.moa).length) this._spawnDistributedMoas(yp.moa);
+      this._biasClosestPairSexes();
+      for (let i = 0; i < (yp.eagles || 0); i++) this.spawnEagle();
+      if (yp.others) for (const type in yp.others) this._spawnOtherEntities(type, yp.others[type]);
+      this._yearStartPops = null;
+    } else if (snap) {
+      // Classic carry (non-endless levels): re-place the snapshot populations verbatim.
       if (Object.keys(snap.moa).length) this._spawnDistributedMoas(snap.moa);
       this._biasClosestPairSexes();
       for (let i = 0; i < snap.eagles; i++) this.spawnEagle();
@@ -232,6 +244,34 @@ class Simulation {
     }
     this._seedNestingSites();
     this._areaSnapshot = null;
+  }
+
+  // Count live podocarp forest trees (rimu/beech/fern) — used for the forest legacy.
+  countForestTrees() {
+    if (typeof FOREST_TREES === 'undefined') return 0;
+    let n = 0;
+    for (let i = 0; i < this.plants.length; i++) {
+      const p = this.plants[i];
+      if (p.alive && FOREST_TREES.has(p.type)) n++;
+    }
+    return n;
+  }
+
+  // Forest legacy: after fresh plants are laid for the new area, grow back a fraction of
+  // the forest you had here last visit (Game sets _forestLegacyTarget). A head start on the
+  // podocarp refuge for areas you tended — without hauling the whole forest across.
+  _restoreForestLegacy() {
+    const target = this._forestLegacyTarget || 0;
+    this._forestLegacyTarget = 0;
+    if (target <= 0 || !this.growForestAt) return;
+    const M = (typeof LEVEL_MECHANICS !== 'undefined') ? LEVEL_MECHANICS : {};
+    const band = (M.forestContraction && M.forestBand) ||
+                 (M.nestingSites && M.nestingSites.forestBand) || { min: 0.36, max: 0.48 };
+    let grown = 0;
+    for (let tries = 0; tries < target * 4 && grown < target; tries++) {
+      const p = this.findWalkablePosition(band.min, band.max);
+      if (p && this.growForestAt(p.x, p.y, 40, 99)) grown++;
+    }
   }
 
   // ============================================
@@ -246,11 +286,21 @@ class Simulation {
     const M = (typeof LEVEL_MECHANICS !== 'undefined') ? LEVEL_MECHANICS : {};
     const cfg = M.nestingSites;
     if (!cfg || typeof NestingSite === 'undefined') return;
+    // Per-year override (Game._beginFreeplayYear sets this from the schedule): fewer
+    // sites and/or a half-map region constraint (the kea year seeds all sites on the
+    // left/forest half). Falls back to the level's defaults.
+    const ov = this._nestingOverride || null;
     const forestBand = cfg.forestBand || { min: 0.36, max: 0.48 };
     const openBand = cfg.openBand || { min: 0.18, max: 0.34 };
     const radius = cfg.radius ?? 46;
-    const forestCount = cfg.forestCount ?? 2;
-    const openCount = cfg.openCount ?? 3;
+    const forestCount = (ov && ov.forestCount != null) ? ov.forestCount : (cfg.forestCount ?? 2);
+    const openCount = (ov && ov.openCount != null) ? ov.openCount : (cfg.openCount ?? 3);
+    const region = ov && ov.region;
+    const inRegion = (x) => {
+      if (region === 'left')  return x < this.worldWidth * 0.5;
+      if (region === 'right') return x >= this.worldWidth * 0.5;
+      return true;
+    };
     // Keep sites from overlapping: a new site must sit at least minGap from every
     // existing one (default 2.6 radii apart, so their raid/egg circles never touch).
     const minGap = cfg.minGap != null ? cfg.minGap : radius * 2.6;
@@ -272,6 +322,7 @@ class Simulation {
         // area has no room in the band, we simply place fewer sites.
         const e = this.terrain.getElevationAt(p.x, p.y);
         if (e <= band.min || e >= band.max || !this.terrain.isWalkable(p.x, p.y)) continue;
+        if (!inRegion(p.x)) continue;
         if (!farEnough(p.x, p.y)) continue;
         this.nestingSites.push(new NestingSite(p.x, p.y, { radius, habitat }));
         return;
@@ -702,6 +753,20 @@ class Simulation {
   // Emergent reproduction, mirroring _hatchEagleEgg; the bird lives in
   // otherEntities[type]. Cap-guarded by the species' own maxPopulation — an
   // over-cap egg is simply lost rather than lingering.
+  // Diminishing per-hatch mauri. With LEVEL_MECHANICS.hatchReward: `fullAmount` (or
+  // mauri.onEggHatch) at/under `full`, `reducedAmount` up to `reduced`, then 0 — counted
+  // per species when `perSpecies`. Without the knob: the default 10 / half>10 / 0>15 taper.
+  _hatchRewardFor(speciesKey, mauri) {
+    const t = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.hatchReward) || null;
+    if (!t) {
+      const pop = this.getSpeciesCount(speciesKey) - 1;
+      return pop > 15 ? 0 : pop > 10 ? mauri.onEggHatch * 0.5 : mauri.onEggHatch;
+    }
+    const pop = (t.perSpecies ? this.getSpeciesCount(speciesKey) : this.getMoaPopulation()) - 1;
+    const full = (t.fullAmount != null) ? t.fullAmount : mauri.onEggHatch;
+    return pop > t.reduced ? 0 : pop > t.full ? (t.reducedAmount ?? 5) : full;
+  }
+
   _hatchFlyerEgg(egg, type) {
     if (!this.otherEntities[type]) this.otherEntities[type] = [];
     const flock = this.otherEntities[type];
@@ -737,6 +802,13 @@ class Simulation {
     if (this.stats && this.stats.births !== undefined) this.stats.births++;
     const name = (sp && sp.displayName) || (chick.species && chick.species.displayName) || type;
     if (this.game) this.game.addNotification(`A ${name} has hatched!`, 'success');
+
+    // Small hatch bonus for flighted birds too, when the level opts in (hatchReward.allSpecies).
+    const _t = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.hatchReward) || null;
+    if (_t && _t.allSpecies && this.game && this.game.mauri) {
+      const r = this._hatchRewardFor(type, this.game.mauri);
+      if (r > 0) this.game.mauri.earn(r, egg.pos.x, egg.pos.y, 'hatch');
+    }
   }
 
   findWalkablePosition(minElev, maxElev) {
@@ -1530,20 +1602,8 @@ class Simulation {
             // LEVEL_MECHANICS.hatchReward = { full, reduced, reducedAmount }:
             // full reward while the TOTAL flock (before this hatch) is at/below
             // `full`, a flat `reducedAmount` up to `reduced`, nothing beyond.
-            // Default (no knob): per-species taper — 0.5x above 10, 0 above 15.
-            const _hrTiers = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.hatchReward) || null;
-            let _hatchReward;
-            if (_hrTiers) {
-              const _flock = this.getMoaPopulation() - 1;   // excludes the newborn
-              _hatchReward = _flock > _hrTiers.reduced ? 0
-                           : _flock > _hrTiers.full ? (_hrTiers.reducedAmount ?? 5)
-                           : mauri.onEggHatch;
-            } else {
-              const _parentPop = this.getSpeciesCount(newMoa.speciesKey) - 1;
-              _hatchReward = _parentPop > 15 ? 0
-                           : _parentPop > 10 ? mauri.onEggHatch * 0.5
-                           : mauri.onEggHatch;
-            }
+            // Diminishing per-hatch mauri (see _hatchRewardFor).
+            const _hatchReward = this._hatchRewardFor(newMoa.speciesKey, mauri);
             if (_hatchReward > 0) mauri.earn(_hatchReward, egg.pos.x, egg.pos.y, 'hatch');
 
             if (this.game.tutorial) {

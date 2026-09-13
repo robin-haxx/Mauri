@@ -34,6 +34,54 @@ class Kakapo extends Kereru {
     this._cruiseAlt = 0;
     this._perchAlt = 0;
     this._altitude = 0;
+
+    // Territorial lek tuning (see behave). Males hold a court and repel rival males.
+    const sp = (speciesData && speciesData.config) ? speciesData.config : KAKAPO_SPECIES;
+    this._lekRadius = sp.lekRadius ?? 120;
+    this._lekRadiusSq = this._lekRadius * this._lekRadius;
+    this._territoryPush = sp.territoryPush ?? 0.05;
+    this._territoryHold = sp.territoryHold ?? 0.02;
+    this._lekAttract = sp.lekAttract ?? 0.03;
+    this._territory = null;   // a male's claimed court (set when it first walks the ground)
+  }
+
+  // Territorial lek behaviour (a basic version of the real thing). After the base ground
+  // loop steers, a MALE holds a spaced court and drives rival males out of it — so males
+  // can't pack tightly and a mast year can't hand a runaway population boom (a steadier
+  // result when you miss the mast goal, and a clearer payoff for defending a good lek). In
+  // a mast a FEMALE drifts toward the nearest male's court to pair. Skipped while a bird is
+  // storm-sheltered or not moving, so shelter and feeding aren't fought.
+  behave(sim, mauri, seasonManager, dt) {
+    super.behave(sim, mauri, seasonManager, dt);
+    if (this._grounded || this.state !== KERERU_STATE.FLYING) return;
+    const list = sim.otherEntities && sim.otherEntities[this.speciesKey];
+    if (!list || list.length < 2) return;
+    const px = this.pos.x, py = this.pos.y;
+
+    if (!this.isFemale) {
+      if (!this._territory) this._territory = createVector(px, py);
+      let rx = 0, ry = 0, n = 0;
+      for (let i = 0; i < list.length; i++) {
+        const o = list[i];
+        if (o === this || !o.alive || o.isFemale) continue;
+        const dx = px - o.pos.x, dy = py - o.pos.y, dSq = dx * dx + dy * dy;
+        if (dSq > 0.01 && dSq < this._lekRadiusSq) {
+          const inv = 1 / Math.sqrt(dSq);
+          rx += dx * inv; ry += dy * inv; n++;
+        }
+      }
+      if (n > 0) this.applyForce(this.seekPoint(px + rx * 30, py + ry * 30, this._territoryPush));
+      this.applyForce(this.seekPoint(this._territory.x, this._territory.y, this._territoryHold));
+    } else if (sim.mastYear) {
+      let best = null, bestSq = Infinity;
+      for (let i = 0; i < list.length; i++) {
+        const o = list[i];
+        if (!o.alive || o.isFemale) continue;
+        const dx = o.pos.x - px, dy = o.pos.y - py, dSq = dx * dx + dy * dy;
+        if (dSq < bestSq) { bestSq = dSq; best = o; }
+      }
+      if (best) this.applyForce(this.seekPoint(best.pos.x, best.pos.y, this._lekAttract));
+    }
   }
 
   // Kākāpō do NOT flee a hunting raptor — they freeze and rely on camouflage. The
@@ -116,7 +164,15 @@ const KAKAPO_SPECIES = {
   mateRadius:       180,
   reproCheckSec:    4,
   maxPopulation:    10,
-  populationFloor:  2
+  populationFloor:  2,
+
+  // Territorial lek (kākāpō-specific) — see Kakapo.behave. Males hold spaced courts and
+  // drive rival males off, so a mast can't hand a runaway boom (more consistent results);
+  // a well-grown, well-spaced lek still breeds and is worth defending.
+  lekRadius:      120,     // males keep ~this far apart (repel rival males within it)
+  territoryPush:  0.05,    // how hard a male drives rival males out of its court
+  territoryHold:  0.02,    // how hard a male holds to its own court
+  lekAttract:     0.03     // how hard a mast-year female drifts to the nearest court
 };
 
 // Register the kākāpō as a flighted-bird TYPE for egg-hatch routing (Simulation

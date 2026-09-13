@@ -158,6 +158,23 @@ class GameUI {
       sidebarPanelWidth: this.sidebar.width - 30
     };
 
+    // Unified season/year RING — one element in place of the old season panel +
+    // TIME panel + level-countdown dial. Centred over the span those three occupied.
+    const _clockSpan = LEVEL_CLOCK.enabled ? (LEVEL_CLOCK.gap + LEVEL_CLOCK.size) : 0;
+    this.layout.ringR = 78;
+    this.layout.ringCX = (this.layout.seasonX + this.layout.timerX + timerWidth + _clockSpan) / 2;
+    this.layout.ringCY = 20 + this.layout.ringR;
+
+    // Mauri counter as a large circular dial, sitting just LEFT of the season ring.
+    this.layout.mauriRingR = 56;
+    this.layout.mauriRingCX = this.layout.ringCX - this.layout.ringR - 26 - this.layout.mauriRingR;
+    this.layout.mauriRingCY = this.layout.ringCY;
+
+    // Ecosystem (avg-pop / balance) dial, sitting just RIGHT of the season ring. Endless only.
+    this.layout.popDialR = 56;
+    this.layout.popDialCX = this.layout.ringCX + this.layout.ringR + 26 + this.layout.popDialR;
+    this.layout.popDialCY = this.layout.ringCY;
+
     // If sidebar is narrower, shrink toolbar buttons slightly to fit
     // (toolbar is in the game area, not sidebar, but this keeps proportions)
     if (gameAreaWidth < 1200) {
@@ -209,6 +226,15 @@ class GameUI {
       seasonX: this.layout.seasonX,
       timerX: this.layout.timerX,
       clockX: this.layout.clockX,
+      ringCX: this.layout.ringCX,
+      ringCY: this.layout.ringCY,
+      ringR: this.layout.ringR,
+      mauriRingCX: this.layout.mauriRingCX,
+      mauriRingCY: this.layout.mauriRingCY,
+      mauriRingR: this.layout.mauriRingR,
+      popDialCX: this.layout.popDialCX,
+      popDialCY: this.layout.popDialCY,
+      popDialR: this.layout.popDialR,
       fsBtnX: this.layout.fsBtnX,
       guideBtnX: this.layout.guideBtnX,
       pauseBtnX: this.layout.pauseBtnX,
@@ -499,25 +525,25 @@ class GameUI {
   renderTopBar() {
     const contentY = 20;
 
-    // Mauri counter (centered left)
-    this.renderMauriCounter(this.layout.mauriX, contentY);
+    // Mauri counter — a large circular dial just left of the season ring.
+    this.renderMauriRing(this.layout.mauriRingCX, this.layout.mauriRingCY, this.layout.mauriRingR);
 
-    // Season & Migration info (center)
-    this.renderSeasonPanel(this.layout.seasonX, contentY);
+    // Unified season/year/time ring (replaces the season panel, TIME panel and
+    // level-countdown dial — one element for season progress, the year and the level).
+    this.renderSeasonRing(this.layout.ringCX, this.layout.ringCY, this.layout.ringR);
 
-    // Timer (centered right)
-    this.renderTimer(this.layout.timerX, contentY);
-
-    // Level countdown dial, immediately right of the timer
-    this.renderLevelClock(this.layout.clockX, contentY);
+    // Ecosystem dial (endless): avg population + balance + mauri/sec, right of the ring.
+    if (this.game.currentLevel && this.game.currentLevel.endless) {
+      this.renderPopDial(this.layout.popDialCX, this.layout.popDialCY, this.layout.popDialR);
+    }
 
     // Field-guide + fullscreen + pause buttons (right edge, before sidebar)
     this.renderGuideButton(this.layout.guideBtnX, this.layout.pauseBtnY);
     this.renderFullscreenButton(this.layout.fsBtnX, this.layout.pauseBtnY);
     this.renderPauseButton(this.layout.pauseBtnX, this.layout.pauseBtnY);
 
-    // Migration hint row (bottom of top bar, centered)
-    this.renderMigrationHint(this.layout.migrationHintX, 110);
+    // (The seasonal message/subtitle info bar was removed — important one-off events go
+    // to the event log via notifications instead of a persistent bar.)
   }
 
   // ==========================================
@@ -529,10 +555,11 @@ class GameUI {
   renderFullscreenOverlay() {
     const fs = this.layout.fs;
 
-    this.renderMauriCounter(fs.mauriX, fs.stripY);
-    this.renderSeasonPanel(fs.seasonX, fs.stripY);
-    this.renderTimer(fs.timerX, fs.stripY);
-    this.renderLevelClock(fs.clockX, fs.stripY);
+    this.renderMauriRing(fs.mauriRingCX, fs.mauriRingCY, fs.mauriRingR);
+    this.renderSeasonRing(fs.ringCX, fs.ringCY, fs.ringR);
+    if (this.game.currentLevel && this.game.currentLevel.endless) {
+      this.renderPopDial(fs.popDialCX, fs.popDialCY, fs.popDialR);
+    }
     this.renderGuideButton(fs.guideBtnX, fs.btnY);
     this.renderFullscreenButton(fs.fsBtnX, fs.btnY);
     this.renderPauseButton(fs.pauseBtnX, fs.btnY);
@@ -760,6 +787,177 @@ class GameUI {
     push();
     textFont(FreckleFace);
     text(Math.floor(this.mauri.mauri), x + 60, y + 28);
+    pop();
+  }
+
+  // Mauri counter as a large circular DIAL, styled to sit next to the season/year ring
+  // (same backing disc). A green accent ring, a small "MAURI" label, and the value big
+  // in the centre. Replaces the old rectangular counter.
+  renderMauriRing(cx, cy, r) {
+    const val = Math.floor(this.mauri.mauri);
+    push();
+    ellipseMode(CENTER);
+
+    // Backing disc (matches renderSeasonRing's ground so the two read as a pair).
+    noStroke();
+    fill(22, 32, 27, 215);
+    circle(cx, cy, r * 2);
+
+    // Green accent ring.
+    noFill();
+    stroke(100, 200, 130, 225);
+    strokeWeight(r * 0.10);
+    circle(cx, cy, r * 2 - r * 0.14);
+
+    // Label.
+    noStroke();
+    fill(150, 190, 160);
+    textAlign(CENTER, CENTER);
+    smallTextSize(11);
+    text('MAURI', cx, cy - r * 0.44);
+
+    // Value — scaled down for longer numbers so it never spills the disc.
+    const str = String(val);
+    let ts = r * 0.62;
+    if (str.length >= 4) ts = r * 0.40;
+    else if (str.length === 3) ts = r * 0.52;
+    fill(120, 255, 150);
+    push();
+    textFont(FreckleFace);
+    textSize(ts);
+    text(str, cx, cy + r * 0.12);
+    pop();
+
+    pop();
+  }
+
+  // Ecosystem dial (endless): a ring whose arc fills with BALANCE (how even the
+  // populations are, 0→1) and whose colour runs red (uneven) → green (even), like the
+  // hunger bar. AVG POP sits big in the centre with the live mauri/sec below — the two
+  // numbers that multiply into the passive income.
+  renderPopDial(cx, cy, r) {
+    const g = this.game;
+    if (!g.ecosystemStats) return;
+    const s = g.ecosystemStats();
+    const bal = Math.max(0, Math.min(1, s.balance || 0));
+    // red (uneven) → green (even).
+    const col = [Math.round(lerp(214, 110, bal)), Math.round(lerp(74, 205, bal)), Math.round(lerp(60, 120, bal))];
+
+    push();
+    ellipseMode(CENTER);
+    noStroke();
+    fill(22, 32, 27, 215);
+    circle(cx, cy, r * 2);
+
+    // Track + balance arc (12 o'clock, clockwise).
+    const RW = r * 0.14, d = (r - RW * 0.7) * 2, TOP = -HALF_PI;
+    noFill();
+    strokeCap(ROUND);
+    stroke(60, 72, 64, 180); strokeWeight(RW);
+    circle(cx, cy, d);
+    if (bal > 0.001) {
+      stroke(col[0], col[1], col[2]); strokeWeight(RW);
+      arc(cx, cy, d, d, TOP, TOP + bal * TWO_PI);
+    }
+
+    // Centre: label, avg pop (big), mauri/sec.
+    noStroke();
+    textAlign(CENTER, CENTER);
+    fill(150, 175, 155); smallTextSize(10);
+    text('AVG POP', cx, cy - r * 0.44);
+    fill(col[0], col[1], col[2]);
+    push(); textFont(FreckleFace); textSize(r * 0.6);
+    text(Math.round(s.avgPop || 0), cx, cy + r * 0.02); pop();
+    fill(170, 195, 175); smallTextSize(10);
+    text(`${(s.mauriPerSec || 0).toFixed(1)}/s`, cx, cy + r * 0.44);
+    pop();
+  }
+
+  // Unified season / year / time DIAL. One element in place of the old season
+  // panel + TIME panel + level-countdown dial:
+  //   • outer ring = the four seasons as coloured quadrants (summer top-right,
+  //     clockwise); the CURRENT season is full strength, the rest dimmed, and a
+  //     bright notch rides the exact point reached in the year (season progress).
+  //   • endless levels add an inner ring = the four-year tour (≈ terrain
+  //     quadrants); the current year's segment lights up, advancing one per year.
+  //   • centre: era (static per level), season name, "YEAR n", and mm:ss.
+  // For a single-year timed level the outer sweep IS the level's progress.
+  renderSeasonRing(cx, cy, R) {
+    const sm = this.seasonManager;
+    if (!sm || !sm.current) return;
+    const order = sm.seasonOrder;
+    const curIdx = sm.currentSeasonIndex | 0;
+    const prog = Math.max(0, Math.min(1, sm.progress || 0));
+    const g = this.game;
+    const level = g.currentLevel || g.level || g.levelConfig || {};
+    const endless = !!level.endless;
+    const cycle = (g.cycle | 0);
+
+    const RW = R * 0.16;                    // season-ring thickness
+    const ringD = (R - RW * 0.5) * 2;       // diameter the arc stroke is centred on
+    const gapA = 0.055;                     // gap (rad) between season arcs
+    const TOP = -HALF_PI;                   // 12 o'clock; summer starts here (→ top-right)
+
+    push();
+    ellipseMode(CENTER);
+
+    // Backing disc so the centre text reads over the busy terrain.
+    noStroke();
+    fill(22, 32, 27, 205);
+    circle(cx, cy, (R - RW) * 2 + 6);
+
+    // Four season arcs. Current season full strength; the others dim.
+    strokeCap(ROUND);
+    for (let i = 0; i < 4; i++) {
+      const col = color(SEASONS[order[i]].color);
+      const a0 = TOP + i * HALF_PI + gapA;
+      const a1 = TOP + (i + 1) * HALF_PI - gapA;
+      noFill();
+      stroke(red(col), green(col), blue(col), i === curIdx ? 255 : 90);
+      strokeWeight(i === curIdx ? RW * 1.15 : RW);
+      arc(cx, cy, ringD, ringD, a0, a1);
+    }
+
+    // Progress notch: a bright dot at the current point in the year.
+    const pAng = TOP + ((curIdx + prog) / 4) * TWO_PI;
+    noStroke();
+    fill(245, 250, 240);
+    circle(cx + Math.cos(pAng) * (ringD / 2), cy + Math.sin(pAng) * (ringD / 2), RW * 0.9);
+
+    // Endless: inner four-year tour ring (≈ terrain quadrants), current year lit.
+    if (endless) {
+      const iD = (R - RW * 2.1) * 2;
+      const tourIdx = ((cycle % 4) + 4) % 4;
+      strokeWeight(R * 0.09);
+      for (let i = 0; i < 4; i++) {
+        noFill();
+        if (i === tourIdx) stroke(210, 225, 190); else stroke(120, 135, 120, 90);
+        arc(cx, cy, iD, iD, TOP + i * HALF_PI + 0.12, TOP + (i + 1) * HALF_PI - 0.12);
+      }
+    }
+
+    // ---- centre text ---------------------------------------------------------
+    const season = sm.current;
+    textAlign(CENTER, CENTER);
+    noStroke();
+
+    let era = (level.menu && level.menu.subtitle) ? level.menu.subtitle : '';
+    era = era.replace(/^[~\s]+/, '').toUpperCase();
+    if (era) { fill(150, 175, 155); smallTextSize(9); text(era, cx, cy - R * 0.46); }
+
+    const sc = color(season.color);
+    fill(red(sc), green(sc), blue(sc));
+    push(); textFont(FreckleFace); textSize(21); text(season.name.toUpperCase(), cx, cy - R * 0.13); pop();
+
+    fill(200, 220, 205);
+    smallTextSize(11);
+    text('YEAR ' + (cycle + 1), cx, cy + R * 0.17);
+
+    const secs = Math.floor(g.playTime / 60);
+    const timeStr = Math.floor(secs / 60) + ':' + (secs % 60).toString().padStart(2, '0');
+    fill(205, 240, 215);
+    push(); textFont(FreckleFace); textSize(19); text(timeStr, cx, cy + R * 0.45); pop();
+
     pop();
   }
 
@@ -1627,7 +1825,11 @@ class GameUI {
     // Panel grows a row taller for each moa species beyond four, so a 5th/6th
     // species row never overflows the box (driven by the level's species list).
     const _nMoaSpecies = ((this.simulation.activeSpecies && this.simulation.activeSpecies.moa) || []).length;
-    const _speciesRowCount = Math.max(1, Math.ceil(_nMoaSpecies / 2));
+    // Flighted birds present this year join the grid too, so the panel grows to fit them.
+    const _birdKeysAll = (this.simulation.activeSpecies && this.simulation.activeSpecies.other) || [];
+    let _nPresentBirds = 0;
+    for (const k of _birdKeysAll) if (this.simulation.getSpeciesCount(k) > 0) _nPresentBirds++;
+    const _speciesRowCount = Math.max(1, Math.ceil((_nMoaSpecies + _nPresentBirds) / 2));
     const panelHeight = this.layout.speciesPanelHeight +
       Math.max(0, _speciesRowCount - 2) * (28 + SMALL_TEXT_BUMP * 2);
 
@@ -1691,6 +1893,25 @@ class GameUI {
     }
     if (_otherMoa > 0 && _speciesRows.length < 6) {
       _speciesRows.push({ icon: '❔', label: 'Other moa', value: _otherMoa, color: [150, 150, 150] });
+    }
+
+    // Flighted birds present this year, shown alongside the moa (kea/kākā/kākāpō/kōkako/kererū).
+    const _BIRD_LABEL = { kea: 'Kea', kaka: 'Kākā', kakapo: 'Kākāpō', kokako: 'Kōkako', kereru: 'Kererū' };
+    const _BIRD_ICON = { kea: '🦜', kaka: '🦜', kakapo: '🦜', kokako: '🐦', kereru: '🐦' };
+    for (const k of _birdKeysAll) {
+      if (_speciesRows.length >= 12) break;
+      const c = this.simulation.getSpeciesCount(k);
+      if (c <= 0) continue;
+      const reg = (typeof REGISTRY !== 'undefined' && REGISTRY.getSpecies) ? REGISTRY.getSpecies(k) : null;
+      const cfg = (reg && reg.config) || {};
+      _speciesRows.push({
+        key: k,
+        icon: _BIRD_ICON[k] || '🐦',
+        label: _BIRD_LABEL[k] || (reg && reg.displayName) || k,
+        value: c,
+        color: cfg.highlightColor || [200, 190, 150],
+        highlightColor: cfg.highlightColor
+      });
     }
 
     // Population stats — 5 rows x 2 columns, row-major. Each row holds a

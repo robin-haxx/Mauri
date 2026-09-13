@@ -262,6 +262,11 @@ function applyLevelToConfig(levelDef) {
   // Opt-in gameplay mechanics (habitat stress, forest competition, ...)
   LEVEL_MECHANICS = levelDef.mechanics || {};
   FOREST_BIOMES = new Set(LEVEL_MECHANICS.forestBiomes || []);
+  // Restore the base eagle target ratio (the loop ramp mutates it live — see
+  // Game._maybeGlacialDeepen) so a restart doesn't inherit last run's ramped pressure.
+  if (LEVEL_MECHANICS._eagleTargetRatioBase != null) {
+    LEVEL_MECHANICS.eagleTargetRatio = LEVEL_MECHANICS._eagleTargetRatioBase;
+  }
 
   // View & calendar (per-level, with engine defaults for levels that omit them)
   CONFIG.zoom = (levelDef.zoom != null) ? levelDef.zoom : 2.5;
@@ -602,6 +607,34 @@ const PLACEABLES = {
     seasonalBonus: { summer: 1.0, autumn: 1.0, winter: 1.0, spring: 1.0 }
   },
 
+  // Year-2 forest cultivator (Free Play). Unlike the Berry Cache it draws no kea and
+  // spawns no berries — it simply CULTIVATES podocarp forest: over its life it seeds
+  // rimu/beech in its radius (the same growForestAt path), spreading the forest into the
+  // lowland. Placed on lowland ground NEAR an existing grove (requiresNearForest), so it
+  // extends the podocarp refuge that feeds the kākā rather than founding forest anywhere.
+  forestBoost: {
+    name: "Forest Seed",
+    description: "Cultivates new podocarp forest — plant on lowland near an existing grove to spread rimu and beech",
+    cost: 35,
+    icon: '🌱',
+    color: '#3b6a50',
+    effect: 'forestBoost',
+    radius: 70,
+    duration: 3600,
+    minSpacing: 30,
+    ignoresSpacing: false,
+    // Podocarp forest cultivated over the seed's life (reuses the Berry Cache path).
+    growsForest: true,
+    growEverySec: 4,           // seed a rimu/beech in-radius this often (faster than the cache)
+    growCap: 12,               // stop once the grove holds this many forest trees
+    // Lowland ground near existing forest only.
+    allowedBiomes: ['forestRefuge', 'shrubland', 'glacialFlats'],
+    requiresNearForest: true,
+    nearForestRadius: 140,     // "near" = a live podocarp grove within this range
+    nearForestMinTrees: 1,
+    seasonalBonus: { summer: 1.0, autumn: 1.0, winter: 1.0, spring: 1.0 }
+  },
+
   // A toolbar INTERACTION (not a placement): selecting it TOGGLES the non-modal nest-raid
   // panel (Game._openRaidPanel) that lists the moa nesting sites to raid. The mauri cost is
   // charged per raid from the panel (mechanics.keaRaid.cost), so this shows 0 and
@@ -615,6 +648,23 @@ const PLACEABLES = {
     effect: 'nestRaid',
     opensDialog: true,
     global: true,              // not a spatial placement
+    radius: 0, minSpacing: 0, ignoresSpacing: true,
+    seasonalBonus: { summer: 1.0, autumn: 1.0, winter: 1.0, spring: 1.0 }
+  },
+
+  // Mast-year interaction (Free Play): shakes a fifth of the mature rimu into a berry
+  // glut — ripe berry patches spring up beside them, and the kākāpō nearby gorge (fed +
+  // crop-full, so they can breed). A gamewide one-shot; replaces Nest Raid in mast years.
+  // Handled by Game._useGlobalInteractable → _triggerRimuScramble.
+  rimuScramble: {
+    name: "Rimu Berry Scramble",
+    description: "Shakes a fifth of the rimu into fruit — a berry glut that feeds and secures the kākāpō through the mast",
+    cost: 40,
+    icon: '🍒',
+    color: '#a23a4a',
+    effect: 'rimuScramble',
+    global: true,              // gamewide one-shot — no map placement
+    cooldown: 1800,            // ~half a year at this seasonDuration
     radius: 0, minSpacing: 0, ignoresSpacing: true,
     seasonalBonus: { summer: 1.0, autumn: 1.0, winter: 1.0, spring: 1.0 }
   }
@@ -1065,6 +1115,8 @@ class Game {
     this.freeplayFocus = [];
     this._yearsSurvived = 0;
     this._yearTransition = null;      // clear any in-flight area transition on (re)load
+    this._areaMoaBest = {};           // per-area species memory for the year-start reset (fresh run)
+    this._areaForest = {};            // per-area cultivated-forest memory (forest legacy)
     this._kawakawaBanned = false;     // re-enable kawakawa for a fresh run (see _banKawakawa)
     this._mastYearTargetCycle = -1;   // reset the pending/active mast per level load
     // Year-2 mast-mauri objective (see _beginFreeplayYear / _checkFreeplayYear): reset
@@ -1105,6 +1157,8 @@ class Game {
       TUTORIAL_REGISTRY.get('default')
     );
     if (BENCHMARK.pending) this.tutorial.enabled = false;   // benchmark runs clean
+    // Endless (Free Play) skips the tutorial/intro for now — it opens straight into play.
+    if (this.currentLevel && this.currentLevel.endless) this.tutorial.enabled = false;
     this.tutorial.init();
 
     // Benchmark: start an armed run; a reload mid-run abandons the old one
@@ -1269,20 +1323,31 @@ class Game {
     this._incomeAccumulator += dt;
     if (this._incomeAccumulator >= 64) {
       this._incomeAccumulator -= 64;
-      const pop = this._cachedMoaCount;
-      let income = (pop * this.mauri.perMoaPerSecond +
-                    this._cachedThrivingCount * this.mauri.onMoaThriving)
-                   * this.mauri.passiveIncomeScale;   // halved: mauri for having moa
-      const tStart = 10, tScale = 5.3;   // asymptote ≈ tStart+tScale; tuned so pop 25 → ~15
-      if (pop > tStart && income > 0) {
-        const effPop = tStart + tScale * (1 - Math.exp(-(pop - tStart) / tScale));
-        income *= effPop / pop;   // scale the whole passive income by the taper
+      let income;
+      if (this.currentLevel && this.currentLevel.endless) {
+        // Endless: a healthy, EVEN ecosystem pays (avg pop above floor × balance). See
+        // ecosystemStats(). The tick is ~1.07s (64 frames), so scale the per-second rate.
+        income = this.ecosystemStats().mauriPerSec * (64 / 60);
+      } else {
+        const pop = this._cachedMoaCount;
+        income = (pop * this.mauri.perMoaPerSecond +
+                  this._cachedThrivingCount * this.mauri.onMoaThriving)
+                 * this.mauri.passiveIncomeScale;   // halved: mauri for having moa
+        const tStart = 10, tScale = 5.3;   // asymptote ≈ tStart+tScale; tuned so pop 25 → ~15
+        if (pop > tStart && income > 0) {
+          const effPop = tStart + tScale * (1 - Math.exp(-(pop - tStart) / tScale));
+          income *= effPop / pop;   // scale the whole passive income by the taper
+        }
       }
       if (income > 0) this.mauri.earn(income, undefined, undefined, 'passive');
     }
-    
+
     this.checkGoals();
-    this.mauri.checkMilestones(this._cachedMoaCount, this.simulation, this);
+    // Endless skips the one-time total-moa milestone bonuses — its economy is the steady
+    // ecosystem stream above, not lump-sum growth rewards.
+    if (!(this.currentLevel && this.currentLevel.endless)) {
+      this.mauri.checkMilestones(this._cachedMoaCount, this.simulation, this);
+    }
 
     // While the world grid is panning between areas (or waiting to repopulate the
     // new one), the cast is unloaded — an empty map then is a transition, not a wipe,
@@ -1585,6 +1650,33 @@ class Game {
     return best;
   }
 
+  // Free Play economy snapshot — the passive-income drivers, also shown in the HUD.
+  //   avgPop      = mean population of non-eagle species ABOVE their floor
+  //   balance     = min/max of those populations (1 = even, →0 = one dominates), raised to
+  //                 a power that grows each year so imbalance bites a little harder over time
+  //   mauriPerSec = avgPop × balance × scale
+  // Eagles never count toward either. Reused by the population HUD and the avg-pop dial.
+  ecosystemStats() {
+    const sim = this.simulation;
+    const M = (typeof LEVEL_MECHANICS !== 'undefined') ? LEVEL_MECHANICS : {};
+    const cfg = M.freeplayPassive || {};
+    const floor = M.freeplayProtectFloor ?? 2;
+    const keys = [...((this.activeSpecies && this.activeSpecies.moa) || []),
+                  ...((this.activeSpecies && this.activeSpecies.other) || [])];
+    let sum = 0, mn = Infinity, mx = 0, n = 0;
+    if (sim) for (const k of keys) {
+      const c = sim.getSpeciesCount(k);
+      if (c > floor) { sum += c; n++; if (c < mn) mn = c; if (c > mx) mx = c; }
+    }
+    if (n === 0) return { avgPop: 0, balance: 0, mauriPerSec: 0, aboveFloor: 0 };
+    const avgPop = sum / n;
+    let balance = mx > 0 ? mn / mx : 0;
+    const harsh = 1 + (cfg.imbalanceHarshness ?? 0) * (this.cycle || 0);
+    balance = Math.pow(balance, harsh);
+    const mauriPerSec = avgPop * balance * (cfg.scale ?? 1);
+    return { avgPop, balance, mauriPerSec, aboveFloor: n };
+  }
+
   _checkFreeplayYear() {
     const sim = this.simulation;
     const halfWidth = CONFIG.width / 2 / CONFIG.zoom;
@@ -1616,11 +1708,76 @@ class Game {
         goal.achieved = true;
         this._goalsCompleted = (this._goalsCompleted || 0) + 1;
         if (goal.reward) this.mauri.earn(goal.reward, halfWidth, 80, 'goal');
-        this.addNotification(`Recovered: ${goal.name}! +${goal.reward} mauri`, 'success');
+        this.addNotification(`Recovered: ${goal.name}!${goal.reward ? ' +' + goal.reward + ' mauri' : ''}`, 'success');
       }
     }
 
     this._updateEagleBoom();
+  }
+
+  // This year's starting populations for the area being entered. Each species falls back
+  // to its default (moa: initialSpeciesDistribution; birds: initialEntityCounts, else
+  // freeplayYearReset.birdDefault), nudged up by how many you held HERE last visit (per-area
+  // memory) — nudge = round((lastHere − default)·influence), capped at maxNudge. Then this
+  // year's introduces and the focus floor are layered on. Birds appear only if they're part
+  // of the default cast, were established here, are a focus, or are introduced this year.
+  _computeYearStartPops(entry, focus, protectFloor, enterIdx) {
+    const reset = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.freeplayYearReset) || {};
+    const influence = reset.influence ?? 0.25;
+    const maxNudge = reset.maxNudge ?? 3;
+    const birdDefault = reset.birdDefault ?? 3;
+    const moaDefaults = this.currentLevel.initialSpeciesDistribution || {};
+    const birdDefaults = this.currentLevel.initialEntityCounts || {};
+    const hist = (this._areaMoaBest && this._areaMoaBest[enterIdx]) || {};
+    const isMoaKey = (k) => (typeof MOA_SPECIES !== 'undefined' && !!MOA_SPECIES[k]);
+    const nudge = (k, def) => Math.min(maxNudge, Math.max(0, Math.round(((hist[k] || 0) - def) * influence)));
+
+    const moa = {}, others = {};
+    // Moa — the persistent cast: every roster species resets to default + nudge.
+    for (const k of ((this.activeSpecies && this.activeSpecies.moa) || [])) {
+      if (!this._speciesUsable(k)) continue;
+      const def = (moaDefaults[k] != null) ? moaDefaults[k] : birdDefault;
+      moa[k] = def + nudge(k, def);
+    }
+    // Birds — present only if part of the default cast (initialEntityCounts), established
+    // here last visit, a focus this year, or introduced this year.
+    const focusSet = new Set(focus || []);
+    const introSet = new Set(((entry && entry.introduce) || []).map(s => s && s.type).filter(Boolean));
+    for (const k of ((this.activeSpecies && this.activeSpecies.other) || [])) {
+      if (!this._speciesUsable(k)) continue;
+      const isDefaultCast = (birdDefaults[k] != null);
+      if (!(isDefaultCast || hist[k] > 0 || focusSet.has(k) || introSet.has(k))) continue;
+      const def = isDefaultCast ? birdDefaults[k] : birdDefault;
+      others[k] = def + nudge(k, def);
+    }
+    // This year's introduces: ensure at least the requested count.
+    if (entry && entry.introduce) for (const spec of entry.introduce) {
+      if (!spec || !this._speciesUsable(spec.type)) continue;
+      const bucket = isMoaKey(spec.type) ? moa : others;
+      bucket[spec.type] = Math.max(bucket[spec.type] || 0, spec.count || 0);
+    }
+    // Focus species never open below the protect floor.
+    for (const k of (focus || [])) {
+      if (!this._speciesUsable(k)) continue;
+      const bucket = isMoaKey(k) ? moa : others;
+      bucket[k] = Math.max(bucket[k] || 0, protectFloor);
+    }
+    return { moa, others, eagles: 2 };
+  }
+
+  // Year 1 only (no camera pan): top the live cast UP to this year's start counts. The
+  // initial spawn already placed the defaults, so this mainly adds introduced birds and
+  // tops a focus species to its floor. Never removes anything.
+  _applyYearStartTopUp(yearPops) {
+    const sim = this.simulation;
+    for (const k in yearPops.moa) {
+      const short = yearPops.moa[k] - sim.getSpeciesCount(k);
+      if (short > 0) sim._spawnDistributedMoas({ [k]: short });
+    }
+    for (const k in yearPops.others) {
+      const short = yearPops.others[k] - sim.getSpeciesCount(k);
+      if (short > 0 && sim._spawnOtherEntities) sim._spawnOtherEntities(k, short);
+    }
   }
 
   _beginFreeplayYear() {
@@ -1639,6 +1796,23 @@ class Game {
     //    years use the ranker too.
     const ranked = this._rankFreeplaySpecies();
     const entry = this._scheduledYearEntry(this.cycle);
+
+    // Per-area memory: what you hold as this year opens = what you carried out of LAST
+    // year's area. Record it (every non-eagle species + the forest you'd grown) against
+    // that departing area, so returning there next loop nudges your restart up a little and
+    // partly re-grows the forest. Different areas are different habitats — populations do
+    // NOT haul across; they fall back to defaults per area (see _computeYearStartPops).
+    const t = this.terrain;
+    if (t && t._quadIndexForCycle && this.cycle > 0) {
+      if (!this._areaMoaBest) this._areaMoaBest = {};
+      if (!this._areaForest) this._areaForest = {};
+      const leaveIdx = t._quadIndexForCycle(this.cycle - 1);
+      const rec = this._areaMoaBest[leaveIdx] || (this._areaMoaBest[leaveIdx] = {});
+      const allKeys = [...((this.activeSpecies && this.activeSpecies.moa) || []),
+                       ...((this.activeSpecies && this.activeSpecies.other) || [])];
+      for (const k of allKeys) rec[k] = sim.getSpeciesCount(k);   // "on the last completion of that area"
+      this._areaForest[leaveIdx] = sim.countForestTrees ? sim.countForestTrees() : 0;
+    }
 
     // 1a) Mast-mauri goal lifecycle. STARTING the mast-goal year arms a fresh objective
     //     (gain `target` mauri during this year). Starting any OTHER year closes it — the
@@ -1674,28 +1848,32 @@ class Game {
     if (!focus) focus = ranked.slice(0, 2).map(s => s.k);   // dynamic fallback
     this.freeplayFocus = focus;
 
-    // 2) Introduce this year's scheduled newcomers (guarded: registered species only,
-    //    and only up to the requested count if they aren't already present).
-    if (introduce) {
-      for (const spec of introduce) {
-        if (!spec || !this._speciesUsable(spec.type)) continue;
-        const short = (spec.count || 0) - sim.getSpeciesCount(spec.type);
-        if (short > 0) {
-          this._spawnFreeplaySpecies(spec.type, short);
-          this.addNotification(`${this._freeplaySpeciesName(spec.type)} are introduced to the forest.`, 'info');
-        }
+    // 2–4) YEAR-START POPULATIONS (reset-to-default + per-area nudge). Populations don't
+    //   haul across areas — each species falls back to its default, nudged up a little by
+    //   how many you held HERE last visit, then this year's introduces + the focus floor
+    //   are layered on. Computed for the area we're MOVING to (enterIdx).
+    const enterIdx = (t && t._quadIndexForCycle) ? t._quadIndexForCycle(this.cycle) : 0;
+    const yearPops = this._computeYearStartPops(entry, this.freeplayFocus, protectFloor, enterIdx);
+
+    // Announce this year's newcomers (species the area didn't already hold).
+    const areaHistNow = (this._areaMoaBest && this._areaMoaBest[enterIdx]) || {};
+    if (introduce) for (const spec of introduce) {
+      if (spec && this._speciesUsable(spec.type) && !(areaHistNow[spec.type] > 0)) {
+        this.addNotification(`${this._freeplaySpeciesName(spec.type)} are introduced to the forest.`, 'info');
       }
     }
 
-    // 3) Refound extinct NON-focus MOA so the moa cast persists each year.
-    for (const s of ranked) {
-      if (this.freeplayFocus.includes(s.k)) continue;
-      if (s.count === 0) sim._spawnDistributedMoas({ [s.k]: refoundCount });
-    }
-    // 4) Top a crashed focus species up to its protect floor so it stays growable.
-    for (const k of this.freeplayFocus) {
-      const short = protectFloor - sim.getSpeciesCount(k);
-      if (short > 0) this._spawnFreeplaySpecies(k, short);
+    if (this.cycle === 0) {
+      // Year 1: no camera pan — the initial spawn already placed the moa/bird defaults, so
+      // just top up to this year's start (adds the introduced kākā, tops focus to floor).
+      this._applyYearStartTopUp(yearPops);
+    } else {
+      // Later years: the pan regenerates the cast on the new ground — hand it the counts,
+      // plus how much cultivated forest to re-grow here (forest legacy).
+      sim._yearStartPops = yearPops;
+      const forestBest = (this._areaForest && this._areaForest[enterIdx]) || 0;
+      const legacyFrac = (M.freeplayYearReset || {}).forestLegacy ?? 0;
+      sim._forestLegacyTarget = Math.round(forestBest * legacyFrac);
     }
 
     // 5) Protect ONLY the focus species from a total wipe this year (dynamic floor).
@@ -1764,6 +1942,19 @@ class Game {
         achieved: false
       });
     }
+    // Mast years are the ONLY time the kākāpō breed, so every mast year carries a kākāpō
+    // population goal. Added here when kākāpō aren't already this year's focus (that path
+    // already sets their goal) and some exist to grow, so the goal is always meetable.
+    if (this._isMastYear() && this._speciesUsable('kakapo') &&
+        !this.freeplayFocus.includes('kakapo') && sim.getSpeciesCount('kakapo') > 0) {
+      const kt = targets['kakapo'] || defaultTarget;
+      goals.push({
+        name: `${this._freeplaySpeciesName('kakapo')} ≥ ${kt}`,
+        condition: () => this.simulation.getSpeciesCount('kakapo') >= kt,
+        reward: goalReward,
+        achieved: false
+      });
+    }
     this.goals = goals;
 
     // 9) Announce the year — the schedule's own note if it has one, else the generic
@@ -1783,6 +1974,13 @@ class Game {
         sim._spawnOtherEntities('kokako', 1);
       }
     }
+
+    // Per-year nesting-site override (e.g. the kea year: two fewer sites, all on the
+    // LEFT/forest half — so you must drive moa off a live forest nest, not claim an empty
+    // one). Read by Simulation._seedNestingSites. Year 1 has no camera pan, so re-seed
+    // here; later years re-seed inside the pan's spawnAreaEntities with this set.
+    sim._nestingOverride = (entry && entry.nesting) ? entry.nesting : null;
+    if (this.cycle === 0) sim._seedNestingSites();
 
     // World grid: LAST, once this year's populations are settled — pan the camera to
     // the year's area of the continuous land and regenerate the cast there (a no-op on
@@ -1819,12 +2017,20 @@ class Game {
   // world), so it's run during the faded pan window where the hitch is hidden.
   _maybeGlacialDeepen() {
     const t = this.terrain;
+    if (!t || !t._quadIndexForCycle || t._quadIndexForCycle(this.cycle) !== 0) return;  // tour start only
+    const loops = Math.floor(this.cycle / t._quadOrder.length);
     const wg = (this.currentLevel && this.currentLevel.worldGrid) || {};
     const perLoop = (wg.glacialPerLoop != null) ? wg.glacialPerLoop : 0;
     const cap = (wg.glacialCap != null) ? wg.glacialCap : 0.6;
-    if (perLoop > 0 && t._quadIndexForCycle(this.cycle) === 0) {
-      const loops = Math.floor(this.cycle / t._quadOrder.length);
-      t.setGlacialAdvance(Math.min(cap, loops * perLoop));
+    if (perLoop > 0) t.setGlacialAdvance(Math.min(cap, loops * perLoop));
+
+    // Eagle pressure climbs a little each loop — more eagles per prey over the run. Ramps
+    // off a stored base so a restart (which re-restores the base at load) starts fresh.
+    const M = (typeof LEVEL_MECHANICS !== 'undefined') ? LEVEL_MECHANICS : {};
+    const perLoopRatio = M.eagleTargetRatioPerLoop || 0;
+    if (perLoopRatio > 0) {
+      if (M._eagleTargetRatioBase == null) M._eagleTargetRatioBase = M.eagleTargetRatio ?? (1 / 8);
+      M.eagleTargetRatio = M._eagleTargetRatioBase + perLoopRatio * loops;
     }
   }
 
@@ -2001,6 +2207,10 @@ class Game {
   attemptRaid(site) {
     const cfg = this._keaRaidCfg();
     if (!cfg || !site || !site.alive) return;
+    if ((site.eggCount || 0) <= 0) {   // nothing to raid — an empty site can't be claimed
+      this.addNotification(`No clutch to raid here — the kea need a nest with eggs. Draw the moa onto a site, then thin them.`, 'error');
+      return;
+    }
     if (this.keaStationedCount(site) < (cfg.stationCount ?? 3)) return;   // not enough kea
     const cost = cfg.cost ?? 60;
     if (this.mauri.mauri < cost) {
@@ -2144,7 +2354,8 @@ class Game {
         const stationed = this.keaStationedCount(s);
         const ready = stationed >= need;
         const afford = this.mauri.mauri >= cost;
-        const raidable = ready && afford;
+        const hasClutch = (s.eggCount || 0) > 0;   // an empty nest can't be raided (drive moa onto it first, then off)
+        const raidable = ready && afford && hasClutch;
         const pct = Math.round(this._raidSuccessChance(s) * 100);
         const rx = x + 7, rw = w - 14, rh = rowH - 4;
         const hovered = mx >= rx && mx <= rx + rw && my >= ry && my <= ry + rh;
@@ -2158,7 +2369,8 @@ class Game {
         text(`${s.habitat === 'forest' ? 'Forest' : 'Open'} · ${s.eggCount}`, rx + 8, ry + rh / 2);
         textStyle(NORMAL); textAlign(RIGHT, CENTER); textSize(10);
         let tag, tc;
-        if (!ready)       { tag = `${stationed}/${need} kea`; tc = [200, 150, 120]; }
+        if (!hasClutch)   { tag = `no clutch`;               tc = [150, 162, 150]; }
+        else if (!ready)  { tag = `${stationed}/${need} kea`; tc = [200, 150, 120]; }
         else if (!afford) { tag = `need ${cost}`;            tc = [200, 150, 120]; }
         else              { tag = `RAID · ${pct}%`;          tc = [242, 212, 120]; }
         fill(tc[0], tc[1], tc[2]); textStyle(raidable ? BOLD : NORMAL);
@@ -2392,6 +2604,10 @@ class Game {
         return false;
       }
     }
+    if (def.requiresNearForest && !this._nearForestOk(def, x, y)) {
+      this.addNotification(`${def.name} must be planted near existing podocarp forest`, 'error');
+      return false;
+    }
     // Spacing must ignore the item being moved, or it blocks itself
     const spacingCheck = this.canPlaceWithSpacing(x, y, p.type, p);
     if (!spacingCheck.allowed) {
@@ -2441,7 +2657,15 @@ class Game {
     
     return { allowed: true };
   }
-    
+
+  // requiresNearForest gate: the spot must have a live podocarp grove within reach, so a
+  // forest cultivator SPREADS existing forest rather than founding it in open country.
+  _nearForestOk(def, x, y) {
+    if (!def || !def.requiresNearForest) return true;
+    if (!this.simulation || !this.simulation.isForestPatch) return true;
+    return this.simulation.isForestPatch(x, y, def.nearForestRadius ?? 140, def.nearForestMinTrees ?? 1);
+  }
+
   tryPlace(x, y) {
     if (!this.selectedPlaceable) return false;
 
@@ -2470,7 +2694,11 @@ class Game {
         return false;
       }
     }
-    
+    if (def.requiresNearForest && !this._nearForestOk(def, x, y)) {
+      this.addNotification(`${def.name} must be planted near existing podocarp forest`, 'error');
+      return false;
+    }
+
     const spacingCheck = this.canPlaceWithSpacing(x, y, this.selectedPlaceable);
     if (!spacingCheck.allowed) {
       this.addNotification(spacingCheck.reason, 'error');
@@ -2516,17 +2744,79 @@ class Game {
       this.addNotification('A mast year is already on the way.', 'error');
       return false;
     }
+    // Feature precondition: the Rimu Berry Scramble needs mature rimu to shake.
+    if (type === 'rimuScramble' &&
+        !this.simulation.plants.some(p => p.alive && p.type === 'rimu' && p.growth >= 0.4)) {
+      this.addNotification('No mature rimu to shake for berries.', 'error');
+      return false;
+    }
     if (!this.mauri.spend(def.cost)) {
       this.addNotification('Not enough mauri!', 'error');
       return false;
     }
 
     if (type === 'mastYear') this.triggerMastYear();
+    if (type === 'rimuScramble') this._triggerRimuScramble();
 
     this._globalCooldownUntil[type] = this.playTime + (def.cooldown || 3600);
     if (typeof BENCHMARK !== 'undefined') BENCHMARK.recordPlacement(type);
     if (audioManager) audioManager.playPlantRustle();
     if (!keyIsDown(SHIFT)) this.selectedPlaceable = null;
+    return true;
+  }
+
+  // Rimu Berry Scramble (mast-year interaction): shake a fifth of the mature rimu into
+  // fruit. A ripe berry patch springs up beside each shaken tree (lasting kākāpō forage),
+  // and every kākāpō near a shaken rimu gorges at once — hunger eased and crop filled, so
+  // a mast-year female is breeding-ready. "Food and security to the kākāpō."
+  _triggerRimuScramble() {
+    const sim = this.simulation;
+    const rimus = [];
+    for (const p of sim.plants) if (p.alive && p.type === 'rimu' && p.growth >= 0.4) rimus.push(p);
+    if (!rimus.length) { this.addNotification('No mature rimu to shake for berries.', 'error'); return false; }
+
+    // Pick 20% of the rimu (shuffle the front of the list, take that many).
+    const count = Math.max(1, Math.round(rimus.length * 0.2));
+    for (let i = 0; i < count && i < rimus.length; i++) {
+      const j = i + ((Math.random() * (rimus.length - i)) | 0);
+      const t = rimus[i]; rimus[i] = rimus[j]; rimus[j] = t;
+    }
+    const picked = rimus.slice(0, count);
+
+    // A ripe berry patch beside each shaken rimu — real, forageable kākāpō food.
+    let berries = 0;
+    for (const tree of picked) {
+      tree._berryDropFrame = (typeof frameCount !== 'undefined') ? frameCount : 0;   // (visual hook)
+      const a = Math.random() * Math.PI * 2, rr = 14 + Math.random() * 22;
+      const bx = tree.pos.x + Math.cos(a) * rr, by = tree.pos.y + Math.sin(a) * rr;
+      const biome = sim.terrain.getBiomeAt(bx, by);
+      if (biome && biome.canHavePlants && sim.terrain.isWalkable(bx, by) && typeof Plant !== 'undefined') {
+        const berry = new Plant(bx, by, 'coprosma', sim.terrain, biome.key);
+        berry.growth = 1.0;                          // ripe at once — immediate forage
+        sim.addPlant(berry);
+        berries++;
+      }
+    }
+
+    // Food + breeding security to the kākāpō gathered near the shaken rimu.
+    const flock = (sim.otherEntities && sim.otherEntities.kakapo) || [];
+    let fed = 0;
+    const R2 = 200 * 200;
+    for (const k of flock) {
+      if (!k.alive) continue;
+      let near = false;
+      for (const tree of picked) {
+        const dx = k.pos.x - tree.pos.x, dy = k.pos.y - tree.pos.y;
+        if (dx * dx + dy * dy < R2) { near = true; break; }
+      }
+      if (!near) continue;
+      k.crop = k._cropCapacity || 1;                          // crop-full → breeding-ready (security)
+      k.hunger = Math.max(0, k.hunger - (k._feedRelief || 60)); // gorged (food)
+      fed++;
+    }
+
+    this.addNotification(`Rimu berry scramble! ${berries} rimu drop berries — the kākāpō gorge${fed ? ` (${fed} fed)` : ''}.`, 'success');
+    if (audioManager && audioManager.playPlantRustle) audioManager.playPlantRustle();
     return true;
   }
 
@@ -3550,6 +3840,7 @@ class Game {
     const spacingCheck = this.canPlaceWithSpacing(tx, ty, p.type, p);
     let biomeOk = true;
     if (def.allowedBiomes) biomeOk = def.allowedBiomes.includes(this.terrain.getBiomeAt(tx, ty).key);
+    if (biomeOk) biomeOk = this._nearForestOk(def, tx, ty);
     const ok = this.terrain.canPlace(tx, ty) && spacingCheck.allowed && biomeOk;
 
     push();
@@ -3585,6 +3876,7 @@ class Game {
       const b = this.terrain.getBiomeAt(tx, ty);
       biomeOk = def.allowedBiomes.includes(b.key);
     }
+    if (biomeOk) biomeOk = this._nearForestOk(def, tx, ty);
     const canPlace = canPlaceTerrain && spacingCheck.allowed && biomeOk;
     
     push();
@@ -3789,8 +4081,16 @@ class Game {
             ? GAME_STATE.PLAYING : GAME_STATE.PAUSED;
           break;
         case 'Escape':
-          this.cancelMove();
-          this.cancelPlacement(); break;
+          // Esc clears an in-progress move/placement if there is one; otherwise it
+          // pauses (or unpauses) the game.
+          if (this.movingPlaceable || this.selectedPlaceable) {
+            this.cancelMove();
+            this.cancelPlacement();
+          } else {
+            this.state = (this.state === GAME_STATE.PAUSED)
+              ? GAME_STATE.PLAYING : GAME_STATE.PAUSED;
+          }
+          break;
         case 'h': case 'H':
           CONFIG.showHungerBars = !CONFIG.showHungerBars; break;
       }
@@ -4089,12 +4389,9 @@ function draw() {
   game.render();
   const t2 = _dbg ? performance.now() : 0;
 
-  // Free Play climate gauge (screen space, on top). The Nest Raid panel and the field
-  // guide are NOT top overlays — they render docked in the right column via GameUI
-  // (renderSidebar / renderFullscreenOverlay), so the sim keeps running behind them.
-  if (game && game._climateCfg && typeof game._renderClimateGauge === 'function') {
-    game._renderClimateGauge();
-  }
+  // (The old Free Play "Year X / glacial stage / survived" climate gauge was removed —
+  // the season/year ring now carries the year + season, and the mast is signalled by the
+  // mast-goal panel, the mast-year kākāpō goal, and the onset notification.)
 
   // Debug lenses: screen-space legend (clickable) + per-lens readouts, over the HUD.
   if (typeof Lens !== 'undefined' && game) Lens.renderScreen(game);

@@ -104,10 +104,13 @@ const KAKA_SPECIES = {
   restSec:          7,
   disperseChance:   0.25,   // seed predator > disperser (kererū is 1.0)
 
+  // Survival — tuned so a flock WITH podocarp forest to feed in holds through winter
+  // rather than dwindling: a gentler hunger burn, a fuller feed, and slower to starve.
+  // (A small static populationFloor in the Free Play level also stops a total die-off.)
   maxHunger:        100,
-  hungerRatePerSec: 1.15,
-  feedRelief:       70,
-  starveSec:        18,
+  hungerRatePerSec: 0.95,
+  feedRelief:       78,
+  starveSec:        26,
 
   maturitySec:      22,
   eggCooldownSec:   40,

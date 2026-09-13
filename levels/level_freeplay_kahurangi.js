@@ -124,9 +124,11 @@ const LEVEL_FREEPLAY_KAHURANGI = {
     shelter:   { cost: 35 },
     nest:      { cost: 55 },
     waterhole: { cost: 35 },
+    forestBoost: { cost: 35 }, // Year-2 forest cultivator (see freeplaySchedule per-year palettes)
     Storm:     { cost: 40 },
     keaLure:   { cost: 45 },   // Year-1 kea magnet (see freeplaySchedule per-year palettes)
-    nestRaid:  { cost: 0 }     // toolbar interaction → nest-raid dialog (charged per raid)
+    nestRaid:  { cost: 0 },    // toolbar interaction → nest-raid dialog (charged per raid)
+    rimuScramble: { cost: 40 } // mast-year interaction → 20% of rimu drop berries for the kākāpō
     // NOTE: the Mast Year is no longer a bought item. It is EARNED — Year 2's mast-mauri
     // goal (see `mastGoal` below) invokes it a year early (year 3) on success, or lets the
     // rimu mast fall late (year 4) on a miss. Driven by freeplaySchedule `mast:true` years.
@@ -139,7 +141,10 @@ const LEVEL_FREEPLAY_KAHURANGI = {
   // South Island kōkako stretch goal opens in year 4. Missing it delays the rimu mast to
   // year 4 (the cold upslope), where the kākāpō must be grown the hard way, and no kōkako
   // stretch is offered. Progress shows as a bar in the Nest-Raid panel's slot.
-  mastGoal: { loopYear: 2, target: 220, reward: 120 },
+  // Target is a fixed mauri-gain bar for the kākā year (task: 250, up from 220). No mauri
+  // REWARD — accomplishing a goal no longer hands a mauri boost (see freeplayGoalReward: 0);
+  // reaching it still pays off by invoking the mast a year early.
+  mastGoal: { loopYear: 2, target: 250, reward: 0 },
 
   // Per-species recovery targets for the yearly focus goals (fall back to
   // freeplayDefaultTarget). Big lowland browsers ask for fewer than the smaller,
@@ -182,8 +187,13 @@ const LEVEL_FREEPLAY_KAHURANGI = {
     years: [
       { // pos 0 — Year of the Kea (east / alps). Nest raid; kākā introduced.
         focus: ['kea'],
-        introduce: [{ type: 'kaka', count: 4 }],
+        introduce: [{ type: 'kaka', count: 3 }],
         moaFocus: 'upland_moa', nestingGoal: true,
+        // Kea year nesting: two FEWER moa nests than the default (5 → 3) and all of them
+        // on the LEFT (west/downslope) half of the map, in the podocarp forest the kea
+        // want. You must actively drive the moa off a live nest to raid it — an empty
+        // site can't be claimed (see mechanics.nestingSites + Game._raidSuccessChance).
+        nesting: { forestCount: 2, openCount: 1, region: 'left' },
         note: "Year of the Kea — the alpine parrots come down to nest in the podocarp forest below. Kākā are introduced to that forest. Plant kawakawa now while the forest is still warm — it will not survive the first winter.",
         // Kawakawa is a frost-tender lowland plant of this warm opening ONLY: it can be
         // planted this year but is stripped from the palette at the first winter and can
@@ -195,16 +205,16 @@ const LEVEL_FREEPLAY_KAHURANGI = {
         focus: ['kaka'],
         moaFocus: 'little_bush_moa', nestingGoal: true,
         mastGoalYear: true,
-        note: "Year of the Kākā — grow the flock in the sheltered lowland forest. Gain enough mauri this year to invoke the Mast: reach it and the rimu mast comes early next year (the milder downslope), so the kākāpō breed there and a kōkako stretch opens after; miss it and the mast falls late, in the cold upslope.",
-        availablePlaceables: { lancewood: {}, shelter: {}, nest: {}, waterhole: {}, Storm: {} }
+        note: "Year of the Kākā — grow the flock in the sheltered lowland forest. Use the Forest Seed to spread podocarp forest into the lowland near existing groves — new rimu and beech to feed the kākā through winter. Gain enough mauri this year to invoke the Mast: reach it and the rimu mast comes early next year (the milder downslope), so the kākāpō breed there and a kōkako stretch opens after; miss it and the mast falls late, in the cold upslope.",
+        availablePlaceables: { lancewood: {}, shelter: {}, nest: {}, forestBoost: {}, Storm: {} }
       },
       { // pos 2 — Year 3 (across / downslope). Branches on the mast-goal outcome.
         branch: {
           reached: { // the mast came early — breed the kākāpō in the milder downslope forest
             focus: ['kakapo'], mast: true,
             introduce: [{ type: 'kakapo', count: 4 }],
-            note: "The Mast came early! The downslope forest blooms with rimu fruit — the kākāpō breed at last. Grow them while the masting holds.",
-            availablePlaceables: { lancewood: {}, nestRaid: {}, shelter: {}, nest: {}, waterhole: {}, Storm: {} }
+            note: "The Mast came early! The downslope forest blooms with rimu fruit — the kākāpō breed at last. Grow them while the masting holds. Loose the Rimu Berry Scramble to shake a berry glut from the rimu — food and cover for the kākāpō.",
+            availablePlaceables: { lancewood: {}, rimuScramble: {}, shelter: {}, nest: {}, waterhole: {}, Storm: {} }
           },
           missed: { // no mast yet — consolidate the bush moa and grow new nesting sites
             focus: ['little_bush_moa'], moaFocus: 'little_bush_moa', nestingGoal: true,
@@ -217,15 +227,15 @@ const LEVEL_FREEPLAY_KAHURANGI = {
         branch: {
           reached: { // kākāpō already secured downslope — a South Island kōkako STRETCH opens
             focus: ['kokako'], moaFocus: 'little_bush_moa', nestingGoal: true, kokakoStretch: true,
-            introduce: [{ type: 'kokako', count: 3 }],
-            note: "With the kākāpō secured downslope, a stretch: grow the South Island kōkako in the forest refuge, and settle the little bush moa in new groves.",
+            introduce: [{ type: 'kokako', count: 3 }, { type: 'upland_moa', count: 8 }],
+            note: "With the kākāpō secured downslope, a stretch: grow the South Island kōkako in the forest refuge, and settle the little bush moa in new groves. The upland moa return in numbers to the high country.",
             availablePlaceables: { lancewood: {}, nestRaid: {}, shelter: {}, nest: {}, waterhole: {}, Storm: {} }
           },
           missed: { // the rimu mast falls late, in the COLD upslope — the hard kākāpō year
             focus: ['kakapo'], mast: true, moaFocus: 'upland_moa', nestingGoal: true,
-            introduce: [{ type: 'kakapo', count: 4 }],
-            note: "The rimu mast falls late — here, in the cold upslope. The kākāpō must breed in harsher country. Hold the upland moa alongside them; no kōkako can be spared this loop.",
-            availablePlaceables: { speargrass: {}, keaLure: {}, nestRaid: {}, shelter: {}, nest: {}, waterhole: {}, Storm: {} }
+            introduce: [{ type: 'kakapo', count: 4 }, { type: 'upland_moa', count: 8 }],
+            note: "The rimu mast falls late — here, in the cold upslope. The kākāpō must breed in harsher country. Loose the Rimu Berry Scramble for a berry glut to feed and secure them. Hold the upland moa alongside them; no kōkako can be spared this loop.",
+            availablePlaceables: { speargrass: {}, keaLure: {}, rimuScramble: {}, shelter: {}, nest: {}, waterhole: {}, Storm: {} }
           }
         }
       }
@@ -247,7 +257,40 @@ const LEVEL_FREEPLAY_KAHURANGI = {
     freeplayProtectFloor: 2,    // last N of each FOCUS species are protected this year
     freeplayRefoundCount: 3,    // extinct non-focus species refound with this many
     freeplayDefaultTarget: 8,   // recovery target when a species isn't in freeplayTargets
-    freeplayGoalReward: 80,     // base mauri per met goal (scaled up by coldIndex)
+    freeplayGoalReward: 0,      // accomplishing a goal no longer gives a mauri boost (was 80)
+
+    // ---- Passive mauri: a healthy, EVEN ecosystem pays (the core income) ------
+    // Income per second = (avg population of non-eagle species ABOVE their floor)
+    // × BALANCE, where BALANCE = min/max of those populations (1 = perfectly even,
+    // →0 = one species dominates). So it rewards breadth + evenness, not farming one
+    // species. `imbalanceHarshness` raises the balance penalty a little each YEAR, so
+    // holding an even spread gets harder as the run deepens. Eagles never count.
+    freeplayPassive: { scale: 1.0, imbalanceHarshness: 0.04 },
+
+    // ---- Year-to-year reset: fall back to defaults, nudged by past performance ----
+    // A new year is a NEW HABITAT — populations do NOT haul across. Each species falls
+    // back to its default (moa: initialSpeciesDistribution; birds: initialEntityCounts,
+    // else `birdDefault`), nudged up a little if you held a lot of it the LAST time you
+    // were in THIS area (per-area memory): nudge = round((lastHere − default)·influence),
+    // capped at `maxNudge`. Forest you grew here partly persists (`forestLegacy`). Keeps
+    // the game from snowballing on current performance while still rewarding cultivation.
+    freeplayYearReset: { influence: 0.25, maxNudge: 3, birdDefault: 3, forestLegacy: 0.4 },
+
+    // Moa laying earns no mauri here (breeding income is the small hatch bonus below,
+    // and the steady passive stream); keeps moa from out-earning the flighted birds.
+    noEggLaidMauri: true,
+
+    // ---- Egg-hatch bonus: small, and for EVERY species -----------------------
+    // A little mauri per hatch (moa AND birds) while that species is still below the
+    // taper: `fullAmount` at/under `full`, `reducedAmount` up to `reduced`, then 0. Small
+    // by design — the passive ecosystem stream is the main income, this just nudges growth.
+    hatchReward: { perSpecies: true, full: 6, reduced: 10, fullAmount: 2, reducedAmount: 1, allSpecies: true },
+
+    // ---- Introduced-bird floors ---------------------------------------------
+    // The kākā are introduced by hand each loop; a small static floor means the last
+    // pair can't be hunted or starved, so a flock with podocarp forest to feed in never
+    // dies off entirely (it can still be pressured down to the floor). See mauri_kaka.js.
+    populationFloors: { kaka: 2 },
 
     // ---- Mast Year interactable (buy with the palette; see Game.triggerMastYear) ----
     mastFlockMult: 1.6,         // fruit-bird flock caps swell by this ×  during a mast year
@@ -292,7 +335,8 @@ const LEVEL_FREEPLAY_KAHURANGI = {
     // baseSuccess minus moaPenalty per moa within moaRadius (so clear the moa first).
     keaRaid: {
       stationCount: 3,
-      stationRadius: 150,
+      stationRadius: 260,       // kea count as stationed from further off (they perch across the
+                               // forest patch, not only right on the nest — avoids a raid softlock)
       cost: 60,
       baseSuccess: 0.9,
       moaPenalty: 0.12,
@@ -328,7 +372,9 @@ const LEVEL_FREEPLAY_KAHURANGI = {
 
     // ---- Emergent eagles. In Free Play their extinction is NOT a loss: it unleashes
     // a dominant-moa boom and they re-immigrate next year (see Game._updateEagleBoom).
-    emergentEagles: true, eagleTargetRatio: 1 / 8, eagleMaxPopulation: 8, eagleHungerRate: 0.02,
+    // eagleTargetRatioPerLoop nudges the eagles-per-prey ratio UP a little each 4-year loop
+    // (applied in Game._maybeGlacialDeepen), so predation pressure climbs over the run.
+    emergentEagles: true, eagleTargetRatio: 1 / 8, eagleTargetRatioPerLoop: 0.012, eagleMaxPopulation: 8, eagleHungerRate: 0.02,
       eagleStarveThreshold: 90, eagleStarveTimeout: 2400, eagleReproChance: 0.4, eagleReproCooldown: 2600,
       eagleReproCheckInterval: 220, eagleMaturityAge: 1500, eaglePreyPopThreshold: 12,
       startingEagleEggHatchTime: 1800, eagleMateRadius: 250, eagleOverhuntRestraint: 30, eagleRestraintCap: 45,
@@ -349,7 +395,7 @@ const LEVEL_FREEPLAY_KAHURANGI = {
 
   menu: {
     title: "Free Play — Kahurangi",
-    subtitle: "endless glacials",
+    subtitle: "",
     areaLabel: "NW Nelson, Te Waipounamu",
     areaSubtitle: "Upper West Coast, South Island",
     featuredSpecies: {

@@ -38,7 +38,7 @@ const GLTerrain = {
     const vs =
       'attribute vec4 aWorld;attribute vec3 aNormal;attribute vec3 aColCur;attribute vec3 aColNext;' +
       'uniform float uK,uLIFT,uScrollX,uScrollY,uViewX,uViewY,uViewZoom,uSS,uW,uH,uSeasonBlend,uWorldH;' +
-      'varying vec3 vN;varying vec3 vCol;varying float vHaze;varying float vWater;varying vec2 vWorld;varying float vElev;' +
+      'varying vec3 vN;varying vec3 vCol;varying float vHaze;varying float vWater;varying vec2 vWorld;varying vec2 vPaint;varying float vElev;' +
       'void main(){' +
       '  float lx=aWorld.x-uScrollX; float ly=aWorld.y-uScrollY;' +
       '  float paintX=lx; float paintY=ly*uK - aWorld.z*uLIFT + uLIFT;' +   // Projection.groundY, relief on
@@ -47,7 +47,7 @@ const GLTerrain = {
       '  gl_Position=vec4(sx/uW*2.0-1.0, 1.0 - sy/uH*2.0, 0.0, 1.0);' +
       '  vN=aNormal; vCol=mix(aColCur,aColNext,uSeasonBlend);' +
       '  vHaze=clamp(1.0 - aWorld.y/uWorldH, 0.0, 1.0);' +               // far (small worldY) → 1
-      '  vWater=aWorld.w; vWorld=aWorld.xy; vElev=aWorld.z;' +
+      '  vWater=aWorld.w; vWorld=aWorld.xy; vPaint=vec2(paintX,paintY); vElev=aWorld.z;' +
       '}';
     // Lighting: two-tone daylight — a warm sun key (uSunCol) plus a cool sky fill
     // (uSkyCol) for the ambient, so lit faces read warm and hollows fall to a natural
@@ -61,7 +61,7 @@ const GLTerrain = {
     //     so the whole land goes wan and blue as the ice tightens and warms back in a thaw.
     const fs =
       'precision mediump float;' +
-      'varying vec3 vN;varying vec3 vCol;varying float vHaze;varying float vWater;varying vec2 vWorld;varying float vElev;' +
+      'varying vec3 vN;varying vec3 vCol;varying float vHaze;varying float vWater;varying vec2 vWorld;varying vec2 vPaint;varying float vElev;' +
       'uniform vec3 uSun;uniform float uAmbient;uniform float uFrost;uniform vec3 uFrostCol;' +
       'uniform vec3 uHazeCol;uniform float uHazeAmt;uniform float uTime;uniform vec3 uWaterCol;' +
       'uniform vec3 uSunCol;uniform vec3 uSkyCol;uniform float uCold;uniform vec3 uColdTint;' +
@@ -69,32 +69,36 @@ const GLTerrain = {
       'void main(){' +
       '  vec3 sun=normalize(uSun); vec3 N=normalize(vN); vec3 col;' +
       '  if(vWater>0.5){' +
-      '    float t=uTime;' +
-      // Three directional wave trains (dominant swell + cross swell + fine chop) summed as
-      // SLOPES → one smooth, coherent surface normal. Low-frequency + directional reads as
-      // water; the old crossing high-freq cosines read as noise.
-      '    vec2 d1=vec2(0.86,0.50), d2=vec2(-0.50,0.86), d3=vec2(0.22,-0.97);' +
-      '    float p1=dot(vWorld,d1)*0.042 + t*0.70;' +
-      '    float p2=dot(vWorld,d2)*0.080 - t*0.95;' +
-      '    float p3=dot(vWorld,d3)*0.185 + t*1.55;' +
-      '    vec2 slope=(0.95*cos(p1)*0.042)*d1 + (0.55*cos(p2)*0.080)*d2 + (0.30*cos(p3)*0.185)*d3;' +
-      '    slope*=4.2;' +
-      '    vec3 wn=normalize(vec3(-slope.x,-slope.y,1.0));' +
-      '    vec3 viewDir=vec3(0.0,0.0,1.0);' +
-      // Fresnel: wave faces tilted from straight-down catch more SKY reflection — the sparkle
-      // that reads as a real surface rather than a tinted texture.
-      '    float fres=pow(1.0-max(0.0,dot(wn,viewDir)),3.0);' +
-      // Depth colour: deep cells stay dark blue; shallows (higher water elevation) lift to teal.
-      '    vec3 shallow=mix(uWaterCol, vec3(0.34,0.60,0.60), 0.6);' +
-      '    vec3 wcol=mix(uWaterCol, shallow, clamp(vElev*3.0,0.0,1.0));' +
-      // Lit body, then blend the sky (haze) reflection in by Fresnel.
-      '    float dw=max(0.0,dot(wn,sun));' +
-      '    vec3 body=wcol*(uSkyCol*uAmbient + uSunCol*(1.0-uAmbient)*dw);' +
-      '    col=mix(body, uHazeCol*1.06, fres*0.45);' +
-      // Sharp, moving sun glint sliding over the swell.
-      '    vec3 hlf=normalize(sun+viewDir);' +
-      '    float spec=pow(max(0.0,dot(wn,hlf)),90.0);' +
-      '    col+=uSunCol*spec*1.10;' +
+      // Caustic water-turbulence effect after David Hoskins / joltz0r (GLSL sandbox).
+      // Sampled in the terrain PAINT space (vPaint = the plan-oblique projected ground
+      // coordinate: world X, world Y squashed by uK + the relief lift) rather than raw world
+      // space, so the ripple field is skewed into the SAME tilted plane as the terrain and
+      // rides the coastline lift. Still locked to the ground as the camera pans; mod() tiles it.
+      '    float time=uTime*0.1+23.0;' +
+      // ANISOTROPIC: tight across the swell (paintX) but stretched ALONG the crest (paintY),
+      // so the ripples read as long wave lines running down-screen rather than round blobs.
+      // Then roll the sample in +X over time so the swell washes in toward the shore.
+      '    vec2 uvw=vPaint*vec2(0.0090,0.0026);' +
+      '    uvw.x+=uTime*0.030;' +
+      '    vec2 p=mod(uvw*6.28318530718,6.28318530718)-250.0;' +
+      '    vec2 iq=p; float c=1.0; float inten=0.005;' +
+      '    for(int n=0;n<5;n++){' +
+      '      float t=time*(1.0-(3.5/float(n+1)));' +
+      '      iq=p+vec2(cos(t-iq.x)+sin(t+iq.y), sin(t-iq.y)+cos(t+iq.x));' +
+      '      c+=1.0/length(vec2(p.x/(sin(iq.x+t)/inten), p.y/(cos(iq.y+t)/inten)));' +
+      '    }' +
+      '    c/=5.0; c=1.17-pow(c,1.4);' +
+      '    float h=pow(abs(c),8.0);' +
+      // POSTERIZE the highlight into a handful of bands so the foam reads stepped, like the
+      // terrain's banded elevation shading. Raise the 5.0 for finer steps, lower for chunkier.
+      '    h=floor(h*4.0+0.5)/4.0;' +
+      '    vec3 caustic=clamp(vec3(h)+vec3(0.0,0.42,0.5),0.0,1.0);' +
+      // Deep cells stay darker & bluer (toward uWaterCol); shallows lift to the bright ripples.
+      '    float depth=clamp(vElev*6.0,0.0,1.0);' +
+      '    caustic=mix(mix(uWaterCol,caustic,0.55), caustic, depth);' +
+      // Ride the scene light so the sea dims at dusk/night with the rest of the land.
+      '    vec3 sceneLit=uSkyCol*uAmbient+uSunCol*(1.0-uAmbient);' +
+      '    col=caustic*mix(vec3(1.0),sceneLit,0.6);' +
       '  } else {' +
       '    float d=max(0.0,dot(N,sun));' +
       '    col=vCol*(uSkyCol*uAmbient + uSunCol*(1.0-uAmbient)*d);' +
@@ -268,22 +272,37 @@ const GLTerrain = {
     const mk = (data, drawType) => { const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf);
       gl.bufferData(gl.ARRAY_BUFFER, data, drawType || gl.STATIC_DRAW); return buf; };
     const posB = mk(pos), nrmB = mk(nrm);
-    const colCurB = gl.createBuffer(), colNextB = gl.createBuffer();
     const idxB = gl.createBuffer();
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, idxB);
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, idx, gl.STATIC_DRAW);
 
-    this._buffers = { pos: posB, nrm: nrmB, colCur: colCurB, colNext: colNextB, idx: idxB, count: k };
-    this._dims = { cols, rows, worldW, worldH, key };
-    this._colKeyCur = this._colKeyNext = null;   // force a colour upload next draw
+    // Free the previous land's GL buffers (this runs only on an actual rebuild — glacial
+    // advance or seed change; the same-key early-out above skips it) so the four per-season
+    // colour buffers below don't leak a full set each year.
+    if (this._buffers) { const ob = this._buffers;
+      [ob.pos, ob.nrm, ob.idx].forEach(x => x && gl.deleteBuffer(x));
+      if (ob.colByKey) for (const kk in ob.colByKey) gl.deleteBuffer(ob.colByKey[kk]);
+    }
 
-    // Pre-warm the per-season vertex colours (clear the old land's cache first) so no
-    // season change — winter especially — pays the ~80ms compute at runtime. Done here,
-    // once per land build (part of the visible "preparing" work), not on the hot path.
+    this._buffers = { pos: posB, nrm: nrmB, idx: idxB, count: k, colByKey: {} };
+    this._dims = { cols, rows, worldW, worldH, key };
+
+    // Per-season vertex colours: compute each season ONCE and upload it to its OWN static GPU
+    // buffer here (part of the visible "preparing" build), clearing the old land's cache first.
+    // A season change is then just a buffer BIND of the right cur/next pair in draw() — no
+    // re-upload. The old path re-uploaded BOTH ~10MB colour buffers via bufferData at every
+    // season boundary (~20ms → a dropped frame, the end-of-season stutter). The JS colour cache
+    // is released once uploaded; the GPU copies are the live ones.
     this._seasonColorCache = null;
     for (const _k of ['summer', 'autumn', 'winter', 'spring']) {
-      try { this._seasonColors(terrain, _k); } catch (_) {}
+      try {
+        const c3 = this._seasonColors(terrain, _k);
+        const cb = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, cb);
+        gl.bufferData(gl.ARRAY_BUFFER, c3, gl.STATIC_DRAW);
+        this._buffers.colByKey[_k] = cb;
+      } catch (_) {}
     }
+    this._seasonColorCache = null;   // GPU holds the colours now; free the JS Float32 copies
     return true;
   },
 
@@ -302,30 +321,12 @@ const GLTerrain = {
     return out;
   },
 
-  _uploadColors(terrain, seasonManager) {
-    const gl = GLBatch.gl;
-    const curKey = seasonManager ? seasonManager.currentKey : 'summer';
-    const nextKey = seasonManager ? (seasonManager.nextKey || curKey) : curKey;
-    if (curKey !== this._colKeyCur) {
-      gl.bindBuffer(gl.ARRAY_BUFFER, this._buffers.colCur);
-      gl.bufferData(gl.ARRAY_BUFFER, this._seasonColors(terrain, curKey), gl.STATIC_DRAW);
-      this._colKeyCur = curKey;
-    }
-    if (nextKey !== this._colKeyNext) {
-      gl.bindBuffer(gl.ARRAY_BUFFER, this._buffers.colNext);
-      gl.bufferData(gl.ARRAY_BUFFER, this._seasonColors(terrain, nextKey), gl.STATIC_DRAW);
-      this._colKeyNext = nextKey;
-    }
-  },
-
   // ---- draw (called each frame in GL mode, after GLBatch.begin() clears) --------
   // clip rect (logical px) matches the 2D game-area clip so terrain never spills onto HUD.
   draw(game, clipX, clipY, clipW, clipH) {
     if (!this.available() || !this._buffers) return;
     const gl = GLBatch.gl, t = game.terrain, P = Projection;
     const ss = (typeof spriteSS === 'function') ? spriteSS() : 1;
-
-    this._uploadColors(t, game.seasonManager);
 
     gl.useProgram(this._prog);
     gl.disable(gl.DEPTH_TEST);
@@ -404,8 +405,14 @@ const GLTerrain = {
       gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, size, gl.FLOAT, false, 0, 0); };
     bindAttr(b.pos, this._aWorld, 4);
     bindAttr(b.nrm, this._aNormal, 3);
-    bindAttr(b.colCur, this._aColCur, 3);
-    bindAttr(b.colNext, this._aColNext, 3);
+    // Seasonal colour = BIND the persistent per-season buffers for this frame's current/next
+    // pair; uSeasonBlend crossfades them in the shader. No per-season upload (see build()).
+    const _sm2 = game.seasonManager;
+    const curKey = _sm2 ? _sm2.currentKey : 'summer';
+    const nextKey = _sm2 ? (_sm2.nextKey || curKey) : curKey;
+    const ck = b.colByKey || {};
+    bindAttr(ck[curKey] || ck.summer, this._aColCur, 3);
+    bindAttr(ck[nextKey] || ck[curKey] || ck.summer, this._aColNext, 3);
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, b.idx);
     gl.drawElements(gl.TRIANGLES, b.count, this._idxType, 0);
 

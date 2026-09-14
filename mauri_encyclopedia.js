@@ -16,22 +16,32 @@ const ENCYCLOPEDIA = [
   { id: 'upland_moa', category: 'Moa', title: 'Upland Moa', subtitle: 'Megalapteryx didinus',
     body: [
       "The small, agile moa of the high country — subalpine tussock and montane forest,",
-      "up to the treeline. Alone among moa it was feathered right down to the ankle, an",
-      "adaptation to the cold. It browsed beech leaves and twigs, nectar-rich flax and",
-      "fuchsia flowers, and subalpine herbs.",
+      "up to the treeline. Alone among the moa it was feathered right down its legs, almost",
+      "to the toes, against the cold, and browsed beech twigs, subalpine herbs and the",
+      "nectar-rich flowers of flax and fuchsia.",
       "",
-      "In Free Play its cold tolerance makes it the backbone of a deep-glacial community:",
-      "when the lowland moa falter, the upland moa is often the last still breeding."
-    ], seeAlso: ['beech_refuge', 'winter_food', 'glacial_cycles'] },
+      "As the cold deepened and open country spread, the upland moa was joined up here by",
+      "the heavy-footed and crested moa, which adapted well to the same harsh, exposed",
+      "ground.",
+      "",
+      "Its cold tolerance makes it the backbone of a deep-glacial community: when the",
+      "lowland moa falter, the upland moa is often the last still breeding — as in life,",
+      "where it outlasted every other moa."
+    ], seeAlso: ['subalpine', 'beech_refuge', 'glacial_cycles'] },
 
   { id: 'little_bush_moa', category: 'Moa', title: 'Little Bush Moa', subtitle: 'Anomalopteryx didiformis',
     body: [
-      "A closed-forest specialist of the lowland and montane bush. Small and secretive,",
-      "it kept to the cover of the canopy and browsed the forest understorey.",
+      "The smallest of the moa, and a closed-forest specialist. Small and secretive, it",
+      "kept to the cover of the canopy and browsed the forest understorey.",
+      "",
+      "In the sparse forest of Aotearoa's last glacial winters the bush moa was pushed",
+      "back into the refugia, in a constant struggle for survival. But it held on, and",
+      "began to thrive again as temperatures warmed and dense forest returned at the onset",
+      "of the Holocene.",
       "",
       "It favours planted lancewood (horoeka), a browse-resistant food that competitors",
       "largely ignore — so a lancewood stand draws the bush moa and few others."
-    ], seeAlso: ['beech_refuge', 'coexistence'] },
+    ], seeAlso: ['beech_refuge', 'coexistence', 'glacial_cycles'] },
 
   { id: 'south_island_giant_moa', category: 'Moa', title: 'South Island Giant Moa', subtitle: 'Dinornis robustus',
     body: [
@@ -75,43 +85,73 @@ const ENCYCLOPEDIA = [
       "forest refuge in the cold and rebounds as the canopy recovers."
     ], seeAlso: ['beech_refuge', 'winter_food'] },
 
-  { id: 'kokako', category: 'Fauna', title: 'Kōkako', subtitle: 'South Island kōkako',
+  { id: 'kokako', category: 'Fauna', title: 'Kōkako', subtitle: 'South Island kōkako · Callaeas cinereus',
     body: [
-      "A wattlebird of the deep forest — a poor flier that bounds between branches. An",
-      "ambient forest voice, tied to the health of the canopy."
-    ], seeAlso: ['beech_refuge'] },
+      "A wattlebird of the deep forest — a poor flier that bounds between the branches on",
+      "long legs, and carries a slow, organ-like song across the canopy. The South Island",
+      "bird wore orange wattles at the throat.",
+      "",
+      "In the glacial ages the kōkako were elusive; without a dense forest mosaic, foraging",
+      "and nesting became very difficult for them. Even after the last glacial their numbers",
+      "kept shrinking, and today the South Island bird is all but gone — a grey ghost no one",
+      "can quite confirm.",
+      "",
+      "You are doing very well if you can bring the forest back and make the rimu mast early",
+      "enough to return this ghost to Te Waipounamu."
+    ], seeAlso: ['beech_refuge', 'rimu', 'glacial_cycles'] },
 
   { id: 'kea', category: 'Fauna', title: 'Kea', subtitle: 'Nestor notabilis',
     body: [
-      "The world's only alpine parrot — a bold, wide-ranging generalist of the subalpine",
-      "tussock and scrub. As the cold closes in it descends into the forest below, where",
-      "it will settle and nest.",
+      "The world's only alpine parrot — a bold, restless generalist of the subalpine",
+      "tussock and scrub, and by repute the cleverest bird in these mountains.",
+      "",
+      "Kea split from the kākā close to two million years ago, as the Southern Alps rose",
+      "and the ice ages opened up alpine country for a parrot willing to leave the forest.",
+      "They are more solitary than the kākā, but far cleverer and far more opportunistic:",
+      "as well as berries such as pātōtara, they raid the nests of ground-birds like kiwi",
+      "and moa for the eggs. Where no moa are near, a Haast's eagle has less reason to hunt",
+      "over kea country.",
       "",
       "In Free Play the kea are your lever on the moa nests: a Berry Cache placed downslope",
-      "draws the flock onto the forest, and stationed kea can be loosed to raid a nesting",
-      "site (Nest Raid)."
-    ], seeAlso: ['beech_refuge', 'glacial_cycles', 'predator_prey'] },
+      "draws the flock down onto the forest, and stationed kea can be loosed to raid a",
+      "nesting site (Nest Raid)."
+    ], seeAlso: ['kaka', 'beech_refuge', 'glacial_cycles', 'predator_prey'] },
 
   { id: 'kaka', category: 'Fauna', title: 'Kākā', subtitle: 'Nestor meridionalis',
     body: [
-      "The forest parrot — kea's gregarious, forest-dwelling sister. It works the podocarp",
-      "and beech canopy for fruit, seed, nectar and sap, and gathers into noisy foraging",
-      "parties. A seed predator more than a disperser.",
+      "The forest parrot — kea's gregarious, forest-dwelling sister, and its mirror image.",
+      "Where the kea took to the alps, the kākā kept to the trees, working the podocarp and",
+      "beech canopy for fruit, seed, nectar and sap and prising grubs from under the bark.",
+      "It gathers into noisy foraging parties, and is a seed predator more than a disperser.",
       "",
-      "Squeezed into the shrinking forest refuge with the bush moa as the glacial deepens,",
-      "so the podocarp forest you grow is its lifeline."
-    ], seeAlso: ['beech_refuge', 'winter_food'] },
+      "Kākā are a warm-forest bird: their bones are common in the deposits of the Holocene,",
+      "laid down when tall wet forest reached its greatest extent. As the glacial deepens",
+      "they are squeezed into the shrinking forest refuge alongside the bush moa — so the",
+      "podocarp forest you grow is their lifeline."
+    ], seeAlso: ['kea', 'beech_refuge', 'winter_food'] },
 
   { id: 'kakapo', category: 'Fauna', title: 'Kākāpō', subtitle: 'Strigops habroptilus',
     body: [
-      "The flightless, nocturnal ground parrot — the heaviest parrot alive. It walks the",
-      "forest floor browsing leaves, stems and fruit, freezes and relies on camouflage",
-      "rather than fleeing, and the males hold spaced courts (a lek), driving rivals off.",
+      "The heaviest parrot in the world, and the only one that cannot fly — a nocturnal,",
+      "moss-green bird with an owl-like face and a sweet, musty scent. With the kea and the",
+      "kākā it belongs to the most ancient lineage of parrots on Earth. It browses the",
+      "forest floor for leaves, stems and fruit and, rather than flee, freezes and trusts",
+      "its camouflage.",
+      "",
+      "Its oddest habit is its breeding: the males gather on high ground and boom through",
+      "the night from shallow bowls to call the females in — and they are fiercely",
+      "territorial about it, attacking any rival whose court is dug too close.",
+      "",
+      "In the warm interglacials kākāpō were everywhere — dense forest ran the length of",
+      "the land, the rimu thronged and fruited, and the birds far outnumbered the eagles.",
+      "In this glacial age most of the South Island is stripped to scrub and herbfield;",
+      "Kahurangi is a refuge where the beech holds on, with rimu clinging to the most",
+      "sheltered pockets.",
       "",
       "It breeds only in a rimu MAST year, so its numbers hold or slowly fall until a mast",
       "lets the flock surge. Fern shelters draw un-settled birds — use them to spread the",
       "flock out."
-    ], seeAlso: ['rimu', 'beech_refuge'] },
+    ], seeAlso: ['rimu', 'beech_refuge', 'glacial_cycles'] },
 
   // ---- Plants ----------------------------------------------------------------
   { id: 'beech', category: 'Plants', title: 'Beech', subtitle: 'Tawhai · Nothofagus/Fuscospora',

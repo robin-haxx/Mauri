@@ -36,7 +36,7 @@ const LEVEL_FREEPLAY_KAHURANGI = {
   terrain: {
     noiseScale: 0.005, octaves: 3, persistence: 0.32, lacunarity: 3.0,
     ridgeInfluence: 1.6, elevationPower: 1.4, islandFalloff: 0.2,
-    plantDensity: 0.008, useLakes: false
+    plantDensity: 0.005, useLakes: false
   },
 
   // ---- 2×2 continuous terrain grid: the camera pans a new area each year -----------

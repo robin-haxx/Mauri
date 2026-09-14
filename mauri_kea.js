@@ -71,6 +71,15 @@ class Kea extends Kereru {
     // A tree counts as "near a site" out to the RAID station radius, so a preferred perch
     // is always one that also counts as stationed (they were settling just outside it).
     this._perchSiteRadius  = sp.perchSiteRadius ?? ((M.keaRaid && M.keaRaid.stationRadius) || 240);
+
+    // Social mate-seek (Berry Cache flock cascade). A kea NOT already being pulled to a cache
+    // will drift toward a nearby flockmate that IS cache-bound — and that leader has a BOOSTED
+    // mate-seek reach because it sits in a cache's pull. So the cache's draw chains outward
+    // through the flock: a kea just beyond a cache's own reach follows one that's heading in,
+    // then commits to the cache itself once in range (mauri_kea.js behave → _seekCacheFlockmate).
+    this._mateSeekRadius = sp.mateRadius ?? 220;
+    this._mateSeekBoost  = sp.mateSeekBoost ?? 2.4;   // cache-bound leaders draw from this× farther
+    this._mateSeekWeight = sp.mateSeekWeight ?? 0.5;  // gentle — below the direct cache pull
   }
 
   // Stash the season manager so _preferredElevBand (reached deep in the base state
@@ -96,7 +105,7 @@ class Kea extends Kereru {
     }
 
     super.behave(sim, mauri, seasonManager, dt);
-    if (!this._grounded && this.state === KERERU_STATE.FLYING) {
+    if (!this._grounded && !this._fleeingStorm && this.state === KERERU_STATE.FLYING) {
       // A Berry Cache (kea lure) placed downslope outranks everything — it pulls the
       // flock onto the forest patch to settle. The bird holds a COMMITTED choice of
       // cache (re-picked on a jittered timer, or when the choice dies / leaves range),
@@ -119,11 +128,39 @@ class Kea extends Kereru {
         if (dx * dx + dy * dy > lr * lr) {
           this.applyForce(this.seekPoint(lure.pos.x, lure.pos.y, 0.85, lr));
         }
-      } else if (!this._perchValid()) {
-        const pt = this._bandwardPoint();
-        if (pt) this.applyForce(this.seekPoint(pt.x, pt.y, 0.6));
+      } else {
+        // No cache in this bird's own reach: FOLLOW a cache-bound flockmate if one is close
+        // (the social cascade — extends a cache's draw beyond its own radius). Else drift to band.
+        const leader = this._seekCacheFlockmate(sim);
+        if (leader) {
+          this.applyForce(this.seekPoint(leader.pos.x, leader.pos.y, this._mateSeekWeight));
+        } else if (!this._perchValid()) {
+          const pt = this._bandwardPoint();
+          if (pt) this.applyForce(this.seekPoint(pt.x, pt.y, 0.6));
+        }
       }
     }
+  }
+
+  // The nearest flockmate that is BEING PULLED to a berry cache (has a live _lureChoice), within
+  // the boosted mate-seek reach. Following it chains the cache's draw outward through the flock:
+  // a kea just beyond a cache's own radius trails one that's heading in, then commits itself once
+  // the cache falls inside its own attract range. null when no kea is cache-bound nearby.
+  _seekCacheFlockmate(sim) {
+    const flock = sim.otherEntities && sim.otherEntities.kea;
+    if (!flock || flock.length < 2) return null;
+    const r = this._mateSeekRadius * this._mateSeekBoost, rSq = r * r;
+    const px = this.pos.x, py = this.pos.y;
+    let best = null, bestSq = rSq;
+    for (let i = 0; i < flock.length; i++) {
+      const o = flock[i];
+      if (o === this || !o.alive) continue;
+      const c = o._lureChoice;
+      if (!c || !c.alive) continue;                 // only a cache-bound leader counts
+      const dx = o.pos.x - px, dy = o.pos.y - py, dSq = dx * dx + dy * dy;
+      if (dSq < bestSq) { bestSq = dSq; best = o; }
+    }
+    return best;
   }
 
   _perchValid() {
@@ -167,11 +204,14 @@ class Kea extends Kereru {
         const dx = o._perchTree.pos.x - p.pos.x, dy = o._perchTree.pos.y - p.pos.y;
         if (dx * dx + dy * dy < crowdR2) crowd++;
       }
-      // Site bonus: favour trees near a moa nesting site (so the flock stations to raid).
+      // Site bonus: favour trees near a moa nesting site that actually HOLDS A CLUTCH — an
+      // empty nest can't be raided, so kea shouldn't fixate on it (that was the "kea stuck at
+      // a no-clutch nest" softlock). A placed berry cache is now what stations them at the
+      // target nest; a clutched nest still adds pull once the moa have laid.
       let siteBonus = 0;
       for (let s = 0; s < sites.length; s++) {
         const st = sites[s];
-        if (!st.alive) continue;
+        if (!st.alive || (st.eggCount || 0) <= 0) continue;
         const dx = st.pos.x - p.pos.x, dy = st.pos.y - p.pos.y;
         if (dx * dx + dy * dy < siteR2) { siteBonus = this._perchSiteBonus; break; }
       }

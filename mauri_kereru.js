@@ -182,15 +182,11 @@ class Kereru extends Boid {
   // Called by Simulation._updateOtherEntities as behave(sim, mauri, seasonManager, dt).
   // ============================================================
   behave(sim, mauri, seasonManager, dt) {
-    // A storm placed nearby grounds the bird (it shelters): no feeding, dispersal
-    // or laying while hunkered — overusing STORM stalls the forest's recruitment.
-    this._grounded = this._isStormNear(sim);
-    if (this._grounded) {
-      this.state = KERERU_STATE.SHELTER;
-      this.maxSpeed = (this.speciesData?.config?.baseSpeed || 1.4) * 0.4;
-      this.vel.mult(Math.pow(0.9, dt));              // ease to a low hover
-      return;
-    }
+    // Storms no longer GROUND a flyer — they FLUSH it off its tree (see _fleeStorm), so it
+    // still ages, hungers and moves rather than hunkering in place. _fleeingStorm tells the
+    // subclasses (kea/kākā/kākāpō) to hold their extra steering while it's fleeing clear.
+    this._grounded = false;
+    this._fleeingStorm = false;
 
     // Age → maturity, and hunger (feeding pays it back below).
     this.age += dt;
@@ -198,7 +194,11 @@ class Kereru extends Boid {
     this.hunger = Math.min(this.hunger + this.hungerRate * dt, this.maxHunger);
     if (this._eggCooldown > 0) this._eggCooldown = Math.max(0, this._eggCooldown - dt);
 
-    // Flush from a hunting eagle first — a raptor on the hunt scatters the flock.
+    // A placed Storm scares the bird OFF its tree — it drops the perch and flies clear to
+    // seek a new one (a displacement tool, not shelter). Outranks the ordinary state loop.
+    if (this._fleeStorm(sim, dt)) return;
+
+    // Flush from a hunting eagle next — a raptor on the hunt scatters the flock.
     if (this._fleeHarrier(sim, dt)) return;
 
     this._runState(sim, dt);
@@ -228,20 +228,47 @@ class Kereru extends Boid {
     this.edges();
   }
 
-  // True if an active Storm placeable sits near the bird (Mauri's storm is placed,
-  // not a global button). Cheap: there are only ever a handful of placeables.
-  _isStormNear(sim) {
+  // The nearest live Storm placeable whose cloud covers the bird (its radius + a margin), or
+  // null. Mauri's storm is a placed tool. Cheap: only a handful of placeables.
+  _nearestStorm(sim) {
     const list = sim.placeables;
-    if (!list) return false;
-    const R = 150, RSq = R * R;
+    if (!list) return null;
     const px = this.pos.x, py = this.pos.y;
+    let best = null, bestSq = Infinity;
     for (let i = 0; i < list.length; i++) {
       const p = list[i];
       if (!p.alive || p.type !== 'Storm') continue;
-      const dx = p.pos.x - px, dy = p.pos.y - py;
-      if (dx * dx + dy * dy <= RSq) return true;
+      const r = (p.radius || 70) * 1.6;              // flush a bit beyond the visible cloud
+      const dx = p.pos.x - px, dy = p.pos.y - py, d2 = dx * dx + dy * dy;
+      if (d2 <= r * r && d2 < bestSq) { bestSq = d2; best = p; }
     }
-    return false;
+    return best;
+  }
+
+  // A Storm within range FLUSHES the bird: it abandons its perch/target tree and flies
+  // directly away from the storm to seek a fresh one — the storm MOVES the flighted birds
+  // off a spot rather than sheltering them. Only real flyers respond (a flightless kākāpō
+  // is unaffected). Sets _fleeingStorm so subclasses hold their own steering. Returns true
+  // when it takes over the tick.
+  _fleeStorm(sim, dt) {
+    if (!this.isFlyer) return false;
+    const storm = this._nearestStorm(sim);
+    if (!storm) return false;
+    this._fleeingStorm = true;
+    this.state = KERERU_STATE.FLYING;
+    this._targetTree = null;                         // drop the tree it was heading to / feeding at
+    this._perchTree = null;                          // and any home perch (kea) — re-chosen once clear
+    const base = this.speciesData?.config?.baseSpeed || 0.42;
+    this.maxSpeed = base * 1.2;                      // hurry off, a shade above cruise
+    let dx = this.pos.x - storm.pos.x, dy = this.pos.y - storm.pos.y;
+    let m = Math.hypot(dx, dy);
+    if (m < 1) { const a = Math.random() * Math.PI * 2; dx = Math.cos(a); dy = Math.sin(a); m = 1; }  // dead-centre → any way out
+    const land = this._clampToLand(this.pos.x + (dx / m) * 90, this.pos.y + (dy / m) * 90);
+    this._target.set(land.x, land.y);
+    this.applyForce(this.seek(this._target, 1.5));
+    this.applyForce(this._landward());
+    this.edges();
+    return true;
   }
 
   // Away from any hunting eagle within range — returns true when it took over the

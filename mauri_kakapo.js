@@ -35,53 +35,136 @@ class Kakapo extends Kereru {
     this._perchAlt = 0;
     this._altitude = 0;
 
-    // Territorial lek tuning (see behave). Males hold a court and repel rival males.
+    // Territorial lek tuning (see behave). Males hold a court, drive rival males off, and burn
+    // energy doing it. Fern shelters draw un-settled birds so the player can distribute the flock.
     const sp = (speciesData && speciesData.config) ? speciesData.config : KAKAPO_SPECIES;
-    this._lekRadius = sp.lekRadius ?? 120;
+    this._lekRadius = sp.lekRadius ?? 140;
     this._lekRadiusSq = this._lekRadius * this._lekRadius;
-    this._territoryPush = sp.territoryPush ?? 0.05;
+    this._territoryPush = sp.territoryPush ?? 0.06;
     this._territoryHold = sp.territoryHold ?? 0.02;
     this._lekAttract = sp.lekAttract ?? 0.03;
-    this._territory = null;   // a male's claimed court (set when it first walks the ground)
+    this._territory = null;   // a male's claimed court (set when it settles — at a shelter if one's near)
+    // Hunger burned each frame a male is actively contesting (chasing a rival / being driven off),
+    // so packing males tight is costly and the flock spaces out.
+    this._territoryHungerCost = (sp.territoryHungerCostPerSec ?? 0.8) / 60;
+    // Fern-shelter attraction: an un-settled kākāpō drifts to the nearest shelter (selective —
+    // only kākāpō), letting the player seed leks / spread the population by placing shelters.
+    this._shelterAttract = sp.shelterAttract ?? 0.05;
+    this._shelterAttractRadius = sp.shelterAttractRadius ?? 360;
+    this._settled = false;    // has this bird settled (male: claimed a court; female: reached a spot)
+    this._settleTimer = 0;    // grace before a male with no shelter claims where it stands
   }
 
-  // Territorial lek behaviour (a basic version of the real thing). After the base ground
-  // loop steers, a MALE holds a spaced court and drives rival males out of it — so males
-  // can't pack tightly and a mast year can't hand a runaway population boom (a steadier
-  // result when you miss the mast goal, and a clearer payoff for defending a good lek). In
-  // a mast a FEMALE drifts toward the nearest male's court to pair. Skipped while a bird is
-  // storm-sheltered or not moving, so shelter and feeding aren't fought.
+  // Territorial lek behaviour. After the base ground loop steers:
+  //   · A MALE first SETTLES a court — walking to a nearby fern shelter to claim it there if one
+  //     is in reach (so the player seeds leks by placing shelters), else claiming where it stands.
+  //     Once settled it HOLDS the court and actively DRIVES RIVAL MALES OFF: it charges an
+  //     intruder inside its court and retreats when it strays into a neighbour's — a real chase
+  //     that BURNS HUNGER, so males can't pack tight (a runaway mast boom is checked, and a
+  //     well-spaced lek is worth defending).
+  //   · A FEMALE drifts to the nearest male's court in a mast to pair; otherwise the fern
+  //     shelters draw her too, so the player can spread the flock out.
+  // Skipped while storm-sheltered or not walking, so shelter and feeding aren't fought.
   behave(sim, mauri, seasonManager, dt) {
     super.behave(sim, mauri, seasonManager, dt);
-    if (this._grounded || this.state !== KERERU_STATE.FLYING) return;
+    // (A flightless kākāpō is never storm-flushed — _fleeStorm ignores non-flyers — but keep
+    // the guard for parity with the other parrots.)
+    if (this._grounded || this._fleeingStorm || this.state !== KERERU_STATE.FLYING) return;
     const list = sim.otherEntities && sim.otherEntities[this.speciesKey];
-    if (!list || list.length < 2) return;
     const px = this.pos.x, py = this.pos.y;
 
     if (!this.isFemale) {
-      if (!this._territory) this._territory = createVector(px, py);
-      let rx = 0, ry = 0, n = 0;
-      for (let i = 0; i < list.length; i++) {
-        const o = list[i];
-        if (o === this || !o.alive || o.isFemale) continue;
-        const dx = px - o.pos.x, dy = py - o.pos.y, dSq = dx * dx + dy * dy;
-        if (dSq > 0.01 && dSq < this._lekRadiusSq) {
-          const inv = 1 / Math.sqrt(dSq);
-          rx += dx * inv; ry += dy * inv; n++;
+      if (!this._settled) {
+        // Still un-settled: drift to a fern shelter to claim a court THERE (the player seeds
+        // leks with shelters), else settle where it stands after a grace. No court is held yet,
+        // so nothing fights the shelter pull.
+        const shelter = this._nearestFernShelter(sim);
+        if (shelter) {
+          this.applyForce(this.seekPoint(shelter.pos.x, shelter.pos.y, this._shelterAttract));
+          const dx = shelter.pos.x - px, dy = shelter.pos.y - py, sr = shelter.radius || 50;
+          if (dx * dx + dy * dy <= sr * sr) this._settle();
+        } else {
+          this._settleTimer += dt;
+          if (this._settleTimer > 180) this._settle();
         }
+      } else {
+        // Settled: hold the court and drive rival males off it.
+        if (!this._territory) this._territory = createVector(px, py);
+        if (list && list.length >= 2) this._contestCourt(list, dt);
+        this.applyForce(this.seekPoint(this._territory.x, this._territory.y, this._territoryHold));
       }
-      if (n > 0) this.applyForce(this.seekPoint(px + rx * 30, py + ry * 30, this._territoryPush));
-      this.applyForce(this.seekPoint(this._territory.x, this._territory.y, this._territoryHold));
-    } else if (sim.mastYear) {
-      let best = null, bestSq = Infinity;
-      for (let i = 0; i < list.length; i++) {
-        const o = list[i];
-        if (!o.alive || o.isFemale) continue;
-        const dx = o.pos.x - px, dy = o.pos.y - py, dSq = dx * dx + dy * dy;
-        if (dSq < bestSq) { bestSq = dSq; best = o; }
+    } else {
+      // Female: pair at the nearest court in a mast; otherwise let the shelters distribute her.
+      let paired = false;
+      if (sim.mastYear && list && list.length >= 2) {
+        let best = null, bestSq = Infinity;
+        for (let i = 0; i < list.length; i++) {
+          const o = list[i];
+          if (!o.alive || o.isFemale) continue;
+          const dx = o.pos.x - px, dy = o.pos.y - py, dSq = dx * dx + dy * dy;
+          if (dSq < bestSq) { bestSq = dSq; best = o; }
+        }
+        if (best) { this.applyForce(this.seekPoint(best.pos.x, best.pos.y, this._lekAttract)); paired = true; }
       }
-      if (best) this.applyForce(this.seekPoint(best.pos.x, best.pos.y, this._lekAttract));
+      if (!paired) {
+        const shelter = this._nearestFernShelter(sim);
+        if (shelter) this.applyForce(this.seekPoint(shelter.pos.x, shelter.pos.y, this._shelterAttract));
+      }
     }
+  }
+
+  // Mark this bird as settled; a male fixes its court where it now stands (if not already set).
+  _settle() {
+    if (this._settled) return;
+    this._settled = true;
+    if (!this.isFemale && !this._territory) this._territory = createVector(this.pos.x, this.pos.y);
+  }
+
+  // The nearest live fern shelter within the attraction radius (selective: only 'shelter'
+  // placeables draw kākāpō). Cheap — there are only ever a handful of placeables.
+  _nearestFernShelter(sim) {
+    const list = sim.placeables;
+    if (!list) return null;
+    const rSq = this._shelterAttractRadius * this._shelterAttractRadius;
+    const px = this.pos.x, py = this.pos.y;
+    let best = null, bestSq = rSq;
+    for (let i = 0; i < list.length; i++) {
+      const p = list[i];
+      if (!p.alive || p.type !== 'shelter') continue;
+      const dx = p.pos.x - px, dy = p.pos.y - py, dSq = dx * dx + dy * dy;
+      if (dSq < bestSq) { bestSq = dSq; best = p; }
+    }
+    return best;
+  }
+
+  // A male's active lek dispute: CHARGE the nearest rival male that has intruded on my court,
+  // and RETREAT if I've strayed into a neighbour's — so residents chase intruders off and the
+  // pair separates. Either one costs hunger, so contesting males run their energy down.
+  _contestCourt(list, dt) {
+    const px = this.pos.x, py = this.pos.y;
+    let contesting = false;
+
+    // (1) Charge the nearest rival inside MY court.
+    let intr = null, intrSq = this._lekRadiusSq;
+    for (let i = 0; i < list.length; i++) {
+      const o = list[i];
+      if (o === this || !o.alive || o.isFemale) continue;
+      const dx = o.pos.x - this._territory.x, dy = o.pos.y - this._territory.y, dSq = dx * dx + dy * dy;
+      if (dSq < intrSq) { intrSq = dSq; intr = o; }
+    }
+    if (intr) { this.applyForce(this.seekPoint(intr.pos.x, intr.pos.y, this._territoryPush)); contesting = true; }
+
+    // (2) Retreat if I'm standing inside a neighbour's court (steer away from him).
+    let host = null, hostSq = this._lekRadiusSq;
+    for (let i = 0; i < list.length; i++) {
+      const o = list[i];
+      if (o === this || !o.alive || o.isFemale || !o._territory) continue;
+      const dx = o._territory.x - px, dy = o._territory.y - py, dSq = dx * dx + dy * dy;
+      if (dSq < hostSq) { hostSq = dSq; host = o; }
+    }
+    if (host) { this.applyForce(this.seekPoint(px + (px - host.pos.x), py + (py - host.pos.y), this._territoryPush)); contesting = true; }
+
+    if (contesting) this.hunger = Math.min(this.maxHunger, this.hunger + this._territoryHungerCost * dt);
   }
 
   // Kākāpō do NOT flee a hunting raptor — they freeze and rely on camouflage. The
@@ -167,12 +250,16 @@ const KAKAPO_SPECIES = {
   populationFloor:  2,
 
   // Territorial lek (kākāpō-specific) — see Kakapo.behave. Males hold spaced courts and
-  // drive rival males off, so a mast can't hand a runaway boom (more consistent results);
-  // a well-grown, well-spaced lek still breeds and is worth defending.
-  lekRadius:      120,     // males keep ~this far apart (repel rival males within it)
-  territoryPush:  0.05,    // how hard a male drives rival males out of its court
+  // actively chase rival males off (which burns their hunger), so a mast can't hand a runaway
+  // boom (more consistent results); a well-grown, well-spaced lek still breeds and is worth
+  // defending. Fern shelters draw un-settled birds so the player can distribute the flock.
+  lekRadius:      140,     // males keep ~this far apart (contest rival males within it)
+  territoryPush:  0.06,    // how hard a male charges an intruder / drives off a neighbour
   territoryHold:  0.02,    // how hard a male holds to its own court
-  lekAttract:     0.03     // how hard a mast-year female drifts to the nearest court
+  lekAttract:     0.03,    // how hard a mast-year female drifts to the nearest court
+  territoryHungerCostPerSec: 0.8,  // hunger burned per second while actively contesting a court
+  shelterAttract:       0.05,      // pull toward a fern shelter for an un-settled bird
+  shelterAttractRadius: 360        // a fern shelter draws un-settled kākāpō within this range
 };
 
 // Register the kākāpō as a flighted-bird TYPE for egg-hatch routing (Simulation

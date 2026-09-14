@@ -7,7 +7,7 @@ const SEASONS = {
   summer: {
     name: "Summer",
     icon: "☀️",
-    color: '#f4a460',
+    color: '#f5c542',   // golden yellow (was a sandy tan #f4a460 — more yellow now)
     plantModifiers: {
       coastal: 0.2, grassland: 0.3, podocarp: 0.4,
       montane: 0.9, subalpine: 1.3,
@@ -31,7 +31,7 @@ const SEASONS = {
   autumn: {
     name: "Autumn",
     icon: "🍂",
-    color: '#d2691e',
+    color: '#e6852f',   // lighter, more orange & less red than the old chocolate #d2691e
     plantModifiers: {
       coastal: 0.6, grassland: 1.0, podocarp: 1.2,
       montane: 1.0, subalpine: 0.6,

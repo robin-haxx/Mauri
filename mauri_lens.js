@@ -144,7 +144,7 @@ Lens.register({
     // Caches — attract reach (faint), effect radius (solid), a core sized by current draw.
     caches.forEach((c, i) => {
       const col = Lens.colOf(i);
-      const rEff = (c.def && c.def.radius) || 70;
+      const rEff = (c.def && (c.def.coverRadius || c.def.radius)) || 70;
       const rAtt = (c.def && c.def.keaAttractRadius) || 520;
       noFill();
       stroke(col[0], col[1], col[2], 42); strokeWeight(lw);

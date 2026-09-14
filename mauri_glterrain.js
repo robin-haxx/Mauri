@@ -38,7 +38,7 @@ const GLTerrain = {
     const vs =
       'attribute vec4 aWorld;attribute vec3 aNormal;attribute vec3 aColCur;attribute vec3 aColNext;' +
       'uniform float uK,uLIFT,uScrollX,uScrollY,uViewX,uViewY,uViewZoom,uSS,uW,uH,uSeasonBlend,uWorldH;' +
-      'varying vec3 vN;varying vec3 vCol;varying float vHaze;varying float vWater;varying vec2 vWorld;varying vec2 vPaint;varying float vElev;' +
+      'varying vec3 vN;varying vec3 vCol;varying float vHaze;varying float vWater;varying vec2 vWorld;varying vec2 vPaint;varying float vElev;varying float vDown;' +
       'void main(){' +
       '  float lx=aWorld.x-uScrollX; float ly=aWorld.y-uScrollY;' +
       '  float paintX=lx; float paintY=ly*uK - aWorld.z*uLIFT + uLIFT;' +   // Projection.groundY, relief on
@@ -47,6 +47,7 @@ const GLTerrain = {
       '  gl_Position=vec4(sx/uW*2.0-1.0, 1.0 - sy/uH*2.0, 0.0, 1.0);' +
       '  vN=aNormal; vCol=mix(aColCur,aColNext,uSeasonBlend);' +
       '  vHaze=clamp(1.0 - aWorld.y/uWorldH, 0.0, 1.0);' +               // far (small worldY) → 1
+      '  vDown=clamp(0.5 - 0.5*gl_Position.y, 0.0, 1.0);' +             // SCREEN Y: 0 at top (far), 1 at bottom (near)
       '  vWater=aWorld.w; vWorld=aWorld.xy; vPaint=vec2(paintX,paintY); vElev=aWorld.z;' +
       '}';
     // Lighting: two-tone daylight — a warm sun key (uSunCol) plus a cool sky fill
@@ -61,7 +62,7 @@ const GLTerrain = {
     //     so the whole land goes wan and blue as the ice tightens and warms back in a thaw.
     const fs =
       'precision mediump float;' +
-      'varying vec3 vN;varying vec3 vCol;varying float vHaze;varying float vWater;varying vec2 vWorld;varying vec2 vPaint;varying float vElev;' +
+      'varying vec3 vN;varying vec3 vCol;varying float vHaze;varying float vWater;varying vec2 vWorld;varying vec2 vPaint;varying float vElev;varying float vDown;' +
       'uniform vec3 uSun;uniform float uAmbient;uniform float uFrost;uniform vec3 uFrostCol;' +
       'uniform vec3 uHazeCol;uniform float uHazeAmt;uniform float uTime;uniform vec3 uWaterCol;' +
       'uniform vec3 uSunCol;uniform vec3 uSkyCol;uniform float uCold;uniform vec3 uColdTint;' +
@@ -100,17 +101,24 @@ const GLTerrain = {
       '    vec3 sceneLit=uSkyCol*uAmbient+uSunCol*(1.0-uAmbient);' +
       '    col=caustic*mix(vec3(1.0),sceneLit,0.6);' +
       '  } else {' +
+      // Foreground CONTRAST: drop the ambient fill toward the camera (vDown→1), so near slopes
+      // fall to a deeper shadow and the top-left sun reads with real relief up close, while the
+      // hazy far distance keeps its soft fill. This is what lifts the "flat grey" near the camera.
+      '    float amb=uAmbient*(1.0 - 0.34*vDown);' +
       '    float d=max(0.0,dot(N,sun));' +
-      '    col=vCol*(uSkyCol*uAmbient + uSunCol*(1.0-uAmbient)*d);' +
+      '    col=vCol*(uSkyCol*amb + uSunCol*(1.0-amb)*d);' +
       '    float flatness=clamp(N.z,0.0,1.0);' +
       '    float snow=smoothstep(uSnowLine, uSnowLine+0.14, vElev)*(0.35+0.65*flatness);' +
-      '    vec3 snowLit=uSnowCol*(uSkyCol*uAmbient + uSunCol*(1.0-uAmbient)*d);' +
+      '    vec3 snowLit=uSnowCol*(uSkyCol*amb + uSunCol*(1.0-amb)*d);' +
       '    col=mix(col, snowLit, snow);' +
       '  }' +
+      // SCREEN-SPACE light gradient: gently dim the up-screen distance and lift the down-screen
+      // foreground, so the diagonal top-left sun reads as real relief and near slopes pop.
+      '  col*=mix(0.90, 1.12, vDown);' +
       '  col=mix(col,uHazeCol, uHazeAmt*vHaze*vHaze);' +                  // atmospheric depth on the far ridge
       '  col=mix(col,uFrostCol, uFrost*0.30);' +                          // winter frost tint (was a 2D overlay)
       '  float g=dot(col, vec3(0.299,0.587,0.114));' +                    // luminance for the glacial desaturate
-      '  col=mix(col, vec3(g), uCold*0.50);' +
+      '  col=mix(col, vec3(g), uCold*0.50*(1.0 - 0.5*vDown));' +          // ease the grey wash near the camera (keep foreground colour)
       '  col*=mix(vec3(1.0), uColdTint, uCold);' +
       '  col*=(1.0 - uCold*0.10);' +
       '  gl_FragColor=vec4(col,1.0);' +
@@ -379,8 +387,9 @@ const GLTerrain = {
     gl.uniform1f(L.uH, GLBatch.H);
     gl.uniform1f(L.uWorldH, t.worldH || t.mapHeight || 1);
     gl.uniform1f(L.uSeasonBlend, game.seasonManager ? (game.seasonManager.transitionProgress || 0) : 0);
-    // Sun from the upper-left, fairly high.
-    gl.uniform3f(L.uSun, -0.45, -0.62, 0.64);
+    // Sun from the upper-left, on a more grazing angle (lower z) so slope faces separate into
+    // clear lit/shadow — paired with the screen-space down-gradient in the shader.
+    gl.uniform3f(L.uSun, -0.48, -0.62, 0.54);
     gl.uniform1f(L.uAmbient, 0.52);
     const frost = (game.seasonManager && game.seasonManager.getWinterness) ? game.seasonManager.getWinterness() : 0;
     gl.uniform1f(L.uFrost, frost);

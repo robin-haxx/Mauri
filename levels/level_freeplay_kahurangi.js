@@ -94,7 +94,7 @@ const LEVEL_FREEPLAY_KAHURANGI = {
       'heavy_footed_moa'        // forest-edge Pachyornis
     ],
     eagle: ['haasts_eagle'],
-    other: ['kereru', 'kokako', 'kea', 'kaka', 'kakapo']
+    other: ['kokako', 'kea', 'kaka', 'kakapo']   // kererū retired from Free Play (kea/kākā/kākāpō/kōkako carry it)
   },
   startingSpecies: 'upland_moa',
 
@@ -105,7 +105,7 @@ const LEVEL_FREEPLAY_KAHURANGI = {
     'south_island_giant_moa': 3,
     'heavy_footed_moa': 2
   },
-  initialEntityCounts: { moa: 18, eagle: 2, kereru: 4, kokako: 3, kea: 4 },
+  initialEntityCounts: { moa: 18, eagle: 2, kokako: 3, kea: 4 },
 
   economy: {
     startingMauri: 80,
@@ -144,7 +144,7 @@ const LEVEL_FREEPLAY_KAHURANGI = {
   // Target is a fixed mauri-gain bar for the kākā year (task: 250, up from 220). No mauri
   // REWARD — accomplishing a goal no longer hands a mauri boost (see freeplayGoalReward: 0);
   // reaching it still pays off by invoking the mast a year early.
-  mastGoal: { loopYear: 2, target: 250, reward: 0 },
+  mastGoal: { loopYear: 2, target: 400, reward: 0 },
 
   // Per-species recovery targets for the yearly focus goals (fall back to
   // freeplayDefaultTarget). Big lowland browsers ask for fewer than the smaller,
@@ -158,7 +158,7 @@ const LEVEL_FREEPLAY_KAHURANGI = {
     // Flighted-bird focus targets (kākā/kākāpō land in later slices; harmless until then).
     kea: 8,
     kaka: 8,
-    kakapo: 6,
+    kakapo: 10,
     kokako: 6
   },
 
@@ -261,11 +261,13 @@ const LEVEL_FREEPLAY_KAHURANGI = {
 
     // ---- Passive mauri: a healthy, EVEN ecosystem pays (the core income) ------
     // Income per second = (avg population of non-eagle species ABOVE their floor)
-    // × BALANCE, where BALANCE = min/max of those populations (1 = perfectly even,
-    // →0 = one species dominates). So it rewards breadth + evenness, not farming one
-    // species. `imbalanceHarshness` raises the balance penalty a little each YEAR, so
-    // holding an even spread gets harder as the run deepens. Eagles never count.
-    freeplayPassive: { scale: 1.0, imbalanceHarshness: 0.04 },
+    // × BALANCE = the equality coefficient (1 − worst species shortfall below the top). So it
+    // rewards breadth + evenness, not farming one species. `focusInequalityWeight` weights the
+    // current year's FOCUS species 2× (neglecting a focus species while others boom hurts income
+    // twice as hard — the incentive to rebuild the two protected species). `imbalanceHarshness`
+    // raises the penalty a little each YEAR; `inequalityWeight` is a flat exponent on top (1 =
+    // off — the 2× now lives in the focus weighting). Eagles never count.
+    freeplayPassive: { scale: 1.0, imbalanceHarshness: 0.04, inequalityWeight: 1, focusInequalityWeight: 2 },
 
     // ---- Year-to-year reset: fall back to defaults, nudged by past performance ----
     // A new year is a NEW HABITAT — populations do NOT haul across. Each species falls
@@ -374,6 +376,10 @@ const LEVEL_FREEPLAY_KAHURANGI = {
     // a dominant-moa boom and they re-immigrate next year (see Game._updateEagleBoom).
     // eagleTargetRatioPerLoop nudges the eagles-per-prey ratio UP a little each 4-year loop
     // (applied in Game._maybeGlacialDeepen), so predation pressure climbs over the run.
+    // eaglePursuitRadius: when no moa sits in the tight huntRadius, an eagle still SEEKS the
+    // nearest huntable moa within this range directly (a committed chase) instead of orbiting
+    // and lurching — kills the rubber-banding on the last straggler in an area (mauri_eagle.js).
+    eaglePursuitRadius: 320,
     emergentEagles: true, eagleTargetRatio: 1 / 8, eagleTargetRatioPerLoop: 0.012, eagleMaxPopulation: 8, eagleHungerRate: 0.02,
       eagleStarveThreshold: 90, eagleStarveTimeout: 2400, eagleReproChance: 0.4, eagleReproCooldown: 2600,
       eagleReproCheckInterval: 220, eagleMaturityAge: 1500, eaglePreyPopThreshold: 12,

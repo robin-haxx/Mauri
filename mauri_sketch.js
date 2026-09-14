@@ -457,7 +457,7 @@ const PLACEABLES = {
   
   Storm: {
     name: "Storm",
-    description: "Distracts hunting eagles",
+    description: "Distracts hunting eagles and scares flighted birds off their trees to seek new ones",
     cost: 40,
     icon: '🌩️',
     color: '#c4a35a',
@@ -585,12 +585,17 @@ const PLACEABLES = {
   // keaAttractRadius); no plants spawned, no moa effect — it is purely a kea magnet.
   keaLure: {
     name: "Berry Cache",
-    description: "Plants subalpine berries and cultivates podocarp forest — draws kea downslope and grows perch trees",
+    description: "Plants subalpine berries and cultivates podocarp forest — draws kea downslope and grows perch trees. Cover a moa nest with its ring to loose the flock on it.",
     cost: 45,
     icon: '🫐',
     color: '#6a4a7a',
     effect: 'keaLure',
-    radius: 70,
+    radius: 70,                // berry + forest cultivation footprint (tight, around the cache)
+    // The RENDERED ring is this larger COVERAGE radius, not the tight cultivation radius: it
+    // marks the effective area to lay over the target moa nest — a nest inside it is where the
+    // drawn kea (they cluster within ~a cultivation radius of the cache) end up stationed and
+    // able to raid, since the kea-raid stationRadius (~260) then easily reaches the nest.
+    coverRadius: 150,
     duration: 3600,
     minSpacing: 30,
     ignoresSpacing: false,
@@ -602,7 +607,9 @@ const PLACEABLES = {
     growEverySec: 5,           // seed a rimu/beech in-radius this often
     growCap: 9,                // stop once the grove holds this many forest trees
     attractsKea: true,
-    keaAttractRadius: 520,     // kea within this range are drawn to the cache
+    // INVISIBLE far-draw: kea within this range are pulled toward the cache (much wider than
+    // the rendered coverage ring, so a cache reaches across the map to gather the flock).
+    keaAttractRadius: 820,
     allowedBiomes: ['forestRefuge', 'shrubland', 'glacialFlats'],
     seasonalBonus: { summer: 1.0, autumn: 1.0, winter: 1.0, spring: 1.0 }
   },
@@ -619,14 +626,18 @@ const PLACEABLES = {
     icon: '🌱',
     color: '#3b6a50',
     effect: 'forestBoost',
-    radius: 70,
+    radius: 95,                // wider grove so the spread reads clearly (was 70)
     duration: 3600,
     minSpacing: 30,
     ignoresSpacing: false,
-    // Podocarp forest cultivated over the seed's life (reuses the Berry Cache path).
+    // Podocarp forest cultivated over the seed's life (reuses the Berry Cache path). Tuned for
+    // a MUCH more visible spread than the cache: a burst of saplings on placement, then a
+    // fast, multi-tree cadence up to a big cap, filling the radius into an obvious new grove.
     growsForest: true,
-    growEverySec: 4,           // seed a rimu/beech in-radius this often (faster than the cache)
-    growCap: 12,               // stop once the grove holds this many forest trees
+    growInitial: 8,            // saplings dropped the instant it's placed (immediate feedback)
+    growPerTick: 2,            // trees seeded per grow tick
+    growEverySec: 2,           // …and it ticks this often (was one tree every 4s)
+    growCap: 24,               // stop once the grove holds this many forest trees (was 12)
     // Lowland ground near existing forest only.
     allowedBiomes: ['forestRefuge', 'shrubland', 'glacialFlats'],
     requiresNearForest: true,
@@ -1652,8 +1663,12 @@ class Game {
 
   // Free Play economy snapshot — the passive-income drivers, also shown in the HUD.
   //   avgPop      = mean population of non-eagle species ABOVE their floor
-  //   balance     = min/max of those populations (1 = even, →0 = one dominates), raised to
-  //                 a power that grows each year so imbalance bites a little harder over time
+  //   balance     = the equality coefficient: 1 − (worst species SHORTFALL below the top),
+  //                 where a FOCUS species' shortfall counts `focusInequalityWeight`× (2 =
+  //                 focus inequality bites double — neglecting a focus species while others
+  //                 boom hurts income twice as hard). Raised to a power that grows each year
+  //                 so imbalance bites a little harder over the run. With no focus species it
+  //                 reduces to the old min/max evenness.
   //   mauriPerSec = avgPop × balance × scale
   // Eagles never count toward either. Reused by the population HUD and the avg-pop dial.
   ecosystemStats() {
@@ -1661,20 +1676,33 @@ class Game {
     const M = (typeof LEVEL_MECHANICS !== 'undefined') ? LEVEL_MECHANICS : {};
     const cfg = M.freeplayPassive || {};
     const floor = M.freeplayProtectFloor ?? 2;
+    const focus = this.freeplayFocus || [];
+    const fW = cfg.focusInequalityWeight ?? 2;
     const keys = [...((this.activeSpecies && this.activeSpecies.moa) || []),
                   ...((this.activeSpecies && this.activeSpecies.other) || [])];
-    let sum = 0, mn = Infinity, mx = 0, n = 0;
+    let sum = 0, mx = 0, n = 0;
+    const items = [];
     if (sim) for (const k of keys) {
       const c = sim.getSpeciesCount(k);
-      if (c > floor) { sum += c; n++; if (c < mn) mn = c; if (c > mx) mx = c; }
+      if (c > floor) { sum += c; n++; if (c > mx) mx = c; items.push([k, c]); }
     }
-    if (n === 0) return { avgPop: 0, balance: 0, mauriPerSec: 0, aboveFloor: 0 };
+    if (n === 0) return { avgPop: 0, balance: 0, rawBalance: 0, mauriPerSec: 0, aboveFloor: 0 };
     const avgPop = sum / n;
-    let balance = mx > 0 ? mn / mx : 0;
-    const harsh = 1 + (cfg.imbalanceHarshness ?? 0) * (this.cycle || 0);
-    balance = Math.pow(balance, harsh);
+    // Worst shortfall below the top species, with focus species weighted fW×.
+    let imbalance = 0, rawImbalance = 0;
+    for (const [k, c] of items) {
+      const shortfall = mx > 0 ? 1 - c / mx : 0;      // 0 = at the top, →1 = far below it
+      if (shortfall > rawImbalance) rawImbalance = shortfall;
+      const w = focus.includes(k) ? fW : 1;
+      const s = Math.min(1, w * shortfall);
+      if (s > imbalance) imbalance = s;
+    }
+    const rawBalance = 1 - rawImbalance;              // == min/max (unweighted), for reference
+    // Per-year ramp (imbalanceHarshness) × an optional flat exponent (inequalityWeight).
+    const harsh = (1 + (cfg.imbalanceHarshness ?? 0) * (this.cycle || 0)) * (cfg.inequalityWeight ?? 1);
+    const balance = Math.pow(1 - imbalance, harsh);
     const mauriPerSec = avgPop * balance * (cfg.scale ?? 1);
-    return { avgPop, balance, mauriPerSec, aboveFloor: n };
+    return { avgPop, balance, rawBalance, mauriPerSec, aboveFloor: n };
   }
 
   _checkFreeplayYear() {
@@ -1969,9 +1997,12 @@ class Game {
     // feast so it reads at once (forest growth + faster breeding do the rest all year).
     if (this._isMastYear()) {
       this.addNotification('Mast year! The podocarp forest blooms — the fruit-birds will boom.', 'success');
+      // Seed a few extra forest fruit-birds to the feast (kererū is retired from Free Play,
+      // so the boom is carried by the kākā and kōkako). Only species active this level.
       if (sim._spawnOtherEntities) {
-        sim._spawnOtherEntities('kereru', 2);
-        sim._spawnOtherEntities('kokako', 1);
+        const active = (this.activeSpecies && this.activeSpecies.other) || [];
+        if (active.includes('kaka')) sim._spawnOtherEntities('kaka', 2);
+        if (active.includes('kokako')) sim._spawnOtherEntities('kokako', 1);
       }
     }
 
@@ -3900,7 +3931,12 @@ class Game {
     strokeWeight(2);
     ellipse(0, 0, 18, 18);
     pop();
-    
+
+    // Berry Cache: show what this placement will AFFECT — its coverage ring (lay it over the
+    // target moa nest), the wide invisible-in-play kea draw reach, and every moa nest + kea
+    // the cache will touch, highlighted. Helps the player aim the cache at a real nest.
+    if (this.selectedPlaceable === 'keaLure') this._renderKeaLurePreview(tx, ty, def);
+
     if (!spacingCheck.allowed && spacingCheck.blocker) {
       push();
       stroke(CACHED_COLORS.blockerLine);
@@ -3918,6 +3954,69 @@ class Game {
     }
   }
   
+  // Berry Cache placement overlay (see renderPlacementPreview). Drawn in the world/game
+  // transform. Marks: the COVERAGE ring at the cursor (the effective area — cover the target
+  // moa nest with it), a faint dashed ring for the wide kea DRAW reach (invisible in normal
+  // play), each moa nesting site the coverage will hold (green = clutched & raidable, amber =
+  // empty), and each kea inside the draw reach that this cache will pull.
+  _renderKeaLurePreview(tx, ty, def) {
+    const sim = this.simulation; if (!sim) return;
+    const cover = def.coverRadius || def.radius || 70;
+    const attract = def.keaAttractRadius || 520;
+    const dc = drawingContext;
+
+    // Wide draw reach — dashed + faint (a placement guide only).
+    push();
+    translate(tx, this._groundPaintY(tx, ty));
+    noFill();
+    dc.setLineDash([6, 9]);
+    stroke(176, 132, 214, 70); strokeWeight(1);
+    ellipse(0, 0, attract * 2, attract * 2);
+    dc.setLineDash([]);
+    // Coverage ring — the effective area to lay over the nest.
+    stroke(196, 156, 228, 210); strokeWeight(1.5);
+    ellipse(0, 0, cover * 2, cover * 2);
+    pop();
+
+    // Moa nesting sites the coverage ring will hold.
+    const coverSq = cover * cover;
+    const sites = sim.nestingSites || [];
+    for (let i = 0; i < sites.length; i++) {
+      const s = sites[i];
+      if (!s.alive) continue;
+      const dx = s.pos.x - tx, dy = s.pos.y - ty;
+      const inside = dx * dx + dy * dy <= coverSq;
+      if (!inside) continue;
+      const clutch = (s.eggCount || 0) > 0;
+      push();
+      translate(s.pos.x, this._groundPaintY(s.pos.x, s.pos.y));
+      noFill();
+      if (clutch) stroke(96, 232, 128, 235); else stroke(232, 202, 112, 220);
+      strokeWeight(2.5);
+      const r = s.radius;
+      ellipse(0, 0, r * 1.9, r * 1.2);
+      pop();
+    }
+
+    // Kea inside the draw reach that this cache will pull.
+    const kea = sim.otherEntities && sim.otherEntities.kea;
+    if (kea) {
+      const attractSq = attract * attract;
+      for (let i = 0; i < kea.length; i++) {
+        const k = kea[i];
+        if (!k.alive) continue;
+        const dx = k.pos.x - tx, dy = k.pos.y - ty;
+        if (dx * dx + dy * dy > attractSq) continue;
+        push();
+        translate(k.pos.x, this._groundPaintY(k.pos.x, k.pos.y));
+        noFill();
+        stroke(206, 240, 130, 220); strokeWeight(1.5);
+        ellipse(0, -(k._altitude || 0), 15, 15);
+        pop();
+      }
+    }
+  }
+
   // Shared click handling for the gamemode-select render settings (resolution + graphics).
   _handleRenderSettingsClick(mx, my) {
     if (this._detailSliderBounds) {

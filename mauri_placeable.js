@@ -71,6 +71,15 @@ class PlaceableObject {
       this.spawnPlantsInRadius();
       if (audioManager) audioManager.playPlantRustle();
     }
+
+    // Forest cultivators (Forest Seed) can drop a BURST of saplings the instant they're
+    // placed, so the new grove reads immediately instead of trickling in over the life.
+    if (this.def.growsForest && this.def.growInitial && this.simulation && this.simulation.growForestAt) {
+      for (let i = 0; i < this.def.growInitial; i++) {
+        this.simulation.growForestAt(this.pos.x, this.pos.y, this.radius, this.def.growCap ?? 8);
+      }
+      if (audioManager) audioManager.playPlantRustle();
+    }
     
     // Storm-specific
     if (this.type === 'Storm') {
@@ -297,7 +306,11 @@ class PlaceableObject {
       this._growTimer = (this._growTimer || 0) + dt;
       if (this._growTimer >= every) {
         this._growTimer = 0;
-        this.simulation.growForestAt(this.pos.x, this.pos.y, this.radius, this.def.growCap ?? 8);
+        // Seed growPerTick trees per tick (default 1) so a cultivator can fill a grove faster.
+        const perTick = this.def.growPerTick ?? 1;
+        for (let i = 0; i < perTick; i++) {
+          this.simulation.growForestAt(this.pos.x, this.pos.y, this.radius, this.def.growCap ?? 8);
+        }
       }
     }
   }
@@ -471,7 +484,8 @@ class PlaceableObject {
   // and now lets a no-fill stroke fall through to 2D, where the shadow blur lives.
   // The blur is scaled by the current world→device transform so the glow stays
   // proportional to the ring at any zoom / supersample.
-  _drawRadiusRing(col, lineAlpha, weight, glowAlpha, lifeRatio) {
+  _drawRadiusRing(col, lineAlpha, weight, glowAlpha, lifeRatio, radiusOverride) {
+    const R = (radiusOverride != null) ? radiusOverride : this.radius;
     const glow = 0.5 + 0.5 * Math.sin(frameCount * 0.05 + this.pulsePhase);   // 0..1, slow breath
     const dc = (typeof drawingContext !== 'undefined') ? drawingContext : null;
     const sc = (dc && dc.getTransform) ? (dc.getTransform().a || 1) : 1;
@@ -482,7 +496,7 @@ class PlaceableObject {
     noFill();
     stroke(col[0], col[1], col[2], lineAlpha * lifeRatio);
     strokeWeight(weight);
-    ellipse(0, 0, this.radius * 2, this.radius * 2);   // FIXED — the real effective radius
+    ellipse(0, 0, R * 2, R * 2);   // FIXED — the real effective radius
     if (dc) { dc.shadowBlur = 0; dc.shadowColor = 'rgba(0,0,0,0)'; }
   }
 
@@ -512,7 +526,15 @@ class PlaceableObject {
       if (this.seasonalMultiplier > 1.2) rc = [100, 255, 150];
       else if (this.seasonalMultiplier < 0.7) rc = [255, 150, 100];
       else rc = [235, 240, 245];
-      this._drawRadiusRing(rc, isFeeding ? 150 : 95, isFeeding ? 2 : 1.25, isFeeding ? 0.7 : 0.45, lifeRatio);
+      // Berry Cache: the RENDERED ring is the larger COVERAGE radius (the area to lay over the
+      // target moa nest), not the tight cultivation radius. In a berry-mauve so it reads as the
+      // kea zone. The wide kea-draw radius stays invisible (see PLACEABLES.keaLure).
+      const _cover = this.def.coverRadius;
+      if (_cover) {
+        this._drawRadiusRing([176, 132, 214], 110, 1.4, 0.5, lifeRatio, _cover);
+      } else {
+        this._drawRadiusRing(rc, isFeeding ? 150 : 95, isFeeding ? 2 : 1.25, isFeeding ? 0.7 : 0.45, lifeRatio);
+      }
 
       // Inner glow when feeding (a filled disc — fine on the GL layer).
       if (isFeeding) {

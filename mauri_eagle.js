@@ -542,7 +542,29 @@ class HaastsEagle extends Boid {
       this.hunting = true;
       this.target = null;
       this._huntEventFired = false;
-      
+
+      // Close the gap on a fleeing straggler. When no moa sits inside the tight huntRadius but
+      // a huntable one is within the wider pursuitRadius, SEEK IT DIRECTLY at hunt speed rather
+      // than orbiting the patrol centre and only lurching onto it every few seconds. That
+      // orbit-then-jump cadence is exactly what read as "rubber-banding" on the last moa in an
+      // area (when prey is dense a moa is always in huntRadius, so this never triggers). A
+      // committed pursuit closes smoothly (the eagle is faster) and hands off to the normal
+      // lock-on + strike the moment the moa re-enters huntRadius. Skips protected/sheltered moa.
+      if (this.emergent && this.huntSearchTimer < this.huntSearchTimeout && simulation.getClosestMoa) {
+        const pr = _M.eaglePursuitRadius ?? 320;
+        const prey = simulation.getClosestMoa(this.pos.x, this.pos.y, pr, m =>
+          m.alive && !m.inShelter &&
+          !(simulation.isSpeciesProtected && simulation.isSpeciesProtected(m.speciesKey)));
+        if (prey) {
+          this.huntSearchTimer = 0;            // an active chase never "times out" into a relocate
+          this.maxSpeed = this.huntSpeed;
+          this._targetVec.set(prey.pos.x + prey.vel.x * 12, prey.pos.y + prey.vel.y * 12);
+          this.applyForce(this.seek(this._targetVec, 1.3));
+          this.edges();
+          return;
+        }
+      }
+
       if (this.huntSearchTimer >= this.huntSearchTimeout) {
         if (this.emergent) {
           // Follow the prey: if a moa exists anywhere in a wide radius, shift the

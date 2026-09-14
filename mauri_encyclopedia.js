@@ -81,6 +81,38 @@ const ENCYCLOPEDIA = [
       "ambient forest voice, tied to the health of the canopy."
     ], seeAlso: ['beech_refuge'] },
 
+  { id: 'kea', category: 'Fauna', title: 'Kea', subtitle: 'Nestor notabilis',
+    body: [
+      "The world's only alpine parrot — a bold, wide-ranging generalist of the subalpine",
+      "tussock and scrub. As the cold closes in it descends into the forest below, where",
+      "it will settle and nest.",
+      "",
+      "In Free Play the kea are your lever on the moa nests: a Berry Cache placed downslope",
+      "draws the flock onto the forest, and stationed kea can be loosed to raid a nesting",
+      "site (Nest Raid)."
+    ], seeAlso: ['beech_refuge', 'glacial_cycles', 'predator_prey'] },
+
+  { id: 'kaka', category: 'Fauna', title: 'Kākā', subtitle: 'Nestor meridionalis',
+    body: [
+      "The forest parrot — kea's gregarious, forest-dwelling sister. It works the podocarp",
+      "and beech canopy for fruit, seed, nectar and sap, and gathers into noisy foraging",
+      "parties. A seed predator more than a disperser.",
+      "",
+      "Squeezed into the shrinking forest refuge with the bush moa as the glacial deepens,",
+      "so the podocarp forest you grow is its lifeline."
+    ], seeAlso: ['beech_refuge', 'winter_food'] },
+
+  { id: 'kakapo', category: 'Fauna', title: 'Kākāpō', subtitle: 'Strigops habroptilus',
+    body: [
+      "The flightless, nocturnal ground parrot — the heaviest parrot alive. It walks the",
+      "forest floor browsing leaves, stems and fruit, freezes and relies on camouflage",
+      "rather than fleeing, and the males hold spaced courts (a lek), driving rivals off.",
+      "",
+      "It breeds only in a rimu MAST year, so its numbers hold or slowly fall until a mast",
+      "lets the flock surge. Fern shelters draw un-settled birds — use them to spread the",
+      "flock out."
+    ], seeAlso: ['rimu', 'beech_refuge'] },
+
   // ---- Plants ----------------------------------------------------------------
   { id: 'beech', category: 'Plants', title: 'Beech', subtitle: 'Tawhai · Nothofagus/Fuscospora',
     body: [

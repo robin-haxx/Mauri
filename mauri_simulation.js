@@ -996,6 +996,12 @@ class Simulation {
     const placeable = new PlaceableObject(x, y, type, this.terrain, this, this.seasonManager);
     this.placeables.push(placeable);
     if (type === 'nest') this._nestCacheValid = false;
+    // A freshly placed Berry Cache should VISIBLY pull the flock: clear every kea's cache-choice
+    // timer so they re-evaluate this frame (and pick up the new cache) instead of drifting on
+    // their old target for up to a couple of seconds. Cheap — the flock is tiny.
+    if (type === 'keaLure' && this.otherEntities && this.otherEntities.kea) {
+      for (const k of this.otherEntities.kea) { if (k && k.alive) k._lureChoiceTimer = 0; }
+    }
     return placeable;
   }
   
@@ -1202,7 +1208,7 @@ class Simulation {
       if (n >= 2) continue;
       const type = Math.random() < 0.6 ? 'rimu' : 'beech';   // podocarp-led
       const seedling = new Plant(px, py, type, this.terrain, biome.key);
-      seedling.growth = 0.25;
+      seedling.growth = 0.4;    // start as a visible young tree, not a tiny sprout (reads sooner)
       this.addPlant(seedling);
       return true;
     }

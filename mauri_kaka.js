@@ -41,7 +41,7 @@ class Kaka extends Kereru {
   // skipped while storm-grounded so shelter isn't fought.
   behave(sim, mauri, seasonManager, dt) {
     super.behave(sim, mauri, seasonManager, dt);
-    if (!this._grounded && this.state === KERERU_STATE.FLYING) {
+    if (!this._grounded && !this._fleeingStorm && this.state === KERERU_STATE.FLYING) {
       const c = this._flockCentroid(sim);
       if (c) this.applyForce(this.seekPoint(c.x, c.y, this._flockPull));
     }
@@ -113,7 +113,7 @@ const KAKA_SPECIES = {
   starveSec:        26,
 
   maturitySec:      22,
-  eggCooldownSec:   40,
+  eggCooldownSec:   32,     // breeds a little more readily than the kererū base (was 40)
   mateRadius:       200,
   reproCheckSec:    3.5,
   maxPopulation:    14,

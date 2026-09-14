@@ -818,6 +818,10 @@ class GameUI {
 
     // Value — scaled down for longer numbers so it never spills the disc.
     const str = String(val);
+    // Nudge the value up a touch (endless) to make room for the gain/sec line below.
+    const g = this.game;
+    const showGain = !!(g && g.currentLevel && g.currentLevel.endless && g.ecosystemStats);
+    const valY = showGain ? cy + r * 0.02 : cy + r * 0.12;
     let ts = r * 0.62;
     if (str.length >= 4) ts = r * 0.40;
     else if (str.length === 3) ts = r * 0.52;
@@ -825,16 +829,25 @@ class GameUI {
     push();
     textFont(FreckleFace);
     textSize(ts);
-    text(str, cx, cy + r * 0.12);
+    text(str, cx, valY);
     pop();
+
+    // Live mauri gain/sec under the counter (endless economy readout). Shares the
+    // passive-income driver with the AVG POP dial (Game.ecosystemStats().mauriPerSec).
+    if (showGain) {
+      const mps = g.ecosystemStats().mauriPerSec || 0;
+      fill(150, 200, 165);
+      smallTextSize(12);
+      text(`${mps >= 0 ? '+' : ''}${mps.toFixed(1)}/s`, cx, cy + r * 0.56);
+    }
 
     pop();
   }
 
   // Ecosystem dial (endless): a ring whose arc fills with BALANCE (how even the
   // populations are, 0→1) and whose colour runs red (uneven) → green (even), like the
-  // hunger bar. AVG POP sits big in the centre with the live mauri/sec below — the two
-  // numbers that multiply into the passive income.
+  // hunger bar. AVG POP sits big in the centre; below it the EQUALITY COEFFICIENT (the
+  // applied balance term) — the mauri/sec readout now lives under the MAURI counter.
   renderPopDial(cx, cy, r) {
     const g = this.game;
     if (!g.ecosystemStats) return;
@@ -860,7 +873,7 @@ class GameUI {
       arc(cx, cy, d, d, TOP, TOP + bal * TWO_PI);
     }
 
-    // Centre: label, avg pop (big), mauri/sec.
+    // Centre: label, avg pop (big), and the equality coefficient (the applied balance).
     noStroke();
     textAlign(CENTER, CENTER);
     fill(150, 175, 155); smallTextSize(10);
@@ -868,8 +881,8 @@ class GameUI {
     fill(col[0], col[1], col[2]);
     push(); textFont(FreckleFace); textSize(r * 0.6);
     text(Math.round(s.avgPop || 0), cx, cy + r * 0.02); pop();
-    fill(170, 195, 175); smallTextSize(10);
-    text(`${(s.mauriPerSec || 0).toFixed(1)}/s`, cx, cy + r * 0.44);
+    fill(col[0], col[1], col[2]); smallTextSize(10);
+    text(`eq ${bal.toFixed(2)}`, cx, cy + r * 0.44);
     pop();
   }
 
@@ -924,10 +937,12 @@ class GameUI {
     fill(245, 250, 240);
     circle(cx + Math.cos(pAng) * (ringD / 2), cy + Math.sin(pAng) * (ringD / 2), RW * 0.9);
 
-    // Endless: inner four-year tour ring (≈ terrain quadrants), current year lit.
+    // Endless: inner four-year tour ring (≈ terrain quadrants), current year lit. Year 1
+    // lights the BOTTOM-RIGHT quadrant (the starting map area), then advances clockwise —
+    // hence the +1 offset from the raw cycle (arc i=1 spans 3→6 o'clock).
     if (endless) {
       const iD = (R - RW * 2.1) * 2;
-      const tourIdx = ((cycle % 4) + 4) % 4;
+      const tourIdx = (((cycle % 4) + 4) % 4 + 1) % 4;
       strokeWeight(R * 0.09);
       for (let i = 0; i < 4; i++) {
         noFill();

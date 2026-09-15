@@ -81,7 +81,7 @@ const KAKA_SPECIES = {
   class:          (typeof Kaka !== 'undefined') ? Kaka : undefined,
   description:    'The forest parrot — a gregarious podocarp-forest bird, the kea\'s forest-dwelling sister.',
   rarity:         'uncommon',
-  highlightColor: [204, 120, 74],   // warm orange-brown — player highlight (pulse + UI border)
+  highlightColor: [250, 150, 90],   // bright warm orange — player highlight (pulse + UI border)
 
   // Movement / render — a strong forest flier, wider-ranging than the kererū's
   // short hops, but still BELOW the eagle's hunt speed so a chase resolves.

@@ -49,7 +49,7 @@ const MOA_SPECIES = {
     seasonalModifiers: {
       summer: { hungerRate: 1.1, speed: 1.0 },
       autumn: { hungerRate: 1.0, speed: 1.0 },
-      winter: { hungerRate: 0.9, speed: 0.9 },  // Better adapted to cold
+      winter: { hungerRate: 0.75, speed: 0.9 }, // Strongly cold-adapted — feels winter hunger least
       spring: { hungerRate: 1.0, speed: 1.1 }
     }
   },

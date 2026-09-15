@@ -6,8 +6,9 @@
 // run (stark swings, ramped ends, brutal by ~cycle 10 — see mauri_climate_drift.js).
 //
 // Each YEAR the game sets soft population goals on the TWO most-endangered species
-// (nearest their floor); those focus species are protected from a total wipe while you
-// rebuild them, and any extinct NON-focus species is refounded the next year. Winter
+// (nearest their floor). EVERY species present that year holds at a survival floor — a
+// hunted or thinned species quietly returns to the floor rather than vanishing (the focus
+// species additionally carry the goals, highlight and income weighting). Winter
 // takes FOOD VALUE, not plants — the evergreen flora stands frosted but stops feeding,
 // so the forest refuge becomes the lifeline. Lose all your moa and the run ends.
 //
@@ -197,7 +198,7 @@ const LEVEL_FREEPLAY_KAHURANGI = {
         // Kawakawa is a frost-tender lowland plant of this warm opening ONLY: it can be
         // planted this year but is stripped from the palette at the first winter and can
         // never be established again (the LGM closing in — see Game._banKawakawa).
-        availablePlaceables: { kawakawa: { cost: 25, duration: 3600 }, keaLure: {}, nestRaid: {}, lancewood: {}, speargrass: {}, Storm: {}, waterhole: {} }
+        availablePlaceables: { kawakawa: { cost: 25, duration: 3600 }, keaLure: {}, nestRaid: {}, lancewood: {}, speargrass: {}, Storm: {}, shelter: {} }
       },
       { // pos 1 — Year of the Kākā (west / shore). The MAST GOAL runs here; its progress
         // bar takes the Nest-Raid slot, so this year carries no nest-raid tool.
@@ -253,7 +254,7 @@ const LEVEL_FREEPLAY_KAHURANGI = {
     coldToleranceMattersMult: 1.0,
 
     // ---- Free Play yearly-goal engine ---------------------------------------
-    freeplayProtectFloor: 2,    // last N of each FOCUS species are protected this year
+    freeplayProtectFloor: 2,    // last N of EVERY species present this year are protected (topped back up if thinned)
     freeplayRefoundCount: 3,    // extinct non-focus species refound with this many
     freeplayDefaultTarget: 8,   // recovery target when a species isn't in freeplayTargets
     freeplayGoalReward: 0,      // accomplishing a goal no longer gives a mauri boost (was 80)
@@ -403,17 +404,18 @@ const LEVEL_FREEPLAY_KAHURANGI = {
     subtitle: "",
     areaLabel: "NW Nelson, Te Waipounamu",
     areaSubtitle: "Upper West Coast, South Island",
-    featuredSpecies: {
-      key: 'upland_moa',
-      displayName: 'Upland Moa',
-      localName: 'Megalapteryx didinus',
-      spriteKey: 'LB_moa_walk_01',
-      spriteScale: 2
-    },
+    // Free Play features its three flighted stars — the kea, kākā and kākāpō — the
+    // birds the yearly focus loop is built around (the moa are the backdrop). The
+    // menu renderer lays an ARRAY of featured species out in a row (see renderMenu).
+    featuredSpecies: [
+      { key: 'kea',    displayName: 'Kea',    localName: 'Nestor notabilis',     spriteKey: 'kea' },
+      { key: 'kaka',   displayName: 'Kākā',   localName: 'Nestor meridionalis',  spriteKey: 'kaka' },
+      { key: 'kakapo', displayName: 'Kākāpō', localName: 'Strigops habroptilus', spriteKey: 'kakapo' }
+    ],
     flavorText: [
-      "Each winter colder than the last.", "",
-      "Protect the two most fragile moa each year,",
-      "and hold your community together as long as you can."
+      "Progressively colder glacial winters.", "",
+      "Protect the focus species each year,",
+      "as the forest shrinks and food becomes scarce."
     ],
     displayPlants: ['lancewood', 'speargrass', 'tussock', 'coprosma', 'beech', 'patotara', 'dracophyllum'],
     art: { coreWidth: 1600, coreHeight: 1080, bgColor: [26, 34, 44] }

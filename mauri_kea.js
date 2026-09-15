@@ -32,6 +32,11 @@
 // flight, dark hooked beak. Wire real art via EntitySprites.getKeaSprite later.
 // ============================================================
 
+// Berry/browse plants a kea takes as cache food (in addition to forest fruit). These are the
+// species a Berry Cache seeds across its habitats — coprosma down low, pātōtara and the other
+// subalpine cushion shrubs up high — so a cache draws the flock wherever it's placed.
+const KEA_BERRY_PLANTS = new Set(['coprosma', 'patotara', 'dracophyllum', 'toatoa', 'pohuehue']);
+
 class Kea extends Kereru {
   constructor(x, y, terrain, config, speciesData) {
     super(x, y, terrain, config, speciesData);
@@ -68,6 +73,8 @@ class Kea extends Kereru {
     // actually happen (rather than clumping at the cache and softlocking the raid).
     this._perchCrowdWeight = sp.perchCrowdWeight ?? 4.0; // ↑ = spread harder off a crowded tree
     this._perchSiteBonus   = sp.perchSiteBonus ?? 6;     // score bonus for a tree near a nesting site
+    this._perchLureBonus   = sp.perchLureBonus ?? 8;     // score bonus for a tree inside a berry cache's patch
+                                                         // (the player's explicit signal — outranks the site bonus)
     // A tree counts as "near a site" out to the RAID station radius, so a preferred perch
     // is always one that also counts as stationed (they were settling just outside it).
     this._perchSiteRadius  = sp.perchSiteRadius ?? ((M.keaRaid && M.keaRaid.stationRadius) || 240);
@@ -115,18 +122,14 @@ class Kea extends Kereru {
       // keeps it home — no extra force needed.
       this._lureChoiceTimer -= dt;
       if (!this._lureValid() || this._lureChoiceTimer <= 0) {
-        this._lureChoice = this._chooseLure(sim);
-        if (!this._lureValid() || this._lureChoiceTimer <= 0) {
         const prev = this._lureChoice;
         this._lureChoice = this._chooseLure(sim);
         this._lureChoiceTimer = this._lureChoiceFrames * (0.75 + Math.random() * 0.5);
-        // Newly committed to a cache → drop the old (edge) perch so it re-homes near the cache.
+        // Newly committed to a (different) cache → drop the old perch so it re-homes near the cache.
         if (this._lureChoice && this._lureChoice !== prev) {
           this._perchTree = null;
           this._perchSearchTimer = 0;
         }
-      }
-        this._lureChoiceTimer = this._lureChoiceFrames * (0.75 + Math.random() * 0.5);
       }
       const lure = this._lureChoice;
       if (lure) {
@@ -181,6 +184,17 @@ class Kea extends Kereru {
   // Home anchor for the base flight loop: the kea's perch tree (kererū is free-ranging).
   _anchorPoint() {
     return this._perchValid() ? this._perchTree.pos : null;
+  }
+
+  // A strong, wide-ranging flier: unlike the forest-bound kererū base, a kea CROSSES the
+  // alpine scree and glacier to relocate (it lives up there), so only OPEN WATER bars it.
+  // This frees a kea that would otherwise get stranded on a walkable pocket ringed by
+  // un-walkable alpine rock — it can now fly over the rock to reach forest/subalpine.
+  _passable(x, y) {
+    const t = this.terrain;
+    if (!t) return true;
+    if (typeof t.isWater === 'function') return !t.isWater(x, y);
+    return typeof t.isWalkable !== 'function' || t.isWalkable(x, y);
   }
 
   // Pick the best nearby fruiting FOREST tree to perch in — "best" = the one with the
@@ -311,7 +325,9 @@ class Kea extends Kereru {
     for (let i = 0; i < near.length; i++) {
       const q = near[i];
       if (!q.alive || q._consumed || q.dormant || q.growth < 0.4) continue;
-      if (q.type === 'coprosma' || (isForest && isForest.has(q.type))) food++;
+      // Kea browse the cache's berries (coprosma / pātōtara & other subalpine cushion berries)
+      // and forest fruit — count all of them so a cache set in ANY habitat draws the flock.
+      if (KEA_BERRY_PLANTS.has(q.type) || (isForest && isForest.has(q.type))) food++;
     }
     cache._keaFood = food;
   }
@@ -389,7 +405,7 @@ class Kea extends Kereru {
     for (let i = 0; i < 8; i++) {
       const a = i * (Math.PI / 4);
       const rx = this.pos.x + Math.cos(a) * R, ry = this.pos.y + Math.sin(a) * R;
-      if (typeof t.isWalkable === 'function' && !t.isWalkable(rx, ry)) continue;
+      if (!this._passable(rx, ry)) continue;   // a kea may step across alpine rock, not water
       const e = t.getElevationAt(rx, ry);
       const s = Math.abs(e - band.center);
       if (s < bestScore) { bestScore = s; best = { x: rx, y: ry }; }
@@ -477,7 +493,7 @@ const KEA_SPECIES = {
   class:          (typeof Kea !== 'undefined') ? Kea : undefined,
   description:    'The bold alpine parrot — a strong, wide-ranging generalist that drops to the forest in the cold.',
   rarity:         'uncommon',
-  highlightColor: [178, 168, 60],   // olive-gold — player highlight (pulse + UI border)
+  highlightColor: [235, 222, 90],   // bright olive-gold — player highlight (pulse + UI border)
 
   // Movement / render — a strong flier that soars higher and ranges wider than the
   // kererū, but still kept BELOW the eagle's hunt speed so a chase resolves.

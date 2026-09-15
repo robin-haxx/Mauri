@@ -195,7 +195,7 @@ const KOKAKO_SPECIES = {
   class:          (typeof Kokako !== 'undefined') ? Kokako : undefined,
   description:    'An orange-wattled forest songbird — a weak flier that holds and sings a forest territory.',
   rarity:         'uncommon',
-  highlightColor: [224, 150, 70],   // orange — player highlight (pulse + UI border)
+  highlightColor: [250, 165, 80],   // bright orange — player highlight (pulse + UI border)
 
   // A poorer flier than the kererū: slower, shorter hops, barely clears the canopy.
   baseSpeed:        0.24,

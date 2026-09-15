@@ -54,7 +54,7 @@ const KERERU_SPECIES = {
   label:          'kererū',   // lower-case, for the notification strip
   description:    'The forest pigeon — the only bird that disperses large podocarp fruit.',
   rarity:         'common',
-  highlightColor: [120, 180, 120],  // green — player highlight (pulse + UI border)
+  highlightColor: [150, 235, 150],  // bright green — player highlight (pulse + UI border)
 
   // Movement / render — an unhurried flap between trees (kept BELOW the eagle's
   // hunt speed so a chase resolves rather than the bird outrunning it forever).
@@ -301,9 +301,18 @@ class Kereru extends Boid {
     return true;
   }
 
+  // Can this bird be over (x,y)? Default: only walkable ground — a forest bird never leaves
+  // land, so un-walkable water AND alpine scree/glacier both bar it. The kea overrides this
+  // (a strong flier crosses the alpine to relocate, barred only by open water).
+  _passable(x, y) {
+    const t = this.terrain;
+    return !t || typeof t.isWalkable !== 'function' || t.isWalkable(x, y);
+  }
+
   // A "stay in habitat" steering force — zero over land away from the rim, else a
   // firm pull inward. Triggers: the world EDGE (no food out there; stops an eagle
-  // pinning a bird against the screen) and WATER (a forest bird never crosses sea).
+  // pinning a bird against the screen) and impassable ground (a forest bird never
+  // crosses sea; a kea, only open water — see _passable).
   _landward() {
     const f = this._landForce; f.set(0, 0);
     const t = this.terrain;
@@ -319,8 +328,8 @@ class Kereru extends Boid {
 
     const spd = Math.hypot(this.vel.x, this.vel.y);
     const ux = spd > 0.001 ? this.vel.x / spd : 0, uy = spd > 0.001 ? this.vel.y / spd : 0;
-    const overWater = !t.isWalkable(px, py);
-    const waterAhead = !t.isWalkable(px + ux * 22, py + uy * 22);
+    const overWater = !this._passable(px, py);
+    const waterAhead = !this._passable(px + ux * 22, py + uy * 22);
     if (!edge && !overWater && !waterAhead) return f;
 
     let gx, gy, have = false;
@@ -344,13 +353,13 @@ class Kereru extends Boid {
   // Pull a fly-to point back onto land. Writes and returns the reused _landPt.
   _clampToLand(x, y) {
     const t = this.terrain, p = this._landPt;
-    if (!t || typeof t.isWalkable !== 'function' || t.isWalkable(x, y)) { p.x = x; p.y = y; return p; }
+    if (!t || typeof t.isWalkable !== 'function' || this._passable(x, y)) { p.x = x; p.y = y; return p; }
     const bx = this.pos.x, by = this.pos.y;
     for (let s = 0.75; s > 0; s -= 0.25) {
       const cx = bx + (x - bx) * s, cy = by + (y - by) * s;
-      if (t.isWalkable(cx, cy)) { p.x = cx; p.y = cy; return p; }
+      if (this._passable(cx, cy)) { p.x = cx; p.y = cy; return p; }
     }
-    p.x = bx; p.y = by; return p;                            // nowhere landward → hold
+    p.x = bx; p.y = by; return p;                            // nowhere passable → hold
   }
 
   // State dispatch — split out so a subclass can add a state (kōkako SINGING).
@@ -585,13 +594,15 @@ class Kereru extends Boid {
       this._flip += (want - this._flip) * Math.min(1, 0.15 * dt);
     }
 
-    // Hard land clamp: a forest bird may skim a coast but never ENDS a frame over
-    // open water. Snap back to the last walkable ground and kill outward momentum.
+    // Hard land clamp: a bird may skim impassable ground but never ENDS a frame over a
+    // true barrier. For a forest bird that's any un-walkable cell; for a kea (which flies
+    // the alpine) only open water — see _passable. _lastLand always tracks genuine
+    // walkable ground so the snap-back lands somewhere it can actually perch.
     const t = this.terrain;
     if (t && typeof t.isWalkable === 'function') {
       if (t.isWalkable(this.pos.x, this.pos.y)) {
         this._lastLand.x = this.pos.x; this._lastLand.y = this.pos.y;
-      } else {
+      } else if (!this._passable(this.pos.x, this.pos.y)) {
         this.pos.x = this._lastLand.x; this.pos.y = this._lastLand.y;
         this.vel.mult(0.3);
       }

@@ -486,6 +486,14 @@ class TerrainGenerator {
   isWalkable(x, y) {
     return this.getEffectiveBiomeAt(x, y).walkable;
   }
+
+  // Is this point open water (sea/lake)? Distinct from merely un-walkable: alpine scree and
+  // glacier are un-walkable too, but they are dry LAND a strong flier (kea) can cross. Only
+  // water is a true barrier to relocation. Used by the flyer passability check.
+  isWater(x, y) {
+    const b = this.getEffectiveBiomeAt(x, y);
+    return b === this._waterBiome || !!b.isWater;
+  }
   
   canPlace(x, y) {
     if (!this.isInBounds(x, y)) return false;

@@ -213,7 +213,7 @@ const KAKAPO_SPECIES = {
   class:          (typeof Kakapo !== 'undefined') ? Kakapo : undefined,
   description:    'The flightless, nocturnal ground parrot — the heaviest parrot alive, and a rimu-mast breeder.',
   rarity:         'rare',
-  highlightColor: [150, 190, 90],   // moss green — player highlight (pulse + UI border)
+  highlightColor: [190, 240, 115],  // bright moss green — player highlight (pulse + UI border)
 
   // Movement / render — a slow, heavy WALKER pinned to the ground (no flight).
   baseSpeed:        0.12,

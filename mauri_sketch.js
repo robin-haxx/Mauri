@@ -503,7 +503,7 @@ const PLACEABLES = {
   
   Storm: {
     name: "Storm",
-    description: "Distracts hunting eagles and scares flighted birds off their trees to seek new ones",
+    description: "A thunderous gust to divert flighted birds!",
     cost: 40,
     icon: '🌩️',
     color: '#c4a35a',
@@ -631,7 +631,7 @@ const PLACEABLES = {
   // keaAttractRadius); no plants spawned, no moa effect — it is purely a kea magnet.
   keaLure: {
     name: "Berry Cache",
-    description: "Plants subalpine berries and cultivates podocarp forest — draws kea downslope and grows perch trees. Cover a moa nest with its ring to loose the flock on it.",
+    description: "Can station Kea by moa nests....",
     cost: 30,
     icon: '🫐',
     color: '#6a4a7a',
@@ -648,10 +648,18 @@ const PLACEABLES = {
     // Berries (kea food) planted on placement…
     plantSpawnCount: 4,
     plantType: 'coprosma',
-    // …but the berry SPECIES follows the ground it's cached on: pātōtara (the alpine/lowland
-    // grassland berry) when placed on grassland, coprosma otherwise. Keyed by biome, read in
-    // Placeable.spawnPlantsInRadius(); add more entries to vary the cache by habitat.
-    biomePlantType: { grassland: 'patotara' },
+    // …but the berry SPECIES follows the habitat it's cached on, keyed by biome and read in
+    // Placeable.spawnPlantsInRadius() (falls back to plantType above where a biome isn't listed):
+    // pātōtara up in the subalpine tussock, coprosma across the lowland shrub/flats/forest floor.
+    // 'grassland' is kept for other levels that use that biome key.
+    biomePlantType: {
+      subalpine:    'patotara',      // alpine/subalpine cushion berry up high
+      shrubland:    'coprosma',      // frost-shrubland berry
+      glacialFlats: 'coprosma',      // glacial-flats berry
+      forestRefuge: 'coprosma',      // understorey berry beneath the forest it cultivates
+      coastal:      'coprosma',      // glacial-outwash flats
+      grassland:    'patotara'       // other levels' grassland key
+    },
     // …and podocarp forest cultivated over the cache's life (Slice B).
     growsForest: true,
     growEverySec: 5,           // seed a rimu/beech in-radius this often
@@ -660,7 +668,8 @@ const PLACEABLES = {
     // INVISIBLE far-draw: kea within this range are pulled toward the cache (much wider than
     // the rendered coverage ring, so a cache reaches across the map to gather the flock).
     keaAttractRadius: 820,
-    allowedBiomes: ['forestRefuge', 'shrubland', 'glacialFlats', 'grassland'],
+    // No allowedBiomes: a Berry Cache goes anywhere the terrain allows a placeable — i.e.
+    // everywhere but open water and the alpine scree/glacier (those biomes are canPlace:false).
     seasonalBonus: { summer: 1.0, autumn: 1.0, winter: 1.0, spring: 1.0 }
   },
 
@@ -701,8 +710,8 @@ const PLACEABLES = {
   // charged per raid from the panel (mechanics.keaRaid.cost), so this shows 0 and
   // opensDialog routes it past selection's affordability check.
   nestRaid: {
-    name: "Nest Raid",
-    description: "Loose the stationed kea on a moa nesting site — pick one from the list",
+    name: "KEA: Nest Raid",
+    description: "Attempt to raid eggs and chase out moa!",
     cost: 0,
     icon: '🥚',
     color: '#8a3a3a',
@@ -719,7 +728,7 @@ const PLACEABLES = {
   // Handled by Game._useGlobalInteractable → _triggerRimuScramble.
   rimuScramble: {
     name: "Rimu Berry Scramble",
-    description: "Shakes a fifth of the rimu into fruit — a berry glut that feeds and secures the kākāpō through the mast",
+    description: "Shakes the trees for fruit!",
     cost: 40,
     icon: '🍒',
     color: '#a23a4a',
@@ -1789,6 +1798,22 @@ class Game {
       }
     }
 
+    // Floor watch: keep every protected species at its floor. isSpeciesProtected already
+    // stops hunting/starving at the floor, but a same-frame double-catch (two eagles read
+    // the cached count before either kill lands) or a species that regenerated below it can
+    // still dip under. Every ~1.5s, respawn the shortfall so a hunted/thinned species quietly
+    // returns to the floor instead of vanishing for the year. Only species already in
+    // dynamicFloors (present this year) are topped up — nothing is conjured from nothing.
+    this._floorWatchTimer = (this._floorWatchTimer || 0) - 1;
+    if (this._floorWatchTimer <= 0) {
+      this._floorWatchTimer = 90;
+      const floors = sim.dynamicFloors;
+      if (floors) for (const k in floors) {
+        const short = floors[k] - sim.getSpeciesCount(k);
+        if (short > 0) this._spawnFreeplaySpecies(k, short);
+      }
+    }
+
     // Soft growth goals: reward when met. There is deliberately NO win path.
     for (const goal of this.goals) {
       if (!goal.achieved && goal.condition && goal.condition()) {
@@ -1963,9 +1988,17 @@ class Game {
       sim._forestLegacyTarget = Math.round(forestBest * legacyFrac);
     }
 
-    // 5) Protect ONLY the focus species from a total wipe this year (dynamic floor).
+    // 5) Protect EVERY species present this year from a total wipe (dynamic floor).
+    //    Non-focus species used to be left to die out and refound only next year; now
+    //    they quietly hold at the floor too, so a hunted/thinned species never vanishes
+    //    for the rest of the year. Any dip below the floor is topped back up by the
+    //    per-frame floor watch in _checkFreeplayYear. Focus species share the same floor.
+    //    Only species the area actually holds this year are floored (a start count > 0),
+    //    so a bird absent from the cast isn't conjured into existence.
     const floors = {};
-    for (const k of this.freeplayFocus) floors[k] = protectFloor;
+    for (const k in yearPops.moa)    if (yearPops.moa[k] > 0)    floors[k] = protectFloor;
+    for (const k in yearPops.others) if (yearPops.others[k] > 0) floors[k] = protectFloor;
+    for (const k of this.freeplayFocus) floors[k] = protectFloor;   // focus always protected
     sim.dynamicFloors = floors;
 
     // 6) Highlight the focus species in the UI.
@@ -3644,9 +3677,37 @@ class Game {
     placeColumn(leftPlants, leftColX);
     placeColumn(rightPlants, rightColX);
 
-    // Featured species — from level def
+    // Featured species — from level def. Either ONE object (classic levels), or an
+    // ARRAY to promote several side by side (Free Play features the kea, kākā and
+    // kākāpō — the birds its yearly focus loop turns on).
     const featured = menu.featuredSpecies;
-    if (featured) {
+    if (Array.isArray(featured)) {
+      const n = featured.length;
+      const spacing = Math.min(180, (cw * 0.42) / n);  // horizontal gap between sprites
+      const firstX = centerX - spacing * (n - 1) / 2;
+      const targetH = 120;                             // draw each bird at a common height
+      for (let i = 0; i < n; i++) {
+        const f = featured[i];
+        const fx = firstX + i * spacing;
+        const sprite = this._getMenuSprite(f.spriteKey);
+        if (sprite) {
+          const s = f.spriteScale != null ? f.spriteScale : targetH / sprite.height;
+          push();
+          imageMode(CENTER);
+          if (f.tint) tint(f.tint[0], f.tint[1], f.tint[2]);
+          image(sprite, fx, plantY, sprite.width * s, sprite.height * s);
+          pop();
+        }
+        fill(CACHED_COLORS.menuSubtitle);
+        textSize(16);
+        textStyle(BOLD);
+        text(f.displayName, fx, plantY + 80);
+        textStyle(NORMAL);
+        fill(CACHED_COLORS.menuText);
+        textSize(12);
+        text(f.localName || '', fx, plantY + 98);
+      }
+    } else if (featured) {
       push();
       imageMode(CENTER);
       translate(centerX, plantY);
@@ -3769,6 +3830,16 @@ class Game {
   }
   
   _getMenuSprite(spriteKey) {
+    // Flighted-bird sprites (kea/kākā/kākāpō/kōkako) resolve to their own art, or
+    // null while still loading — return that as-is so the caller draws nothing
+    // rather than a stand-in moa.
+    const birds = {
+      'kea':    EntitySprites.getKeaSprite?.(),
+      'kaka':   EntitySprites.getKakaSprite?.(),
+      'kakapo': EntitySprites.getKakapoSprite?.(),
+      'kokako': EntitySprites.getKokakoSprite?.()
+    };
+    if (spriteKey in birds) return birds[spriteKey];
     const map = {
       'moa_idle': splashScreenMoa,
       'LB_moa_walk_01': EntitySprites.moaVariants?.bush?.walk?.[0],

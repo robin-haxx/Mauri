@@ -116,6 +116,16 @@ class Kea extends Kereru {
       this._lureChoiceTimer -= dt;
       if (!this._lureValid() || this._lureChoiceTimer <= 0) {
         this._lureChoice = this._chooseLure(sim);
+        if (!this._lureValid() || this._lureChoiceTimer <= 0) {
+        const prev = this._lureChoice;
+        this._lureChoice = this._chooseLure(sim);
+        this._lureChoiceTimer = this._lureChoiceFrames * (0.75 + Math.random() * 0.5);
+        // Newly committed to a cache → drop the old (edge) perch so it re-homes near the cache.
+        if (this._lureChoice && this._lureChoice !== prev) {
+          this._perchTree = null;
+          this._perchSearchTimer = 0;
+        }
+      }
         this._lureChoiceTimer = this._lureChoiceFrames * (0.75 + Math.random() * 0.5);
       }
       const lure = this._lureChoice;
@@ -180,23 +190,26 @@ class Kea extends Kereru {
     if (!sim.getNearbyPlants) return;
     const isForest = (typeof FOREST_TREES !== 'undefined') ? FOREST_TREES : null;
     if (!isForest) return;
-    // Search a bit wider than before so a kea can reach a spread-out or site-adjacent tree.
     const trees = sim.getNearbyPlants(this.pos.x, this.pos.y, this._feedRadius * 2.0);
     const flock = (sim.otherEntities && sim.otherEntities.kea) || [];
     const sites = sim.nestingSites || [];
     const crowdR2 = 55 * 55, siteR2 = this._perchSiteRadius * this._perchSiteRadius;
+
+    // If this bird is committed to a cache, prefer perches NEAR that cache so the
+    // flock actually re-homes onto the cache patch instead of clinging to old trees.
+    const lure = this._lureValid() ? this._lureChoice : null;
+    const lureR2 = lure ? (((lure.def && lure.def.radius) || 70) * 2.2) ** 2 : 0;
+
     let best = null, bestScore = -Infinity;
     for (let i = 0; i < trees.length; i++) {
       const p = trees[i];
       if (!p.alive || p._consumed || p.dormant || p.growth < 0.5 || !isForest.has(p.type)) continue;
-      // Food around the tree.
       const near = sim.getNearbyPlants(p.pos.x, p.pos.y, 60);
       let food = 0;
       for (let j = 0; j < near.length; j++) {
         const q = near[j];
         if (q.alive && q.growth >= 0.4 && (isForest.has(q.type) || q.type === 'coprosma')) food++;
       }
-      // Crowd term: other kea already perched on/near this tree — spread off crowded trees.
       let crowd = 0;
       for (let k = 0; k < flock.length; k++) {
         const o = flock[k];
@@ -204,10 +217,6 @@ class Kea extends Kereru {
         const dx = o._perchTree.pos.x - p.pos.x, dy = o._perchTree.pos.y - p.pos.y;
         if (dx * dx + dy * dy < crowdR2) crowd++;
       }
-      // Site bonus: favour trees near a moa nesting site that actually HOLDS A CLUTCH — an
-      // empty nest can't be raided, so kea shouldn't fixate on it (that was the "kea stuck at
-      // a no-clutch nest" softlock). A placed berry cache is now what stations them at the
-      // target nest; a clutched nest still adds pull once the moa have laid.
       let siteBonus = 0;
       for (let s = 0; s < sites.length; s++) {
         const st = sites[s];
@@ -215,7 +224,13 @@ class Kea extends Kereru {
         const dx = st.pos.x - p.pos.x, dy = st.pos.y - p.pos.y;
         if (dx * dx + dy * dy < siteR2) { siteBonus = this._perchSiteBonus; break; }
       }
-      const score = food + siteBonus - crowd * this._perchCrowdWeight;
+      // Cache proximity bonus: a tree within the cache's patch is strongly favoured.
+      let lureBonus = 0;
+      if (lure) {
+        const dx = lure.pos.x - p.pos.x, dy = lure.pos.y - p.pos.y;
+        if (dx * dx + dy * dy < lureR2) lureBonus = this._perchLureBonus;
+      }
+      const score = food + siteBonus + lureBonus - crowd * this._perchCrowdWeight;
       if (score > bestScore) { bestScore = score; best = p; }
     }
     if (best) this._perchTree = best;

@@ -267,7 +267,7 @@ const LEVEL_FREEPLAY_KAHURANGI = {
     // twice as hard — the incentive to rebuild the two protected species). `imbalanceHarshness`
     // raises the penalty a little each YEAR; `inequalityWeight` is a flat exponent on top (1 =
     // off — the 2× now lives in the focus weighting). Eagles never count.
-    freeplayPassive: { scale: 1.0, imbalanceHarshness: 0.04, inequalityWeight: 1, focusInequalityWeight: 2 },
+    freeplayPassive: { scale: 1.0, imbalanceHarshness: 0.03, inequalityWeight: 1, focusInequalityWeight: 2 },
 
     // ---- Year-to-year reset: fall back to defaults, nudged by past performance ----
     // A new year is a NEW HABITAT — populations do NOT haul across. Each species falls

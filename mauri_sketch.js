@@ -1683,8 +1683,8 @@ class Game {
     let sum = 0, mx = 0, n = 0;
     const items = [];
     if (sim) for (const k of keys) {
-      const c = sim.getSpeciesCount(k);
-      if (c > floor) { sum += c; n++; if (c > mx) mx = c; items.push([k, c]); }
+      const c = Math.max(1, sim.getSpeciesCount(k));   // treat absent (0) as 1
+      sum += c; n++; if (c > mx) mx = c; items.push([k, c]);
     }
     if (n === 0) return { avgPop: 0, balance: 0, rawBalance: 0, mauriPerSec: 0, aboveFloor: 0 };
     const avgPop = sum / n;

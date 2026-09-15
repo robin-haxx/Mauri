@@ -22,7 +22,7 @@ const MOA_SPECIES = {
     
     // Movement
     baseSpeed: 0.16,
-    fleeSpeed: 0.24,
+    fleeSpeed: 0.25,
     maxForce: 0.02,
     
     // Survival
@@ -70,7 +70,7 @@ const MOA_SPECIES = {
     bodyColor: { r: [100, 120], g: [75, 90], b: [45, 60] },
     
     baseSpeed: 0.15,      // Slower due to size
-    fleeSpeed: 0.3,
+    fleeSpeed: 0.21,
     maxForce: 0.02,
     
     maxHunger: 140,       // Needs more food
@@ -115,7 +115,7 @@ const MOA_SPECIES = {
     bodyColor: { r: [95, 115], g: [70, 85], b: [40, 55] },
     
     baseSpeed: 0.14,
-    fleeSpeed: 0.45,
+    fleeSpeed: 0.3,
     maxForce: 0.02,
     
     maxHunger: 120,
@@ -156,7 +156,7 @@ const MOA_SPECIES = {
     bodyColor: { r: [85, 105], g: [65, 80], b: [35, 50] },
     
     baseSpeed: 0.2,
-    fleeSpeed: 0.5,
+    fleeSpeed: 0.3,
     maxForce: 0.02,
     
     maxHunger: 95,
@@ -197,7 +197,7 @@ const MOA_SPECIES = {
     bodyColor: { r: [88, 108], g: [58, 73], b: [32, 45] },
     
     baseSpeed: 0.18,
-    fleeSpeed: 0.6,  // Fast runner despite stocky build
+    fleeSpeed: 0.35,  // Fast runner despite stocky build
     maxForce: 0.024,  // More agile
     
     maxHunger: 90,
@@ -235,7 +235,7 @@ const MOA_SPECIES = {
     bodyColor: { r: [105, 125], g: [78, 93], b: [50, 65] },
     
     baseSpeed: 0.14,
-    fleeSpeed: 0.4,
+    fleeSpeed: 0.2,
     maxForce: 0.018,
     
     maxHunger: 130,
@@ -277,7 +277,7 @@ const MOA_SPECIES = {
     crestColor: { r: [140, 160], g: [100, 120], b: [60, 80] },
     
     baseSpeed: 0.21,
-    fleeSpeed: 0.52,
+    fleeSpeed: 0.3,
     maxForce: 0.02,
     
     maxHunger: 105,
@@ -315,7 +315,7 @@ const MOA_SPECIES = {
     bodyColor: { r: [98, 118], g: [72, 87], b: [42, 57] },
     
     baseSpeed: 0.19,
-    fleeSpeed: 0.48,
+    fleeSpeed: 0.3,
     maxForce: 0.021,
     
     maxHunger: 110,
@@ -355,7 +355,7 @@ const MOA_SPECIES = {
     bodyColor: { r: [82, 100], g: [55, 68], b: [25, 38] },
     
     baseSpeed: 0.15,       // Fastest moa
-    fleeSpeed: 0.6,
+    fleeSpeed: 0.35,
     maxForce: 0.028,
     
     maxHunger: 70,        // Smallest needs least food

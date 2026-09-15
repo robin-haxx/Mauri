@@ -156,7 +156,7 @@ const LEVEL_FREEPLAY_KAHURANGI = {
     heavy_footed_moa: 6,
     // Flighted-bird focus targets (kākā/kākāpō land in later slices; harmless until then).
     kea: 8,
-    kaka: 8,
+    kaka: 10,
     kakapo: 10,
     kokako: 6
   },

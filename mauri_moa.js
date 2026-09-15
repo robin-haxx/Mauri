@@ -25,7 +25,7 @@ class Moa extends Boid {
   static DEFAULTS = {
     size: { min: 8, max: 11 },
     baseSpeed: 0.1,
-    fleeSpeed: 0.3,
+    fleeSpeed: 0.2,
     maxForce: 0.025,
     flockTendency: 0.8,
     flightiness: 0.7,

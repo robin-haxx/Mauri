@@ -29,6 +29,19 @@ const GLTerrain = {
   _colKeyCur: null, _colKeyNext: null,
   _loc: {},
 
+  // ---- terrain-resolution cap (offscreen) ------------------------------------
+  // The terrain mesh shares the GL canvas with the sprite batch, so at
+  // spriteSupersample 2 it pays the full 4× fragment cost — and the water caustic
+  // loop makes it the heaviest shader in the frame. But a smooth shaded height-field
+  // gains far less from supersampling than pixel-art sprites do, so we render it into
+  // an offscreen buffer capped at CONFIG.terrainMaxSS (default 1× logical) and blit it
+  // up with a linear filter. Sprites + HUD keep the full SS; only the ground softens
+  // slightly. Kicks in ONLY when the live SS exceeds the cap (so at SS=1, or when
+  // dynamic resolution has already dropped, it draws direct with zero extra cost).
+  // Any GL failure falls back to a direct draw permanently. See _drawMesh/draw.
+  _fbo: null, _fboTex: null, _fboW: 0, _fboH: 0, _fboFailed: false,
+  _blitProg: null, _blitBuf: null, _aBlitPos: 0, _uBlitTex: null,
+
   available() {
     return this.enabled && typeof GLBatch !== 'undefined' && GLBatch.enabled && GLBatch.gl;
   },
@@ -83,12 +96,19 @@ const GLTerrain = {
       '    uvw.x+=uTime*0.030;' +
       '    vec2 p=mod(uvw*6.28318530718,6.28318530718)-250.0;' +
       '    vec2 iq=p; float c=1.0; float inten=0.005;' +
-      '    for(int n=0;n<5;n++){' +
+      // PERF: this turbulence loop runs per WATER fragment every frame — at the backing
+      // resolution it is the single most expensive thing on the terrain. Each step is
+      // 2 sin + 2 cos + a divide, so the count trades directly against water fill cost.
+      // 3 keeps the long-wave character; the original 5 added only fine chatter that the
+      // posterize step below mostly flattens anyway. Bump WATER_STEPS back up only if you
+      // profile headroom on the sea-heavy views. The normalizer tracks the count.
+      '    const int WATER_STEPS=3;' +
+      '    for(int n=0;n<WATER_STEPS;n++){' +
       '      float t=time*(1.0-(3.5/float(n+1)));' +
       '      iq=p+vec2(cos(t-iq.x)+sin(t+iq.y), sin(t-iq.y)+cos(t+iq.x));' +
       '      c+=1.0/length(vec2(p.x/(sin(iq.x+t)/inten), p.y/(cos(iq.y+t)/inten)));' +
       '    }' +
-      '    c/=5.0; c=1.17-pow(c,1.4);' +
+      '    c/=float(WATER_STEPS); c=1.17-pow(c,1.4);' +
       '    float h=pow(abs(c),8.0);' +
       // POSTERIZE the highlight into a handful of bands so the foam reads stepped, like the
       // terrain's banded elevation shading. Raise the 5.0 for finer steps, lower for chunkier.
@@ -331,9 +351,41 @@ const GLTerrain = {
 
   // ---- draw (called each frame in GL mode, after GLBatch.begin() clears) --------
   // clip rect (logical px) matches the 2D game-area clip so terrain never spills onto HUD.
+  // When the terrain-resolution cap engages (live SS above CONFIG.terrainMaxSS) the mesh is
+  // rendered into a smaller offscreen buffer and blitted up with a linear filter; otherwise
+  // it draws straight to the GL canvas exactly as before.
   draw(game, clipX, clipY, clipW, clipH) {
     if (!this.available() || !this._buffers) return;
-    const gl = GLBatch.gl, t = game.terrain, P = Projection;
+    const gl = GLBatch.gl;
+    const ss = (typeof spriteSS === 'function') ? spriteSS() : 1;
+    const cap = (typeof CONFIG !== 'undefined' && CONFIG.terrainMaxSS != null) ? CONFIG.terrainMaxSS : ss;
+    const terrainSS = Math.min(ss, cap);
+    const useFBO = !this._fboFailed && terrainSS < ss - 1e-3 && this._prepareFBO(gl, terrainSS);
+
+    if (useFBO) {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, this._fbo);
+      gl.viewport(0, 0, this._fboW, this._fboH);
+      this._renderMesh(gl, game, clipX, clipY, clipW, clipH, terrainSS, true);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      gl.viewport(0, 0, GLBatch.W, GLBatch.H);
+      this._blit(gl, clipX, clipY, clipW, clipH, ss);
+    } else {
+      gl.viewport(0, 0, GLBatch.W, GLBatch.H);
+      this._renderMesh(gl, game, clipX, clipY, clipW, clipH, ss, false);
+    }
+
+    // Restore the sprite batch's program so its quads draw next.
+    if (GLBatch._prog) gl.useProgram(GLBatch._prog);
+  },
+
+  // Render sky + the lit height-field mesh into the CURRENT framebuffer. targetSS is the
+  // supersample of that target (= live ss for the canvas, = the cap for the offscreen); it
+  // only scales the scissor rect — the vertex projection is resolution-independent (the ss
+  // in uSS cancels against uW=GLBatch.W), so the same uniforms place the terrain identically
+  // at any target resolution. isFBO clears the WHOLE target to sky first so the blit's
+  // linear edge samples sky rather than uninitialised texels.
+  _renderMesh(gl, game, clipX, clipY, clipW, clipH, targetSS, isFBO) {
+    const t = game.terrain, P = Projection;
     const ss = (typeof spriteSS === 'function') ? spriteSS() : 1;
 
     gl.useProgram(this._prog);
@@ -341,12 +393,12 @@ const GLTerrain = {
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
-    // Scissor to the game area (backing px, GL origin bottom-left) — mirrors the 2D clip.
-    gl.enable(gl.SCISSOR_TEST);
-    const bx = Math.max(0, Math.round(clipX * ss)), bw = Math.round(clipW * ss);
-    const bh = Math.round(clipH * ss);
-    const byTop = Math.round(clipY * ss);
-    gl.scissor(bx, GLBatch.H - (byTop + bh), bw, bh);
+    // Scissor to the game area, in the CURRENT target's pixels (targetSS), GL origin
+    // bottom-left — mirrors the 2D clip. The offscreen clears whole first (below).
+    const targetH = isFBO ? this._fboH : GLBatch.H;
+    const bx = Math.max(0, Math.round(clipX * targetSS)), bw = Math.round(clipW * targetSS);
+    const bh = Math.round(clipH * targetSS);
+    const byTop = Math.round(clipY * targetSS);
 
     // Eased glacial severity + snow line: game.coldIndex jumps at each year rollover, so
     // ease the RENDERED value toward it (~1s) — the grade and the creeping snow line stay
@@ -372,7 +424,13 @@ const GLTerrain = {
     const _hzB = (CONFIG.view3DHaze) || [206, 220, 230];
     const _hz = [_hzB[0] * (1 - 0.16 * cold), _hzB[1] * (1 - 0.06 * cold), Math.min(255, _hzB[2] * (1 + 0.05 * cold))];
     gl.clearColor(_hz[0] / 255, _hz[1] / 255, _hz[2] / 255, 1);
-    gl.clear(gl.COLOR_BUFFER_BIT);
+    // Offscreen: clear the WHOLE buffer to sky (so a linear-upscaled edge samples sky, not
+    // stale texels), then scissor the mesh to the game area. Direct: clear only the game
+    // area (scissored), exactly as the original single-pass path did.
+    if (isFBO) { gl.disable(gl.SCISSOR_TEST); gl.clear(gl.COLOR_BUFFER_BIT); }
+    gl.enable(gl.SCISSOR_TEST);
+    gl.scissor(bx, targetH - (byTop + bh), bw, bh);
+    if (!isFBO) gl.clear(gl.COLOR_BUFFER_BIT);
 
     const L = this._loc;
     gl.uniform1f(L.uK, P.K);
@@ -425,12 +483,98 @@ const GLTerrain = {
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, b.idx);
     gl.drawElements(gl.TRIANGLES, b.count, this._idxType, 0);
 
-    // Restore state for the sprite batch: its program + no scissor. (blend already matches.)
+    // Leave scissor off + the mesh attribs disabled so the sprite batch (or the blit) draws
+    // clean. The program is restored by the draw() caller.
     gl.disable(gl.SCISSOR_TEST);
     gl.disableVertexAttribArray(this._aWorld);
     gl.disableVertexAttribArray(this._aNormal);
     gl.disableVertexAttribArray(this._aColCur);
     gl.disableVertexAttribArray(this._aColNext);
-    if (GLBatch._prog) gl.useProgram(GLBatch._prog);
+  },
+
+  // ---- offscreen terrain buffer (resolution cap) -----------------------------
+  // Ensure a colour-only framebuffer sized to the logical canvas × terrainSS exists and is
+  // current. Returns false (and latches _fboFailed) on any GL failure so draw() falls back
+  // to a direct render for the rest of the session rather than showing a blank ground.
+  _prepareFBO(gl, terrainSS) {
+    const w = Math.max(1, Math.round(CONFIG.canvasWidth * terrainSS));
+    const h = Math.max(1, Math.round(CONFIG.canvasHeight * terrainSS));
+    if (!this._blitProg && !this._buildBlitProgram(gl)) { this._fboFailed = true; return false; }
+    if (this._fbo && this._fboW === w && this._fboH === h) return true;
+    try {
+      if (this._fboTex) gl.deleteTexture(this._fboTex);
+      if (this._fbo) gl.deleteFramebuffer(this._fbo);
+      const tex = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, tex);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);   // soft upscale
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+      const fbo = gl.createFramebuffer();
+      gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+      const ok = gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE;
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      if (!ok) { gl.deleteTexture(tex); gl.deleteFramebuffer(fbo); this._fboFailed = true;
+        console.warn('[glterrain] offscreen FBO incomplete; terrain cap disabled'); return false; }
+      this._fbo = fbo; this._fboTex = tex; this._fboW = w; this._fboH = h;
+      return true;
+    } catch (e) {
+      this._fboFailed = true;
+      console.warn('[glterrain] FBO setup failed; terrain cap disabled:', e && e.message);
+      return false;
+    }
+  },
+
+  // Full-screen textured-quad program that copies the offscreen terrain onto the GL canvas.
+  // UV is derived from clip position in the vertex shader, so the only attribute is a 2D
+  // clip-space position — a static 2-triangle quad covering [-1,1].
+  _buildBlitProgram(gl) {
+    try {
+      const vs = 'attribute vec2 aPos;varying vec2 vUV;' +
+        'void main(){vUV=(aPos+1.0)*0.5;gl_Position=vec4(aPos,0.0,1.0);}';
+      const fs = 'precision mediump float;varying vec2 vUV;uniform sampler2D uTex;' +
+        'void main(){gl_FragColor=texture2D(uTex,vUV);}';
+      const co = (ty, src) => { const s = gl.createShader(ty); gl.shaderSource(s, src); gl.compileShader(s);
+        if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)); return s; };
+      const p = gl.createProgram();
+      gl.attachShader(p, co(gl.VERTEX_SHADER, vs));
+      gl.attachShader(p, co(gl.FRAGMENT_SHADER, fs));
+      gl.bindAttribLocation(p, 0, 'aPos');
+      gl.linkProgram(p);
+      if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+      this._blitProg = p; this._aBlitPos = 0;
+      this._uBlitTex = gl.getUniformLocation(p, 'uTex');
+      const buf = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, 1,1, -1,-1, 1,1, -1,1]), gl.STATIC_DRAW);
+      this._blitBuf = buf;
+      return true;
+    } catch (e) {
+      console.warn('[glterrain] blit program build failed:', e && e.message);
+      return false;
+    }
+  },
+
+  // Copy the offscreen terrain onto the GL canvas, scissored to the game area (canvas px),
+  // as an opaque blit (blend off) — the offscreen game area is fully painted (sky + mesh).
+  _blit(gl, clipX, clipY, clipW, clipH, ss) {
+    gl.useProgram(this._blitProg);
+    gl.enable(gl.SCISSOR_TEST);
+    const bx = Math.max(0, Math.round(clipX * ss)), bw = Math.round(clipW * ss);
+    const bh = Math.round(clipH * ss), byTop = Math.round(clipY * ss);
+    gl.scissor(bx, GLBatch.H - (byTop + bh), bw, bh);
+    gl.disable(gl.BLEND);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this._blitBuf);
+    gl.enableVertexAttribArray(this._aBlitPos);
+    gl.vertexAttribPointer(this._aBlitPos, 2, gl.FLOAT, false, 0, 0);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, this._fboTex);
+    gl.uniform1i(this._uBlitTex, 0);
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+    gl.disableVertexAttribArray(this._aBlitPos);
+    gl.disable(gl.SCISSOR_TEST);
+    gl.enable(gl.BLEND);   // sprite batch expects blend on
   }
 };

@@ -958,7 +958,7 @@ class GameUI {
 
     let era = (level.menu && level.menu.subtitle) ? level.menu.subtitle : '';
     era = era.replace(/^[~\s]+/, '').toUpperCase();
-    if (era) { fill(150, 175, 155); smallTextSize(9); text(era, cx, cy - R * 0.46); }
+    if (era) { fill(150, 175, 155); smallTextSize(9); text(era, cx, cy - R * 0.3); }
 
     const sc = color(season.color);
     fill(red(sc), green(sc), blue(sc));

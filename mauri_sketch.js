@@ -15,6 +15,34 @@ let fpsHistory = [];
 const FPS_HISTORY_SIZE = 30;
 let currentFPS = 60;
 
+// ---- Honest frame-cost tracking (perf HUD) ---------------------------------
+// The debug Update/Render numbers only time CPU command-SUBMISSION; the GPU
+// (terrain fragment shader, 3-layer composite) runs AFTER render() returns, so
+// those numbers stay low while the real frame is slow. `deltaTime` (rAF wall
+// clock) is the honest measure — the browser won't fire the next frame until the
+// previous one has been accepted by the GPU. We EMA the real frame time and the
+// two CPU spans so the HUD can show the hidden GPU/composite gap, plus a decaying
+// worst-frame reading that surfaces hitches an averaged number hides.
+let perfFrameMs = 16.667;   // EMA of the real (unclamped) frame time
+let perfUpdateMs = 0;       // EMA of game.update() CPU time
+let perfRenderMs = 0;       // EMA of game.render() CPU submit time
+let perfWorstMs = 16.667;   // slowly-relaxing worst frame (hitch detector)
+const PERF_EMA = 0.1;       // smoothing for the averages
+const PERF_WORST_DECAY = 0.98;
+
+// ---- Dynamic resolution ----------------------------------------------------
+// Supersampling (CONFIG.spriteSupersample) is a pure fill-rate cost: SS=2 is 4×
+// the fragments of SS=1, all on the GPU and invisible to the CPU timers. Rather
+// than pin a fixed SS, watch the real frame time and step SS down when the GPU is
+// drowning, back up when it has headroom. Hysteresis + a cooldown keep it from
+// oscillating (each change is an expensive resizeCanvas). Off unless
+// CONFIG.dynamicResolution is set; CONFIG.spriteSupersample stays the CEILING.
+let dynResCurrentSS = 0;        // 0 = not yet initialised from the ceiling
+let dynResCooldownUntil = 0;    // millis() before which we won't change again
+const DYNRES_UP_MS = 13.5;      // frame faster than this (~74fps) → try more res
+const DYNRES_DOWN_MS = 20.0;    // frame slower than this (~50fps) → drop res
+const DYNRES_COOLDOWN = 1500;   // ms between changes (a resize is not free)
+
 function preload(){
   OpenDyslexic = loadFont('typefaces/OpenDyslexic.ttf');
   GroceryRounded = loadFont('typefaces/GroceryRounded.ttf');
@@ -115,6 +143,23 @@ const CONFIG = {
   //   SS = 1 → exactly the old single-1080-canvas behaviour (safe fallback).
   //   SS = 2 → sprites + HUD at 2× detail. ?sprites=1|2|3 overrides at startup.
   spriteSupersample: 2,
+
+  // Dynamic resolution: treat spriteSupersample as a CEILING and float the live SS
+  // down toward 1 when the real frame time (perfFrameMs, GPU included) says the GPU
+  // is fill-bound, back up when it has headroom. This is the fix for "sprite crispness
+  // when it's free, no death-spiral when it isn't" — SS is a pure fill-rate cost the
+  // CPU debug timers can't see. Hysteresis + a cooldown keep resizes rare. See
+  // updateDynamicResolution(). Set false to pin SS at the authored ceiling.
+  dynamicResolution: true,
+
+  // Terrain-resolution cap: the GPU height-field shares the GL canvas with the sprite
+  // batch, so it pays the full spriteSupersample fill cost — and its water-caustic shader
+  // is the heaviest in the frame. A smooth shaded terrain gains little from 2× SS, so cap
+  // its render resolution here (1 = draw the ground at logical 1080 even while sprites/HUD
+  // stay at 2×). It only engages when the live SS exceeds this cap, and blits up with a
+  // linear filter (slight softening of the ground only). Raise to 2 to disable the cap.
+  // See GLTerrain (mauri_glterrain.js).
+  terrainMaxSS: 1,
   zoom: 2.5,
   debugMode: false,
 
@@ -586,7 +631,7 @@ const PLACEABLES = {
   keaLure: {
     name: "Berry Cache",
     description: "Plants subalpine berries and cultivates podocarp forest — draws kea downslope and grows perch trees. Cover a moa nest with its ring to loose the flock on it.",
-    cost: 45,
+    cost: 30,
     icon: '🫐',
     color: '#6a4a7a',
     effect: 'keaLure',
@@ -602,6 +647,10 @@ const PLACEABLES = {
     // Berries (kea food) planted on placement…
     plantSpawnCount: 4,
     plantType: 'coprosma',
+    // …but the berry SPECIES follows the ground it's cached on: pātōtara (the alpine/lowland
+    // grassland berry) when placed on grassland, coprosma otherwise. Keyed by biome, read in
+    // Placeable.spawnPlantsInRadius(); add more entries to vary the cache by habitat.
+    biomePlantType: { grassland: 'patotara' },
     // …and podocarp forest cultivated over the cache's life (Slice B).
     growsForest: true,
     growEverySec: 5,           // seed a rimu/beech in-radius this often
@@ -610,7 +659,7 @@ const PLACEABLES = {
     // INVISIBLE far-draw: kea within this range are pulled toward the cache (much wider than
     // the rendered coverage ring, so a cache reaches across the map to gather the flock).
     keaAttractRadius: 820,
-    allowedBiomes: ['forestRefuge', 'shrubland', 'glacialFlats'],
+    allowedBiomes: ['forestRefuge', 'shrubland', 'glacialFlats', 'grassland'],
     seasonalBonus: { summer: 1.0, autumn: 1.0, winter: 1.0, spring: 1.0 }
   },
 
@@ -1203,6 +1252,12 @@ class Game {
   // keeps the standing terrain inside the flat map's rect.
   toggleView3D() {
     if (!this.terrain) return;
+    // The 3D view is GL-only (the CPU relief path is broken); in Classic 2D there is nothing
+    // to toggle to, so keep top-down and point the player at the graphics setting instead.
+    if (!CONFIG.useGL) {
+      this.addNotification("3D view needs Enhanced graphics", 'info');
+      return;
+    }
     CONFIG.view3D = !CONFIG.view3D;
     this._configureProjection();
     this.addNotification(CONFIG.view3D ? "3D view" : "Top-down view", 'info');
@@ -1218,7 +1273,10 @@ class Game {
       mapWidth: this.terrain.mapWidth,
       mapHeight: this.terrain.mapHeight
     });
-    Projection.relief = !!CONFIG.view3D;
+    // Relief (plan-oblique 3D) is GL-only — never enable it in Classic 2D, whose relief bake
+    // is broken. This is the single master switch the bake, billboards and pointer maths read,
+    // so gating it here keeps every consumer top-down in Classic 2D even if view3D drifts true.
+    Projection.relief = !!CONFIG.view3D && !!CONFIG.useGL;
   }
 
   // Screen (canvas) point → world point, honouring the 3D projection so clicks
@@ -4147,6 +4205,16 @@ class Game {
 
     if (key === 'd' || key === 'D') { CONFIG.debugMode = !CONFIG.debugMode; return; }
 
+    // Graphics renderer toggle (Classic 2D ↔ Enhanced 3D). Mirrors the level-select menu
+    // button, but works in ANY state — during play too — so switching back to Enhanced 3D
+    // never depends on being on the menu and hitting that one button. setRenderGL also
+    // flips the view (Enhanced → 3D, Classic → top-down) via its renderer/view coupling.
+    if (key === 'g' || key === 'G') {
+      const on = setRenderGL(!CONFIG.useGL);
+      this.addNotification(on ? 'Enhanced 3D graphics' : 'Classic 2D graphics', 'info');
+      return;
+    }
+
     // Debug lenses: L toggles the overlay + its clickable legend (see mauri_lens.js).
     if (key === 'l' || key === 'L') {
       if (typeof Lens !== 'undefined') {
@@ -4239,7 +4307,7 @@ function setup() {
                    // pixelDensity stays 1 — we supersample MANUALLY (backing = logical × SS)
                    // so the terrain can opt out of it via the screen-size offscreen layer.
   const _ss = spriteSS();
-  let cnv = createCanvas(CONFIG.canvasWidth * _ss, CONFIG.canvasHeight * _ss);
+  let cnv = createCanvas(Math.round(CONFIG.canvasWidth * _ss), Math.round(CONFIG.canvasHeight * _ss));
   _mainCanvasEl = (cnv && cnv.elt) ? cnv.elt : document.querySelector('canvas');
   cnv.style('display', 'block');
   document.body.style.margin = '0';
@@ -4282,9 +4350,14 @@ function windowResized() {
   // Recalculate layout for actual window dimensions
   CONFIG.recalculateLayout(windowWidth, windowHeight);
 
-  // Resize the p5 canvas to the new computed dimensions (backing = logical × SS)
+  // Resize the p5 canvas to the new computed dimensions (backing = logical × SS).
+  // Round the backing ONCE and share it with the GL canvas so a fractional SS (dynamic
+  // resolution) can never leave the two layers a sub-pixel apart — GLBatch.W must equal
+  // the GL canvas's real pixel width for the terrain's clip-space projection to line up.
   const _ss = spriteSS();
-  resizeCanvas(CONFIG.canvasWidth * _ss, CONFIG.canvasHeight * _ss);
+  const _bw = Math.round(CONFIG.canvasWidth * _ss);
+  const _bh = Math.round(CONFIG.canvasHeight * _ss);
+  resizeCanvas(_bw, _bh);
 
   // Apply CSS scaling to fill the window (uses the LOGICAL size, so the on-screen
   // footprint is unchanged; the extra backing pixels are the crispness)
@@ -4292,7 +4365,7 @@ function windowResized() {
 
   // Keep the WebGL entity canvas matched to the backing resolution (GL_PORT.md).
   if (typeof GLBatch !== 'undefined' && GLBatch.enabled) {
-    GLBatch.resize(CONFIG.canvasWidth * _ss, CONFIG.canvasHeight * _ss);
+    GLBatch.resize(_bw, _bh);
   }
 
   // Update UI panel positions if game is running
@@ -4330,9 +4403,64 @@ function scaleCanvasToFit() {
 
 // Backing-canvas supersample factor, clamped. 1 = logical 1080 (old behaviour);
 // 2 = 2× sprites/HUD. The one place SS is read, so the clamp lives here.
+// With dynamic resolution on, CONFIG.spriteSupersample is the CEILING and the live
+// factor is dynResCurrentSS (a float, so degradation is smooth) clamped to [1, ceil].
 function spriteSS() {
-  const s = Math.round((typeof CONFIG !== 'undefined' && CONFIG.spriteSupersample) || 1);
-  return Math.max(1, Math.min(3, s));
+  const ceil = Math.max(1, Math.min(3,
+    Math.round((typeof CONFIG !== 'undefined' && CONFIG.spriteSupersample) || 1)));
+  if (typeof CONFIG !== 'undefined' && CONFIG.dynamicResolution && dynResCurrentSS > 0) {
+    return Math.max(1, Math.min(ceil, dynResCurrentSS));
+  }
+  return ceil;
+}
+
+// Ceiling (authored max) for dynamic resolution, independent of the live value.
+function spriteSSCeiling() {
+  return Math.max(1, Math.min(3,
+    Math.round((typeof CONFIG !== 'undefined' && CONFIG.spriteSupersample) || 1)));
+}
+
+// Dynamic resolution controller — called once per frame from draw() when
+// CONFIG.dynamicResolution is on. Steps the live supersample factor toward the load:
+// down FAST when the real frame time is bad (react to a drop), up gently when there is
+// headroom (probe without thrashing). A resize is not free, so a cooldown gates changes
+// and the thresholds have a wide dead-band (13.5–20ms) so a frame near the target does
+// nothing. perfFrameMs already includes the GPU/composite time the CPU timers miss —
+// which is exactly the cost SS drives — so it is the right signal to steer on.
+function updateDynamicResolution() {
+  const ceil = spriteSSCeiling();
+  if (dynResCurrentSS <= 0) dynResCurrentSS = ceil;          // init from the ceiling
+  if (dynResCurrentSS > ceil) { applySupersample(ceil); return; }  // ceiling lowered
+  if (ceil <= 1) return;                                     // nothing to float
+  if (!game) return;                                         // not in a live frame yet
+
+  const now = (typeof millis === 'function') ? millis() : Date.now();
+  if (now < dynResCooldownUntil) return;
+
+  let target = dynResCurrentSS;
+  if (perfFrameMs > DYNRES_DOWN_MS && dynResCurrentSS > 1) {
+    target = Math.max(1, dynResCurrentSS - 0.5);            // drop res fast
+  } else if (perfFrameMs < DYNRES_UP_MS && dynResCurrentSS < ceil) {
+    target = Math.min(ceil, dynResCurrentSS + 0.25);        // probe res up gently
+  }
+
+  if (target !== dynResCurrentSS) {
+    applySupersample(target);
+    dynResCooldownUntil = now + DYNRES_COOLDOWN;
+    // Nudge the EMAs so the just-changed resolution isn't immediately re-judged on the
+    // resize frame's own (slow) timing.
+    perfFrameMs = (DYNRES_UP_MS + DYNRES_DOWN_MS) * 0.5;
+    perfWorstMs = perfFrameMs;
+  }
+}
+
+// Apply a new live supersample factor: set it, then reuse the proven resize path
+// (windowResized re-reads spriteSS() and resizes the main canvas, the GL entity canvas
+// and re-lays the stacked layers). GPU terrain needs no rebuild — it reads uSS live.
+function applySupersample(ss) {
+  if (ss === dynResCurrentSS) return;
+  dynResCurrentSS = ss;
+  if (typeof windowResized === 'function') windowResized();
 }
 
 // ?sprites=1|2|3 startup override. Must run BEFORE createCanvas, since it sets the
@@ -4399,6 +4527,16 @@ function setRenderGL(on, persist = true) {
     if (typeof GLTerrain !== 'undefined') GLTerrain.enabled = false;
   }
   CONFIG.useGL = !!(GLBatch.enabled);
+
+  // The plan-oblique 3D view is a GL-only feature: the CPU relief bake is no longer
+  // maintained (it renders flat and drops the billboarded cast), so Classic 2D is LOCKED
+  // to the top-down view. Bind the view to the renderer here — Enhanced → 3D, Classic → 2D
+  // top-down — so flipping the graphics toggle also flips the view (and, crucially, switching
+  // back to Enhanced restores 3D). _configureProjection mirrors this onto Projection.relief.
+  CONFIG.view3D = CONFIG.useGL;
+  if (typeof game !== 'undefined' && game && game.terrain && game._configureProjection) {
+    game._configureProjection();
+  }
   return CONFIG.useGL;
 }
 
@@ -4459,11 +4597,22 @@ function draw() {
   }
 
   const currentTime = millis();
-  deltaTime = constrain(currentTime - lastFrameTime, 1, 100);
+  const rawFrameMs = currentTime - lastFrameTime;   // true frame time, pre-clamp
+  deltaTime = constrain(rawFrameMs, 1, 100);
   lastFrameTime = currentTime;
   deltaMultiplier = deltaTime / TARGET_FRAME_TIME;
 
   updateFPS();
+
+  // Honest frame-cost EMAs (skip the first frame's bogus huge delta). perfFrameMs
+  // is the real cost; perfUpdate/RenderMs are filled from last frame's CPU spans
+  // below, so `hidden = frame − update − render` is the GPU/composite time the
+  // debug Update/Render numbers can't see. Dynamic resolution reads perfFrameMs.
+  if (rawFrameMs > 0 && rawFrameMs < 1000) {
+    perfFrameMs += (rawFrameMs - perfFrameMs) * PERF_EMA;
+    perfWorstMs = Math.max(rawFrameMs, perfWorstMs * PERF_WORST_DECAY);
+  }
+  if (typeof CONFIG !== 'undefined' && CONFIG.dynamicResolution) updateDynamicResolution();
 
   if (typeof BENCHMARK !== 'undefined') BENCHMARK.tick();
 
@@ -4496,12 +4645,25 @@ function draw() {
   if (typeof Lens !== 'undefined' && game) Lens.renderScreen(game);
 
   if (_dbg) {
+    // Feed the CPU-span EMAs so "Hidden" (the GPU/composite time the Update/Render
+    // numbers can't see) reads stably: Hidden = real frame − update − render.
+    perfUpdateMs += ((t1 - t0) - perfUpdateMs) * PERF_EMA;
+    perfRenderMs += ((t2 - t1) - perfRenderMs) * PERF_EMA;
+    const hidden = Math.max(0, perfFrameMs - perfUpdateMs - perfRenderMs);
     fill(255);
     smallTextSize(10);
-    text(`Update: ${(t1-t0).toFixed(1)}ms`, 85, 38);
-    text(`Render: ${(t2-t1).toFixed(1)}ms`, 85, 52);
-    text(`Canvas: ${CONFIG.canvasWidth}×${CONFIG.canvasHeight} @${_ss}×`, 85, 70);
-    text(`Version: ${CONFIG.version}`, 85, 84);
+    text(`Update: ${(t1-t0).toFixed(1)}ms  (CPU sim)`, 85, 38);
+    text(`Render: ${(t2-t1).toFixed(1)}ms  (CPU submit)`, 85, 52);
+    // The honest frame cost + the hidden GPU/composite share. If Frame ≫ Update+
+    // Render, you are GPU/fill-rate bound (try ?sprites=1 or dynamic resolution).
+    fill(perfFrameMs <= 18 ? 255 : (perfFrameMs <= 26 ? [255, 220, 120] : [255, 130, 130]));
+    text(`Frame:  ${perfFrameMs.toFixed(1)}ms  (${(1000/perfFrameMs).toFixed(0)}fps)`, 85, 66);
+    text(`Hidden: ${hidden.toFixed(1)}ms  (GPU+composite)`, 85, 80);
+    text(`Worst:  ${perfWorstMs.toFixed(1)}ms`, 85, 94);
+    fill(255);
+    text(`Canvas: ${CONFIG.canvasWidth}×${CONFIG.canvasHeight} @${_ss}×`, 85, 112);
+    text(`Version: ${CONFIG.version}`, 85, 126);
+    renderFPSCounter();
   }
   pop();
 

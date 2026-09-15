@@ -230,8 +230,18 @@ class PlaceableObject {
   // ============================================
   
   spawnPlantsInRadius() {
-    const plantType = this.def.plantType || 'tussock';
-    
+    // The berry species follows the biome the placeable sits on: def.biomePlantType maps a
+    // biome key to the plant to spawn there (e.g. keaLure → pātōtara on grassland), falling
+    // back to the flat def.plantType. Resolved once from the CENTRE biome so the whole cache
+    // plants one consistent species even where its radius straddles a biome edge.
+    let plantType = this.def.plantType || 'tussock';
+    if (this.def.biomePlantType) {
+      const baseBiome = this.terrain.getBiomeAt(this.pos.x, this.pos.y);
+      if (baseBiome && this.def.biomePlantType[baseBiome.key]) {
+        plantType = this.def.biomePlantType[baseBiome.key];
+      }
+    }
+
     for (let i = 0; i < this.def.plantSpawnCount; i++) {
       const angle = random(TWO_PI);
       const dist = random(5, this.radius * 0.8);

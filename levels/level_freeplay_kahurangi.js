@@ -119,14 +119,13 @@ const LEVEL_FREEPLAY_KAHURANGI = {
   },
 
   availablePlaceables: {
-    lancewood: { cost: 30 },   // slot 1 — bush moa
-    speargrass: { cost: 30 },  // slot 2 — upland moa
+    lancewood: { cost: 25 },   // slot 1 — bush moa
+    speargrass: { cost: 25 },  // slot 2 — upland moa
     shelter:   { cost: 35 },
-    nest:      { cost: 55 },
-    waterhole: { cost: 35 },
+    nest:      { cost: 50 },
     forestBoost: { cost: 35 }, // Year-2 forest cultivator (see freeplaySchedule per-year palettes)
     Storm:     { cost: 40 },
-    keaLure:   { cost: 45 },   // Year-1 kea magnet (see freeplaySchedule per-year palettes)
+    keaLure:   { cost: 30 },   // Year-1 kea magnet (see freeplaySchedule per-year palettes)
     nestRaid:  { cost: 0 },    // toolbar interaction → nest-raid dialog (charged per raid)
     rimuScramble: { cost: 40 } // mast-year interaction → 20% of rimu drop berries for the kākāpō
     // NOTE: the Mast Year is no longer a bought item. It is EARNED — Year 2's mast-mauri

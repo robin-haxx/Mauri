@@ -283,7 +283,10 @@ const GLTerrain = {
     const quads = (cols - 1) * (extRows - 1);
     const idx = (n > 65535) ? new Uint32Array(quads * 6) : new Uint16Array(quads * 6);
     this._idxType = (n > 65535) ? gl.UNSIGNED_INT : gl.UNSIGNED_SHORT;
-    if (this._idxType === gl.UNSIGNED_INT && !gl.getExtension('OES_element_index_uint')) {
+    // 32-bit indices are core in WebGL2 (the extension query returns null there even though
+    // they work); only WebGL1 needs the OES_element_index_uint extension.
+    const uintOK = (typeof GLBatch !== 'undefined' && GLBatch._gl2) || gl.getExtension('OES_element_index_uint');
+    if (this._idxType === gl.UNSIGNED_INT && !uintOK) {
       // No 32-bit indices available — fall back so we never draw garbage.
       console.warn('[glterrain] mesh too large for 16-bit indices and no uint index ext; disabling');
       this.enabled = false; return false;

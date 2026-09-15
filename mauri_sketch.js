@@ -30,18 +30,21 @@ let perfWorstMs = 16.667;   // slowly-relaxing worst frame (hitch detector)
 const PERF_EMA = 0.1;       // smoothing for the averages
 const PERF_WORST_DECAY = 0.98;
 
-// ---- Dynamic resolution ----------------------------------------------------
-// Supersampling (CONFIG.spriteSupersample) is a pure fill-rate cost: SS=2 is 4×
-// the fragments of SS=1, all on the GPU and invisible to the CPU timers. Rather
-// than pin a fixed SS, watch the real frame time and step SS down when the GPU is
-// drowning, back up when it has headroom. Hysteresis + a cooldown keep it from
-// oscillating (each change is an expensive resizeCanvas). Off unless
-// CONFIG.dynamicResolution is set; CONFIG.spriteSupersample stays the CEILING.
-let dynResCurrentSS = 0;        // 0 = not yet initialised from the ceiling
+// ---- Dynamic resolution (terrain-targeted) ---------------------------------
+// The sprites + HUD stay pinned at the full CONFIG.spriteSupersample ceiling so the
+// bird art is ALWAYS supersampled and crisp — that layer is sparse and cheap to keep
+// sharp. The expensive full-screen fill is the GPU terrain (its water shader), which
+// already renders into its own offscreen buffer (GLTerrain, CONFIG.terrainMaxSS). So the
+// adaptive scaler steers THAT buffer's resolution, not the sprites: drop the terrain
+// buffer when the real frame time is bad, raise it back when there's headroom. Cheaper
+// and smoother than the old full-canvas resize — the FBO just reallocates. Hysteresis +
+// a cooldown stop oscillation. Off unless CONFIG.dynamicResolution is set.
 let dynResCooldownUntil = 0;    // millis() before which we won't change again
-const DYNRES_UP_MS = 13.5;      // frame faster than this (~74fps) → try more res
-const DYNRES_DOWN_MS = 20.0;    // frame slower than this (~50fps) → drop res
-const DYNRES_COOLDOWN = 1500;   // ms between changes (a resize is not free)
+const DYNRES_UP_MS = 13.5;      // frame faster than this (~74fps) → raise terrain res
+const DYNRES_DOWN_MS = 20.0;    // frame slower than this (~50fps) → drop terrain res
+const DYNRES_COOLDOWN = 1200;   // ms between changes
+const DYNRES_TERRAIN_MIN = 0.5; // floor for the terrain buffer scale (soft, hazed distance)
+const DYNRES_TERRAIN_MAX = 1.0; // ceiling — terrain gains nothing above native 1080
 
 function preload(){
   OpenDyslexic = loadFont('typefaces/OpenDyslexic.ttf');
@@ -134,31 +137,29 @@ const CONFIG = {
   // ?render=gl URL override. Enables the whole GPU path: entity batch + GPU terrain/water.
   useGL: false,
 
-  // Split-resolution rendering (ported from Te Manawa). The backing canvas is
-  // spriteSupersample× the logical 1080 size, and a single scale(SS) in draw() renders
-  // the sprite cast + HUD at that higher resolution. The terrain OPTS OUT: it composites
-  // into a screen-size offscreen buffer (Game._terrainLayer) and blits up as one quad, so
-  // the ground stays cheap while the cast is crisp. pixelDensity stays 1 (a density of 2
-  // would supersample the WHOLE frame, terrain included, defeating the split).
-  //   SS = 1 → exactly the old single-1080-canvas behaviour (safe fallback).
-  //   SS = 2 → sprites + HUD at 2× detail. ?sprites=1|2|3 overrides at startup.
-  spriteSupersample: 2,
+  // Frame supersample factor (backing = spriteSupersample × logical 1080). DEFAULT 1 =
+  // native 1080p, Te Manawa's fill cost. It USED to be 2 to hide sprite aliasing, but the GL
+  // sprite atlas is now MIPMAPPED (GLBatch WebGL2 + the atlas alpha-bleed), so sprites — the
+  // birds included — stay crisp when downscaled at 1×; supersampling the whole frame is no
+  // longer needed for quality. Raise to 2 for extra sharpness on a strong GPU (4× the fill).
+  //   SS = 1 → native 1080p (mipmaps keep sprites crisp).
+  //   SS = 2 → 2× sprites + HUD. ?sprites=1|2|3 overrides at startup.
+  spriteSupersample: 1,
 
-  // Dynamic resolution: treat spriteSupersample as a CEILING and float the live SS
-  // down toward 1 when the real frame time (perfFrameMs, GPU included) says the GPU
-  // is fill-bound, back up when it has headroom. This is the fix for "sprite crispness
-  // when it's free, no death-spiral when it isn't" — SS is a pure fill-rate cost the
-  // CPU debug timers can't see. Hysteresis + a cooldown keep resizes rare. See
-  // updateDynamicResolution(). Set false to pin SS at the authored ceiling.
+  // Dynamic resolution: when the real frame time (perfFrameMs, GPU included) says the GPU
+  // is fill-bound, shed load by shrinking the TERRAIN buffer (terrainMaxSS) — the sprites
+  // and HUD keep their full supersample, so the bird cast never softens. Raise the terrain
+  // buffer back when there's headroom. Hysteresis + a cooldown keep it stable; the terrain
+  // FBO just reallocates (no canvas resize). See updateDynamicResolution(). Set false to
+  // pin the terrain buffer at terrainMaxSS.
   dynamicResolution: true,
 
-  // Terrain-resolution cap: the GPU height-field shares the GL canvas with the sprite
-  // batch, so it pays the full spriteSupersample fill cost — and its water-caustic shader
-  // is the heaviest in the frame. A smooth shaded terrain gains little from 2× SS, so cap
-  // its render resolution here (1 = draw the ground at logical 1080 even while sprites/HUD
-  // stay at 2×). It only engages when the live SS exceeds this cap, and blits up with a
-  // linear filter (slight softening of the ground only). Raise to 2 to disable the cap.
-  // See GLTerrain (mauri_glterrain.js).
+  // Terrain-resolution scale (also the dynamic-resolution knob above). The GPU height-field
+  // renders into its own offscreen buffer at this fraction of logical 1080 and blits up with
+  // a linear filter — a smooth shaded terrain gains little from supersampling, so 1 (native)
+  // is the default and dynamic resolution floats it DOWN toward 0.5 under load. The sprites/
+  // HUD are unaffected and stay at the full spriteSupersample. Set dynamicResolution:false and
+  // this to 1 to pin native terrain; raise to 2 to supersample the ground too. See GLTerrain.
   terrainMaxSS: 1,
   zoom: 2.5,
   debugMode: false,
@@ -3398,24 +3399,14 @@ class Game {
     fill(CACHED_COLORS.btnNormal); stroke(200, 240, 210); strokeWeight(2); ellipse(hx, trackY, 16, 16); noStroke();
     this._detailSliderBounds = { x: sliderX, y: sliderY, w: sliderW, h: trackY + 12 - sliderY, trackPad, stepW };
 
-    // Graphics toggle
-    const glOn = !!CONFIG.useGL;
-    const tglW = w, tglH = 34, tglX = cx - w / 2, tglY = trackY + 30;
-    const tglHover = mouseX > tglX && mouseX < tglX + tglW && mouseY > tglY && mouseY < tglY + tglH;
-    noStroke();
-    fill(glOn ? (tglHover ? [50, 85, 66] : [40, 70, 55]) : (tglHover ? [56, 60, 70] : [44, 48, 56]));
-    rect(tglX, tglY, tglW, tglH, 10);
-    noFill(); stroke(glOn ? 90 : 88, glOn ? 170 : 96, glOn ? 120 : 108); strokeWeight(1.5);
-    rect(tglX, tglY, tglW, tglH, 10);
-    noStroke();
-    fill(glOn ? [120, 230, 150] : [110, 118, 130]);
-    circle(tglX + 16, tglY + tglH / 2, 10);
-    fill(glOn ? [212, 240, 222] : [176, 183, 193]);
-    textAlign(LEFT, CENTER); smallTextSize(13);
-    text(glOn ? 'Graphics: Enhanced 3D' : 'Graphics: Classic 2D', tglX + 30, tglY + tglH / 2 + 1);
+    // The Classic-2D / Enhanced-3D graphics toggle was removed: the GL path now renders at
+    // native 1080p (mipmapped sprites — GLBatch WebGL2 + atlas alpha-bleed) so it's both
+    // faster and more capable than the old 2D path, which only ever did a flat top-down view.
+    // GL is the sole path; the 2D renderer survives only as an automatic fallback when WebGL
+    // is unavailable (setRenderGL). `?render=2d` still forces it for debugging.
+    this._glToggleBounds = null;
     pop();
-    this._glToggleBounds = { x: tglX, y: tglY, w: tglW, h: tglH };
-    return tglY + tglH;
+    return trackY + 30;
   }
 
     renderLevelSelect() {
@@ -4075,7 +4066,8 @@ class Game {
     }
   }
 
-  // Shared click handling for the gamemode-select render settings (resolution + graphics).
+  // Shared click handling for the level-select render settings (terrain-resolution slider).
+  // The graphics-mode toggle was removed — GL is the sole path (see _renderRenderSettings).
   _handleRenderSettingsClick(mx, my) {
     if (this._detailSliderBounds) {
       const s = this._detailSliderBounds;
@@ -4084,13 +4076,6 @@ class Game {
         const idx = Math.max(0, Math.min(TERRAIN_DETAIL_OPTIONS.length - 1, Math.round(t)));
         CONFIG.pixelScale = TERRAIN_DETAIL_OPTIONS[idx].pixelScale;
         CONFIG.terrainDetail = TERRAIN_DETAIL_OPTIONS[idx].detail;
-        return true;
-      }
-    }
-    if (this._glToggleBounds) {
-      const t = this._glToggleBounds;
-      if (mx > t.x && mx < t.x + t.w && my > t.y && my < t.y + t.h) {
-        setRenderGL(!CONFIG.useGL);   // flip Enhanced/Classic live + persist
         return true;
       }
     }
@@ -4205,16 +4190,6 @@ class Game {
 
     if (key === 'd' || key === 'D') { CONFIG.debugMode = !CONFIG.debugMode; return; }
 
-    // Graphics renderer toggle (Classic 2D ↔ Enhanced 3D). Mirrors the level-select menu
-    // button, but works in ANY state — during play too — so switching back to Enhanced 3D
-    // never depends on being on the menu and hitting that one button. setRenderGL also
-    // flips the view (Enhanced → 3D, Classic → top-down) via its renderer/view coupling.
-    if (key === 'g' || key === 'G') {
-      const on = setRenderGL(!CONFIG.useGL);
-      this.addNotification(on ? 'Enhanced 3D graphics' : 'Classic 2D graphics', 'info');
-      return;
-    }
-
     // Debug lenses: L toggles the overlay + its clickable legend (see mauri_lens.js).
     if (key === 'l' || key === 'L') {
       if (typeof Lens !== 'undefined') {
@@ -4324,18 +4299,18 @@ function setup() {
   initPortraitPlantSprites(portraitPlantSprites);
   initializeRegistry();
 
+  // WebGL renderer (GL_PORT.md §12) — the whole GPU path (entity batch + GPU terrain/
+  // water & ecology lighting). Bring the GL context up FIRST so the atlas build below can
+  // see whether it's WebGL2 (GLBatch._gl2) and alpha-bleed its pages for mipmapping. If GL
+  // is unavailable this falls back to the untouched 2D path.
+  setRenderGL(resolveUseGLPreference(), false);
+
   // WebGL port (GL_PORT.md), Phase 1: consolidate every loaded sprite PNG into
   // shared GPU atlas pages now that preload() has resolved them all and the plant
   // sprite globals are wired. Transparent to the render code (mauri_spriteatlas.js);
-  // a no-op if the module is absent or nothing is packable.
+  // a no-op if the module is absent or nothing is packable. On WebGL2 it also alpha-bleeds
+  // each page so the mip chain built in GLBatch doesn't fringe downscaled sprites.
   if (typeof SpriteAtlas !== 'undefined') SpriteAtlas.build();
-
-  // WebGL renderer (GL_PORT.md §12) — the whole GPU path (entity batch + GPU terrain/
-  // water & ecology lighting) behind ONE switch, now a main-menu setting (renderMenu).
-  // Apply the saved/URL/default preference: this lazily creates + mounts the GL context
-  // at the BACKING resolution only if Enhanced is on; Classic 2D leaves the untouched
-  // 2D path running and never spins up a context. Live-toggleable via setRenderGL.
-  setRenderGL(resolveUseGLPreference(), false);
 
   PROGRESS.init();
 
@@ -4402,65 +4377,45 @@ function scaleCanvasToFit() {
 }
 
 // Backing-canvas supersample factor, clamped. 1 = logical 1080 (old behaviour);
-// 2 = 2× sprites/HUD. The one place SS is read, so the clamp lives here.
-// With dynamic resolution on, CONFIG.spriteSupersample is the CEILING and the live
-// factor is dynResCurrentSS (a float, so degradation is smooth) clamped to [1, ceil].
+// 2 = 2× sprites/HUD. The one place SS is read, so the clamp lives here. Sprites + HUD
+// (the bird art especially) are ALWAYS drawn at this ceiling — they are never scaled by
+// dynamic resolution, so the cast stays crisp. Load is shed from the terrain buffer
+// instead (see updateDynamicResolution / CONFIG.terrainMaxSS).
 function spriteSS() {
-  const ceil = Math.max(1, Math.min(3,
-    Math.round((typeof CONFIG !== 'undefined' && CONFIG.spriteSupersample) || 1)));
-  if (typeof CONFIG !== 'undefined' && CONFIG.dynamicResolution && dynResCurrentSS > 0) {
-    return Math.max(1, Math.min(ceil, dynResCurrentSS));
-  }
-  return ceil;
-}
-
-// Ceiling (authored max) for dynamic resolution, independent of the live value.
-function spriteSSCeiling() {
   return Math.max(1, Math.min(3,
     Math.round((typeof CONFIG !== 'undefined' && CONFIG.spriteSupersample) || 1)));
 }
 
-// Dynamic resolution controller — called once per frame from draw() when
-// CONFIG.dynamicResolution is on. Steps the live supersample factor toward the load:
-// down FAST when the real frame time is bad (react to a drop), up gently when there is
-// headroom (probe without thrashing). A resize is not free, so a cooldown gates changes
-// and the thresholds have a wide dead-band (13.5–20ms) so a frame near the target does
-// nothing. perfFrameMs already includes the GPU/composite time the CPU timers miss —
-// which is exactly the cost SS drives — so it is the right signal to steer on.
-function updateDynamicResolution() {
-  const ceil = spriteSSCeiling();
-  if (dynResCurrentSS <= 0) dynResCurrentSS = ceil;          // init from the ceiling
-  if (dynResCurrentSS > ceil) { applySupersample(ceil); return; }  // ceiling lowered
-  if (ceil <= 1) return;                                     // nothing to float
-  if (!game) return;                                         // not in a live frame yet
+// Alias kept for callers that want the authored ceiling explicitly.
+function spriteSSCeiling() { return spriteSS(); }
 
+// Dynamic resolution controller — called once per frame from draw() when
+// CONFIG.dynamicResolution is on. Steers the TERRAIN buffer's scale (CONFIG.terrainMaxSS)
+// toward the load — down fast when the real frame time is bad, up gently when there's
+// headroom — while the sprites/HUD keep their full supersample. The terrain FBO
+// reallocates itself to the new scale next frame (no canvas resize), and a cooldown +
+// wide dead-band (13.5–20ms) stop it oscillating. perfFrameMs includes the GPU/composite
+// time the CPU timers miss, so it is the right signal to steer on.
+function updateDynamicResolution() {
+  if (!game) return;                                         // not in a live frame yet
   const now = (typeof millis === 'function') ? millis() : Date.now();
   if (now < dynResCooldownUntil) return;
 
-  let target = dynResCurrentSS;
-  if (perfFrameMs > DYNRES_DOWN_MS && dynResCurrentSS > 1) {
-    target = Math.max(1, dynResCurrentSS - 0.5);            // drop res fast
-  } else if (perfFrameMs < DYNRES_UP_MS && dynResCurrentSS < ceil) {
-    target = Math.min(ceil, dynResCurrentSS + 0.25);        // probe res up gently
+  const cur = (typeof CONFIG !== 'undefined' && CONFIG.terrainMaxSS != null) ? CONFIG.terrainMaxSS : 1;
+  let target = cur;
+  if (perfFrameMs > DYNRES_DOWN_MS && cur > DYNRES_TERRAIN_MIN) {
+    target = Math.max(DYNRES_TERRAIN_MIN, cur - 0.25);       // shrink the terrain buffer
+  } else if (perfFrameMs < DYNRES_UP_MS && cur < DYNRES_TERRAIN_MAX) {
+    target = Math.min(DYNRES_TERRAIN_MAX, cur + 0.25);       // grow it back
   }
 
-  if (target !== dynResCurrentSS) {
-    applySupersample(target);
+  if (target !== cur) {
+    CONFIG.terrainMaxSS = target;   // GLTerrain._prepareFBO resizes the buffer next frame
     dynResCooldownUntil = now + DYNRES_COOLDOWN;
-    // Nudge the EMAs so the just-changed resolution isn't immediately re-judged on the
-    // resize frame's own (slow) timing.
+    // Nudge the EMA so the change isn't immediately re-judged before it takes effect.
     perfFrameMs = (DYNRES_UP_MS + DYNRES_DOWN_MS) * 0.5;
     perfWorstMs = perfFrameMs;
   }
-}
-
-// Apply a new live supersample factor: set it, then reuse the proven resize path
-// (windowResized re-reads spriteSS() and resizes the main canvas, the GL entity canvas
-// and re-lays the stacked layers). GPU terrain needs no rebuild — it reads uSS live.
-function applySupersample(ss) {
-  if (ss === dynResCurrentSS) return;
-  dynResCurrentSS = ss;
-  if (typeof windowResized === 'function') windowResized();
 }
 
 // ?sprites=1|2|3 startup override. Must run BEFORE createCanvas, since it sets the
@@ -4487,17 +4442,14 @@ const GL_DEFAULT_ON = true;
 const GL_PREF_KEY = 'mauri_useGL';
 
 function resolveUseGLPreference() {
-  // URL override wins (dev/testing), then the saved menu choice, then the default.
+  // GL is the sole renderer now (the graphics toggle was removed), so it's always on —
+  // except a `?render=2d` dev override, and the automatic fallback if the context can't be
+  // created (setRenderGL). The old localStorage menu choice is deliberately IGNORED: a stale
+  // '0' from before the toggle was removed must not trap a session in the retired 2D path.
   try {
     const q = (typeof window !== 'undefined' && window.location)
       ? new URLSearchParams(window.location.search).get('render') : null;
-    if (q === 'gl' || q === 'webgl' || q === 'on') return true;
     if (q === '2d' || q === 'canvas' || q === 'off') return false;
-  } catch (_) {}
-  try {
-    const s = localStorage.getItem(GL_PREF_KEY);
-    if (s === '1') return true;
-    if (s === '0') return false;
   } catch (_) {}
   return GL_DEFAULT_ON;
 }
@@ -4661,8 +4613,8 @@ function draw() {
     text(`Hidden: ${hidden.toFixed(1)}ms  (GPU+composite)`, 85, 80);
     text(`Worst:  ${perfWorstMs.toFixed(1)}ms`, 85, 94);
     fill(255);
-    text(`Canvas: ${CONFIG.canvasWidth}×${CONFIG.canvasHeight} @${_ss}×`, 85, 112);
-    text(`Version: ${CONFIG.version}`, 85, 126);
+    text(`Sprites @${_ss}×  Terrain @${(CONFIG.terrainMaxSS ?? 1).toFixed(2)}×`, 85, 112);
+    text(`Canvas: ${CONFIG.canvasWidth}×${CONFIG.canvasHeight}   v${CONFIG.version}`, 85, 126);
     renderFPSCounter();
   }
   pop();

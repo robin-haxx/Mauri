@@ -37,7 +37,11 @@
 
 const SpriteAtlas = {
   MAX_PAGE: 4096,   // page dimension cap — Chrome guarantees >= 4096; kiosk-safe
-  GUTTER: 2,        // transparent px between frames so bilinear scaling can't bleed a neighbour
+  // Transparent px between frames. Sized for MIPMAPPING (GLBatch WebGL2): a downscaled sprite
+  // samples a mip level whose footprint is ~source/drawSize texels, so the gutter must exceed
+  // that footprint or a small sprite would pull in a NEIGHBOUR across the seam. 16 keeps sprites
+  // clean down to ~1/16 scale; below that the sprite is tiny and any bleed is invisible.
+  GUTTER: 16,
 
   enabled: false,
   pages: [],        // p5.Graphics atlas pages, GPU-resident for the life of the page
@@ -123,6 +127,19 @@ const SpriteAtlas = {
       if (pg && pg.image) pg.image(p.img, p.x, p.y);   // graphics-method draw of a REAL image — 1:1, crisp
     }
 
+    // 3b. ALPHA BLEED — only when the pages will be MIPMAPPED (GLBatch WebGL2). The sprite
+    //     art has hard transparency (transparent px are RGB 0), so a mip level that averages
+    //     an opaque edge with its transparent neighbours would pull the edge toward black —
+    //     a dark fringe on downscaled sprites. Extend each sprite's edge COLOUR outward into
+    //     the surrounding transparent px (alpha stays 0) so the average keeps the right hue.
+    //     One-time, on the loading screen. Skipped on WebGL1 / 2D (no mipmaps, no fringe).
+    if (typeof GLBatch !== 'undefined' && GLBatch._gl2) {
+      for (const pg of this.pages) {
+        const cnv = pg.drawingContext && pg.drawingContext.canvas;
+        if (cnv) cnv._glMipSource = this._bleedEdges(pg, this.GUTTER);   // GLBatch uploads this
+      }
+    }
+
     // 4. Build image -> frame, then write the frame into every recorded slot. The
     //    frame's width/height mirror the source so downstream aspect maths are
     //    unchanged; sx/sy/sw/sh are the sub-rectangle on the page.
@@ -145,6 +162,47 @@ const SpriteAtlas = {
     this.enabled = true;
     console.log(`[atlas] packed ${uniq.length} frames into ${nPages} page(s), ` +
                 `${slots.length} references rebound`);
+  },
+
+  // Return an ImageData copy of the page with each opaque edge colour extended `radius` px
+  // into the surrounding transparent pixels (alpha kept at 0), so MIPMAPPING can't average a
+  // sprite edge toward transparent-black (a dark fringe on downscaled sprites). We can't write
+  // this back to the CANVAS — a canvas stores premultiplied alpha, so colour under alpha 0 is
+  // discarded — so GLBatch uploads this ImageData straight to the (non-premultiplied) texture
+  // instead. A bounded outward dilation: each pass copies a solid 4-neighbour's RGB into a
+  // still-empty pixel; `solid` updates only AFTER the pass so colour spreads exactly 1 px/pass.
+  _bleedEdges(page, radius) {
+    const ctx = page.drawingContext, w = page.width, h = page.height;
+    if (!ctx || !ctx.getImageData || !w || !h) return null;
+    let img;
+    try { img = ctx.getImageData(0, 0, w, h); } catch (_) { return null; }
+    const d = img.data, N = w * h;
+    const solid = new Uint8Array(N);
+    for (let i = 0; i < N; i++) if (d[i * 4 + 3] > 0) solid[i] = 1;
+    const add = [];
+    for (let pass = 0; pass < radius; pass++) {
+      add.length = 0;
+      for (let y = 0; y < h; y++) {
+        const row = y * w;
+        for (let x = 0; x < w; x++) {
+          const i = row + x;
+          if (solid[i]) continue;
+          let ni = -1;
+          if (x > 0 && solid[i - 1]) ni = i - 1;
+          else if (x < w - 1 && solid[i + 1]) ni = i + 1;
+          else if (y > 0 && solid[i - w]) ni = i - w;
+          else if (y < h - 1 && solid[i + w]) ni = i + w;
+          if (ni >= 0) { const o = ni * 4; add.push(i, d[o], d[o + 1], d[o + 2]); }
+        }
+      }
+      if (!add.length) break;
+      for (let k = 0; k < add.length; k += 4) {
+        const o = add[k] * 4;
+        d[o] = add[k + 1]; d[o + 1] = add[k + 2]; d[o + 2] = add[k + 3];
+        solid[add[k]] = 1;
+      }
+    }
+    return img;
   },
 
   // ---- container enumeration --------------------------------------------------

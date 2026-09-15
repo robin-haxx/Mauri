@@ -99,7 +99,14 @@ const GLBatch = {
       if (!cnv) return false;
       cnv.width = width; cnv.height = height;
       const opts = { premultipliedAlpha: false, antialias: false, alpha: true, depth: false };
-      const gl = cnv.getContext('webgl', opts) || cnv.getContext('experimental-webgl', opts);
+      // Prefer WebGL2: it mipmaps NON-power-of-two textures (WebGL1 cannot), which is what
+      // lets the sprite atlas pages carry a proper mip chain so downscaled sprites (the birds
+      // especially) stay crisp instead of aliasing — the whole point of not needing to
+      // supersample the frame. The existing GLSL 1.00 shaders compile unchanged on WebGL2.
+      // Fall back to WebGL1 (no sprite mipmaps, LINEAR only) if WebGL2 is unavailable.
+      let gl = cnv.getContext('webgl2', opts);
+      this._gl2 = !!gl;
+      if (!gl) gl = cnv.getContext('webgl', opts) || cnv.getContext('experimental-webgl', opts);
       if (!gl) { console.warn('[glbatch] no WebGL context; staying on 2D'); return false; }
 
       this.canvas = cnv; this.gl = gl; this.W = width; this.H = height;
@@ -124,7 +131,8 @@ const GLBatch = {
       this.enabled = true;
       this.domStack = true;
       this._wrapShapes();
-      console.log(`[glbatch] DOM-stacked WebGL entity layer active (${width}x${height})`);
+      console.log(`[glbatch] DOM-stacked ${this._gl2 ? 'WebGL2' : 'WebGL'} entity layer active ` +
+                  `(${width}x${height})${this._gl2 ? ' — sprite mipmaps on' : ''}`);
       return true;
     } catch (e) {
       console.warn('[glbatch] init failed, staying on 2D:', e && e.message);
@@ -269,10 +277,24 @@ const GLBatch = {
     gl.bindTexture(gl.TEXTURE_2D, tex);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-    try { gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, src); }
+    // Upload the alpha-BLED ImageData (edge colour extended under alpha 0) when the atlas
+    // prepared one for mipmapping — a canvas can't hold colour under alpha 0 (premultiplied
+    // storage), but a texture uploaded from raw ImageData with premultiply OFF can, so the
+    // mip chain doesn't fringe. Falls back to the canvas itself when there's no bled source.
+    const upload = (this._gl2 && src._glMipSource) ? src._glMipSource : src;
+    try { gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, upload); }
     catch (err) { console.warn('[glbatch] texImage2D failed:', err && err.message); return null; }
+    // Sprite sources (atlas pages / standalone images) are static, so build a mip chain ONCE
+    // and sample it trilinearly — this is the anti-aliasing that keeps a downscaled sprite
+    // crisp without supersampling the frame. WebGL2 mipmaps any size; WebGL1 can't do NPOT,
+    // so it stays on a single LINEAR level (the pre-mipmap behaviour, unchanged).
+    if (this._gl2) {
+      gl.generateMipmap(gl.TEXTURE_2D);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+    } else {
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    }
     e = { tex, w: src.width, h: src.height };
     this._tex.set(src, e);
     return e;

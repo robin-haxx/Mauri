@@ -16,7 +16,7 @@ const LEVEL_KAHURANGI = {
     ridgeInfluence: 1.3,
     elevationPower: 1.4,
     islandFalloff: 0.6,
-    plantDensity: 0.005,
+    plantDensity: 0.004,
     useLakes: false
   },
 
@@ -67,7 +67,8 @@ const LEVEL_KAHURANGI = {
 
   species: {
     moa: ['upland_moa'],
-    eagle: ['haasts_eagle']
+    eagle: ['haasts_eagle'],
+    other: ['kea']
   },
   startingSpecies: 'upland_moa',
 
@@ -79,14 +80,16 @@ const LEVEL_KAHURANGI = {
   // founder egg at a crag eyrie (~30s hatch), completing the breeding pair.
   initialEntityCounts: {
     moa: 6,
-    eagle: 1
+    eagle: 1,
+    kea: 4
+
   },
 
   economy: {
     startingMauri: 60,
-    seasonDuration: 2100,
+    seasonDuration: 1800,
     eggIncubationTime: 700,
-    securityTimeToLay: 1400,
+    securityTimeToLay: 1600,
     securityTimeVariation: 400,
     layingHungerThreshold: 28,
     eagleSpawnMilestones: [],   // eagles are driven by predator-prey coupling (mechanics below)
@@ -153,10 +156,10 @@ const LEVEL_KAHURANGI = {
   failReason: "The Upland Moa vanished from Kahurangi...",
   goals: [
     { name: "Hatch 5 Upland Moa",          condition: (sim) => (sim.stats.birthsBySpecies['upland_moa'] || 0) >= 5, reward: 50 },
-    { name: "Hatch 15 Upland Moa",         condition: (sim) => (sim.stats.birthsBySpecies['upland_moa'] || 0) >= 15, reward: 50 },
+    { name: "Hatch 20 Upland Moa",         condition: (sim) => (sim.stats.birthsBySpecies['upland_moa'] || 0) >= 20, reward: 50 },
     { name: "Reach 2 minutes",             condition: (sim, game) => game.playTime >= 7200, reward: 50 },
     { name: "Reach 3 minutes",             condition: (sim, game) => game.playTime >= 10800, reward: 100 },
-    { name: "BONUS: Have 30 Moa before 4:00", condition: (sim, game) => game._cachedMoaCount >= 30, reward: 100 }
+    { name: "BONUS: Have 30 Moa before the end of Year 2", condition: (sim, game) => game._cachedMoaCount >= 30, reward: 100 }
   ],
 
   menu: {

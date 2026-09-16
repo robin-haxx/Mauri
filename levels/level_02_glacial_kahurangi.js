@@ -71,7 +71,7 @@ const LEVEL_GLACIAL_KAHURANGI = {
     ridgeInfluence: 1.6,
     elevationPower: 1.4,
     islandFalloff: 0.2,
-    plantDensity: 0.008,
+    plantDensity: 0.004,
     useLakes: false
   },
 
@@ -137,7 +137,7 @@ const LEVEL_GLACIAL_KAHURANGI = {
     // Flighted forest birds — ambient population, seeded and bred like the moa but
     // via the otherEntities path (mauri_kereru.js / mauri_kokako.js). They feed on
     // the forestRefuge canopy (beech/rimu/fern) and thin with it in the glacial.
-    other: ['kereru', 'kokako']
+    other: ['kea','kaka','kokako']
   },
   startingSpecies: 'upland_moa',
 
@@ -153,13 +153,14 @@ const LEVEL_GLACIAL_KAHURANGI = {
   initialEntityCounts: {
     moa: 14,
     eagle: 1,
-    kereru: 4,     // founding flock — breeds up toward kereru maxPopulation (16)
+    kea: 4,
+    kaka: 4,     // founding flock — breeds up toward kereru maxPopulation (16)
     kokako: 3      // founding birds — breeds up toward kokako maxPopulation (10)
   },
 
   economy: {
     startingMauri: 60,
-    seasonDuration: 3600,        // 8 seasons x 3600 = ~8 minutes across 4 phases
+    seasonDuration: 3200,        // 8 seasons x 3600 = ~8 minutes across 4 phases
     eggIncubationTime: 600,
     securityTimeToLay: 900,
     securityTimeVariation: 300,

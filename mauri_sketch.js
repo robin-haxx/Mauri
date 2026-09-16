@@ -90,7 +90,7 @@ function preload(){
 // ============================================
 const CONFIG = {
   // ===== ENGINE CONSTANTS (never change between levels) =====
-  version: 'alpha 1.2.1',
+  version: 'alpha 2.1.0',
 
   // Reference height is always 1080; width is computed from window aspect ratio
   referenceHeight: 1080,

@@ -15,18 +15,14 @@ const ENCYCLOPEDIA = [
   // ---- Species ---------------------------------------------------------------
   { id: 'upland_moa', category: 'Moa', title: 'Upland Moa', subtitle: 'Megalapteryx didinus',
     body: [
-      "The small, agile moa of the high country — subalpine tussock and montane forest,",
+      "The small, agile moa of the high country: subalpine tussock and montane forest,",
       "up to the treeline. Alone among the moa it was feathered right down its legs, almost",
       "to the toes, against the cold, and browsed beech twigs, subalpine herbs and the",
       "nectar-rich flowers of flax and fuchsia.",
       "",
-      "As the cold deepened and open country spread, the upland moa was joined up here by",
-      "the heavy-footed and crested moa, which adapted well to the same harsh, exposed",
-      "ground.",
-      "",
-      "Its cold tolerance makes it the backbone of a deep-glacial community: when the",
-      "lowland moa falter, the upland moa is often the last still breeding — as in life,",
-      "where it outlasted every other moa."
+      "As the cold deepened and open country spread, the upland moa was joined by",
+      "the heavy-footed and crested moa, which adapted well to the same harsh land.",
+      
     ], seeAlso: ['subalpine', 'beech_refuge', 'glacial_cycles'] },
 
   { id: 'little_bush_moa', category: 'Moa', title: 'Little Bush Moa', subtitle: 'Anomalopteryx didiformis',
@@ -39,26 +35,23 @@ const ENCYCLOPEDIA = [
       "began to thrive again as temperatures warmed and dense forest returned at the onset",
       "of the Holocene.",
       "",
-      "It favours planted lancewood (horoeka), a browse-resistant food that competitors",
-      "largely ignore — so a lancewood stand draws the bush moa and few others."
+      "It favours the juvenile form of lancewood (horoeka),",
+      "a browse-resistant food that competitors largely ignore."
     ], seeAlso: ['beech_refuge', 'coexistence', 'glacial_cycles'] },
 
   { id: 'south_island_giant_moa', category: 'Moa', title: 'South Island Giant Moa', subtitle: 'Dinornis robustus',
     body: [
-      "The tallest moa — females could reach ~3.6 m to the raised head. A lowland",
-      "browser of the open plains and forest margins.",
+      "The tallest moa: females could reach ~3.6 m!. A lowland browser,",
+      "of the open plains and forest margins.",
       "",
-      "Poorly suited to deepening cold: in Free Play the giant is among the first to",
-      "struggle as the glacials intensify, and can lean hard on the shared forest."
     ], seeAlso: ['glacial_cycles', 'coexistence'] },
 
   { id: 'stout_legged_moa', category: 'Moa', title: 'Stout-legged Moa', subtitle: 'Emeus crassus',
     body: [
       "A heavily built moa of the open lowlands and glacial outwash flats, grazing and",
-      "browsing shrubland — coprosma and matagouri.",
+      "browsing shrubland (coprosma and matagouri.)",
       "",
-      "A generalist on the wild background flora, so it sustains itself off the landscape",
-      "rather than raiding planted plots."
+
     ], seeAlso: ['glacial_flats', 'coexistence'] },
 
   { id: 'heavy_footed_moa', category: 'Moa', title: 'Heavy-footed Moa', subtitle: 'Pachyornis elephantopus',
@@ -69,21 +62,15 @@ const ENCYCLOPEDIA = [
 
   { id: 'haasts_eagle', category: 'Fauna', title: "Haast's Eagle", subtitle: 'Pouākai · Hieraaetus moorei',
     body: [
-      "The largest eagle known, and the apex predator of the moa world — a bird that",
-      "hunted prey many times its own weight.",
+      "The largest eagle known, and the apex predator of the moa world.",
+      "Known as the Pouākai, it hunted prey many times its own weight.",
       "",
-      "Its numbers rise and fall with the moa it hunts. A run of good years feeds more",
-      "eagles; a deep glacial that thins the moa starves the eagles down behind them.",
+      "Its numbers rise and fall with the moa it hunts. A good year for moa means more",
+      "food for eagles; as moa populations fall, it starves the eagles behind them.",
       "In Free Play, if the eagles are lost entirely, the dominant moa surges unchecked",
       "until eagles return the following year."
     ], seeAlso: ['glacial_cycles', 'predator_prey'] },
 
-  { id: 'kereru', category: 'Fauna', title: 'Kererū', subtitle: 'New Zealand pigeon',
-    body: [
-      "A large forest pigeon and a key seed-disperser: it swallows fruit whole and",
-      "carries the seed away, replanting the forest as it feeds. It thins with the",
-      "forest refuge in the cold and rebounds as the canopy recovers."
-    ], seeAlso: ['beech_refuge', 'winter_food'] },
 
   { id: 'kokako', category: 'Fauna', title: 'Kōkako', subtitle: 'South Island kōkako · Callaeas cinereus',
     body: [

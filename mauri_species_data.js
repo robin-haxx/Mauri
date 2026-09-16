@@ -12,7 +12,7 @@ const MOA_SPECIES = {
     displayName: "Upland Moa",
     scientificName: "Megalapteryx didinus",
     tint: null,                // Megalapteryx — rendered as-is
-    highlightColor: [235, 238, 242],  // white — player highlight (pulse + UI border)
+    highlightColor: [235, 238, 242],  // white; player highlight
     description: "Small, hardy moa adapted to high-altitude forests",
     rarity: 'common',
     
@@ -49,7 +49,7 @@ const MOA_SPECIES = {
     seasonalModifiers: {
       summer: { hungerRate: 1.1, speed: 1.0 },
       autumn: { hungerRate: 1.0, speed: 1.0 },
-      winter: { hungerRate: 0.75, speed: 0.9 }, // Strongly cold-adapted — feels winter hunger least
+      winter: { hungerRate: 0.75, speed: 0.9 }, // strongly cold-adapted
       spring: { hungerRate: 1.0, speed: 1.1 }
     }
   },
@@ -62,7 +62,7 @@ const MOA_SPECIES = {
     displayName: "South Island Giant Moa",
     scientificName: "Dinornis robustus",
     tint: [170, 150, 130],     // Dinornis — desaturated brown
-    highlightColor: [190, 140, 90],   // brown — player highlight (pulse + UI border)
+    highlightColor: [190, 140, 90],   // brown; player highlight
     description: "Massive moa of the lowland plains, up to 3.6m tall",
     rarity: 'uncommon',
     
@@ -107,7 +107,7 @@ const MOA_SPECIES = {
     displayName: "North Island Giant Moa",
     scientificName: "Dinornis novaezealandiae",
     tint: [170, 150, 130],     // Dinornis — desaturated brown
-    highlightColor: [190, 140, 90],   // brown — player highlight (pulse + UI border)
+    highlightColor: [190, 140, 90],   // brown; player highlight
     description: "Large moa of northern forests",
     rarity: 'uncommon',
     
@@ -148,7 +148,7 @@ const MOA_SPECIES = {
     displayName: "Eastern Moa",
     scientificName: "Emeus crassus",
     tint: [190, 120, 60],      // emeid — saturated brown
-    highlightColor: [205, 195, 120],  // wheat — player highlight (pulse + UI border)
+    highlightColor: [205, 195, 120],  // wheat; player highlight
     description: "Adaptable medium-sized moa of varied habitats",
     rarity: 'common',
     
@@ -189,7 +189,7 @@ const MOA_SPECIES = {
     displayName: "Stout-legged Moa",
     scientificName: "Euryapteryx curtus",
     tint: [205, 170, 80],      // yellow-brown — distinct from the rust bush moa
-    highlightColor: [235, 165, 70],   // orange — player highlight (pulse + UI border)
+    highlightColor: [235, 165, 70],   // orange; player highlight
     description: "Stocky moa with powerful legs, coastal to lowland",
     rarity: 'common',
     
@@ -227,7 +227,7 @@ const MOA_SPECIES = {
     displayName: "Heavy-footed Moa",
     scientificName: "Pachyornis elephantopus",
     tint: [165, 168, 172],     // Pachyornis — grey
-    highlightColor: [178, 184, 194],  // grey — player highlight (pulse + UI border)
+    highlightColor: [178, 184, 194],  // grey; player highlight
     description: "Robust moa with massive legs, lowland specialist",
     rarity: 'uncommon',
     
@@ -267,7 +267,7 @@ const MOA_SPECIES = {
     displayName: "Crested Moa",
     scientificName: "Pachyornis australis",
     tint: [165, 168, 172],     // Pachyornis — grey
-    highlightColor: [178, 184, 194],  // grey — player highlight (pulse + UI border)
+    highlightColor: [178, 184, 194],  // grey; player highlight
     description: "Southern moa with distinctive head crest",
     rarity: 'rare',
     
@@ -307,7 +307,7 @@ const MOA_SPECIES = {
     displayName: "Mantell's Moa",
     scientificName: "Pachyornis geranoides",
     tint: [165, 168, 172],     // Pachyornis — grey
-    highlightColor: [178, 184, 194],  // grey — player highlight (pulse + UI border)
+    highlightColor: [178, 184, 194],  // grey; player highlight
     description: "North Island relative of the heavy-footed moa",
     rarity: 'uncommon',
     
@@ -347,7 +347,7 @@ const MOA_SPECIES = {
     spriteSet: 'bush',         // dedicated LB_moa art — renders untinted
     spriteScale: 1.5,          // LB art drawn small — render at 1.5x
     tint: [190, 120, 60],      // emeid — saturated brown (unused while spriteSet is set)
-    highlightColor: [255, 215, 70],   // yellow — player highlight (pulse + UI border)
+    highlightColor: [255, 215, 70],   // yellow; player highlight
     description: "Smallest moa, nimble forest dweller",
     rarity: 'common',
     
@@ -377,8 +377,7 @@ const MOA_SPECIES = {
     // Fudged: harder to spot by eagles
     camouflage: 0.5,       // 50% chance eagle doesn't see
 
-    // Unique: when migrating, passively biases toward dense forest
-    // (beech/rimu/fern cover). 0..1 — weight added to migration target scoring.
+    // When migrating, biases toward dense forest. 0..1 weight in target scoring.
     forestAffinity: 0.8,
     
     seasonalModifiers: {
@@ -399,7 +398,7 @@ const EAGLE_SPECIES = {
     scientificName: "Hieraaetus moorei",
     description: "Largest known eagle, apex predator of moa",
     rarity: 'common',
-    highlightColor: [255, 145, 90],   // ember — player highlight (pulse + UI border)
+    highlightColor: [255, 145, 90],   // ember; player highlight
     
     wingspan: { min: 20, max: 26 },
     
@@ -429,7 +428,7 @@ const EAGLE_SPECIES = {
     scientificName: "Hieraaetus moorei (juvenile)",
     description: "Inexperienced but energetic hunter",
     rarity: 'uncommon',
-    highlightColor: [255, 145, 90],   // ember — player highlight (pulse + UI border)
+    highlightColor: [255, 145, 90],   // ember; player highlight
     
     wingspan: { min: 16, max: 20 },
     

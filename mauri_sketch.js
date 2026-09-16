@@ -1,4 +1,3 @@
-// lets goooo
 let tutorialMantisSprite = null;
 let splashScreenMoa = null;
 
@@ -16,13 +15,10 @@ const FPS_HISTORY_SIZE = 30;
 let currentFPS = 60;
 
 // ---- Honest frame-cost tracking (perf HUD) ---------------------------------
-// The debug Update/Render numbers only time CPU command-SUBMISSION; the GPU
-// (terrain fragment shader, 3-layer composite) runs AFTER render() returns, so
-// those numbers stay low while the real frame is slow. `deltaTime` (rAF wall
-// clock) is the honest measure — the browser won't fire the next frame until the
-// previous one has been accepted by the GPU. We EMA the real frame time and the
-// two CPU spans so the HUD can show the hidden GPU/composite gap, plus a decaying
-// worst-frame reading that surfaces hitches an averaged number hides.
+// The debug Update/Render numbers only time CPU command submission; the GPU runs
+// after render() returns, so they stay low while the frame is slow. deltaTime (rAF
+// wall clock) is the honest measure. We EMA the real frame time and the two CPU
+// spans, plus a decaying worst-frame reading that surfaces hitches.
 let perfFrameMs = 16.667;   // EMA of the real (unclamped) frame time
 let perfUpdateMs = 0;       // EMA of game.update() CPU time
 let perfRenderMs = 0;       // EMA of game.render() CPU submit time
@@ -31,14 +27,10 @@ const PERF_EMA = 0.1;       // smoothing for the averages
 const PERF_WORST_DECAY = 0.98;
 
 // ---- Dynamic resolution (terrain-targeted) ---------------------------------
-// The sprites + HUD stay pinned at the full CONFIG.spriteSupersample ceiling so the
-// bird art is ALWAYS supersampled and crisp — that layer is sparse and cheap to keep
-// sharp. The expensive full-screen fill is the GPU terrain (its water shader), which
-// already renders into its own offscreen buffer (GLTerrain, CONFIG.terrainMaxSS). So the
-// adaptive scaler steers THAT buffer's resolution, not the sprites: drop the terrain
-// buffer when the real frame time is bad, raise it back when there's headroom. Cheaper
-// and smoother than the old full-canvas resize — the FBO just reallocates. Hysteresis +
-// a cooldown stop oscillation. Off unless CONFIG.dynamicResolution is set.
+// Sprites + HUD stay at the full CONFIG.spriteSupersample ceiling; the adaptive scaler
+// steers only the GPU terrain buffer (the expensive full-screen fill): drop it when the
+// frame time is bad, raise it when there's headroom. Hysteresis + a cooldown stop
+// oscillation. Off unless CONFIG.dynamicResolution is set.
 let dynResCooldownUntil = 0;    // millis() before which we won't change again
 const DYNRES_UP_MS = 13.5;      // frame faster than this (~74fps) → raise terrain res
 const DYNRES_DOWN_MS = 20.0;    // frame slower than this (~50fps) → drop terrain res
@@ -61,10 +53,8 @@ function preload(){
     }
   }
 
-  // Portrait plant variants: each of these plants has 2 alternate sprites in its
-  // own sprites/<Plant>/ folder. They're portrait-oriented and anchored at
-  // bottom-centre (x = w*0.5, y = 0 measured from the base) rather than dead
-  // centre, so they're rendered by a dedicated path (see mauri_plant.js).
+  // Portrait plant variants: 2 alternate sprites each in sprites/<Plant>/, anchored at
+  // bottom-centre and rendered by a dedicated path (see mauri_plant.js).
   const portraitPlants = ['Rimu', 'Beech', 'Dracophyllum', 'Matagouri'];
   for (const plant of portraitPlants) {
     const key = plant.toLowerCase();
@@ -82,9 +72,6 @@ function preload(){
   preloadAudio();
 }
 
-// ============================================
-// CONFIGURATION
-// ============================================
 // ============================================
 // CONFIGURATION
 // ============================================
@@ -137,29 +124,19 @@ const CONFIG = {
   // ?render=gl URL override. Enables the whole GPU path: entity batch + GPU terrain/water.
   useGL: false,
 
-  // Frame supersample factor (backing = spriteSupersample × logical 1080). DEFAULT 1 =
-  // native 1080p, Te Manawa's fill cost. It USED to be 2 to hide sprite aliasing, but the GL
-  // sprite atlas is now MIPMAPPED (GLBatch WebGL2 + the atlas alpha-bleed), so sprites — the
-  // birds included — stay crisp when downscaled at 1×; supersampling the whole frame is no
-  // longer needed for quality. Raise to 2 for extra sharpness on a strong GPU (4× the fill).
-  //   SS = 1 → native 1080p (mipmaps keep sprites crisp).
-  //   SS = 2 → 2× sprites + HUD. ?sprites=1|2|3 overrides at startup.
+  // Frame supersample factor (backing = spriteSupersample × logical 1080). 1 = native 1080p;
+  // the mipmapped sprite atlas keeps sprites crisp at 1×, so whole-frame supersampling isn't
+  // needed. Raise to 2 for extra sharpness on a strong GPU. ?sprites=1|2|3 overrides at startup.
   spriteSupersample: 1,
 
-  // Dynamic resolution: when the real frame time (perfFrameMs, GPU included) says the GPU
-  // is fill-bound, shed load by shrinking the TERRAIN buffer (terrainMaxSS) — the sprites
-  // and HUD keep their full supersample, so the bird cast never softens. Raise the terrain
-  // buffer back when there's headroom. Hysteresis + a cooldown keep it stable; the terrain
-  // FBO just reallocates (no canvas resize). See updateDynamicResolution(). Set false to
-  // pin the terrain buffer at terrainMaxSS.
+  // Dynamic resolution: when the frame is GPU fill-bound, shrink the terrain buffer
+  // (terrainMaxSS); sprites/HUD keep their supersample. Raise it back with headroom.
+  // Set false to pin the terrain buffer at terrainMaxSS.
   dynamicResolution: true,
 
-  // Terrain-resolution scale (also the dynamic-resolution knob above). The GPU height-field
-  // renders into its own offscreen buffer at this fraction of logical 1080 and blits up with
-  // a linear filter — a smooth shaded terrain gains little from supersampling, so 1 (native)
-  // is the default and dynamic resolution floats it DOWN toward 0.5 under load. The sprites/
-  // HUD are unaffected and stay at the full spriteSupersample. Set dynamicResolution:false and
-  // this to 1 to pin native terrain; raise to 2 to supersample the ground too. See GLTerrain.
+  // Terrain-resolution scale. The GPU height-field renders into an offscreen buffer at this
+  // fraction of 1080 and blits up; 1 (native) is the default, floated down toward 0.5 under
+  // load. Raise to 2 to supersample the ground too. See GLTerrain.
   terrainMaxSS: 1,
   zoom: 2.5,
   debugMode: false,
@@ -174,33 +151,24 @@ const CONFIG = {
   viewZoom: 2.5,
 
   // ===== FIXED 3D VIEW (plan-oblique) =====
-  // Toggled with V (Game.toggleView3D). When on, the terrain is re-drawn from a
-  // relief bake so the ranges stand up, and the sprite cast is billboarded onto
-  // it (see mauri_projection.js / mauri_simulation.js). view3DK + view3DLiftFrac
-  // feed Projection.configure; keep their sum ≈ 1.0 so the standing terrain fills
-  // the same rect the flat map did (no view-transform change needed).
+  // Toggled with V. When on, the terrain is re-drawn from a relief bake and the cast is
+  // billboarded onto it. view3DK + view3DLiftFrac feed Projection.configure; keep their
+  // sum ≈ 1.0 so the standing terrain fills the same rect the flat map did.
   view3D: true,          // default view: fixed 3D (plan-oblique). Toggle to top-down with V.
   view3DK: 0.72,         // pitch squash (1 = top-down, lower = more tilt). Keep K + liftFrac ≈ 1.0
   view3DLiftFrac: 0.28,  // range height at elevation 1.0, as a fraction of map height
   view3DHaze: [206, 220, 230],   // atmospheric haze behind the far ridge
   view3DEdge: [38, 46, 42],      // dark ink lip on prominent relief silhouettes
-  // World pad: the terrain is generated as an island spanning a domain this much
-  // TALLER than the play area on each side (fraction of map height), so the play
-  // area is a WINDOW into the CENTRE of a larger island rather than a whole island.
-  // 2D shows the window at the same zoom (the rest cropped); 3D reveals the rest as
-  // one continuous real landmass. Applied at level generation (it shifts the habitat
-  // toward the island interior — retune levels to taste). 0 = the old whole-island.
+  // World pad: the terrain island spans a domain this much taller than the play area on
+  // each side, so the play area is a window into the centre of a larger island. 3D reveals
+  // the rest as one continuous landmass. Applied at generation. 0 = whole-island.
   view3DWorldPad: 0.5,
-  // Over-scan: how much of that larger island (as a fraction of map height) the 3D
-  // relief bake actually draws beyond the play window. FAR fills the receding
-  // distance past the top of the frame (needs ≳ liftFrac/K ≈ 0.39); NEAR continues
-  // the foreground down under the bottom HUD bar. Keep ≤ view3DWorldPad.
+  // Over-scan: how much of that larger island the 3D relief bake draws beyond the play
+  // window. FAR fills the distance past the top; NEAR continues under the HUD bar. Keep ≤ view3DWorldPad.
   view3DOverscan: 0.45,       // far (up-map) over-scan
   view3DOverscanNear: 0.28,   // near (down-map) over-scan — hides the near cut under the HUD
-  // Aerial perspective: optional. 0 = off — the over-scan renders as plain real
-  // terrain, identical in fashion to the play area (the island's true near/far
-  // outskirts). Raise toward ~0.5 only if a seed's compressed far distance reads
-  // too busy and you want it muted into haze.
+  // Aerial perspective: 0 = off (the over-scan renders as plain terrain). Raise toward ~0.5
+  // to mute a busy far distance into haze.
   view3DHazeFade: 0,
 
   col_UI: [40, 70, 30, 180],
@@ -665,11 +633,10 @@ const PLACEABLES = {
     growEverySec: 5,           // seed a rimu/beech in-radius this often
     growCap: 9,                // stop once the grove holds this many forest trees
     attractsKea: true,
-    // INVISIBLE far-draw: kea within this range are pulled toward the cache (much wider than
-    // the rendered coverage ring, so a cache reaches across the map to gather the flock).
+    // Invisible far-draw: kea within this range are pulled toward the cache (wider than the
+    // rendered ring, so a cache gathers the flock from across the map).
     keaAttractRadius: 820,
-    // No allowedBiomes: a Berry Cache goes anywhere the terrain allows a placeable — i.e.
-    // everywhere but open water and the alpine scree/glacier (those biomes are canPlace:false).
+    // No allowedBiomes: a Berry Cache goes anywhere the terrain allows a placeable.
     seasonalBonus: { summer: 1.0, autumn: 1.0, winter: 1.0, spring: 1.0 }
   },
 

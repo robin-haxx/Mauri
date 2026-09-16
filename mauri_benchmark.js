@@ -1,16 +1,12 @@
 // ============================================
 // SIMULATION BENCHMARK RECORDER (debug tool)
-// Armed from the level splash screen while debug mode (D) is on. Starts the
-// level with the tutorial off, samples every animal population every 10
-// in-game seconds, records how many of each placeable the player placed
-// during each interval, and downloads the whole run as a CSV ready for graphing.
+// Armed from the level splash while debug mode (D) is on. Runs the level with the
+// tutorial off, samples every animal population every 10 in-game seconds, records
+// placeables placed per interval, and downloads the run as a CSV.
 //
-// The run ends — with a final sample + CSV save — on:
-//   * a normal win/loss (goal/phased levels), OR
-//   * the close of ENDLESS_YEARS in-game years on an endless level (Free Play).
-//     Endless mode never wins and only loses on a total moa wipe, so a fixed
-//     window is what lets us chart a year's population arc. Default 1 year; set
-//     BENCHMARK.endlessYears (or arm via armBatch) to record more.
+// The run ends (final sample + CSV) on a win/loss, or after ENDLESS_YEARS in-game
+// years on an endless level (Free Play). Default 1 year; set BENCHMARK.endlessYears
+// or arm via armBatch to record more.
 //
 // CSV columns: time_s, year, season, <one per moa species>, other_moa,
 // total_moa, eagles, eggs, n_<other entity types>, placed_<each placeable>, event
@@ -21,9 +17,7 @@ const BENCHMARK = {
   active: false,
   finished: false,
 
-  // Batch mode: run N benchmark playthroughs back-to-back, unattended. Each
-  // ends on its own win/loss, saves its CSV, then the level auto-restarts for
-  // the next run until the batch is done.
+  // Batch mode: run N playthroughs back-to-back, each saving its own CSV.
   batchTotal: 0,
   batchIndex: 0,
   _restartAtFrame: null,
@@ -32,7 +26,6 @@ const BENCHMARK = {
   SAMPLE_INTERVAL: 600,   // frames — 10 seconds of game time at 60fps
 
   // Endless mode has no win: record this many in-game years, then finish + save.
-  // A year is 4 seasons (4 * CONFIG.seasonDuration frames). Override before arming.
   endlessYears: 1,
 
   _rows: [],
@@ -100,9 +93,7 @@ const BENCHMARK = {
       this.sample(game, 'sample');
       this._nextSampleAt += this.SAMPLE_INTERVAL;
     }
-    // Endless levels never reach WON/LOST on their own (loss is the moa-wipe check
-    // in Game.update, handled by the render-path finish). Close the run after a
-    // fixed number of years so we capture a clean population-over-time window.
+    // Endless levels never win on their own; close the run after a fixed number of years.
     const deadline = this._endlessDeadline(game);
     if (deadline && game.playTime >= deadline) this.finish(game, 'year_end');
   },
@@ -135,7 +126,7 @@ const BENCHMARK = {
     for (const e of sim.eggs) if (e.alive && !e.hatched) eggs++;
 
     const row = { time_s: +(game.playTime / 60).toFixed(1) };
-    // Year/season markers make the population arc legible over time (esp. endless).
+    // Year/season markers for the population arc.
     row.year = (game.cycle | 0) + 1;   // 1-based in-game year
     row.season = (game.seasonManager && game.seasonManager.currentKey) || '';
     for (const k of this._moaKeys) row[k] = counts[k];
@@ -166,8 +157,7 @@ const BENCHMARK = {
     this._save();
 
     if (this.batchIndex < this.batchTotal) {
-      // More runs queued — schedule an auto-restart (short delay lets the
-      // win/loss banner show and the download flush before re-init).
+      // More runs queued — auto-restart after a short delay.
       this._restartAtFrame = frameCount + 90;
       game.addNotification(`Benchmark ${this.batchIndex}/${this.batchTotal} done — next run starting…`, 'success');
     } else {

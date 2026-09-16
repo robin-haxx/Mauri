@@ -1,44 +1,20 @@
 // ============================================================
 // KERERŪ — the large-seed disperser  (flighted-bird base class)
-// ------------------------------------------------------------
-// Hemiphaga novaeseelandiae. The only bird large enough to swallow and pass big
-// podocarp fruit, so the FOREST recruits where kererū go (moa were seed
-// destroyers, not dispersers). Ported/adapted from the Te Manawa fork; it is the
-// BASE CLASS for Mauri's flighted birds — kōkako extends it now, and kea / kākā /
-// kākāpō will hang off it later (see FLYER_TYPES below).
-//
-// A flyer like the eagle, but a different animal to watch: SHORT flights between
-// trees and a great deal of PERCHING — to feed, to digest when full, and to lay:
-//
-//   FLYING (hungry) → find a fruiting forest tree, short hop to it
-//        → FEEDING (perched) → fill its crop with fruit (the tree is NOT consumed)
-//        → PERCHED (digest a beat, maybe lay an egg)
-//        → FLYING (full) → short hops AWAY, dropping a seed on each
-//          (Simulation.disperseSeed plants a forest seedling — cap-guarded)
-//        → crop empty → hungry again → back to FLYING.
-//
-// Reproduction is emergent and sexual (mirrors the eagle): a mature, well-fed
-// female with a mate nearby lays an egg tagged offspringType = this.speciesKey;
-// Simulation._hatchFlyerEgg hatches it true. Numbers ebb with the forest.
-//
-// --- Adaptations from Te Manawa (a museum fork with a different clock/world) ---
-//  · ONE real-time dt (Mauri is a game, not a deep-time loop): behave() takes
-//    Mauri's (sim, mauri, seasonManager, dt) call from Simulation._updateOtherEntities.
-//  · Fruiting FOREST is Mauri's FOREST_TREES set (beech/rimu/fern), not the fork's
-//    coldTolerance/TM_GROW classification.
-//  · Storm shelter keys off a nearby Storm PLACEABLE (Mauri's storm is a placed
-//    tool), not a global storm-window flag.
-//  · Render draws in the LOCAL pos frame like the Mauri eagle (the sim's cast loop
-//    lifts the feet onto the 3/4 relief); facing is a self-computed lateral flip
-//    (Mauri's Boid has no _flip easing).
-//
-// Placeholder art: a drawn glyph (green-grey back, pale breast). Wire real art via
-// EntitySprites.getKereruSprite when it exists.
+// Hemiphaga novaeseelandiae, the only bird large enough to pass big podocarp fruit,
+// so the forest recruits where kererū go. Base class for Mauri's flighted birds
+// (kōkako/kea/kākā/kākāpō extend it; see FLYER_TYPES). A flyer with short flights
+// between trees and much perching:
+//   FLYING (hungry) → hop to a fruiting tree
+//        → FEEDING (perched) → fill the crop (the tree is NOT consumed)
+//        → PERCHED (digest, maybe lay an egg)
+//        → FLYING (full) → short hops away, dropping a seed each (disperseSeed)
+//        → crop empty → hungry → FLYING.
+// Reproduction is emergent and sexual: a mature, well-fed female with a mate near
+// lays an egg tagged offspringType = speciesKey.
 // ============================================================
 
-// Which otherEntities types are flighted birds — the sim reads this to route egg
-// hatches (Simulation._hatchFlyerEgg) and the "flyer above trees" render pass.
-// Subclasses append their key (kōkako does below); kea/kākā/kākāpō add theirs.
+// Which otherEntities types are flighted birds; the sim reads this to route egg
+// hatches and the flyer render pass. Subclasses append their key.
 const FLYER_TYPES = new Set(['kereru']);
 
 const KERERU_STATE = {
@@ -54,10 +30,9 @@ const KERERU_SPECIES = {
   label:          'kererū',   // lower-case, for the notification strip
   description:    'The forest pigeon — the only bird that disperses large podocarp fruit.',
   rarity:         'common',
-  highlightColor: [150, 235, 150],  // bright green — player highlight (pulse + UI border)
+  highlightColor: [150, 235, 150],  // green; player highlight
 
-  // Movement / render — an unhurried flap between trees (kept BELOW the eagle's
-  // hunt speed so a chase resolves rather than the bird outrunning it forever).
+  // Movement / render — an unhurried flap, kept below the eagle's hunt speed so a chase resolves.
   baseSpeed:        0.32,
   maxForce:         0.055,
   size:             6,
@@ -65,7 +40,7 @@ const KERERU_SPECIES = {
   cruiseAlt:        24,     // flight height above the ground, px (shadow sells the height)
   perchAlt:         8,      // sits low on the canopy when perched
 
-  // Flight character — SHORT legs. The eagle patrols wide; the kererū only hops.
+  // Flight character — short legs; the kererū only hops.
   hopRadius:        50,
   feedRadius:       100,
 
@@ -81,8 +56,7 @@ const KERERU_SPECIES = {
   feedRelief:       70,     // hunger removed by a full feed
   starveSec:        18,     // sustained max-hunger before death
 
-  // Reproduction — sexual, emergent. A mature, well-fed (carrying fruit) female
-  // with a mate nearby lays.
+  // Reproduction — sexual, emergent (see _tryReproduce).
   maturitySec:      20,
   eggCooldownSec:   35,
   mateRadius:       200,
@@ -116,8 +90,7 @@ class Kereru extends Boid {
     this._cruiseAlt = sp.cruiseAlt ?? 24;
     this._perchAlt  = sp.perchAlt ?? 5;
     this._altitude  = this._cruiseAlt;
-    // Perch VARIETY: each landing picks a fresh height + small trunk offset, so a
-    // flock doesn't stack on one spot. Chosen on the land transition in update().
+    // Perch variety: each landing picks a fresh height + offset so a flock doesn't stack.
     this._perchAltCur = this._perchAlt;
     this._perchDX = 0;
     this._perchDY = 0;
@@ -138,8 +111,7 @@ class Kereru extends Boid {
     this._feedFrames     = (sp.feedSec ?? 5) * F;
     this._disperseFrames = (sp.disperseEverySec ?? 5) * F;
     this._restFrames     = (sp.restSec ?? 4) * F;
-    // Dispersal effectiveness: chance a drop establishes a seedling. Kererū is THE
-    // large-seed disperser (1 = every drop counts); kōkako sets this < 0.5.
+    // Dispersal effectiveness: chance a drop establishes a seedling (kererū 1, kōkako < 0.5).
     this._disperseChance = sp.disperseChance ?? 1;
     this.crop = 0;
 
@@ -178,13 +150,11 @@ class Kereru extends Boid {
   }
 
   // ============================================================
-  // LIFE / MOTION CLOCK (Mauri: one real-time dt).
-  // Called by Simulation._updateOtherEntities as behave(sim, mauri, seasonManager, dt).
+  // LIFE / MOTION CLOCK — called by Simulation._updateOtherEntities.
   // ============================================================
   behave(sim, mauri, seasonManager, dt) {
-    // Storms no longer GROUND a flyer — they FLUSH it off its tree (see _fleeStorm), so it
-    // still ages, hungers and moves rather than hunkering in place. _fleeingStorm tells the
-    // subclasses (kea/kākā/kākāpō) to hold their extra steering while it's fleeing clear.
+    // Storms flush a flyer off its tree (see _fleeStorm) rather than grounding it.
+    // _fleeingStorm tells subclasses to hold their extra steering while fleeing.
     this._grounded = false;
     this._fleeingStorm = false;
 
@@ -194,8 +164,7 @@ class Kereru extends Boid {
     this.hunger = Math.min(this.hunger + this.hungerRate * dt, this.maxHunger);
     if (this._eggCooldown > 0) this._eggCooldown = Math.max(0, this._eggCooldown - dt);
 
-    // A placed Storm scares the bird OFF its tree — it drops the perch and flies clear to
-    // seek a new one (a displacement tool, not shelter). Outranks the ordinary state loop.
+    // A placed Storm scares the bird off its tree to seek a new one (a displacement tool).
     if (this._fleeStorm(sim, dt)) return;
 
     // Flush from a hunting eagle next — a raptor on the hunt scatters the flock.
@@ -206,9 +175,7 @@ class Kereru extends Boid {
     // Keep to land: a forest bird never crosses open water for long.
     this.applyForce(this._landward());
 
-    // Survival: sustained max-hunger kills, but never below the population floor,
-    // so a long glacial thins the flock without stranding the forest with no
-    // disperser (recruitment keys off the bird being ALIVE).
+    // Survival: sustained max-hunger kills, but never below the population floor.
     if (this.hunger >= this.maxHunger) {
       this._starveTimer += dt;
       if (this._starveTimer >= this._starveFrames) {
@@ -228,8 +195,7 @@ class Kereru extends Boid {
     this.edges();
   }
 
-  // The nearest live Storm placeable whose cloud covers the bird (its radius + a margin), or
-  // null. Mauri's storm is a placed tool. Cheap: only a handful of placeables.
+  // The nearest live Storm placeable whose cloud covers the bird (radius + margin), or null.
   _nearestStorm(sim) {
     const list = sim.placeables;
     if (!list) return null;
@@ -245,11 +211,8 @@ class Kereru extends Boid {
     return best;
   }
 
-  // A Storm within range FLUSHES the bird: it abandons its perch/target tree and flies
-  // directly away from the storm to seek a fresh one — the storm MOVES the flighted birds
-  // off a spot rather than sheltering them. Only real flyers respond (a flightless kākāpō
-  // is unaffected). Sets _fleeingStorm so subclasses hold their own steering. Returns true
-  // when it takes over the tick.
+  // A Storm within range flushes the bird: it drops its tree and flies away to seek a
+  // fresh one. Only real flyers respond. Sets _fleeingStorm; returns true when it takes the tick.
   _fleeStorm(sim, dt) {
     if (!this.isFlyer) return false;
     const storm = this._nearestStorm(sim);
@@ -271,8 +234,7 @@ class Kereru extends Boid {
     return true;
   }
 
-  // Away from any hunting eagle within range — returns true when it took over the
-  // tick. Cheap: only a handful of eagles, and only when one is actually hunting.
+  // Flee any hunting eagle within range; returns true when it took over the tick.
   _fleeHarrier(sim, dt) {
     if (!sim.getNearbyEagles) return false;
     const R = 110, RSq = R * R;
@@ -301,18 +263,15 @@ class Kereru extends Boid {
     return true;
   }
 
-  // Can this bird be over (x,y)? Default: only walkable ground — a forest bird never leaves
-  // land, so un-walkable water AND alpine scree/glacier both bar it. The kea overrides this
-  // (a strong flier crosses the alpine to relocate, barred only by open water).
+  // Can this bird be over (x,y)? Default: only walkable ground. The kea overrides this
+  // (crosses the alpine, barred only by open water).
   _passable(x, y) {
     const t = this.terrain;
     return !t || typeof t.isWalkable !== 'function' || t.isWalkable(x, y);
   }
 
-  // A "stay in habitat" steering force — zero over land away from the rim, else a
-  // firm pull inward. Triggers: the world EDGE (no food out there; stops an eagle
-  // pinning a bird against the screen) and impassable ground (a forest bird never
-  // crosses sea; a kea, only open water — see _passable).
+  // A "stay in habitat" steering force: zero over land away from the rim, else a firm
+  // pull inward. Triggers on the world edge and impassable ground (see _passable).
   _landward() {
     const f = this._landForce; f.set(0, 0);
     const t = this.terrain;
@@ -408,8 +367,7 @@ class Kereru extends Boid {
         }
         this.applyForce(this.seek(this._target, 1, 24));
       } else {
-        // No fruiting forest within reach (a thinned canopy): drift, let hunger
-        // climb — the food-driven climate coupling. Anchored birds drift home.
+        // No fruiting forest within reach: drift and let hunger climb. Anchored birds drift home.
         this._driftHome(sim, dt);
       }
     } else {
@@ -417,8 +375,7 @@ class Kereru extends Boid {
       const arrived = dx * dx + dy * dy < 16 * 16;
       this._disperseTimer -= dt;
       if (arrived || this._disperseTimer <= 0) {
-        // Drop a seed HERE (away from the parent tree). Crop is always spent, but
-        // the seed only ESTABLISHES with probability _disperseChance.
+        // Drop a seed here. Crop is always spent, but establishes with _disperseChance.
         if (sim.disperseSeed && random() < this._disperseChance) sim.disperseSeed(this.pos.x, this.pos.y);
         this.crop -= 1;
         this._disperseTimer = this._disperseFrames;
@@ -473,8 +430,7 @@ class Kereru extends Boid {
     }
   }
 
-  // Choose a short fly-to point for the next dispersal leg (kept on the map). An
-  // anchored bird throws it from halfway toward home, so it orbits its patch.
+  // Choose a short fly-to point for the next dispersal leg. Anchored birds orbit home.
   _pickHop() {
     const anchor = this._anchorPoint();
     let ox = this.pos.x, oy = this.pos.y;
@@ -492,8 +448,8 @@ class Kereru extends Boid {
   // Home anchor for territory/pair fidelity. null = free-ranging (the kererū).
   _anchorPoint() { return null; }
 
-  // Drift when no fruit tree is in reach. Base: idle wander (kererū). An anchored
-  // bird beyond its leash seeks home; within it, wanders locally.
+  // Drift when no fruit tree is in reach: an anchored bird beyond its leash seeks home,
+  // else wanders.
   _driftHome(sim, dt) {
     const anchor = this._anchorPoint();
     if (anchor) {
@@ -507,8 +463,7 @@ class Kereru extends Boid {
     return !!(p && p.alive && !p._consumed && !p.dormant && p.growth > 0.4);
   }
 
-  // Nearest fruiting FOREST tree: alive, grown, and a large-fruited canopy species
-  // (Mauri's FOREST_TREES — beech/rimu/fern, the same set disperseSeed recruits).
+  // Nearest fruiting forest tree: alive, grown, and in FOREST_TREES.
   _findFruitTree(sim) {
     if (!sim.getNearbyPlants) return null;
     const plants = sim.getNearbyPlants(this.pos.x, this.pos.y, this._feedRadius);
@@ -526,13 +481,12 @@ class Kereru extends Boid {
     return best;
   }
 
-  // Emergent reproduction: a mature, well-fed (carrying fruit) female that is
-  // perched, off cooldown, below the flock cap and with a mature mate nearby lays.
+  // Emergent reproduction: a mature, well-fed, off-cooldown female below the flock cap
+  // with a mature mate nearby lays.
   _tryReproduce(sim) {
     if (!this.mature || !this.isFemale || this._eggCooldown > 0) return;
     if (this.crop <= 0) return;                             // must be well-fed
-    // Mast year (Free Play): the podocarp forest fruits abundantly, so the fruit-birds
-    // boom — a higher flock cap and a much shorter cooldown turn the glut into chicks.
+    // Mast year (Free Play): a higher flock cap and shorter cooldown turn the glut into chicks.
     const mast = !!(sim && sim.mastYear);
     const mastMult = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.mastFlockMult) || 1.6;
     const cap = mast ? Math.ceil(this._maxPopulation() * mastMult) : this._maxPopulation();
@@ -587,17 +541,14 @@ class Kereru extends Boid {
 
     super.update(dt);
 
-    // Eased lateral facing (Mauri's Boid has no _flip): ease toward the sign of the
-    // horizontal velocity, passing through 0 edge-on. A perched bird holds its facing.
+    // Eased lateral facing: ease toward the sign of horizontal velocity. A perched bird holds it.
     if (!perched && Math.abs(this.vel.x) > 0.02) {
       const want = this.vel.x >= 0 ? 1 : -1;
       this._flip += (want - this._flip) * Math.min(1, 0.15 * dt);
     }
 
-    // Hard land clamp: a bird may skim impassable ground but never ENDS a frame over a
-    // true barrier. For a forest bird that's any un-walkable cell; for a kea (which flies
-    // the alpine) only open water — see _passable. _lastLand always tracks genuine
-    // walkable ground so the snap-back lands somewhere it can actually perch.
+    // Hard land clamp: a bird may skim impassable ground but never ends a frame over a
+    // true barrier (see _passable). _lastLand tracks genuine walkable ground for the snap-back.
     const t = this.terrain;
     if (t && typeof t.isWalkable === 'function') {
       if (t.isWalkable(this.pos.x, this.pos.y)) {
@@ -609,9 +560,8 @@ class Kereru extends Boid {
     }
   }
 
-  // Drawn in the LOCAL pos frame: the sim's render loop already lifts the origin to
-  // the projected ground point, so the shadow sits on the ground and the body lifts
-  // by its altitude — a real height at 3/4 (and identical in flat 2D mode).
+  // Drawn in the local pos frame (the sim's render loop lifts the origin to the ground
+  // point), so the shadow sits on the ground and the body lifts by its altitude.
   render() {
     const s = this.size * (this.mature ? 1 : 0.7);   // juveniles smaller
     const alt = this._altitude || 0;
@@ -631,9 +581,8 @@ class Kereru extends Boid {
 
     translate(offX, -alt + offY);                    // body lifts to altitude + perch offset
 
-    // Species highlight (player toggle) + field-guide selection share ONE
-    // sprite-shaped outline, emitted at the sprite draw site below (after the
-    // flip, so it mirrors with the bird). Replaces the old soft pulsing halo.
+    // Species highlight + field-guide selection share one sprite-shaped outline, emitted
+    // at the sprite draw below (after the flip, so it mirrors with the bird).
 
     const sprite = this._getSprite(perched);
     if (sprite) {
@@ -642,8 +591,7 @@ class Kereru extends Boid {
       noTint();
       imageMode(CENTER);
       scale(this._flip >= 0 ? 1 : -1, 1);            // art faces up-and-right; mirror for leftward
-      // Highlight outline: field-guide selection OR the player's species toggle.
-      // Drawn after the flip so it mirrors with the bird (covers all flyers).
+      // Highlight outline: field-guide selection or the player's species toggle.
       const _hlCfg = this.speciesData && this.speciesData.config && this.speciesData.config.highlightColor;
       const _olCol = (typeof highlightOutlineColor !== 'undefined')
         ? highlightOutlineColor(this.speciesKey, _hlCfg) : null;

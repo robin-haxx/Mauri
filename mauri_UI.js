@@ -1,19 +1,15 @@
 // ============================================
 // LEVEL COUNTDOWN PIE - tunables
-// A small pie sitting to the right of the TIME panel. It begins as a full
-// disc and is eaten away clockwise from 12 o'clock over the course of the
-// level, hitting empty as the level ends. It encodes proportion of level
-// remaining only - the TIME panel next to it already carries the minutes.
+// A small pie right of the TIME panel: a full disc eaten away clockwise from 12
+// o'clock as the level runs, empty at the end. Shows proportion remaining only.
 // ============================================
 const LEVEL_CLOCK = {
   enabled: true,        // false = no dial drawn, and no layout space reserved
   size: 70,             // outer diameter (px); also the width it claims in the top bar
   gap: 10,              // spacing between the TIME panel and the dial
 
-  // Levels declare their length as `timeLimit` in FRAMES (14400 = 4 min).
-  // This is only a last-resort fallback in seconds if that can't be found;
-  // leave it null so an unresolved level simply draws no pie rather than
-  // counting down a duration that means nothing.
+  // Levels declare their length as `timeLimit` in frames. Last-resort fallback in seconds;
+  // leave null so an unresolved level draws no pie.
   fallbackSeconds: null,
 
   // Urgency thresholds, as a FRACTION of the level still remaining
@@ -145,10 +141,8 @@ class GameUI {
       migrationHintWidth: Math.min(1000, gameAreaWidth - 100),
       migrationHintX: (gameAreaWidth - Math.min(1000, gameAreaWidth - 100)) / 2,
 
-      // Bottom bar toolbar. Count the LEVEL'S active palette, not the global
-      // PLACEABLES catalog — the catalog also holds tools from other levels
-      // (lancewood, speargrass, ...), so using its length centers the row and
-      // sizes the tutorial highlight for phantom extra buttons.
+      // Bottom bar toolbar. Count the level's active palette, not the global PLACEABLES
+      // catalog (which holds tools from other levels, so its length would misplace the row).
       toolbarBtnSize: 70,
       toolbarSpacing: 85,
       toolbarBtnCount: Object.keys((this.game && this.game.activePlaceables) || PLACEABLES).length,
@@ -194,9 +188,8 @@ class GameUI {
     // Event log and species panel heights scale with sidebar width
     // Wider sidebar = can show more; narrower = show less
     const sidebarScale = this.sidebar.width / 560; // 560 is the 16:9 baseline
-    // Panel heights grow with the small-text bump so their content rhythm
-    // (event log lines, population rows) keeps fitting as the text scales:
-    // one lineHeight bump per log message, two per stat row (5 rows).
+    // Panel heights grow with the small-text bump so their content keeps fitting:
+    // one lineHeight per log message, two per stat row.
     this.layout.eventLogHeight = Math.round(280 * sidebarScale) + SMALL_TEXT_BUMP * 7;
     this.layout.speciesPanelHeight = Math.round(240 * sidebarScale) + SMALL_TEXT_BUMP * 10;
     this.layout.eventLogMaxMessages = sidebarScale >= 1 ? 7 : 5;
@@ -208,14 +201,10 @@ class GameUI {
     // Field-guide (encyclopedia) toggle sits just left of the fullscreen button
     this.layout.guideBtnX = this.layout.fsBtnX - 80;
 
-    // Fullscreen overlay HUD layout: the HUD is drawn over the maximised play
-    // area, but the top-bar essentials, the fullscreen/pause buttons and the
-    // goals panel all sit exactly where they do in the docked full UI, so
-    // nothing jumps when toggling fullscreen. (Toggling fullscreen only
-    // changes the view transform, not gameAreaWidth/rightSidebarX, so the
-    // docked positions computed above are still valid here.) The focus-species
-    // population toggles sit *below* the goals panel — see
-    // renderFocusSpeciesButtons. The placeables toolbar runs along the bottom.
+    // Fullscreen overlay HUD layout: the top-bar essentials, fullscreen/pause buttons and
+    // goals panel sit exactly where they do in the docked full UI, so nothing jumps when
+    // toggling fullscreen (which only changes the view transform). Focus-species toggles
+    // sit below the goals panel; the placeables toolbar runs along the bottom.
     const contentY = 20; // matches renderTopBar's docked contentY
     this.layout.fs = {
       stripY: contentY,
@@ -613,9 +602,8 @@ class GameUI {
   // filled in the species' highlight colour.
   renderFocusSpeciesButtons() {
     this._fsFocusBtnBounds = [];
-    // Free Play shows THIS YEAR'S focus species (rotates — may be kea/kākā/kākāpō),
-    // not the static focal moa. Other levels use their explicit focal list, else the
-    // moa roster (so the toggles exist everywhere in fullscreen).
+    // Free Play shows this year's focus species (rotates), not the static focal moa. Other
+    // levels use their focal list, else the moa roster.
     let focal = null;
     if (this.game && this.game.freeplayFocus && this.game.freeplayFocus.length) {
       focal = this.game.freeplayFocus;
@@ -624,11 +612,8 @@ class GameUI {
         ((this.simulation.activeSpecies && this.simulation.activeSpecies.moa) || null);
     }
 
-    // Endless keystone moa: a Free Play run ends only when EVERY moa is gone, so the
-    // keystone moa (upland + little bush — the level's focalSpecies) are what actually
-    // gate a game over. The year's focus rotates onto birds (kea/kākāpō), which never
-    // trigger a loss, so ALWAYS surface these moa here too — as a survival group, and
-    // de-duplicated against any already shown as this year's focus.
+    // Endless keystone moa: a Free Play run ends only when every moa is gone, so always
+    // surface the keystone moa here as a survival group (de-duplicated against the year's focus).
     let survival = [];
     if (this.game && this.game.currentLevel && this.game.currentLevel.endless) {
       const M = (typeof LEVEL_MECHANICS !== 'undefined') ? LEVEL_MECHANICS : {};
@@ -649,9 +634,7 @@ class GameUI {
     const tiles = (focal || []).map(k => ({ key: k, survival: false }))
       .concat(survival.map(k => ({ key: k, survival: true })));
 
-    // Sit the row just below the goals panel, left-aligned to the same column.
-    // The goals panel has a 12px translucent backing skirt around it, so start
-    // a little further down to clear it.
+    // Sit the row just below the goals panel, left-aligned, clearing its backing skirt.
     const fs = this.layout.fs;
     const goalsH = 30 + this.game.goals.length * 26;
     const size = 70, gap = 10;
@@ -702,9 +685,8 @@ class GameUI {
           pop();
         }
       } else {
-        // Bird focus species — its own sprite (kea/kākā/kākāpō/kōkako, keyed the
-        // same as EntitySprites.flyers). A species without dedicated art keeps the
-        // simple coloured marker as a fallback.
+        // Bird focus species — its own sprite (keyed like EntitySprites.flyers), else the
+        // coloured marker fallback.
         const birdSprite = (typeof EntitySprites !== 'undefined' && EntitySprites.flyers)
           ? EntitySprites.flyers[key] : null;
         if (EntitySprites.isValid(birdSprite)) {
@@ -790,9 +772,8 @@ class GameUI {
     pop();
   }
 
-  // Mauri counter as a large circular DIAL, styled to sit next to the season/year ring
-  // (same backing disc). A green accent ring, a small "MAURI" label, and the value big
-  // in the centre. Replaces the old rectangular counter.
+  // Mauri counter as a large circular dial beside the season/year ring: a green accent
+  // ring, a "MAURI" label, and the value in the centre.
   renderMauriRing(cx, cy, r) {
     const val = Math.floor(this.mauri.mauri);
     push();
@@ -938,8 +919,7 @@ class GameUI {
     circle(cx + Math.cos(pAng) * (ringD / 2), cy + Math.sin(pAng) * (ringD / 2), RW * 0.9);
 
     // Endless: inner four-year tour ring (≈ terrain quadrants), current year lit. Year 1
-    // lights the BOTTOM-RIGHT quadrant (the starting map area), then advances clockwise —
-    // hence the +1 offset from the raw cycle (arc i=1 spans 3→6 o'clock).
+    // lights the bottom-right quadrant, then advances clockwise (hence the +1 offset).
     if (endless) {
       const iD = (R - RW * 2.1) * 2;
       const tourIdx = (((cycle % 4) + 4) % 4 + 1) % 4;
@@ -1124,9 +1104,8 @@ class GameUI {
          LEVEL_CLOCK.spentColor[2], LEVEL_CLOCK.spentColor[3]);
     ellipse(cx, cy, r * 2, r * 2);
 
-    // Remaining slice, depleting clockwise from 12 o'clock.
-    // p5 won't close a full-circle arc cleanly, so draw a plain disc when
-    // the level has barely started.
+    // Remaining slice, depleting clockwise from 12 o'clock. Draw a plain disc when nearly
+    // full (p5 won't close a full-circle arc cleanly).
     if (t.fraction >= 0.999) {
       fill(col[0], col[1], col[2], wedgeAlpha);
       ellipse(cx, cy, r * 2, r * 2);
@@ -1234,9 +1213,8 @@ class GameUI {
     }
   }
 
-  // Field-guide (encyclopedia) toggle. A little open-book glyph; framed/tinted
-  // while the guide is open. Sits left of the fullscreen button in both the docked
-  // top bar and the fullscreen overlay.
+  // Field-guide toggle: an open-book glyph, framed while the guide is open. Sits left of
+  // the fullscreen button.
   renderGuideButton(x, y) {
     const size = this.layout.pauseBtnSize;
     const isHovered = mouseX > x && mouseX < x + size &&
@@ -1501,9 +1479,8 @@ class GameUI {
       // Icon (origin is already the centre of the icon circle)
       this.renderPlaceableIcon(def, 0, 0, 30, 20, canAfford ? 240 : 100);
 
-      // Storm recharge: clock-style sweep over the icon circle. The shaded
-      // wedge covers the remaining cooldown and its edge advances clockwise
-      // from 12 o'clock until the storm is ready again.
+      // Storm recharge: a clock-style wedge over the icon covering the remaining cooldown,
+      // its edge advancing clockwise until ready.
       if (type === 'Storm') {
         const cdRemaining = (this.game._stormCooldownUntil || 0) - this.game.playTime;
         if (cdRemaining > 0) {
@@ -1538,9 +1515,8 @@ class GameUI {
     }
   }
 
-  // Draws a placeable's palette icon centred on (cx, cy): pixel art when the
-  // definition names an `iconSprite`, otherwise the emoji glyph. spriteSize and
-  // glyphSize are separate because the art fills more of the circle than text.
+  // Draws a placeable's palette icon centred on (cx, cy): pixel art when the def names
+  // an `iconSprite`, else the emoji glyph. spriteSize/glyphSize differ (art fills more).
   renderPlaceableIcon(def, cx, cy, spriteSize, glyphSize, alpha = 255) {
     const sprite = def.iconSprite ? placeableSprites.icons[def.iconSprite] : null;
 
@@ -1643,9 +1619,8 @@ class GameUI {
     // Section 1: Goals (top)
     y = this.renderGoalsPanel(x + padding, y);
 
-    // Section 1b: Nest Raid — a NON-MODAL panel below goals, above population (half the
-    // event log's height). Only present while the tool has toggled it open. In the kākā
-    // mast-goal year the Mast Year progress bar takes this same slot instead.
+    // Section 1b: Nest Raid — a non-modal panel below goals, present while the tool toggled
+    // it open. In the kākā mast-goal year the Mast Year progress bar takes this slot instead.
     if (this.game._mastGoalPanelActive && this.game._mastGoalPanelActive()) {
       const rh = Math.round(this.layout.eventLogHeight / 2);
       this.game._renderMastGoalPanel(x + padding, y + 12, this.layout.sidebarPanelWidth, rh);
@@ -1929,9 +1904,7 @@ class GameUI {
       });
     }
 
-    // Population stats — 5 rows x 2 columns, row-major. Each row holds a
-    // small label over a value, so row height grows with the text bump
-    // (label line + value offset each gain SMALL_TEXT_BUMP).
+    // Population stats — 5 rows × 2 columns, row-major. Row height grows with the text bump.
     let statY = y + 42;
     const rowH = 28 + SMALL_TEXT_BUMP * 2;
     const col1X = x + 15;
@@ -2010,9 +1983,8 @@ class GameUI {
     return y + panelHeight;
   }
 
-  // One clickable species population row. Clicking it (handleSidebarClick)
-  // toggles the in-world species highlight; while active the row is framed
-  // in the species' highlight colour.
+  // One clickable species population row: clicking toggles the in-world highlight; while
+  // active the row is framed in the species' colour.
   _renderSpeciesRow(x, y, w, row) {
     const rowBoxH = 32 + SMALL_TEXT_BUMP * 2;   // tracks renderStatItem's height
     if (row.key) {
@@ -2029,9 +2001,8 @@ class GameUI {
     this.renderStatItem(x, y, row.icon, row.label, row.value, row.color);
   }
 
-  // The clickable "Total eagles" row — same shape as a species row. Clicking
-  // it (handleSidebarClick) toggles the eagle highlight and plays the eagle
-  // call; while active the row is framed in the eagle highlight colour.
+  // The clickable "Total eagles" row: clicking toggles the eagle highlight and plays the
+  // eagle call; framed in the eagle colour while active.
   _renderEagleRow(x, y, w, count) {
     const rowBoxH = 32 + SMALL_TEXT_BUMP * 2;   // tracks renderStatItem's height
     this._eagleRowBounds = { x: x - 8, y: y - 4, w: w, h: rowBoxH };

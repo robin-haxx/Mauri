@@ -1,30 +1,18 @@
 // ============================================================
 // KŌKAKO — the singing forest wattlebird  (extends Kereru)
-// ------------------------------------------------------------
-// SOUTH ISLAND kōkako, Callaeas cinereus — the "grey ghost", ORANGE-wattled (the
-// North Island bird is the blue-wattled Callaeas wilsoni). A poor flier of tall
-// native forest: it bounds and hops through the canopy and only makes short,
-// laboured glides between trees — the same short-flight frugivore loop as the
-// kererū, so it IS a kererū mechanically (its own base type + list, extends Kereru).
-// It disperses forest seed like the kererū but far less (a smaller gape passes
-// fewer large fruit, so _disperseChance is well under half — KOKAKO_SPECIES).
-//
-// Two things make it a kōkako, not a small kererū:
-//   · TERRITORY. It holds a patch of forest and sings from it. The _territory
-//     anchor pulls foraging and hops back onto that patch, so it stays put.
-//   · SONG. When secure on a perch (well fed, no storm) it settles into a SINGING
-//     state — it sits notably longer than a kererū. A song provokes the
-//     neighbours: the NEAREST kōkako within earshot answers (a duet); any others
-//     crowded inside the territory radius are pushed off to claim ground of their
-//     own. Over time the flock spaces itself out — emergent territoriality.
-//
-// No audio ships for the song, so the cue is diegetic-visual: a small music note
-// lifting from the singing bird (_renderExtra), non-flashing (photosensitivity).
-// Ported/adapted from the Te Manawa fork alongside mauri_kereru.js.
+// South Island kōkako, Callaeas cinereus, the orange-wattled "grey ghost". A poor
+// flier of tall native forest, so it is a kererū mechanically (short-flight
+// frugivore loop, own base type + list). Disperses forest seed far less than the
+// kererū (smaller gape, low _disperseChance). Two differences from a kererū:
+//   · TERRITORY. The _territory anchor pulls foraging and hops back onto its patch.
+//   · SONG. When secure on a perch it enters a SINGING state, sitting longer. The
+//     nearest kōkako within earshot answers; others inside the territory radius are
+//     pushed off, so the flock spaces itself out (emergent territoriality).
+// No audio ships; the song cue is a visual music note (_renderExtra).
 // ============================================================
 
 const KOKAKO_STATE = {
-  SINGING: 'singing'    // perched and holding a song — sits longer than a plain perch
+  SINGING: 'singing'    // perched and holding a song
 };
 
 class Kokako extends Kereru {
@@ -59,8 +47,7 @@ class Kokako extends Kereru {
 
   _anchorPoint() { return this._territory; }
 
-  // While relocating to a new territory, ignore trees and travel there; on arrival,
-  // resume the ordinary forage/disperse loop.
+  // While relocating, ignore trees and travel to the new territory.
   _flying(sim, dt) {
     if (this._relocating) {
       const t = this._territory;
@@ -76,8 +63,7 @@ class Kokako extends Kereru {
     super._flying(sim, dt);
   }
 
-  // PERCHED — count the song clocks, and break into a song when secure and either
-  // answering a neighbour or due for a spontaneous one. Otherwise the kererū perch.
+  // PERCHED — break into a song when secure and answering or due; else kererū perch.
   _perched(sim, dt) {
     if (this._singCooldown > 0) this._singCooldown = Math.max(0, this._singCooldown - dt);
     if (this._songTimer > 0)    this._songTimer    = Math.max(0, this._songTimer - dt);
@@ -105,13 +91,12 @@ class Kokako extends Kereru {
     if (this._singTimer <= 0) {
       this._singCooldown = this._singCooldownFrames;
       this._songTimer = this._songInterval * random(0.7, 1.3);
-      this.state = KERERU_STATE.PERCHED;           // back to a normal perch beat
+      this.state = KERERU_STATE.PERCHED;           // back to a normal perch
       this._restTimer = this._restFrames;
     }
   }
 
-  // One rule drives the territoriality: the nearest kōkako within earshot answers;
-  // every other kōkako packed inside the territory radius is displaced.
+  // The nearest kōkako within earshot answers; others inside the territory radius are displaced.
   _provokeNeighbours(sim) {
     const list = sim.otherEntities && sim.otherEntities[this.speciesKey];
     if (!list) return;
@@ -138,8 +123,7 @@ class Kokako extends Kereru {
 
   _answerSong() { this._respondSing = true; }
 
-  // Pushed out of a rival's territory: claim a new patch away from the singer and
-  // set off for it, dropping the current tree. Stays quiet until it arrives.
+  // Pushed out of a rival's territory: claim a new patch away from the singer and go.
   _displaceFrom(sx, sy) {
     let ang = Math.atan2(this.pos.y - sy, this.pos.x - sx);
     if (!isFinite(ang) || (this.pos.x === sx && this.pos.y === sy)) ang = random(TWO_PI);
@@ -164,8 +148,7 @@ class Kokako extends Kereru {
       ? EntitySprites.getKokakoSprite(perched) : null;
   }
 
-  // Song cue — a small music note lifting from the singing bird. USER-FACING (like
-  // the mating heart), gentle bob on the anim clock, non-flashing (CLAUDE.md).
+  // Song cue: a small music note lifting from the singing bird. Non-flashing.
   _renderExtra(s, perched) {
     if (this.state !== KOKAKO_STATE.SINGING) return;
     const dir = (this._flip >= 0) ? 1 : -1;
@@ -185,8 +168,7 @@ class Kokako extends Kereru {
 }
 
 // ------------------------------------------------------------
-// SPECIES DATA — South Island kōkako. Registered as its own base type + species
-// in initializeRegistry (mauri_sketch.js), carrying class: Kokako.
+// SPECIES DATA — South Island kōkako. Registered in initializeRegistry.
 // ------------------------------------------------------------
 const KOKAKO_SPECIES = {
   displayName:    'South Island Kōkako',
@@ -195,7 +177,7 @@ const KOKAKO_SPECIES = {
   class:          (typeof Kokako !== 'undefined') ? Kokako : undefined,
   description:    'An orange-wattled forest songbird — a weak flier that holds and sings a forest territory.',
   rarity:         'uncommon',
-  highlightColor: [250, 165, 80],   // bright orange — player highlight (pulse + UI border)
+  highlightColor: [250, 165, 80],   // orange; player highlight
 
   // A poorer flier than the kererū: slower, shorter hops, barely clears the canopy.
   baseSpeed:        0.24,
@@ -235,7 +217,7 @@ const KOKAKO_SPECIES = {
   secureHungerFrac: 0.6
 };
 
-// Register the kōkako as a flighted-bird type (routes egg hatch + render pass).
+// Register the kōkako as a flighted-bird type.
 if (typeof FLYER_TYPES !== 'undefined') FLYER_TYPES.add('kokako');
 
 if (typeof window !== 'undefined') {

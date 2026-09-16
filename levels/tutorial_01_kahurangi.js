@@ -1,8 +1,7 @@
 // ============================================================================
 // LEVEL 1 (Kahurangi) — TUTORIAL SCRIPT
-// Registered with TUTORIAL_REGISTRY under the level id, keeping the engine
-// (mauri_tutorial.js) content-free. Also registered as 'default': any level
-// without its own script falls back to this one.
+// Registered with TUTORIAL_REGISTRY under the level id (and as 'default', the
+// fallback for any level without its own script). The engine stays content-free.
 //
 // AUTHORING GUIDE — each tip supports:
 //   trigger: { type: TRIGGER_TYPE.EVENT | TIME | CONDITION | IMMEDIATE,
@@ -13,8 +12,7 @@
 //   title, content: ["short line", ...]  (lines don't reflow — keep them short)
 //   guidePosition: center|left|right|top|bottom|topLeft|topRight|bottomLeft|bottomRight
 //   highlight / highlightAlt: { type: 'element', target: <TutorialUIMapper target> }
-//   guidedPlaceable: '<type>'  — a "place this" beat: placing anything else
-//                                WHILE the tip is up fires off_script_placement
+//   guidedPlaceable: '<type>'  — a "place this" beat: placing anything else fires off_script_placement
 //   onShow: (game, data) => {} — side effects when the tip appears
 //   nextTip: '<id>'            — chain; the next tip must be TRIGGER_TYPE.IMMEDIATE
 //   pauseGame, showOnce, priority (lower first), urgency: 'high' (skips spacing)
@@ -54,9 +52,7 @@ const TIPS = {
     ],
     guidePosition: 'center',
     highlight: null,
-    // Instead of boxing the whole play area, light up the birds themselves:
-    // the upland moa species highlight comes on while this tip is up (their
-    // sprites re-drawn above the dim overlay) and goes off when it's done.
+    // Light up the upland moa themselves while this tip is up (highlight on/off).
     onShow: (game) => {
       if (typeof SPECIES_HIGHLIGHT !== 'undefined') SPECIES_HIGHLIGHT.add('upland_moa');
     },
@@ -180,10 +176,8 @@ const TIPS = {
       type: TRIGGER_TYPE.EVENT,
       event: TUTORIAL_EVENTS.EAGLE_HUNTING,
       minGameTime: 180,
-      // The storm lesson only runs when the player can actually afford one.
-      // If they're broke, eagle_hunting_no_mauri takes this beat instead —
-      // and since a skipped trigger isn't "shown", this tip stays available
-      // for a later hunt when the Mauri is there.
+      // Only runs when the player can afford a storm; else eagle_hunting_no_mauri takes
+      // this beat, and this tip stays available for a later affordable hunt.
       condition: (game) => {
         const def = game.activePlaceables && game.activePlaceables.Storm;
         return game.mauri.canAfford(def ? def.cost : 40);
@@ -194,8 +188,7 @@ const TIPS = {
       "Now's your time: The Pouākai is hunting a moa!",
       "Select the Storm [🌩️] to call on the atua for a distraction!"
     ],
-    // Arm the grace window on every bird already mid-hunt, so the player has
-    // ~8 seconds of unpaused play to respond before a strike can land.
+    // Arm the grace window on every mid-hunt bird (~8s to respond before a strike).
     onShow: (game, data) => {
       const GRACE = 480; // frames @60fps ≈ 8s
       const eagles = (game.simulation && game.simulation.eagles) || [];
@@ -218,8 +211,7 @@ const TIPS = {
     urgency: 'high'
   },
 
-  // Step two of the emergency: where to drop the storm. Chained from
-  // eagle_hunting, so the game stays paused between the two.
+  // Step two of the emergency: where to drop the storm. Chained from eagle_hunting.
   storm_place: {
     id: 'storm_place',
     trigger: { type: TRIGGER_TYPE.IMMEDIATE },
@@ -229,15 +221,13 @@ const TIPS = {
       "You'll have to think fast to prevent the strike of a hungry Pouākai!",
 
     ],
-    // Timestamp for the follow-up shelter tip ("a few seconds later").
-    // playTime is frozen while paused, so this equals the dismissal time.
+    // Timestamp for the follow-up shelter tip (playTime is frozen while paused).
     onShow: (game) => {
       if (game.tutorial) game.tutorial.scratch.eagleTipsAt = game.playTime;
     },
     guidePosition: 'bottomRight',
     highlight: null,
-    // Re-draw the hunting eagle above the dark overlay, flashing white,
-    // so "click on the hunting eagle" points at an unmissable bird.
+    // Re-draw the hunting eagle above the overlay, flashing white, so it's unmissable.
     spotlightHuntingEagle: true,
     guidedPlaceable: 'Storm',
     nextTip: null,
@@ -247,10 +237,8 @@ const TIPS = {
     urgency: 'high'
   },
 
-  // Alternate first-attack beat: the Pouākai hunts but the player can't
-  // afford a storm. Shown at most once, and only while the storm lesson
-  // hasn't run yet (eagle_hunting skips when broke and stays unburned for a
-  // later, affordable hunt). No grace window — the chase plays out for real.
+  // Alternate first-attack beat: eagle hunts but the player can't afford a storm.
+  // Shown once, only while the storm lesson hasn't run. No grace window.
   eagle_hunting_no_mauri: {
     id: 'eagle_hunting_no_mauri',
     trigger: {
@@ -278,8 +266,7 @@ const TIPS = {
     urgency: 'high'
   },
 
-  // The calmer follow-up beat: once the emergency has played out, teach the
-  // preventive tool. Fires ~8s of unpaused play after the storm tips.
+  // Calmer follow-up: teach the preventive tool ~8s after the storm tips.
   shelter_secure: {
     id: 'shelter_secure',
     trigger: {
@@ -307,15 +294,13 @@ const TIPS = {
     priority: 2
   },
 
-  // Player takes initiative: first placement made WITHOUT a "place this"
-  // dialog asking for it. Praises them and teaches the move mechanic.
+  // First placement made without a "place this" dialog; teaches the move mechanic.
   first_free_placement: {
     id: 'first_free_placement',
     trigger: {
       type: TRIGGER_TYPE.EVENT,
       event: TUTORIAL_EVENTS.PLACEMENT,
-      // Storms don't count: they're transient, and the move mechanic this
-      // tip teaches doesn't apply to them.
+      // Storms don't count (transient; the move mechanic doesn't apply).
       condition: (game, data) =>
         !tutorialGuidedWindowActive(game) && !(data && data.type === 'Storm')
     },
@@ -334,8 +319,7 @@ const TIPS = {
     priority: 2
   },
 
-  // Player goes off-script: a "place this" dialog asked for one thing and
-  // they placed another. Encourage it — and remind them tips are optional.
+  // Player placed something other than what a "place this" dialog asked for.
   off_script_placement: {
     id: 'off_script_placement',
     trigger: {
@@ -487,8 +471,7 @@ const TIPS = {
     priority: 2
   },
   
-  // Fires the first time ANY moa species reaches 10 — points at the population
-  // panel and teaches the click-to-highlight feature.
+  // Fires the first time any moa species reaches 10; teaches click-to-highlight.
   species_thriving: {
     id: 'species_thriving',
     trigger: {

@@ -41,11 +41,8 @@ class PlaceableObject {
     this.terrain = terrain;
     this.simulation = simulation;
     this.seasonManager = seasonManager;
-    // Prefer the level/year-resolved def so per-level and per-year overrides (cost,
-    // duration, radius, …) actually apply to the placed object — the active palette
-    // entry is a full merged copy of PLACEABLES[type] + those overrides, and carries
-    // _parsedColor. Fall back to the global base for any off-palette/programmatic spawn.
-    // (See Game._resolvePalette / resolveLevelDef._resolvedPlaceables.)
+    // Prefer the level/year-resolved def (merged PLACEABLES[type] + overrides, carrying
+    // _parsedColor); fall back to the global base for an off-palette spawn.
     this.def = (typeof game !== 'undefined' && game && game.activePlaceables && game.activePlaceables[type]) || PLACEABLES[type];
     
     this.life = this.def.duration;
@@ -72,8 +69,7 @@ class PlaceableObject {
       if (audioManager) audioManager.playPlantRustle();
     }
 
-    // Forest cultivators (Forest Seed) can drop a BURST of saplings the instant they're
-    // placed, so the new grove reads immediately instead of trickling in over the life.
+    // Forest cultivators drop a burst of saplings on placement, so the grove reads at once.
     if (this.def.growsForest && this.def.growInitial && this.simulation && this.simulation.growForestAt) {
       for (let i = 0; i < this.def.growInitial; i++) {
         this.simulation.growForestAt(this.pos.x, this.pos.y, this.radius, this.def.growCap ?? 8);
@@ -86,9 +82,8 @@ class PlaceableObject {
       this._initThunderstorm();
     }
 
-    // Shelter-specific: the fern canopy grows in like a planted tree rather
-    // than appearing full-size. Fixed layout with slight per-placement
-    // variation; each frond starts staggered a little behind the last.
+    // Shelter-specific: the fern canopy grows in rather than appearing full-size, with
+    // slight per-placement variation and each frond staggered behind the last.
     if (this.type === 'shelter') {
       this._fernGrowth = 0;   // 0..1, ticks up in update()
       this._ferns = [
@@ -230,10 +225,8 @@ class PlaceableObject {
   // ============================================
   
   spawnPlantsInRadius() {
-    // The berry species follows the biome the placeable sits on: def.biomePlantType maps a
-    // biome key to the plant to spawn there (e.g. keaLure → pātōtara on grassland), falling
-    // back to the flat def.plantType. Resolved once from the CENTRE biome so the whole cache
-    // plants one consistent species even where its radius straddles a biome edge.
+    // The berry species follows the biome under the placeable: def.biomePlantType maps a
+    // biome key to a plant, else def.plantType. Resolved once from the centre biome.
     let plantType = this.def.plantType || 'tussock';
     if (this.def.biomePlantType) {
       const baseBiome = this.terrain.getBiomeAt(this.pos.x, this.pos.y);
@@ -301,16 +294,13 @@ class PlaceableObject {
       this._updateThunderstorm(dt);
     }
 
-    // Fern canopy grow-in — paced like a fern plant maturing (PLANT_TYPES
-    // fern growthTime = 240). Purely visual; the shelter protects instantly.
+    // Fern canopy grow-in, paced like a maturing fern. Purely visual; protection is instant.
     if (this.type === 'shelter' && this._fernGrowth < 1) {
       this._fernGrowth = Math.min(1, this._fernGrowth + dt / 240);
     }
 
-    // Kea Raid v2 — the Berry Cache CULTIVATES podocarp forest: over its life it
-    // periodically seeds a rimu/beech tree in its radius (expanding the forest even
-    // into shrubland/flats — the player changing the habitat), so kea get perch trees
-    // downslope. Gated by the def's grow params; density-limited inside growForestAt.
+    // The Berry Cache cultivates forest: over its life it periodically seeds a rimu/beech
+    // tree in its radius, so kea get perch trees downslope. Density-limited in growForestAt.
     if (this.def.growsForest && this.simulation && this.simulation.growForestAt) {
       const every = (this.def.growEverySec ?? 6) * 60;
       this._growTimer = (this._growTimer || 0) + dt;
@@ -333,11 +323,8 @@ class PlaceableObject {
     if (!this.def.feedingRate) return 0;
     if (this.frostDying) return 0;   // a frost-killed grove no longer feeds (see frostKill)
 
-    // Species-selective feeders (lancewood, speargrass) nourish ONLY the species
-    // they favour. Any other moa is scaled by the same knob as browsing a
-    // favoured plant (LEVEL_MECHANICS.unfavouredBrowsePenalty). At 0 they get no
-    // nourishment at all, so the two founders never cross-feed from each other's
-    // plots (this is the direct-feed counterpart to the browse-gain penalty).
+    // Species-selective feeders (lancewood, speargrass) nourish only their favoured
+    // species; others are scaled by LEVEL_MECHANICS.unfavouredBrowsePenalty (0 = none).
     let sel = 1;
     if (this.def.favouredSpecies && moa.speciesKey !== this.def.favouredSpecies) {
       sel = (typeof LEVEL_MECHANICS !== 'undefined' ? (LEVEL_MECHANICS.unfavouredBrowsePenalty ?? 0.25) : 0.25);
@@ -390,7 +377,7 @@ class PlaceableObject {
       strength = (moa.hunger / 100) * (this.def.attractionStrength || 1.0) * this.seasonalMultiplier;
     }
     
-    // Note: attractsReadyMoa uses pregnancy system now (moa.isPregnant)
+    // attractsReadyMoa uses the pregnancy system (moa.isPregnant)
     if (this.def.attractsReadyMoa && moa.isPregnant && moa.hunger < (moa.config?.layingHungerThreshold || 28)) {
       strength = (this.def.attractionStrength || 1.0) * 1.5 * this.seasonalMultiplier;
     }
@@ -417,9 +404,8 @@ class PlaceableObject {
   // MOVE / DESTROY
   // ============================================
 
-  // Re-root this placeable at a new position (player touch-and-hold move).
-  // Spawned plants belong to the old spot, so they're cleared and regrown at
-  // the new one; remaining life carries over unchanged.
+  // Re-root this placeable at a new position (touch-and-hold move); spawned plants are
+  // regrown at the new spot, remaining life unchanged.
   moveTo(x, y) {
     this.pos.set(x, y);
     if (this.def.plantSpawnCount) {
@@ -438,11 +424,8 @@ class PlaceableObject {
     for (const plant of this.spawnedPlants) plant.alive = false;
   }
 
-  // Free Play LGM: the first winter frost-kills a warm-forest grove (kawakawa)
-  // GRADUALLY. Its spawned plants stop feeding and render wilted at once, and the
-  // grove's remaining life is capped to a short wither window so it fades out over
-  // the start of that winter rather than lingering. destroy() then clears the plants
-  // when the life runs down. One-shot. See Game._banKawakawa.
+  // Free Play LGM: the first winter frost-kills a kawakawa grove gradually. Its plants
+  // wilt and stop feeding at once, and its life is capped to a short wither window. One-shot.
   frostKill() {
     if (this.frostDying) return;
     this.frostDying = true;
@@ -476,7 +459,7 @@ class PlaceableObject {
     this.renderParticles();
   }
   
-  // Shared life bar (was duplicated between storm and standard)
+  // Shared life bar.
   _renderLifeBar(lifeRatio, yPos) {
     if (lifeRatio >= 0.5) return;
     fill(50, 50, 50, 150);
@@ -485,15 +468,9 @@ class PlaceableObject {
     rect(-10, yPos, 20 * lifeRatio, 3);
   }
   
-  // A ring at the object's TRUE effect radius. The line is steady — only a soft
-  // outer glow breathes in intensity — so the radius the placeable actually covers
-  // is never ambiguous. (It used to pulse in DIAMETER, which hid the real reach.)
-  //
-  // Drawn with a raw canvas shadow so it renders as a real ring in BOTH paths: the
-  // WebGL layer captures only FILLED ellipses as tinted discs (mauri_glbatch.js),
-  // and now lets a no-fill stroke fall through to 2D, where the shadow blur lives.
-  // The blur is scaled by the current world→device transform so the glow stays
-  // proportional to the ring at any zoom / supersample.
+  // A ring at the object's true effect radius. The line is steady; only a soft outer
+  // glow breathes. Drawn with a raw canvas shadow so it renders in both the GL and 2D
+  // paths, with the blur scaled by the world→device transform.
   _drawRadiusRing(col, lineAlpha, weight, glowAlpha, lifeRatio, radiusOverride) {
     const R = (radiusOverride != null) ? radiusOverride : this.radius;
     const glow = 0.5 + 0.5 * Math.sin(frameCount * 0.05 + this.pulsePhase);   // 0..1, slow breath
@@ -524,8 +501,7 @@ class PlaceableObject {
   
   _renderStandard(lifeRatio) {
     const isFeeding = this.feedingMoaCount > 0;
-    // Placeables that spawn real plant sprites (lancewood, speargrass, etc.) are
-    // their own visual, so hide their radius ring unless debug mode is on.
+    // Plant-spawning placeables are their own visual, so hide the ring unless debug is on.
     const _plantPlaceable = this.type === 'kawakawa' || this.type === 'harakeke' || this.type === 'lancewood' || this.type === 'speargrass';
     const _showRing = !_plantPlaceable || (typeof CONFIG !== 'undefined' && CONFIG.debugMode);
 
@@ -536,9 +512,8 @@ class PlaceableObject {
       if (this.seasonalMultiplier > 1.2) rc = [100, 255, 150];
       else if (this.seasonalMultiplier < 0.7) rc = [255, 150, 100];
       else rc = [235, 240, 245];
-      // Berry Cache: the RENDERED ring is the larger COVERAGE radius (the area to lay over the
-      // target moa nest), not the tight cultivation radius. In a berry-mauve so it reads as the
-      // kea zone. The wide kea-draw radius stays invisible (see PLACEABLES.keaLure).
+      // Berry Cache: the rendered ring is the larger coverage radius (in berry-mauve), not
+      // the tight cultivation radius. The wide kea-draw radius stays invisible.
       const _cover = this.def.coverRadius;
       if (_cover) {
         this._drawRadiusRing([176, 132, 214], 110, 1.4, 0.5, lifeRatio, _cover);
@@ -614,8 +589,7 @@ class PlaceableObject {
         break;
         
       case 'shelter': {
-        // Render the fern canopy, growing in like planted trees: each frond
-        // eases from a sprout to full size on its own staggered schedule.
+        // Render the fern canopy, each frond easing from sprout to full size on its own schedule.
         const fernSprite = plantSprites.fern?.mature;
         if (fernSprite && this._ferns) {
           imageMode(CENTER);

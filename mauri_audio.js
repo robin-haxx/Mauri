@@ -2,10 +2,8 @@
 // AUDIO MANAGER FOR MAURI
 // ============================================
 
-// Per-species call recordings for the highlight buttons. Drop a matching file
-// into audio/ and it is picked up automatically on the next launch; species
-// without an entry (or whose file is missing) fall back to the generic moa or
-// eagle call in playSpeciesCall(). Add new species here as recordings arrive.
+// Per-species call recordings for the highlight buttons. A missing file falls back
+// to the generic moa or eagle call in playSpeciesCall().
 const SPECIES_CALL_FILES = {
   little_bush_moa: 'call_little_bush_moa.mp3',
   upland_moa: 'call_upland_moa.mp3'
@@ -58,10 +56,7 @@ class AudioManager {
   // LOADING
   // ============================================
   
-  /**
-   * Load all audio files - call in preload()
-   * @returns {Promise} Resolves when all audio is loaded
-   */
+  // Load all audio files (call in preload()).
   loadAll() {
     const audioPath = 'audio/';
     
@@ -134,11 +129,8 @@ class AudioManager {
       (err) => console.warn('Could not load loss:', err)
     );
 
-    // Dedicated species calls — optional files. IMPORTANT: not loadSound().
-    // p5.sound's loadSound only releases the preload counter on success, so a
-    // missing optional file would hang preload() and setup() would never run.
-    // Constructing p5.SoundFile directly skips the counter: the file loads in
-    // the background and a miss just falls back to the generic call.
+    // Dedicated species calls — optional files. NOT loadSound(): a missing file would
+    // hang preload(). Constructing p5.SoundFile directly skips the preload counter.
     for (const [key, file] of Object.entries(SPECIES_CALL_FILES)) {
       try {
         this.sounds.speciesCalls[key] = new p5.SoundFile(audioPath + file,
@@ -160,9 +152,7 @@ class AudioManager {
   // PLAYBACK HELPERS
   // ============================================
   
-  /**
-   * Get effective volume for a sound type
-   */
+  // Effective volume for a sound type.
   _getVolume(isMusic = false) {
     if (!this.enabled) return 0;
     if (isMusic && !this.musicEnabled) return 0;
@@ -172,10 +162,7 @@ class AudioManager {
     return this.masterVolume * typeVolume;
   }
   
-  /**
-   * Check and update cooldown for a sound
-   * @returns {boolean} True if sound can play (not on cooldown)
-   */
+  // Check + update cooldown; true if the sound can play (not on cooldown).
   _checkCooldown(soundKey) {
     const now = frameCount;
     const lastPlayed = this.cooldowns[soundKey] || 0;
@@ -189,9 +176,7 @@ class AudioManager {
     return true;
   }
   
-  /**
-   * Safely play a sound with volume
-   */
+  // Safely play a sound with volume.
   _playSound(sound, volume, loop = false) {
     if (!sound || !this.enabled) return null;
     
@@ -208,9 +193,7 @@ class AudioManager {
     return null;
   }
   
-  /**
-   * Stop a sound safely
-   */
+  // Stop a sound safely.
   _stopSound(sound) {
     if (!sound) return;
     try {
@@ -226,9 +209,7 @@ class AudioManager {
   // BACKGROUND MUSIC
   // ============================================
   
-  /**
-   * Start background music (loops)
-   */
+  // Start background music (loops).
   playBackground() {
     if (!this.musicEnabled || !this.enabled) return;
     if (this._backgroundPlaying) return;
@@ -242,17 +223,13 @@ class AudioManager {
     }
   }
   
-  /**
-   * Stop background music
-   */
+  // Stop background music.
   stopBackground() {
     this._stopSound(this.sounds.background);
     this._backgroundPlaying = false;
   }
   
-  /**
-   * Pause background music
-   */
+  // Pause background music.
   pauseBackground() {
     const sound = this.sounds.background;
     if (sound && sound.isPlaying()) {
@@ -260,9 +237,7 @@ class AudioManager {
     }
   }
   
-  /**
-   * Resume background music
-   */
+  // Resume background music.
   resumeBackground() {
     if (!this.musicEnabled || !this.enabled) return;
     
@@ -272,9 +247,7 @@ class AudioManager {
     }
   }
   
-  /**
-   * Update background music volume (call when settings change)
-   */
+  // Update background music volume.
   updateBackgroundVolume() {
     const sound = this.sounds.background;
     if (sound && sound.isLoaded()) {
@@ -286,17 +259,13 @@ class AudioManager {
   // SOUND EFFECTS
   // ============================================
   
-  /**
-   * Play tutorial tip sound
-   */
+  // Play tutorial tip sound.
   playTutorialTip() {
     if (!this._checkCooldown('tutorialTip')) return;
     this._playSound(this.sounds.tutorialTip, this._getVolume() * 0.6);
   }
   
-  /**
-   * Play a random plant rustle sound
-   */
+  // Play a random plant rustle sound.
   playPlantRustle() {
     if (!this._checkCooldown('plantRustle')) return;
     
@@ -313,34 +282,24 @@ class AudioManager {
     this._playSound(this.sounds.boltStrike, this._getVolume() * 0.7);
   }
   
-  /**
-   * Play mating cheep sound
-   */
+  // Play mating cheep sound.
   playMateCheep() {
     if (!this._checkCooldown('mateCheep')) return;
     this._playSound(this.sounds.mateCheep, this._getVolume() * 0.5);
   }
   
-  /**
-   * Play moa population milestone sound
-   */
+  // Play moa population milestone sound.
   playMoaMilestone() {
     this._playSound(this.sounds.moaMilestone, this._getVolume() * 0.7);
   }
 
-  /**
-   * True if the key names an eagle species (vs a moa).
-   */
+  // True if the key names an eagle species.
   _isEagleSpecies(key) {
     return typeof EAGLE_SPECIES !== 'undefined' && !!EAGLE_SPECIES[key];
   }
 
-  /**
-   * Play the call for a species — used when a highlight button is clicked
-   * (population panel rows / fullscreen focus buttons / eagle row).
-   * Priority: dedicated recording from SPECIES_CALL_FILES if loaded, else the
-   * eagle hunt cry for eagle species, else the generic moa vocalisation.
-   */
+  // Play the call for a species (highlight-button click): a dedicated recording if
+  // loaded, else the eagle hunt cry for eagles, else the generic moa call.
   playSpeciesCall(speciesKey = null) {
     if (!this._checkCooldown('speciesCall')) return;
 
@@ -356,24 +315,17 @@ class AudioManager {
     this._playSound(this.sounds.moaMilestone, this._getVolume() * 0.55);
   }
 
-  /**
-   * Generic moa call (kept for existing call sites).
-   */
+  // Generic moa call (kept for existing call sites).
   playMoaCall() {
     this.playSpeciesCall(null);
   }
 
-  /**
-   * Eagle call — the hunt cry at button volume.
-   */
+  // Eagle call — the hunt cry at button volume.
   playEagleCall() {
     this.playSpeciesCall('haasts_eagle');
   }
   
-  /**
-   * Play season change sound
-   * @param {string} seasonKey - 'summer', 'autumn', 'winter', or 'spring'
-   */
+  // Play season change sound.
   playSeasonChange(seasonKey) {
     const sound = this.sounds.seasonChange[seasonKey];
     if (sound) {
@@ -381,33 +333,25 @@ class AudioManager {
     }
   }
   
-  /**
-   * Play eagle hunting sound
-   */
+  // Play eagle hunting sound.
   playEagleHunt() {
     if (!this._checkCooldown('eagleHunt')) return;
     this._playSound(this.sounds.eagleHunt, this._getVolume() * 0.7);
   }
   
-  /**
-   * Play eagle catch sound
-   */
+  // Play eagle catch sound.
   playEagleCatch() {
     this._playSound(this.sounds.eagleCatch, this._getVolume() * 0.8);
   }
   
-  /**
-   * Play win sound
-   */
+  // Play win sound.
   playWin() {
     // Stop background music for victory fanfare
     this.stopBackground();
     this._playSound(this.sounds.win, this._getVolume() * 0.9);
   }
   
-  /**
-   * Play loss sound
-   */
+  // Play loss sound.
   playLoss() {
     // Stop background music for defeat sound
     this.stopBackground();
@@ -418,35 +362,24 @@ class AudioManager {
   // VOLUME & SETTINGS
   // ============================================
   
-  /**
-   * Set master volume
-   * @param {number} volume - 0.0 to 1.0
-   */
+  // Set master volume (0..1).
   setMasterVolume(volume) {
     this.masterVolume = constrain(volume, 0, 1);
     this.updateBackgroundVolume();
   }
   
-  /**
-   * Set music volume
-   * @param {number} volume - 0.0 to 1.0
-   */
+  // Set music volume (0..1).
   setMusicVolume(volume) {
     this.musicVolume = constrain(volume, 0, 1);
     this.updateBackgroundVolume();
   }
   
-  /**
-   * Set SFX volume
-   * @param {number} volume - 0.0 to 1.0
-   */
+  // Set SFX volume (0..1).
   setSfxVolume(volume) {
     this.sfxVolume = constrain(volume, 0, 1);
   }
   
-  /**
-   * Toggle all audio
-   */
+  // Toggle all audio.
   toggleAudio() {
     this.enabled = !this.enabled;
     if (!this.enabled) {
@@ -457,9 +390,7 @@ class AudioManager {
     return this.enabled;
   }
   
-  /**
-   * Toggle music only
-   */
+  // Toggle music only.
   toggleMusic() {
     this.musicEnabled = !this.musicEnabled;
     if (!this.musicEnabled) {
@@ -470,26 +401,20 @@ class AudioManager {
     return this.musicEnabled;
   }
   
-  /**
-   * Toggle SFX only
-   */
+  // Toggle SFX only.
   toggleSfx() {
     this.sfxEnabled = !this.sfxEnabled;
     return this.sfxEnabled;
   }
   
-  /**
-   * Mute all audio temporarily (e.g., when tab loses focus)
-   */
+  // Mute all audio temporarily (e.g. when the tab loses focus).
   mute() {
     if (this.sounds.background && this.sounds.background.isPlaying()) {
       this.sounds.background.setVolume(0);
     }
   }
   
-  /**
-   * Unmute audio
-   */
+  // Unmute audio.
   unmute() {
     this.updateBackgroundVolume();
   }
@@ -498,17 +423,13 @@ class AudioManager {
 // Global audio manager instance
 let audioManager = null;
 
-/**
- * Initialize audio manager - call in setup()
- */
+// Initialize audio manager (call in setup()).
 function initAudioManager() {
   audioManager = new AudioManager();
   return audioManager;
 }
 
-/**
- * Load all audio - call in preload()
- */
+// Load all audio (call in preload()).
 function preloadAudio() {
   if (!audioManager) {
     audioManager = new AudioManager();

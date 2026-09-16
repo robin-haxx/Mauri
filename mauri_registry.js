@@ -22,12 +22,7 @@ class EntityRegistry {
   // Base types define the class and shared behavior
   // ==========================================
   
-  /**
-   * Register a base animal type (e.g., 'moa', 'eagle')
-   * @param {string} typeKey - Unique identifier for the type
-   * @param {object} config - Base configuration
-   * @param {class} behaviorClass - The class to instantiate
-   */
+  // Register a base animal type (e.g. 'moa', 'eagle').
   registerAnimalType(typeKey, config, behaviorClass) {
     this.animalTypes.set(typeKey, {
       key: typeKey,
@@ -44,9 +39,7 @@ class EntityRegistry {
     console.log(`Registered animal type: ${typeKey}`);
   }
   
-  /**
-   * Get a base animal type definition
-   */
+  // Get a base animal type definition.
   getAnimalType(typeKey) {
     return this.animalTypes.get(typeKey);
   }
@@ -56,12 +49,7 @@ class EntityRegistry {
   // Species are variations of base animal types
   // ==========================================
   
-  /**
-   * Register a species (variant of a base animal type)
-   * @param {string} speciesKey - Unique identifier (e.g., 'upland_moa')
-   * @param {string} baseType - The base animal type (e.g., 'moa')
-   * @param {object} speciesConfig - Species-specific overrides and additions
-   */
+  // Register a species (variant of a base animal type).
   registerSpecies(speciesKey, baseType, speciesConfig) {
     const baseAnimal = this.animalTypes.get(baseType);
     
@@ -94,9 +82,7 @@ class EntityRegistry {
     console.log(`Registered species: ${speciesKey} (${baseType})`);
   }
   
-  /**
-   * Deep merge two config objects, with source overriding base
-   */
+  // Deep merge two config objects, source overriding base.
   mergeConfigs(base, source) {
     const result = { ...base };
     
@@ -114,24 +100,18 @@ class EntityRegistry {
     return result;
   }
   
-  /**
-   * Get a species definition
-   */
+  // Get a species definition.
   getSpecies(speciesKey) {
     return this.species.get(speciesKey);
   }
   
-  /**
-   * Get all species of a given base type
-   */
+  // Get all species of a given base type.
   getSpeciesOfType(baseType) {
     const speciesKeys = this.speciesByType.get(baseType) || [];
     return speciesKeys.map(key => this.species.get(key));
   }
   
-  /**
-   * Create an instance of a species
-   */
+  // Create an instance of a species.
   createAnimal(speciesKey, x, y, terrain, gameConfig) {
     const species = this.species.get(speciesKey);
     
@@ -153,10 +133,7 @@ class EntityRegistry {
     return instance;
   }
   
-  /**
-   * Create a random species of a given type
-   * Respects rarity weights
-   */
+  // Create a random species of a type, respecting rarity weights.
   createRandomOfType(baseType, x, y, terrain, gameConfig, rarityWeights = null) {
     const speciesList = this.getSpeciesOfType(baseType);
     
@@ -273,9 +250,7 @@ class EntityRegistry {
   // UTILITIES
   // ==========================================
   
-  /**
-   * Get summary of all registered content
-   */
+  // Summary of all registered content.
   getSummary() {
     return {
       animalTypes: Array.from(this.animalTypes.keys()),
@@ -288,9 +263,7 @@ class EntityRegistry {
     };
   }
   
-  /**
-   * Validate that all required content is registered
-   */
+  // Validate that all required content is registered.
   validate() {
     const issues = [];
     

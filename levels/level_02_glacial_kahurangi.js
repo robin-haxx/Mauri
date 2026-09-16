@@ -1,10 +1,8 @@
 // ============================================
 // LEVEL 2: Kahurangi — Glacial Maximum (LGM)
-// Species variation across habitats + a scarce, contested forest.
-// No speciation. Four 2-season PHASES starting in spring: grow two founders
-// (emeid bush moa + Megalapteryx upland moa) using their favoured, browse-
-// resistant plants, then endure two glacial winters without losing either.
-// ~8 minutes total.
+// Species variation across habitats + a scarce, contested forest. No speciation.
+// Four 2-season phases: grow two founders (bush moa + upland moa) on their favoured
+// browse-resistant plants, then endure two glacial winters without losing either.
 // ============================================
 
 // The two founder populations the phases care about.
@@ -53,14 +51,13 @@ function gkGrowthUnmet(sim) {
 const LEVEL_GLACIAL_KAHURANGI = {
   id: 'glacial_kahurangi',
   name: 'Taihekenga Huka',
-  // Open for playtesting. To gate it behind Level 1 again, restore the line below:
+  // Open for playtesting; restore the line below to gate behind Level 1:
   // unlockCondition: (progress) => progress.levelsCompleted.includes('kahurangi'),
   unlockCondition: null,
 
-  // View: zoomed out ~50% vs the default 2.5 (shows ~1.5x the map units).
+  // Zoomed out ~50% vs the default 2.5.
   zoom: 1.667,
-  // The run opens in spring so the four 2-season phases read spring→summer,
-  // autumn→winter, spring→summer, autumn→winter.
+  // Opens in spring, so the four 2-season phases align to spring/autumn starts.
   startSeason: 'spring',
 
   terrain: {
@@ -75,9 +72,7 @@ const LEVEL_GLACIAL_KAHURANGI = {
     useLakes: false
   },
 
-  // Glacial biome bands: the forest is compressed into a thin refuge, while
-  // open glacial flats, shrubland and subalpine tussock dominate the country.
-  // Permanent ice starts low (0.80) rather than the interglacial 0.90.
+  // Glacial biome bands: the forest compressed into a thin refuge; ice starts low (0.80).
   biomes: {
     sea: {
       key: 'sea', name: "Sea", minElevation: 0, maxElevation: 0.10,
@@ -134,9 +129,8 @@ const LEVEL_GLACIAL_KAHURANGI = {
       'heavy_footed_moa'       // forest-edge Pachyornis — competes at the margin
     ],
     eagle: ['haasts_eagle'],
-    // Flighted forest birds — ambient population, seeded and bred like the moa but
-    // via the otherEntities path (mauri_kereru.js / mauri_kokako.js). They feed on
-    // the forestRefuge canopy (beech/rimu/fern) and thin with it in the glacial.
+    // Flighted forest birds: ambient population via the otherEntities path, feeding on
+    // the forestRefuge canopy and thinning with it in the glacial.
     other: ['kea','kaka','kokako']
   },
   startingSpecies: 'upland_moa',
@@ -154,13 +148,13 @@ const LEVEL_GLACIAL_KAHURANGI = {
     moa: 14,
     eagle: 1,
     kea: 4,
-    kaka: 4,     // founding flock — breeds up toward kereru maxPopulation (16)
-    kokako: 3      // founding birds — breeds up toward kokako maxPopulation (10)
+    kaka: 4,     // founding flock
+    kokako: 3      // founding birds
   },
 
   economy: {
     startingMauri: 60,
-    seasonDuration: 3200,        // 8 seasons x 3600 = ~8 minutes across 4 phases
+    seasonDuration: 3200,        // ~8 minutes across 4 phases
     eggIncubationTime: 600,
     securityTimeToLay: 900,
     securityTimeVariation: 300,
@@ -182,8 +176,7 @@ const LEVEL_GLACIAL_KAHURANGI = {
     Storm:     { cost: 40 }    // slot 6
   },
 
-  // Opt-in gameplay mechanics (read by mauri_moa.js / mauri_plant.js /
-  // mauri_seasons.js / mauri_simulation.js). Absent on other levels.
+  // Opt-in gameplay mechanics. Absent on other levels.
   mechanics: {
     // Moa foraging far outside their species niche burn extra energy — worse in winter.
     habitatStress: true,
@@ -199,24 +192,17 @@ const LEVEL_GLACIAL_KAHURANGI = {
     forestCompetitionPenalty: 0.18,
     winterCompetitionMult: 1.7,
 
-    // Favoured plants are FULLY exclusive to the species they belong to: a
-    // non-favoured moa gains NOTHING from them. Speargrass feeds only the upland
-    // moa, lancewood only the bush moa — the two founders never cross-feed, and
-    // competitors can't nibble the plots either. 0 = no benefit at all.
+    // Favoured plants are fully exclusive: speargrass feeds only the upland moa,
+    // lancewood only the bush moa. 0 = no benefit to any other moa.
     unfavouredBrowsePenalty: 0,
 
-    // Non-focal competitors are generalists: they get a bonus on the WILD
-    // background flora (any plant with no favouredSpecies) so they sustain
-    // themselves off the landscape instead of raiding the founders' plots. This
-    // is their niche edge. 1.0 = off; raise for hardier competitors.
+    // Non-focal competitors are generalists: a bonus on wild background flora so they
+    // feed off the landscape, not the founders' plots. 1.0 = off.
     nonFocalGeneralistBonus: 1.2,
 
     // ---- Measured reproduction ----------------------------------------------
-    // Soft carrying capacity: breeding readiness is full at/below breedingSoftCap
-    // total moa, then tapers toward breedingSuppressFloor as the population climbs
-    // to breedingCarryingCap. Flattens the unprompted spring boom; because it
-    // keys off live population it eases back off after a winter crash so the
-    // founders can still rebound. TUNE THESE against a benchmark run.
+    // Soft carrying capacity: breeding is full at/below breedingSoftCap, tapering to
+    // breedingSuppressFloor by breedingCarryingCap. Eases off after a winter crash.
     breedingSoftCap: 10,          // no suppression at/below this many moa
     breedingCarryingCap: 30,      // suppression bottoms out here
     breedingSuppressFloor: 0.12,  // min breeding rate at/above the carrying cap
@@ -226,39 +212,30 @@ const LEVEL_GLACIAL_KAHURANGI = {
     // Reproduction slows in the deep cold (ramped by winterness, not a cliff).
     winterBreedingCooldownMult: 2,
 
-    // Fixed cast: offspring always inherit the parent species (no random
-    // mutation to off-level moa). This level is about coexistence, not speciation.
+    // Fixed cast: offspring always inherit the parent species (no speciation).
     noSpeciation: true,
 
-    // The two founders the phases protect. Every OTHER moa is "non-focal" — a
-    // competitor that sustains itself a little better (breeds faster, favours its
-    // own kind more). See mauri_moa.js.
+    // The two founders the phases protect. Every other moa is non-focal.
     focalSpecies: ['little_bush_moa', 'upland_moa'],
 
     // Hard ceiling per moa species (stops any one competitor swamping the map).
     maxPerSpecies: 20,
 
-    // Population floors: the last N of these species can't be hunted or starved,
-    // so the species can't be wiped out below the floor.
+    // Population floors: the last N of these species can't be hunted or starved out.
     populationFloors: {
       south_island_giant_moa: 2,
       stout_legged_moa: 2,
       heavy_footed_moa: 2
     },
 
-    // Pulsing highlight on still-vulnerable founders until they recover past the
-    // threshold — light yellow for the bush moa, light grey for the Megalapteryx.
+    // Pulsing highlight on vulnerable founders until they recover past the threshold.
     vulnerableHighlight: {
       little_bush_moa: { color: [255, 250, 150], until: 5 },
       upland_moa:      { color: [220, 220, 232], until: 5 }
     },
 
-    // Emergent eagles: instead of a top-down controller setting the eagle count,
-    // each eagle holds a nest, feeds or starves on its own energy, and breeds with
-    // a varied drive. The population ebbs and flows from those births and deaths.
-    // TUNE THIS: the drive to reproduce is pulled toward a target eagle:moa RATIO,
-    // not a fixed eagle count. 1/6 ≈ one eagle per six moa. Raise it for more
-    // predation pressure, lower it for a lighter touch.
+    // Emergent eagles: each eagle feeds or starves on its own energy and breeds with
+    // a drive pulled toward a target eagle:moa ratio, not a fixed count.
     emergentEagles: true,
     eagleTargetRatio: 1 / 8,      // ← the main knob (one eagle per six moa)
     eagleMaxPopulation: 8,       // hard safety cap on total eagles
@@ -269,24 +246,20 @@ const LEVEL_GLACIAL_KAHURANGI = {
     eagleReproCooldown: 2600,     // ticks between clutches for one bird
     eagleReproCheckInterval: 220, // how often a calm, fed adult considers laying
     eagleMaturityAge: 1500,       // ticks before a hatchling can breed
-    eaglePreyPopThreshold: 12,    // eagles prioritise moa species with MORE than this many members (spares rare species)
+    eaglePreyPopThreshold: 12,    // eagles prioritise moa species with more than this many members
 
     // ---- Sexual eagle reproduction + Lotka-Volterra restraint ----
-    // The run starts as a breeding PAIR: the spawned founder plus one opposite-sex
-    // egg at a crag eyrie, hatching after startingEagleEggHatchTime ticks (~30s).
-    // A female only lays with a mature male within eagleMateRadius; if a sex is
-    // lost the line dies out (and the game is lost — see mauri_sketch.js).
+    // Starts as a breeding pair (founder + one opposite-sex egg). A female lays only
+    // with a mature male within eagleMateRadius; lose a sex and the line dies out.
     startingEagleEggHatchTime: 1800,  // ~30s at 60fps
     eagleMateRadius: 250,             // a female needs a mature male this close to lay
-    // Anti-overhunt: when eagles exceed the target eagle:moa ratio (e.g. after a
-    // sudden moa die-off), each bird tolerates this much extra hunger before
+    // Anti-overhunt: over the target ratio, each bird tolerates extra hunger before
     // hunting, so the surplus starves off instead of cropping the last herd.
     eagleOverhuntRestraint: 30,       // hunger added per unit of over-ratio surplus
     eagleRestraintCap: 45,            // max extra hunger tolerance (keeps them hunting eventually)
 
-    // Forest contraction: the productive tree band retreats (treeline drops) in
-    // the cold seasons; canopy trees above the band go unproductive/wilted.
-    // Lerped smoothly per frame like the snow line (no reclassification, no stutter).
+    // Forest contraction: the productive tree band retreats in the cold seasons,
+    // lerped smoothly per frame like the snow line.
     forestContraction: true,
     forestBand: { min: 0.36, max: 0.48 },
     forestBandBySeason: {
@@ -297,18 +270,15 @@ const LEVEL_GLACIAL_KAHURANGI = {
     }
   },
 
-  // Classic static-goal field kept empty so validation passes; the level is
-  // actually driven by `phases` below.
+  // Kept empty so validation passes; the level is driven by `phases` below.
   goals: [],
 
-  // Per-level final score. This phase level runs a fixed ~8 minutes, so it omits
-  // the default formula's time penalty and just rewards the surviving flock and
-  // total mauri earned. Tune freely — ctx = {moaCount, totalEarned, playTime,
-  // goalsCompleted, level}.
+  // Per-level final score: fixed ~8-min run, so no time penalty. ctx = {moaCount,
+  // totalEarned, playTime, goalsCompleted, level}.
   scoreFormula: (ctx) => (ctx.moaCount * (ctx.totalEarned * 0.001)) + 60,
 
-  // Four 2-season phases. Growth objectives are soft (reward only). Winter
-  // phases are lost if either founder population is wiped out.
+  // Four 2-season phases. Growth goals are soft (reward only); winter phases are
+  // lost if either founder is wiped out.
   phases: [
     {
       name: "Spring & Summer: Establish the founders",

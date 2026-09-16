@@ -1,29 +1,13 @@
 // ============================================================
 // KĀKĀ — the forest parrot  (extends Kereru)
-// ------------------------------------------------------------
-// Nestor meridionalis, kea's forest-dwelling sister species (both Nestor). A
-// strong flier of tall podocarp–beech forest: it works the canopy for fruit,
-// seeds, nectar and sap, and nests in cavities in big old trees. Mechanically it
-// is a Kereru — the same FLYING → FEEDING → PERCHED → lay loop, feeding at
-// FOREST_TREES (beech/rimu/fern) — so as the glacial forest refuge contracts, the
-// kākā are squeezed into it with the bush moa. That IS the forest-refuge pressure
-// the Free Play cycle is built on; no elevation logic needed (unlike its alpine
-// cousin the kea, which ranges high and drops down only in the cold).
-//
-// Two things make it a kākā, not a kererū:
-//   · DISPERSAL. Kākā are seed PREDATORS more than dispersers — they crush and eat
-//     seed and take nectar/sap — so _disperseChance is low (0.25) versus the
-//     kererū's 1.0. The forest still recruits where kākā go, but far less.
-//   · GREGARIOUS. Kākā are noisy, social flock birds. A gentle cohesion pulls a
-//     flying kākā toward nearby kākā, so they gather into loose foraging parties —
-//     the opposite of the kōkako's territorial spacing.
-//
-// Reproduction is the emergent, sexual Kereru loop (a fed, mature female with a
-// mate nearby lays). Class declared BEFORE its species object so KAKA_SPECIES's
-// `typeof Kaka` guard doesn't hit the class's temporal dead zone.
-//
-// Placeholder art: a drawn glyph — olive-brown body, grey crown, crimson underwing
-// flash and reddish belly. Wire real art via EntitySprites.getKakaSprite later.
+// Nestor meridionalis, kea's forest-dwelling sister. A strong flier of podocarp-
+// beech forest. Mechanically a Kereru (same FLYING → FEEDING → PERCHED → lay loop,
+// feeding at FOREST_TREES), so the contracting glacial forest refuge squeezes the
+// kākā in with the bush moa. Two differences from the kererū:
+//   · DISPERSAL. A seed predator more than disperser, so _disperseChance is low
+//     (0.25 vs the kererū's 1.0).
+//   · GREGARIOUS. A gentle cohesion pulls flying kākā together into foraging parties.
+// Class declared before its species object so KAKA_SPECIES's typeof guard is safe.
 // ============================================================
 
 class Kaka extends Kereru {
@@ -35,10 +19,8 @@ class Kaka extends Kereru {
     this._flockPull = sp.flockPull ?? 0.35;
   }
 
-  // Gregarious: after the base state machine steers, a flying kākā drifts gently
-  // toward the centroid of nearby kākā, so the flock gathers into loose parties.
-  // Weak (below the forage-seek weight) so a bird still peels off to feed, and
-  // skipped while storm-grounded so shelter isn't fought.
+  // Gregarious: a flying kākā drifts toward the centroid of nearby kākā. Weak (below
+  // forage-seek) so a bird still peels off to feed; skipped while storm-grounded.
   behave(sim, mauri, seasonManager, dt) {
     super.behave(sim, mauri, seasonManager, dt);
     if (!this._grounded && !this._fleeingStorm && this.state === KERERU_STATE.FLYING) {
@@ -47,8 +29,7 @@ class Kaka extends Kereru {
     }
   }
 
-  // Centroid of living flockmates within _flockRadius (excluding self), or null if
-  // none near. A direct list scan — the flock is small and only checked while flying.
+  // Centroid of living flockmates within _flockRadius (excluding self), or null.
   _flockCentroid(sim) {
     const list = sim.otherEntities && sim.otherEntities[this.speciesKey];
     if (!list) return null;
@@ -71,8 +52,7 @@ class Kaka extends Kereru {
 }
 
 // ------------------------------------------------------------
-// SPECIES DATA — Nestor meridionalis. Registered as its own base type + species in
-// initializeRegistry (mauri_sketch.js), carrying class: Kaka.
+// SPECIES DATA — Nestor meridionalis. Registered in initializeRegistry.
 // ------------------------------------------------------------
 const KAKA_SPECIES = {
   displayName:    'Kākā',
@@ -81,10 +61,9 @@ const KAKA_SPECIES = {
   class:          (typeof Kaka !== 'undefined') ? Kaka : undefined,
   description:    'The forest parrot — a gregarious podocarp-forest bird, the kea\'s forest-dwelling sister.',
   rarity:         'uncommon',
-  highlightColor: [250, 150, 90],   // bright warm orange — player highlight (pulse + UI border)
+  highlightColor: [250, 150, 90],   // warm orange; player highlight
 
-  // Movement / render — a strong forest flier, wider-ranging than the kererū's
-  // short hops, but still BELOW the eagle's hunt speed so a chase resolves.
+  // Movement / render: a strong forest flier, but below eagle hunt speed so chases resolve.
   baseSpeed:        0.34,
   maxForce:         0.055,
   size:             8,
@@ -96,24 +75,21 @@ const KAKA_SPECIES = {
   feedRadius:       130,
   homeLeash:        0,      // free-ranging within the forest
 
-  // Forest frugivore (inherits the base FOREST_TREES search — beech/rimu/fern), but
-  // a poor disperser: it crushes seed and takes nectar/sap more than it plants forest.
+  // Forest frugivore (inherits FOREST_TREES search), but a poor disperser.
   cropCapacity:     1,
   feedSec:          5,
   disperseEverySec: 20,
   restSec:          7,
   disperseChance:   0.25,   // seed predator > disperser (kererū is 1.0)
 
-  // Survival — tuned so a flock WITH podocarp forest to feed in holds through winter
-  // rather than dwindling: a gentler hunger burn, a fuller feed, and slower to starve.
-  // (A small static populationFloor in the Free Play level also stops a total die-off.)
+  // Survival — tuned so a flock with forest to feed in holds through winter.
   maxHunger:        100,
   hungerRatePerSec: 0.95,
   feedRelief:       78,
   starveSec:        26,
 
   maturitySec:      22,
-  eggCooldownSec:   32,     // breeds a little more readily than the kererū base (was 40)
+  eggCooldownSec:   32,     // breeds a little more readily than the kererū base
   mateRadius:       200,
   reproCheckSec:    3.5,
   maxPopulation:    14,
@@ -124,7 +100,7 @@ const KAKA_SPECIES = {
   flockPull:        0.35
 };
 
-// Register the kākā as a flighted-bird type (routes egg hatch + the render pass).
+// Register the kākā as a flighted-bird type.
 if (typeof FLYER_TYPES !== 'undefined') FLYER_TYPES.add('kaka');
 
 if (typeof window !== 'undefined') {

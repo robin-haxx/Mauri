@@ -92,16 +92,13 @@ const LEVEL_REGISTRY = {
 };
 
 // ============================================
-// FINAL SCORE (detached from the sketch, tunable per level)
+// FINAL SCORE (tunable per level)
 // ============================================
-// A level may define `scoreFormula(ctx)` to compute its own final score. When it
-// doesn't, defaultLevelScore is used. ctx = {
-//   moaCount, totalEarned, playTime (frames), goalsCompleted, level }
-// Keep formulas pure (no side effects) so the WON screen and the recorded score
-// always agree.
+// A level may define `scoreFormula(ctx)` for its own final score; otherwise
+// defaultLevelScore is used. ctx = { moaCount, totalEarned, playTime (frames),
+// goalsCompleted, level }. Keep formulas pure.
 function defaultLevelScore(ctx) {
-  // Rewards a healthy final flock and total mauri earned; a mild penalty for
-  // taking a long time. (Matches the legacy static-goal formula.)
+  // Rewards final flock and mauri earned, with a mild time penalty.
   return (ctx.moaCount * (ctx.totalEarned * 0.001)) - ((ctx.playTime / 60) - 240) + 60;
 }
 
@@ -112,7 +109,7 @@ function computeLevelScore(level, ctx) {
   return Math.round(s);
 }
 
-// Default values that levels can omit to use these
+// Defaults a level can omit.
 const LEVEL_DEFAULTS = {
   terrain: {
     noiseScale: 0.005,
@@ -143,16 +140,14 @@ const LEVEL_DEFAULTS = {
 
 // Merge a level definition with defaults (level values win)
 function resolveLevelDef(levelDef) {
-  // Only deep-clone the plain-data parts
   const resolved = {};
-  
-  // Copy all top-level properties by reference first
-  // (this preserves functions, arrays of objects with functions, etc.)
+
+  // Copy top-level properties by reference (preserves functions).
   for (const key in levelDef) {
     resolved[key] = levelDef[key];
   }
-  
-  // Deep-merge only the plain-data objects that have no functions
+
+  // Deep-merge the plain-data objects.
   resolved.terrain = Object.assign(
     {}, LEVEL_DEFAULTS.terrain, levelDef.terrain || {}
   );
@@ -163,8 +158,7 @@ function resolveLevelDef(levelDef) {
     {}, LEVEL_DEFAULTS.initialEntityCounts, levelDef.initialEntityCounts || {}
   );
 
-  // Goals array is kept by reference — functions intact
-  // (already copied above, but being explicit)
+  // Goals array kept by reference (functions intact).
   resolved.goals = levelDef.goals;
 
   // Resolve placeable overrides onto base PLACEABLES

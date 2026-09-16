@@ -28,7 +28,7 @@ const FOREST_TREES = new Set(['beech', 'rimu', 'fern']);
 
 // Free Play winter-inedibility tuning (read only when LEVEL_MECHANICS.winterInedibility).
 // A deepening glacial (coldIndex) erodes each plant's winter food floor; below the
-// threshold a plant is standing scenery, not forage. See FREEPLAY_PLAN.md §4.2.
+// threshold a plant is standing scenery, not forage.
 const PLANT_CLIMATE_EDIBILITY_EROSION = 0.8;   // how hard coldIndex erodes the floor
 const PLANT_INEDIBLE_THRESHOLD = 3;            // nutrition below this => skipped as food
 
@@ -39,10 +39,8 @@ function initPlantSprites(sprites) {
   PLANT_SPRITES = sprites;
 }
 
-// Portrait-sprite plants: each has 2 alternate sprites (in PORTRAIT_PLANT_SPRITES[type]),
-// one picked at random per plant. Unlike the state-based sprites above these are
-// portrait-oriented and anchored at bottom-centre (the base sits on the ground point),
-// so they get a dedicated render path.
+// Portrait-sprite plants: 2 alternate sprites each, one picked at random, anchored at
+// bottom-centre (the base sits on the ground point), via a dedicated render path.
 const PORTRAIT_PLANTS = new Set(['rimu', 'beech', 'dracophyllum', 'matagouri']);
 let PORTRAIT_PLANT_SPRITES = null;
 
@@ -213,8 +211,7 @@ class Plant {
     // Check if this plant uses sprites
     this.usesSprites = SPRITE_PLANTS.has(type);
 
-    // Portrait-sprite plants pick one of their 2 variants at random (fixed for
-    // the plant's lifetime) and render via the dedicated bottom-centre path.
+    // Portrait-sprite plants pick one of 2 variants at random (fixed for life).
     this.usesPortraitSprite = PORTRAIT_PLANTS.has(type);
     this.portraitVariant = this.usesPortraitSprite ? floor(random(2)) : 0;
     
@@ -266,9 +263,8 @@ class Plant {
       return;
     }
     
-    // Forest contraction: canopy trees outside the (seasonally shrinking) forest
-    // band become unproductive/wilted. O(1) per plant against a per-frame lerped
-    // band — no biome reclassification, so no stutter.
+    // Forest contraction: canopy trees outside the shrinking forest band go
+    // unproductive/wilted. O(1) per plant against a per-frame lerped band.
     if (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.forestContraction
         && FOREST_TREES.has(this.type)) {
       const band = seasonManager.getForestBand();
@@ -298,10 +294,8 @@ class Plant {
 
     this.handleGrowth();
 
-    // Free Play: winter takes FOOD VALUE, not the plant. A wild plant stays alive and
-    // standing (rendered frosted) but its nutrition drops to its winter floor, eroded
-    // by the deepening glacial. Only grazing removes a plant — never the cold. (Placeable-
-    // spawned food is exempt above: a tended grove stays a winter lifeline.)
+    // Free Play: winter takes food value, not the plant. A wild plant stays standing
+    // (frosted) but its nutrition drops to its winter floor. Placeable food is exempt.
     if (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.winterInedibility) {
       this._applyWinterEdibility(seasonManager);
     } else {
@@ -309,16 +303,12 @@ class Plant {
     }
   }
 
-  // Standing-but-inedible winter model (see FREEPLAY_PLAN.md §4.2 / MISTAKES.md).
-  // Blends the season-computed nutrition toward a per-type winter floor by winterness,
-  // then flags the plant unforageable when that floor falls below the threshold. Never
-  // touches `alive` — the plant persists as frosted cover.
+  // Standing-but-inedible winter model. Blends nutrition toward a per-type winter floor
+  // by winterness, and flags the plant unforageable below the threshold. Never touches alive.
   _applyWinterEdibility(seasonManager) {
     const w = seasonManager.getWinterness ? seasonManager.getWinterness() : 0;
     if (w <= 0) { this.winterInedible = false; return; }
-    // Mast year: the podocarp forest fruits abundantly, so forest plants keep their
-    // food value right through the cold — the boom that feeds the fruit-birds and the
-    // browsers. (Growth is surged in mauri_seasons.js getPlantTypeModifier.)
+    // Mast year: forest plants keep their food value through the cold.
     if (seasonManager.mastYear && typeof FOREST_TREES !== 'undefined' && FOREST_TREES.has(this.type)) {
       this.winterInedible = false; return;
     }
@@ -452,17 +442,12 @@ class Plant {
     
     if (displaySize < 2) return;
 
-    // Food-value fade (GL only — 2D's tint() is the slow per-draw path): a plant dims
-    // toward drab as its LIVE nutrition falls, so "standing food with nothing in it"
-    // becomes visible. Beech holds its winter value and stays green while rimu/tussock
-    // grey out around it — the forest refuge reads as the last green in a hard winter.
-    // Skipped for dormant plants (they already render frosted). See GL_PORT.md.
+    // Food-value fade (GL only): a plant dims toward drab as its live nutrition falls, so
+    // "standing food with nothing in it" reads visibly. Skipped for dormant plants.
     let _faded = false;
     if (!dormant && typeof GLBatch !== 'undefined' && GLBatch.enabled && GLBatch._open) {
-      // Fade by ABSOLUTE current food value against a "worthwhile browse" band, not by
-      // fraction-of-own-max — so a plant that HOLDS its winter value (beech) stays green
-      // while one whose value collapses (rimu, tussock in the cold) greys out, and every
-      // healthy summer plant stays vivid. GOOD_HI≈a decent feed, GOOD_LO≈near inedible.
+      // Fade by absolute food value against a "worthwhile browse" band, so a plant that
+      // holds its value (beech) stays green while a collapsing one greys out.
       const GOOD_LO = 1.5, GOOD_HI = 6.5;
       let fade = Math.max(0, Math.min(1, (GOOD_HI - (this.nutrition || 0)) / (GOOD_HI - GOOD_LO)));
       if (this.winterInedible) fade = Math.max(fade, 0.85);
@@ -500,9 +485,8 @@ class Plant {
       return;
     }
 
-    // Crossfade on a sprite-state change (mature↔wilting↔thriving as the season turns) so
-    // trees don't hard-flick between frames. Keep the OUTGOING sprite and blend it out
-    // under the incoming one over ~0.5s; frameCount-based so it advances once per frame.
+    // Crossfade on a sprite-state change so trees don't hard-flick: blend the outgoing
+    // sprite out under the incoming one over ~0.5s.
     if (spriteState !== this._spriteState) {
       if (this._spriteState !== undefined && this._lastSprite && this._lastSprite !== sprite) {
         this._fadeSprite = this._lastSprite;
@@ -530,18 +514,15 @@ class Plant {
 
     const halfSize = spriteSize * 0.5;
 
-    // Sway as a cheap sub-pixel horizontal offset rather than a per-plant
-    // push/translate/rotate/pop. With thousands of plants on screen that matrix
-    // churn was the dominant render cost; at the sway's tiny amplitude (max
-    // ~0.05 rad) an x-offset reads the same as a base-pivot rotation.
+    // Sway as a cheap sub-pixel x-offset rather than a per-plant push/rotate/pop, which
+    // was the dominant render cost with thousands of plants on screen.
     let drawX = px - halfSize;
     if (!dormant && this.seasonalModifier > 0.1) {
       drawX += PlantStatics.getSway(frameCount, this.swayPhase, this.seasonalModifier) * halfSize;
     }
     const dy = py - halfSize;
     if (this._fadeSprite && fadeT < 1) {
-      // Outgoing sprite fades out beneath the incoming one fading in (a true crossfade).
-      // (During the ~0.5s blend the per-plant food-value tint is momentarily skipped.)
+      // Outgoing sprite fades out beneath the incoming one (a true crossfade).
       tint(255, (1 - fadeT) * 255);
       image(this._fadeSprite, drawX, dy, spriteSize, spriteSize);
       tint(255, fadeT * 255);
@@ -559,9 +540,7 @@ class Plant {
   
   // ============================================
   // PORTRAIT SPRITE RENDERING
-  // Bottom-centre anchored, aspect-ratio preserved. The world point (px, py)
-  // sits at the base of the sprite (x = w*0.5, y = 0 from the base) so the
-  // plant stands up from the ground rather than being centred on it.
+  // Bottom-centre anchored, aspect preserved: (px, py) sits at the base of the sprite.
   // ============================================
 
   _renderPortraitSprite(px, py, displaySize, dormant) {
@@ -578,8 +557,7 @@ class Plant {
       { alpha: dormant ? 0.05 : 0.10, squash: 0.5, wide: 0.82,
         fbW: displaySize * 1.2, fbH: displaySize * 0.6 });
 
-    // Width follows displaySize (footprint), height follows the sprite's aspect
-    // ratio so portrait art keeps its proportions.
+    // Width follows displaySize; height follows the sprite's aspect ratio.
     let spriteW = displaySize;
     if (this.growth < 0.5) {
       spriteW = displaySize * (0.5 + this.growth);

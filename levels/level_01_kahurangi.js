@@ -72,12 +72,10 @@ const LEVEL_KAHURANGI = {
   },
   startingSpecies: 'upland_moa',
 
-  // Calendar: open in spring so the first autumn (and its "Seasons Turn"
-  // tutorial moment) lands mid-level rather than immediately.
+  // Open in spring so the first autumn lands mid-level.
   startSeason: 'spring',
 
-  // One spawned founder eagle; the emergent-eagle system adds an opposite-sex
-  // founder egg at a crag eyrie (~30s hatch), completing the breeding pair.
+  // One founder eagle; the emergent system adds an opposite-sex founder egg (~30s hatch).
   initialEntityCounts: {
     moa: 6,
     eagle: 1,
@@ -92,19 +90,14 @@ const LEVEL_KAHURANGI = {
     securityTimeToLay: 1600,
     securityTimeVariation: 400,
     layingHungerThreshold: 28,
-    eagleSpawnMilestones: [],   // eagles are driven by predator-prey coupling (mechanics below)
+    eagleSpawnMilestones: [],   // eagles are driven by predator-prey coupling
     maxPopulation: 40
   },
 
-  // Emergent eagles (same system as level 2): no top-down spawn controller.
-  // Each bird holds a nest, feeds or starves on its own energy budget, and a
-  // fed female lays when a mature male is near — with the drive pulled toward
-  // the target eagle:moa ratio. Tuning copied from level 2, capped lower for
-  // the short 4-minute run.
+  // Emergent eagles (as level 2): each bird feeds or starves on its own budget and
+  // a fed female lays with a mature male near, pulled toward the target eagle:moa ratio.
   mechanics: {
-    // Diminishing hatch rewards: full mauri (10) while the flock is 15 or
-    // fewer, a token 5 up to 20, nothing beyond — late growth toward the
-    // 30-moa bonus is its own reward rather than a mauri faucet.
+    // Diminishing hatch rewards: full mauri up to 15, a token up to 20, nothing beyond.
     hatchReward: { full: 15, reduced: 20, reducedAmount: 5 },
 
     emergentEagles: true,
@@ -136,14 +129,11 @@ const LEVEL_KAHURANGI = {
     Storm:     { cost: 35 }    // slot 6 — storm
   },
 
-  // The level runs to a fixed 4:00 end (timeLimit below); goals are rewards
-  // along the way, not the win condition. The population goal is a bonus.
+  // Runs to a fixed 4:00 end (timeLimit); goals are rewards along the way, not the win.
   timeLimit: 14400,   // 4 minutes @ 60fps
 
-  // Losing the Upland Moa is losing the level: hatch mutations can spawn
-  // cousin species, but they can't carry the sim to a win on their own.
-  // Grace period while an upland-line egg (parentSpecies upland or unset,
-  // which hatches upland by default) is still incubating.
+  // Losing the Upland Moa loses the level, with a grace period while an upland-line
+  // egg is still incubating.
   fail: (sim) => {
     if (sim.getCachedSpeciesCount('upland_moa') > 0) return false;
     for (let i = 0; i < sim.eggs.length; i++) {
@@ -183,7 +173,7 @@ const LEVEL_KAHURANGI = {
 
     // The system renders a plain background if paths are missing or images fail to load.
     art: {
-      // Dimensions of the core illustration in pixels (the "safe zone" visible at all ratios)
+      // Core illustration size in px (safe zone visible at all ratios)
       coreWidth: 1600,
       coreHeight: 1080,
 

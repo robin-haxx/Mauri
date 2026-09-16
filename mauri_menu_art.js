@@ -1,8 +1,7 @@
 // ============================================
 // MENU ART MANAGER
-// Handles illustration layers for level start screens.
-// Supports core + wings (widescreen) + bleed (tall) layout.
-// Falls back gracefully when no art is configured.
+// Illustration layers for level start screens: core + wings (widescreen) + bleed
+// (tall). Falls back to a plain background when no art is configured.
 // ============================================
 
 class MenuArtManager {
@@ -15,11 +14,7 @@ class MenuArtManager {
     this.bgColor = [25, 35, 30];
   }
 
-  /**
-   * Load illustration assets for a level.
-   * Call this from Game.loadLevel() after resolving the level def.
-   * If no art config exists, the manager renders a plain background.
-   */
+  // Load illustration assets for a level; renders a plain background if none configured.
   loadForLevel(levelDef) {
     const artConfig = levelDef?.menu?.art;
 
@@ -78,12 +73,7 @@ class MenuArtManager {
     }
   }
 
-  /**
-   * Render the illustration behind menu UI elements.
-   * Call this at the start of renderMenu(), before any text/buttons.
-   * @param {number} canvasW - Current canvas width
-   * @param {number} canvasH - Current canvas height
-   */
+  // Render the illustration behind menu UI elements.
   render(canvasW, canvasH) {
     // Always fill background colour first (covers entire canvas)
     noStroke();
@@ -186,9 +176,7 @@ class MenuArtManager {
     this._renderTextProtection(canvasW, canvasH);
   }
 
-  /**
-   * Subtle edge darkening matching the original menu style.
-   */
+  // Subtle edge darkening.
   _renderVignette(w, h) {
     noStroke();
     for (let i = 0; i < 5; i++) {
@@ -197,10 +185,7 @@ class MenuArtManager {
     }
   }
 
-  /**
-   * Dark overlays behind key UI zones so text stays readable
-   * over detailed illustrations.
-   */
+  // Dark overlays behind key UI zones so text stays readable.
   _renderTextProtection(w, h) {
     const centerY = h / 2;
     noStroke();
@@ -218,10 +203,7 @@ class MenuArtManager {
     rect(0, centerY + 200, w, 120);
   }
 
-  /**
-   * Graduated fade from illustration edge to background colour.
-   * @param {string} direction - 'left', 'right', 'top', or 'bottom'
-   */
+  // Graduated fade from illustration edge to background colour.
   _renderEdgeFade(x, y, w, h, direction) {
     const steps = 20;
     noStroke();
@@ -249,9 +231,7 @@ class MenuArtManager {
     }
   }
 
-  /**
-   * Release loaded images and reset state.
-   */
+  // Release loaded images and reset state.
   clear() {
     this.images = {};
     this.loaded = false;

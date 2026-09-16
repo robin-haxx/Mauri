@@ -31,16 +31,12 @@ class HaastsEagle extends Boid {
     this.lastTargetTime = 0;
     this._huntEventFired = false;
 
-    // Tutorial grace: while > 0 the bird still chases (so the threat reads on
-    // screen) but circles at reduced speed and cannot strike. Set by the
-    // eagle_hunting tutorial tip so a first-time player has a real window to
-    // select and place a storm/shelter after dismissing the tip. Ticks down
-    // only during hunts, i.e. only in unpaused play.
+    // Tutorial grace: while > 0 the bird chases (so the threat reads) but circles slower
+    // and can't strike, giving a first-time player a window to react. Ticks down only in hunts.
     this.tutorialGraceTimer = 0;
 
-    // Strike windup: every fresh lock-on starts a short timer before a catch
-    // can land, so a moa (and the player) always gets a beat to react — even
-    // when the hunt begins at point-blank range.
+    // Strike windup: every fresh lock-on starts a short timer before a catch can land,
+    // so prey always gets a beat to react.
     this.huntWindupTimer = 0;
     this.huntWindupDuration = 60;   // ~1 second @60fps
     
@@ -67,11 +63,8 @@ class HaastsEagle extends Boid {
     this.relocateTarget = null;
     this.relocateTimer = 0;
 
-    // Chase-loop (flighted-bird pursuit quirk). Occasionally an eagle chasing a
-    // FLIGHTED bird (kōkako / kākā / kea / kererū) gets stuck in a pursuit loop:
-    // it matches the bird's fleeing pace instead of closing (so the gap holds and
-    // no strike lands), then peels off and turns back, over and over, unable to
-    // commit. Never happens to moa. See _startChaseLoop / _runChaseLoop (mauri_eagle).
+    // Chase-loop (flighted-bird pursuit quirk): occasionally an eagle chasing a flyer
+    // matches its pace and repeatedly turns back rather than closing. Never for moa.
     this._chaseLoop = null;   // { target, phase:'match'|'turn', timer, reps } while active
     this._chaseLoopChance = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS &&
       LEVEL_MECHANICS.eagleChaseLoopChance != null) ? LEVEL_MECHANICS.eagleChaseLoopChance : 0.35;
@@ -89,26 +82,21 @@ class HaastsEagle extends Boid {
     this._separationForce = createVector();
     this._relocateTargetVec = createVector();
 
-    // Alive flag — emergent eagles can die of starvation and be cleaned up
-    // like moa (the classic controller never needed this).
+    // Alive flag — emergent eagles can die of starvation and be cleaned up like moa.
     this.alive = true;
 
-    // Sex. Emergent reproduction is sexual: a female only lays with a mature male
-    // nearby, so the founding pair matters and losing a sex means eventual
-    // extinction. Founder/starting-egg sexes are set explicitly by the simulation.
+    // Sex. Emergent reproduction is sexual: a female lays only with a mature male near,
+    // so losing a sex means eventual extinction.
     this.isFemale = random() < 0.5;
 
     // ---- Emergent population model (opt-in via LEVEL_MECHANICS.emergentEagles) ----
-    // When on, an eagle's numbers are NOT set by a top-down controller: each bird
-    // holds a fixed nest, feeds or starves on its own energy budget, and breeds
-    // with a varied drive scaled to prey abundance. Population ebbs and flows from
-    // these individual births and deaths.
+    // Each bird holds a nest, feeds or starves on its own energy, and breeds with a
+    // varied drive scaled to prey abundance. Population ebbs from these births and deaths.
     const M = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS) ? LEVEL_MECHANICS : {};
     this.emergent = !!M.emergentEagles;
 
-    // Nest: a fixed home site (a crag eyrie, or a large tree) the bird patrols
-    // around and returns to after feeding. Placed precisely by the simulation
-    // (Simulation._assignEagleNest); defaults to the spawn point until then.
+    // Nest: a fixed home site the bird patrols around and returns to. Placed by the
+    // simulation; defaults to the spawn point until then.
     this.nest = createVector(x, y);
 
     // Age & maturity — hatchlings must mature before they can breed.
@@ -123,23 +111,19 @@ class HaastsEagle extends Boid {
     this.starveThreshold = M.eagleStarveThreshold ?? 85;
     this.starveTimeout = M.eagleStarveTimeout ?? 900;
 
-    // Reproduction: a *varied* per-bird drive, gated on being well-fed, mature,
-    // and off cooldown, with a rate that scales by how far below the target
-    // eagle:moa ratio the population currently sits (see _tryReproduce).
+    // Reproduction: a varied per-bird drive, gated on being well-fed, mature, and off
+    // cooldown, scaled by how far below the target eagle:moa ratio (see _tryReproduce).
     this.reproDrive = random(0.6, 1.4);
     this.reproCooldown = 0;
     this.reproCheckInterval = M.eagleReproCheckInterval ?? 220;
     this.reproCheckTimer = random(0, this.reproCheckInterval);
 
-    // Pair bond: emergent birds hold a partner so a mated pair keeps a *shared*
-    // territory. Without this each bird chases prey and relocates its own nest
-    // independently, the two drift beyond eagleMateRadius, and the female can
-    // never find a mate to lay with — so reproduction silently stalls.
+    // Pair bond: emergent birds hold a partner so a mated pair keeps a shared territory
+    // (else they drift beyond eagleMateRadius and reproduction stalls).
     this.partner = null;
 
     if (this.emergent) {
-      // Emergent birds metabolise a little faster so the population visibly ebbs
-      // across a season instead of coasting indefinitely.
+      // Emergent birds metabolise faster so the population visibly ebbs across a season.
       this.hungerRate = M.eagleHungerRate ?? 0.03;
     }
   }
@@ -221,12 +205,9 @@ class HaastsEagle extends Boid {
     this.applyForce(sep);
     this.applyForce(this.avoidEdges());
     
-    // Lotka-Volterra predation restraint: when the flock already sits at or
-    // above the target eagle:moa ratio (i.e. there are more predators than the
-    // prey base supports), each bird tolerates more hunger before hunting. So a
-    // sudden moa die-off — which makes the population instantly "over target" —
-    // is met with restraint rather than the last herd being cropped to zero; the
-    // surplus predators thin out by starvation instead, tracking prey with a lag.
+    // Lotka-Volterra predation restraint: over the target eagle:moa ratio, each bird
+    // tolerates more hunger before hunting, so a moa die-off thins the surplus predators
+    // by starvation instead of cropping the last herd.
     let _huntThresh = this.huntThreshold;
     if (this.emergent) {
       const _M = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS) ? LEVEL_MECHANICS : {};
@@ -375,17 +356,15 @@ class HaastsEagle extends Boid {
       this.patrolCenter.y + sin(this.patrolAngle) * this.patrolRadius
     );
     
-    // Readability: seek the orbit point a little harder and wander less, so the
-    // eagle traces a clear circle around its nest/site rather than drifting about.
+    // Seek the orbit point harder and wander less, so the eagle traces a clear circle.
     this.applyForce(this.seek(this._targetVec, 0.55));
 
     const wander = this.wander();
     wander.mult(0.12);
     this.applyForce(wander);
 
-    // Gentler, less frequent random re-centring — the patrol holds its ground so the
-    // player can read where an eagle is guarding (the site-follow logic still moves it
-    // deliberately when the prey/nests move).
+    // Gentle, infrequent random re-centring, so the patrol holds its ground and the
+    // player can read where an eagle is guarding.
     this._driftTimer += dt;
     if (this._driftTimer >= 420) {
       this._driftTimer -= 420;
@@ -401,10 +380,8 @@ class HaastsEagle extends Boid {
     const wander = this.wander();
     wander.mult(0.15);
     this.applyForce(wander);
-    // Arrival radius here is what stops the post-kill "spin": without it the
-    // seek has no target-speed ramp, so once the bird reaches its nest it
-    // overshoots and whips back and forth across the point (a tight spin) for
-    // the rest of the rest timer. Easing down inside 45px lets it settle.
+    // Arrival radius stops the post-kill "spin": without the target-speed ramp the bird
+    // overshoots its nest and whips back and forth. Easing down inside 45px lets it settle.
     this.applyForce(this.seek(this.patrolCenter, 0.2, 45));
 
     this.edges();
@@ -438,18 +415,16 @@ class HaastsEagle extends Boid {
       if (simulation.isSpeciesProtected && simulation.isSpeciesProtected(moa.speciesKey)) continue; // never target a protected floor species
       if (moa.inShelter && this.target !== moa) continue;
       if (moa.eagleResistance > 0 && random() < moa.eagleResistance) continue;
-      // Camouflage: chance the eagle simply doesn't spot this moa during a
-      // scan. Once a moa IS spotted (current target) camo no longer hides it —
-      // camouflage makes prey harder to find, not harder to chase.
+      // Camouflage: chance the eagle doesn't spot this moa during a scan. Once it's the
+      // current target camo no longer hides it (harder to find, not harder to chase).
       if (moa.camouflage > 0 && this.target !== moa && random() < moa.camouflage) continue;
 
       const dx = moa.pos.x - px;
       const dy = moa.pos.y - py;
       const dSq = dx * dx + dy * dy;
 
-      // Prefer abundant prey: a species at/below the threshold is "protected" —
-      // its members feel much farther away, so eagles crop common species and
-      // spare rare ones (this breaks the moa death-spiral when things turn cold).
+      // Prefer abundant prey: a species at/below the threshold feels much farther away, so
+      // eagles crop common species and spare rare ones (breaks the moa death-spiral).
       let eff = dSq;
       if (this.emergent && simulation.getCachedSpeciesCount &&
           simulation.getCachedSpeciesCount(moa.speciesKey) <= _preyThreshold) {
@@ -463,12 +438,9 @@ class HaastsEagle extends Boid {
       }
     }
     
-    // LINK 4 — opportunistic predation on FLIGHTED birds (kea/kākā/kererū/kōkako). Moa
-    // are always the preferred prey; a HUNGRY eagle (hunger past eagleFlyerHungerGate)
-    // also considers any flyer in range, which "feels" eagleFlyerPreyPenalty× farther so
-    // it's taken only when it's the easy option (near, or no moa about). The bird itself
-    // is the target, never its nest/eggs. Grounded birds (kākāpō, isFlyer=false) are NOT
-    // eligible — they freeze and rely on camouflage. Gated by eagleHuntsFlyers.
+    // Opportunistic predation on flighted birds. Moa are always preferred; a hungry eagle
+    // (past eagleFlyerHungerGate) also considers any flyer in range, felt eagleFlyerPreyPenalty×
+    // farther so it's taken only when easy. Grounded kākāpō are exempt. Gated by eagleHuntsFlyers.
     let target = nearestMoa, targetDistSq = nearestDistSq, targetEff = nearestEff, targetIsFlyer = false;
     if (_M.eagleHuntsFlyers && this.hunger >= (_M.eagleFlyerHungerGate ?? 55)) {
       const penalty = _M.eagleFlyerPreyPenalty ?? 1.7;
@@ -496,8 +468,7 @@ class HaastsEagle extends Boid {
       this.huntSearchTimer = 0;
       this.lastTargetTime = frameCount;
 
-      // Fresh lock-on: arm the strike windup (see constructor) so the catch
-      // can't land in the very first moments of a hunt.
+      // Fresh lock-on: arm the strike windup so the catch can't land in the first moments.
       if (hadNoTarget) this.huntWindupTimer = this.huntWindupDuration;
 
       if (hadNoTarget && !this._huntEventFired) {
@@ -506,9 +477,8 @@ class HaastsEagle extends Boid {
         if (audioManager) audioManager.playEagleHunt();
       }
 
-      // Chase-loop quirk (flighted birds only). On a fresh lock onto a flyer there's
-      // a small chance the eagle falls into a pursuit loop — matching the bird's pace
-      // and repeatedly turning back rather than closing. A moa target ends any loop.
+      // Chase-loop quirk (flyers only): a fresh lock onto a flyer may fall into a pursuit
+      // loop. A moa target ends any loop.
       if (targetIsFlyer) {
         if (hadNoTarget && !this._chaseLoop && !inGrace &&
             this.tutorialGraceTimer <= 0 && Math.random() < this._chaseLoopChance) {
@@ -543,13 +513,9 @@ class HaastsEagle extends Boid {
       this.target = null;
       this._huntEventFired = false;
 
-      // Close the gap on a fleeing straggler. When no moa sits inside the tight huntRadius but
-      // a huntable one is within the wider pursuitRadius, SEEK IT DIRECTLY at hunt speed rather
-      // than orbiting the patrol centre and only lurching onto it every few seconds. That
-      // orbit-then-jump cadence is exactly what read as "rubber-banding" on the last moa in an
-      // area (when prey is dense a moa is always in huntRadius, so this never triggers). A
-      // committed pursuit closes smoothly (the eagle is faster) and hands off to the normal
-      // lock-on + strike the moment the moa re-enters huntRadius. Skips protected/sheltered moa.
+      // Close the gap on a fleeing straggler: when no moa is in huntRadius but one is within
+      // pursuitRadius, seek it directly at hunt speed rather than orbiting the patrol centre
+      // (which read as rubber-banding). Hands back to lock-on when the moa re-enters huntRadius.
       if (this.emergent && this.huntSearchTimer < this.huntSearchTimeout && simulation.getClosestMoa) {
         const pr = _M.eaglePursuitRadius ?? 320;
         const prey = simulation.getClosestMoa(this.pos.x, this.pos.y, pr, m =>
@@ -567,20 +533,14 @@ class HaastsEagle extends Boid {
 
       if (this.huntSearchTimer >= this.huntSearchTimeout) {
         if (this.emergent) {
-          // Follow the prey: if a moa exists anywhere in a wide radius, shift the
-          // territory toward it — eagles trail the herds downhill in winter rather
-          // than roaming the barren alps. Only when NO moa can be found does the
-          // bird stay put and let hunger take its course (a real local ebb).
+          // Follow the prey: if a moa exists in a wide radius, shift the territory toward it
+          // (eagles trail the herds downhill in winter). No moa found → stay put and let hunger take its course.
           const followR = _M.eagleFollowRadius ?? 900;
-          // LINK 3 — patrol tracks moa NESTS: prefer the nearest moa egg, so the
-          // territory follows where moa are breeding. When kea rob the forest nests,
-          // the eagles drift off after the moa that are still nesting elsewhere —
-          // leaving the forest, which is what makes it safe for kea. Falls back to the
-          // nearest adult moa when no nests are about.
+          // Patrol tracks moa nests: prefer the nearest moa egg, so the territory follows where
+          // moa breed. Falls back to the nearest adult moa when no nests are about.
           let anchor = null;
           if (_M.eaglePatrolTracksNests) {
-            // Prefer an established NESTING SITE — the eagles orbit the moa nests, so
-            // raiding a site out from under them makes them relocate off it (visibly).
+            // Prefer an established nesting site, so raiding one out from under them relocates them.
             if (simulation.getNearestNestingSite) {
               const site = simulation.getNearestNestingSite(this.pos.x, this.pos.y, followR);
               if (site) anchor = site.pos;
@@ -597,8 +557,7 @@ class HaastsEagle extends Boid {
             if (prey) anchor = prey.pos;
           }
           if (anchor) {
-            // Drag a bonded partner along so the pair tracks prey together and
-            // stays inside mate range instead of splitting up.
+            // Drag a bonded partner along so the pair tracks prey together within mate range.
             this._relocateTerritory(anchor.x, anchor.y);
           }
           this.state = 'patrol';
@@ -628,11 +587,9 @@ class HaastsEagle extends Boid {
     };
   }
 
-  // Drive one frame of the chase loop. 'match' trails the bird at its OWN fleeing
-  // speed (seeking its actual position, no lead) so the gap holds and no catch can
-  // land; 'turn' peels away from the bird for a beat. Each turn spends a rep; when
-  // they run out (or the bird escapes / dies) the loop ends and normal pursuit — and
-  // the strike — resume next frame.
+  // Drive one frame of the chase loop. 'match' trails the bird at its own fleeing speed
+  // (no lead, so no catch lands); 'turn' peels away for a beat. Each turn spends a rep;
+  // when they run out (or the bird escapes) normal pursuit resumes.
   _runChaseLoop(target, dt) {
     const loop = this._chaseLoop;
     const dx = target.pos.x - this.pos.x, dy = target.pos.y - this.pos.y;
@@ -642,9 +599,8 @@ class HaastsEagle extends Boid {
 
     loop.timer -= dt;
     if (loop.phase === 'match') {
-      // Match the bird's fleeing pace (with a floor so a near-stationary bird is
-      // still trailed), and seek its ACTUAL position — no lead prediction, so the
-      // eagle rides the gap instead of intercepting.
+      // Match the bird's fleeing pace (with a floor) and seek its actual position (no lead),
+      // so the eagle rides the gap instead of intercepting.
       const birdSpeed = Math.hypot(target.vel.x, target.vel.y);
       this.maxSpeed = Math.max(birdSpeed, this.baseSpeed * 0.6);
       this.applyForce(this.seek(target.pos, 1.0));
@@ -747,9 +703,8 @@ class HaastsEagle extends Boid {
   // REPRODUCTION (emergent population)
   // ============================================
 
-  // Keep a live pair bond. Drops a dead/stale partner and, when single, adopts
-  // the nearest mature opposite-sex emergent bird (bonding both ways). Cheap and
-  // throttled by the caller so it isn't run every frame.
+  // Keep a live pair bond: drop a dead/stale partner and, when single, adopt the nearest
+  // mature opposite-sex emergent bird (bonding both ways). Throttled by the caller.
   _refreshPartner(simulation) {
     if (this.partner && (!this.partner.alive || this.partner.isFemale === this.isFemale)) {
       this.partner = null;
@@ -770,9 +725,8 @@ class HaastsEagle extends Boid {
     if (best) { this.partner = best; best.partner = this; }
   }
 
-  // Move this bird's territory onto (x, y) and drag a bonded partner along to a
-  // nearby offset, so a following/relocating pair stays inside mate range and
-  // keeps breeding instead of splitting up over the map.
+  // Move this bird's territory onto (x, y) and drag a bonded partner to a nearby offset,
+  // so a relocating pair stays inside mate range.
   _relocateTerritory(x, y) {
     this.nest.set(x, y);
     this.patrolCenter.set(x, y);
@@ -784,18 +738,13 @@ class HaastsEagle extends Boid {
     }
   }
 
-  // Lay an egg in the nest when prey is plentiful. Emergent, not scripted: the
-  // decision is per-bird (a varied drive, a fed state, a cooldown) and the rate
-  // is pulled toward a target eagle:moa RATIO — the tuning knob the designer sets
-  // instead of a fixed eagle count. Pressure is 0 at/above target and rises to 1
-  // as the population falls below it, so numbers self-regulate around the ratio
-  // without ever being forced there.
+  // Lay an egg in the nest when prey is plentiful. Per-bird (varied drive, fed state,
+  // cooldown) with a rate pulled toward a target eagle:moa ratio: pressure is 0 at/above
+  // target and rises to 1 below it, so numbers self-regulate around the ratio.
   _tryReproduce(simulation) {
     if (!this.mature || this.reproCooldown > 0) return;
 
-    // Sexual reproduction: the female lays. A lone male, or a female with no
-    // mate, does not — so the founding pair matters and a lost sex leads to
-    // extinction.
+    // Sexual reproduction: the female lays (a lone male or unmated female does not).
     if (!this.isFemale) return;
 
     // Must be well-fed to invest in an egg.
@@ -860,10 +809,8 @@ class HaastsEagle extends Boid {
   // RENDERING
   // ============================================
   
-  // Tutorial spotlight: re-draws this bird's sprite with a pulsing white
-  // flash. Called above the tutorial's dark overlay (renderHuntingEagleAboveUI
-  // in mauri_sketch.js) so the player can spot the hunting eagle while the
-  // "Drop It on the Eagle!" tip is up.
+  // Tutorial spotlight: re-draws the sprite with a pulsing white flash, above the
+  // tutorial's dark overlay, so the player can spot the hunting eagle.
   renderSpotlight() {
     const isActiveHunt = this.hunting && this.target !== null;
     const spriteState = isActiveHunt ? 'hunting' : (this.state === 'resting' ? 'resting' : 'flying');
@@ -895,9 +842,8 @@ class HaastsEagle extends Boid {
       push();
       translate(this.pos.x, this.pos.y);
 
-      // Species highlight (player toggle) + field-guide selection share ONE
-      // sprite-shaped outline, emitted below at the sprite draw site so it lines
-      // up. Replaces the old soft pulsing halo (which read like an effect radius).
+      // Species highlight + field-guide selection share one sprite-shaped outline, emitted
+      // below at the sprite draw so it lines up.
 
       // Shadow
       noStroke();
@@ -912,8 +858,7 @@ class HaastsEagle extends Boid {
       
       imageMode(CENTER);
       const _eW = this.wingspan * 2.8, _eH = this.wingspan * 2.1;
-      // Highlight outline: field-guide selection OR the player's species toggle.
-      // The eagle's highlightColor lives on its config (ember); fall back to ember.
+      // Highlight outline: field-guide selection or the player's species toggle (ember default).
       const _olCol = (typeof highlightOutlineColor !== 'undefined')
         ? highlightOutlineColor(this.speciesKey, (this.config && this.config.highlightColor) || [255, 145, 90]) : null;
       if (_olCol) EntitySprites.drawSpriteOutline(sprite, _eW, _eH, _olCol);
@@ -929,8 +874,7 @@ class HaastsEagle extends Boid {
       textAlign(CENTER, CENTER);
       text("?", this.pos.x, this.pos.y - this.wingspan - 5);
     } else if (this.tutorialGraceTimer > 0 && this.hunting) {
-      // Telegraphed strike during the tutorial grace window — marks which
-      // bird the player should drop the storm on.
+      // Telegraphed strike during the tutorial grace window — the bird to drop the storm on.
       fill(255, 120, 80);
       noStroke();
       textSize(8);

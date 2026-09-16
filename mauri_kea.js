@@ -1,40 +1,19 @@
 // ============================================================
 // KEA — the alpine parrot  (extends Kereru)
-// ------------------------------------------------------------
-// Nestor notabilis. The world's only alpine parrot and kākā's sister species
-// (both Nestor). A strong, wide-ranging flier — the opposite of the kererū's
-// short tree-to-tree hops — and a bold generalist: it browses, digs and picks
-// over the high country rather than living off podocarp fruit. So mechanically
-// it IS a flyer (the same FLYING → FEEDING → PERCHED → lay loop), but with three
-// kea differences layered on the Kereru base:
-//
-//   · RANGE. Kea live high — subalpine tussock and scrub — by default, but they
-//     DESCEND to the forest below in the cold (winter, and the deepening glacial
-//     coldIndex). _preferredElevBand() slides its target band down as it gets
-//     colder; foraging and drifting both steer toward that band. This is the
-//     Free Play Year-1 hook: protect the kea so they can shelter — and nest —
-//     downslope in the forest refuge when winter closes in.
-//   · DIET. A generalist: it forages ANY grown plant near it (no FOREST_TREES
-//     filter), biased toward its current elevation band.
-//   · NO DISPERSAL. Kea are not large-seed dispersers (that is the kererū's job),
-//     so _disperseChance is 0 — it still feeds, perches and breeds, planting no
-//     forest as it goes.
-//
-// Reproduction is the emergent, sexual Kereru loop (a fed, mature female with a
-// mate nearby lays). Because breeding happens wherever the bird is perched, the
-// cold-driven descent means kea nest low in a hard winter — the ecology the
-// Year-1 focus is built around.
-//
-// Class is declared BEFORE its species object (like the kōkako) so KEA_SPECIES's
-// `typeof Kea` guard doesn't hit the class's temporal dead zone.
-//
-// Placeholder art: a drawn glyph — olive-green body, scarlet underwing flash in
-// flight, dark hooked beak. Wire real art via EntitySprites.getKeaSprite later.
+// Nestor notabilis, the world's only alpine parrot and kākā's sister. A strong,
+// wide-ranging generalist that forages the high country rather than podocarp fruit.
+// Mechanically a flyer (same FLYING → FEEDING → PERCHED → lay loop) with three kea
+// differences on the Kereru base:
+//   · RANGE. Kea live high by default but DESCEND to the forest in the cold (winter
+//     + the deepening coldIndex). _preferredElevBand() slides the target band down;
+//     foraging and drifting steer toward it. The Free Play Year-1 hook.
+//   · DIET. A generalist: forages any grown plant near it (no FOREST_TREES filter).
+//   · NO DISPERSAL. Not a large-seed disperser, so _disperseChance is 0.
+// Class declared before its species object so KEA_SPECIES's typeof guard is safe.
 // ============================================================
 
-// Berry/browse plants a kea takes as cache food (in addition to forest fruit). These are the
-// species a Berry Cache seeds across its habitats — coprosma down low, pātōtara and the other
-// subalpine cushion shrubs up high — so a cache draws the flock wherever it's placed.
+// Berry/browse plants a kea takes as cache food (besides forest fruit); the species a
+// Berry Cache seeds across its habitats, so a cache draws the flock wherever it's placed.
 const KEA_BERRY_PLANTS = new Set(['coprosma', 'patotara', 'dracophyllum', 'toatoa', 'pohuehue']);
 
 class Kea extends Kereru {
@@ -47,9 +26,8 @@ class Kea extends Kereru {
     this._descendCold   = sp.descendFromCold ?? 0.6;
     this._sm = null;   // season manager, stashed each tick so the band helper can read it
 
-    // Egg-raiding (LINK 1): kea rob moa nests — it destroys the egg, feeds the kea a
-    // little, and (via the sim) seeds a disturbance moa steer away from. A cooldown
-    // keeps it opportunistic rather than obsessive.
+    // Egg-raiding: kea rob moa nests, destroying the egg, feeding a little, and seeding
+    // a disturbance moa steer away from. A cooldown keeps it opportunistic.
     const M = (typeof LEVEL_MECHANICS !== 'undefined') ? LEVEL_MECHANICS : {};
     this._raidEnabled = !!M.keaRaidsEggs;
     this._raidRadius = M.keaRaidRadius ?? 95;
@@ -57,54 +35,39 @@ class Kea extends Kereru {
     this._raidCooldownFrames = (M.keaRaidCooldownSec ?? 5) * 60;
     this._raidCooldown = Math.random() * this._raidCooldownFrames;
 
-    // Berry Cache choice (emergent flock spread). A kea doesn't blindly seek the NEAREST
-    // cache; it COMMITS to one for a beat, chosen by relative nutrition-per-bird and
-    // distance (see _chooseLure). Committing damps flapping; staggered timers + the
-    // crowd term let the flock rebalance across caches instead of piling on one.
+    // Berry Cache choice (emergent flock spread): a kea commits to one cache for a beat,
+    // chosen by relative nutrition-per-bird and distance (see _chooseLure).
     this._lureChoice = null;
     this._lureChoiceTimer = Math.random() * 90;         // stagger the first pick across the flock
     this._lureChoiceFrames = (sp.lureChoiceSec ?? 2.5) * 60;
     this._lureBaseNutrition = sp.lureBaseNutrition ?? 6; // a placed cache attracts even before its berries grow
     this._lureCrowdWeight   = sp.lureCrowdWeight ?? 1.0; // ↑ = the flock spreads harder off a crowded cache
 
-    // Perch-tree spread (Slice C): kea don't all pile onto the single richest tree by a
-    // cache — they penalise a tree already crowded with kea, and favour trees near a moa
-    // nesting site, so the flock fans out across the forest and stations where a raid can
-    // actually happen (rather than clumping at the cache and softlocking the raid).
+    // Perch-tree spread: kea penalise a tree already crowded with kea and favour trees near
+    // a moa nesting site, so the flock fans out and stations where a raid can happen.
     this._perchCrowdWeight = sp.perchCrowdWeight ?? 4.0; // ↑ = spread harder off a crowded tree
     this._perchSiteBonus   = sp.perchSiteBonus ?? 6;     // score bonus for a tree near a nesting site
     this._perchLureBonus   = sp.perchLureBonus ?? 8;     // score bonus for a tree inside a berry cache's patch
-                                                         // (the player's explicit signal — outranks the site bonus)
-    // A tree counts as "near a site" out to the RAID station radius, so a preferred perch
-    // is always one that also counts as stationed (they were settling just outside it).
+    // A tree counts as "near a site" out to the raid station radius, so a preferred perch
+    // also counts as stationed.
     this._perchSiteRadius  = sp.perchSiteRadius ?? ((M.keaRaid && M.keaRaid.stationRadius) || 240);
 
-    // Social mate-seek (Berry Cache flock cascade). A kea NOT already being pulled to a cache
-    // will drift toward a nearby flockmate that IS cache-bound — and that leader has a BOOSTED
-    // mate-seek reach because it sits in a cache's pull. So the cache's draw chains outward
-    // through the flock: a kea just beyond a cache's own reach follows one that's heading in,
-    // then commits to the cache itself once in range (mauri_kea.js behave → _seekCacheFlockmate).
+    // Social mate-seek (cache flock cascade): a kea not being pulled to a cache drifts
+    // toward a nearby cache-bound flockmate, so the cache's draw chains outward through the flock.
     this._mateSeekRadius = sp.mateRadius ?? 220;
     this._mateSeekBoost  = sp.mateSeekBoost ?? 2.4;   // cache-bound leaders draw from this× farther
     this._mateSeekWeight = sp.mateSeekWeight ?? 0.5;  // gentle — below the direct cache pull
   }
 
-  // Stash the season manager so _preferredElevBand (reached deep in the base state
-  // machine, which doesn't pass it down) can read winterness / coldIndex. Then, once
-  // the base state machine has steered for the tick, add a gentle, PERSISTENT drift
-  // toward the preferred elevation band while airborne — the alpine↔forest seasonal
-  // migration. It is deliberately weak (below the forage-seek weight) so a kea still
-  // detours to nearby food, but over a season it lifts the flock into the subalpine
-  // in the warm and settles it into the forest refuge in the cold. Skipped while
-  // storm-grounded so shelter isn't fought.
+  // Stash the season manager so _preferredElevBand can read winterness/coldIndex. After
+  // the base loop steers, add a gentle drift toward the preferred elevation band while
+  // airborne (the alpine↔forest migration), weak enough that a kea still detours to food.
   behave(sim, mauri, seasonManager, dt) {
     this._sm = seasonManager;
     if (this._raidCooldown > 0) this._raidCooldown -= dt;
 
-    // Perch tree (Slice C): each kea holds a fruiting FOREST tree, chosen by the food
-    // around it, as its home perch — this is what "stations" the flock near a spot.
-    // Refreshed when it's lost or on a timer. _anchorPoint() feeds it to the base
-    // loop so the bird orbits and returns to it.
+    // Perch tree: each kea holds a fruiting forest tree (chosen by nearby food) as its home
+    // perch, refreshed when lost or on a timer. _anchorPoint() feeds it to the base loop.
     this._perchSearchTimer = (this._perchSearchTimer || 0) - dt;
     if (!this._perchValid() || this._perchSearchTimer <= 0) {
       this._perchSearchTimer = 120;
@@ -113,13 +76,9 @@ class Kea extends Kereru {
 
     super.behave(sim, mauri, seasonManager, dt);
     if (!this._grounded && !this._fleeingStorm && this.state === KERERU_STATE.FLYING) {
-      // A Berry Cache (kea lure) placed downslope outranks everything — it pulls the
-      // flock onto the forest patch to settle. The bird holds a COMMITTED choice of
-      // cache (re-picked on a jittered timer, or when the choice dies / leaves range),
-      // so the flock spreads across caches by relative nutrition + distance rather than
-      // all chasing the nearest one. Else, if the bird has no perch yet, drift toward
-      // the elevation band to go find forest. With a perch, the anchor (via _anchorPoint)
-      // keeps it home — no extra force needed.
+      // A Berry Cache pulls the flock onto the forest patch. The bird holds a committed cache
+      // choice (re-picked on a jittered timer), so the flock spreads across caches rather than
+      // all chasing the nearest. With no cache and no perch, drift toward the elevation band.
       this._lureChoiceTimer -= dt;
       if (!this._lureValid() || this._lureChoiceTimer <= 0) {
         const prev = this._lureChoice;
@@ -135,15 +94,13 @@ class Kea extends Kereru {
       if (lure) {
         const lr = (lure.def && lure.def.radius) || 70;
         const dx = lure.pos.x - this.pos.x, dy = lure.pos.y - this.pos.y;
-        // Only pull toward the cache while still ARRIVING; once on the patch, let the perch
-        // anchor + crowd-spread fan the flock across the trees (don't pile on the centre —
-        // that clumping was leaving too few kea stationed at a nest to raid).
+        // Only pull toward the cache while still arriving; once on the patch, let the perch
+        // anchor + crowd-spread fan the flock across the trees.
         if (dx * dx + dy * dy > lr * lr) {
           this.applyForce(this.seekPoint(lure.pos.x, lure.pos.y, 0.85, lr));
         }
       } else {
-        // No cache in this bird's own reach: FOLLOW a cache-bound flockmate if one is close
-        // (the social cascade — extends a cache's draw beyond its own radius). Else drift to band.
+        // No cache in reach: follow a nearby cache-bound flockmate (the social cascade), else drift to band.
         const leader = this._seekCacheFlockmate(sim);
         if (leader) {
           this.applyForce(this.seekPoint(leader.pos.x, leader.pos.y, this._mateSeekWeight));
@@ -155,10 +112,8 @@ class Kea extends Kereru {
     }
   }
 
-  // The nearest flockmate that is BEING PULLED to a berry cache (has a live _lureChoice), within
-  // the boosted mate-seek reach. Following it chains the cache's draw outward through the flock:
-  // a kea just beyond a cache's own radius trails one that's heading in, then commits itself once
-  // the cache falls inside its own attract range. null when no kea is cache-bound nearby.
+  // The nearest cache-bound flockmate (live _lureChoice) within the boosted mate-seek
+  // reach; following it chains the cache's draw outward through the flock. null if none.
   _seekCacheFlockmate(sim) {
     const flock = sim.otherEntities && sim.otherEntities.kea;
     if (!flock || flock.length < 2) return null;
@@ -186,10 +141,8 @@ class Kea extends Kereru {
     return this._perchValid() ? this._perchTree.pos : null;
   }
 
-  // A strong, wide-ranging flier: unlike the forest-bound kererū base, a kea CROSSES the
-  // alpine scree and glacier to relocate (it lives up there), so only OPEN WATER bars it.
-  // This frees a kea that would otherwise get stranded on a walkable pocket ringed by
-  // un-walkable alpine rock — it can now fly over the rock to reach forest/subalpine.
+  // A strong flier: a kea crosses alpine scree and glacier to relocate, so only open water
+  // bars it (frees a kea stranded on a walkable pocket ringed by alpine rock).
   _passable(x, y) {
     const t = this.terrain;
     if (!t) return true;
@@ -197,9 +150,8 @@ class Kea extends Kereru {
     return typeof t.isWalkable !== 'function' || t.isWalkable(x, y);
   }
 
-  // Pick the best nearby fruiting FOREST tree to perch in — "best" = the one with the
-  // most food (other fruiting trees + berries) around it, so kea gather where the
-  // player has grown forest/berries (a Berry Cache patch).
+  // Pick the best nearby fruiting forest tree to perch in ("best" = most food around it),
+  // so kea gather where the player has grown forest/berries.
   _choosePerchTree(sim) {
     if (!sim.getNearbyPlants) return;
     const isForest = (typeof FOREST_TREES !== 'undefined') ? FOREST_TREES : null;
@@ -209,8 +161,7 @@ class Kea extends Kereru {
     const sites = sim.nestingSites || [];
     const crowdR2 = 55 * 55, siteR2 = this._perchSiteRadius * this._perchSiteRadius;
 
-    // If this bird is committed to a cache, prefer perches NEAR that cache so the
-    // flock actually re-homes onto the cache patch instead of clinging to old trees.
+    // If committed to a cache, prefer perches near it so the flock re-homes onto the patch.
     const lure = this._lureValid() ? this._lureChoice : null;
     const lureR2 = lure ? (((lure.def && lure.def.radius) || 70) * 2.2) ** 2 : 0;
 
@@ -259,13 +210,9 @@ class Kea extends Kereru {
     return dx * dx + dy * dy <= r * r;
   }
 
-  // Choose which in-range Berry Cache to head for. Emergent flock spread: each cache is
-  // scored by its RELATIVE NUTRITION PER BIRD (available food ÷ how many kea are already
-  // committed to it) times a DISTANCE falloff (closer is better). So the nearest cache
-  // usually wins — but as it crowds, its per-bird share drops, and a re-picking kea will
-  // prefer a less-crowded (or richer, or nearer) cache instead: some peel off to the
-  // others. A freshly placed cache starts empty (crowd 0) with a base draw, so nearby
-  // kea migrate onto it even before its berries grow. (placeables/flock lists are tiny.)
+  // Choose which in-range Berry Cache to head for. Each is scored by nutrition per bird
+  // (food ÷ kea committed) times a distance falloff, so the nearest usually wins but a
+  // crowded one sheds birds to emptier/richer/nearer caches.
   _chooseLure(sim) {
     const list = sim.placeables;
     if (!list) return null;
@@ -281,8 +228,7 @@ class Kea extends Kereru {
     if (!caches.length) return null;
     if (caches.length === 1) return caches[0].c;   // one cache in reach — no balancing to do
 
-    // Crowd = kea currently committed to each cache (assignment-based, so a kea still
-    // EN ROUTE already counts — this pre-empts everyone piling on before arrivals show).
+    // Crowd = kea committed to each cache (a kea en route already counts).
     const flock = (sim.otherEntities && sim.otherEntities.kea) || [];
     const crowd = new Map();
     for (let i = 0; i < flock.length; i++) {
@@ -309,10 +255,8 @@ class Kea extends Kereru {
     return best;
   }
 
-  // Available nutrition at a cache = grown, unconsumed food (kea browse coprosma berries
-  // and forest fruit) within its radius. Counted at most ~twice a second and cached ON
-  // the placeable, so the whole flock shares one count and depletion (kea eating it down)
-  // lowers the cache's draw on its own — an emergent second reason to spread out.
+  // Available nutrition at a cache = grown, unconsumed food in its radius. Counted at most
+  // ~twice a second and cached on the placeable, so depletion lowers the cache's draw.
   _refreshLureFood(sim, cache) {
     if (!sim.getNearbyPlants) { cache._keaFood = 0; return; }
     const now = (typeof frameCount !== 'undefined') ? frameCount : 0;
@@ -325,20 +269,16 @@ class Kea extends Kereru {
     for (let i = 0; i < near.length; i++) {
       const q = near[i];
       if (!q.alive || q._consumed || q.dormant || q.growth < 0.4) continue;
-      // Kea browse the cache's berries (coprosma / pātōtara & other subalpine cushion berries)
-      // and forest fruit — count all of them so a cache set in ANY habitat draws the flock.
+      // Count the cache's berries and forest fruit, so a cache in any habitat draws the flock.
       if (KEA_BERRY_PLANTS.has(q.type) || (isForest && isForest.has(q.type))) food++;
     }
     cache._keaFood = food;
   }
 
-  // Raiding is an alternative to the base "fly to a plant" action: while airborne and
-  // off cooldown, a moa egg within reach outranks foraging — the kea diverts to rob
-  // it. Keeping this inside _runState (not behave) preserves all the base bookkeeping
-  // (hunger, ageing, starvation, landward/edges) that behave runs around it.
+  // Raiding overrides foraging: while airborne and off cooldown, a moa egg in reach makes
+  // the kea divert to rob it. Inside _runState so the base bookkeeping still runs.
   _runState(sim, dt) {
-    // Player-DIRECTED egg raid (tap a moa egg): the assigned kea flies to it and eats
-    // it, whatever the auto-raid flag says. Cleared when the egg is gone.
+    // Player-directed egg raid (tap a moa egg): the assigned kea flies to it and eats it.
     if (this._directedEgg) {
       if (!this._directedEgg.alive || this._directedEgg.hatched) {
         this._directedEgg = null;
@@ -372,8 +312,7 @@ class Kea extends Kereru {
     return best;
   }
 
-  // Fly to the egg; on arrival, rob it (sim destroys it + seeds disturbance), take the
-  // meal, start the cooldown, and perch a beat.
+  // Fly to the egg; on arrival, rob it, take the meal, start the cooldown, and perch.
   _raidStep(sim, egg, dt) {
     this.maxSpeed = (this.speciesData && this.speciesData.config && this.speciesData.config.baseSpeed) || 0.4;
     const dx = egg.pos.x - this.pos.x, dy = egg.pos.y - this.pos.y;
@@ -390,10 +329,8 @@ class Kea extends Kereru {
     this.applyForce(this.seek(this._target, 1.2, 20));
   }
 
-  // The nearest walkable step (of 8 sampled) whose elevation is closer to the
-  // preferred band centre than where the bird stands — i.e. one pace uphill in the
-  // warm, downhill in the cold. null when already in-band or nowhere better. Shared
-  // by the persistent drift (behave) and the no-forage relocation (_driftHome).
+  // The nearest walkable step (of 8) whose elevation is closer to the band centre — one
+  // pace uphill in the warm, downhill in the cold. null when in-band or nowhere better.
   _bandwardPoint() {
     const t = this.terrain;
     if (!t || typeof t.getElevationAt !== 'function') return null;
@@ -413,9 +350,8 @@ class Kea extends Kereru {
     return best;
   }
 
-  // The elevation band the kea wants to be in right now. Warm → high (subalpine);
-  // cold → dragged down toward the forest refuge. Blends by BOTH the seasonal
-  // winterness and the deepening glacial coldIndex.
+  // The elevation band the kea wants right now: high (subalpine) in the warm, dragged
+  // down toward the forest refuge in the cold. Blends winterness and coldIndex.
   _preferredElevBand() {
     const sm = this._sm;
     const winter = (sm && typeof sm.getWinterness === 'function') ? sm.getWinterness() : 0;
@@ -428,16 +364,12 @@ class Kea extends Kereru {
     return { lo, hi, center: (lo + hi) * 0.5 };
   }
 
-  // Generalist forage: any grown plant of ANY type (kea are not frugivores), but the
-  // elevation band decides WHERE it is willing to feed, so the flock trends high in
-  // the warm and drops to the forest in the cold. Overrides the base's
-  // FOREST_TREES-only fruit search, which _flying calls through `this.`.
+  // Generalist forage: any grown plant, but the elevation band decides where it will
+  // feed. Overrides the base's FOREST_TREES-only search.
   //   · In-band food is always taken (nearest wins).
-  //   · If only out-of-band food is in reach and the bird is comfortable AND well
-  //     outside its band, it returns null so _flying falls through to _driftHome and
-  //     relocates toward the band instead of feeding at the wrong altitude.
-  //   · A hungry bird (or one already near its band) eats whatever is closest —
-  //     survival overrides the habitat preference, so kea never starve beside food.
+  //   · Only out-of-band food + a comfortable bird well outside its band → null, so
+  //     _flying falls through to _driftHome and relocates toward the band.
+  //   · A hungry bird (or one near its band) eats whatever is closest.
   _findFruitTree(sim) {
     if (!sim.getNearbyPlants) return null;
     const plants = sim.getNearbyPlants(this.pos.x, this.pos.y, this._feedRadius);
@@ -456,11 +388,8 @@ class Kea extends Kereru {
       else        { if (dSq < bestOutSq) { bestOutSq = dSq; bestOut = p; } }
     }
     if (bestIn) return bestIn;                                   // in-band food always preferred
-    // Only out-of-band food in reach: a COMFORTABLE bird well outside its band
-    // returns null so _flying falls through to _driftHome and relocates toward the
-    // band; a HUNGRY bird (or one already near its band) eats what's here — survival
-    // overrides the habitat preference, so kea never starve marching to sparse high
-    // ground (which on this map would defeat the point of protecting them).
+    // Only out-of-band food in reach: a comfortable bird well outside its band returns null
+    // (relocate toward the band); a hungry one eats what's here.
     const hungry = this.hunger >= this.maxHunger * 0.7;
     const here = canElev ? t.getElevationAt(px, py) : band.center;
     const farOutside = here < band.lo - 0.05 || here > band.hi + 0.05;
@@ -468,8 +397,7 @@ class Kea extends Kereru {
     return bestOut;
   }
 
-  // No fruit within reach: instead of the base idle wander, climb or descend
-  // decisively toward the preferred elevation band — the alpine↔forest migration.
+  // No fruit within reach: climb or descend toward the preferred elevation band.
   _driftHome(sim, dt) {
     const pt = this._bandwardPoint();
     if (pt) this.applyForce(this.seekPoint(pt.x, pt.y, 1.1));
@@ -483,8 +411,7 @@ class Kea extends Kereru {
 }
 
 // ------------------------------------------------------------
-// SPECIES DATA — Nestor notabilis. Registered as its own base type + species in
-// initializeRegistry (mauri_sketch.js), carrying class: Kea.
+// SPECIES DATA — Nestor notabilis. Registered in initializeRegistry.
 // ------------------------------------------------------------
 const KEA_SPECIES = {
   displayName:    'Kea',
@@ -493,10 +420,10 @@ const KEA_SPECIES = {
   class:          (typeof Kea !== 'undefined') ? Kea : undefined,
   description:    'The bold alpine parrot — a strong, wide-ranging generalist that drops to the forest in the cold.',
   rarity:         'uncommon',
-  highlightColor: [235, 222, 90],   // bright olive-gold — player highlight (pulse + UI border)
+  highlightColor: [235, 222, 90],   // olive-gold; player highlight
 
-  // Movement / render — a strong flier that soars higher and ranges wider than the
-  // kererū, but still kept BELOW the eagle's hunt speed so a chase resolves.
+  // Movement / render — a strong flier, wider-ranging than the kererū, but below eagle
+  // hunt speed so a chase resolves.
   baseSpeed:        0.40,
   maxForce:         0.06,
   size:             8,
@@ -530,24 +457,20 @@ const KEA_SPECIES = {
   maxPopulation:    14,
   populationFloor:  2,
 
-  // Kea-specific: the elevation band the flock targets, and how far the cold
-  // drags it down toward the forest. Warm band ≈ subalpine; cold band ≈ forest
-  // refuge (see the freeplay biomes). Tunable.
+  // Kea-specific: the elevation band the flock targets, and how far the cold drags it
+  // down toward the forest.
   bandWarm:   { lo: 0.48, hi: 0.66 },   // subalpine tussock & scrub
   bandCold:   { lo: 0.34, hi: 0.50 },   // dropped down into the forest refuge
   descendFromWinter: 0.7,               // how much seasonal winter pulls it down
   descendFromCold:   0.6,               //   ... and how much the glacial coldIndex does
 
-  // Berry Cache choice — how the flock spreads across MULTIPLE caches (mauri_kea.js
-  // _chooseLure). Each in-range cache scores as (lureBaseNutrition + food) ÷
-  // (1 + lureCrowdWeight · kea already committed), times a distance falloff, so the
-  // nearest usually wins but a crowded one sheds birds to emptier/richer/nearer caches.
+  // Berry Cache choice — how the flock spreads across multiple caches (see _chooseLure).
   lureChoiceSec:     2.5,               // re-pick a cache at most this often (jittered per bird)
   lureBaseNutrition: 6,                 // a freshly placed cache draws kea even before its berries grow
   lureCrowdWeight:   1.0                // ↑ = the flock balances harder off a crowded cache
 };
 
-// Register the kea as a flighted-bird type (routes egg hatch + the render pass).
+// Register the kea as a flighted-bird type.
 if (typeof FLYER_TYPES !== 'undefined') FLYER_TYPES.add('kea');
 
 if (typeof window !== 'undefined') {

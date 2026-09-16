@@ -1,15 +1,9 @@
 // ============================================================
 // MAURI — local static server
-// ------------------------------------------------------------
 //   node tools/serve.js        then open http://127.0.0.1:8081
 //
-// Opening index.html directly as file:// does not work: Chrome's CORS
-// policy blocks p5's loadImage/loadFont/loadSound from a file origin,
-// so the sprites, fonts and audio all fail silently and you get a black
-// screen. Serve the folder instead.
-//
-// No dependencies, no network access, no caching (so a reload always
-// picks up edits).
+// Serves the project folder so p5's asset loading works (file:// is
+// blocked by Chrome's CORS policy). No dependencies, no caching.
 // ============================================================
 
 const http = require('http');

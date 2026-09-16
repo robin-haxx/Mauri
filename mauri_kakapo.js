@@ -1,29 +1,15 @@
 // ============================================================
 // KĀKĀPŌ — the flightless mast-breeder  (extends Kereru)
-// ------------------------------------------------------------
-// Strigops habroptilus. The heavy, nocturnal, FLIGHTLESS ground parrot — a moss-
-// green herbivore that walks the forest floor browsing leaves, stems, rhizomes and
-// fruit. Two things define it, and both are built here:
-//
-//   · FLIGHTLESS. It reuses the Kereru state machine for its forage → feed → rest
-//     loop, but never leaves the ground: isFlyer is false (so it renders in the
-//     ground pass, under the trees, not above them) and its altitude is pinned to
-//     zero, so the "flight" is a slow walk. It also does NOT flee a raptor — kākāpō
-//     freeze and rely on camouflage (their undoing against mammals, but authentic
-//     against a diurnal eagle that hunts moa, not them).
-//   · MAST BREEDING. Kākāpō breed ONLY in a rimu/podocarp MAST YEAR — the single
-//     most important fact about them, and the payoff for the player's Mast Year
-//     item (Game.triggerMastYear → sim.mastYear). Outside a mast the population only
-//     holds or slowly declines; buy a mast and it surges. _tryReproduce gates on
-//     sim.mastYear, then defers to the base (which already boosts the flock cap and
-//     shortens the cooldown during a mast).
-//
-// A generalist ground forager (any plant, not just FOREST_TREES). Class declared
-// BEFORE its species object so KAKAPO_SPECIES's `typeof Kakapo` guard doesn't hit
-// the class's temporal dead zone.
-//
-// Placeholder art: a drawn glyph — plump moss-green body, pale owl-like facial disc.
-// Wire real art via EntitySprites.getKakapoSprite later.
+// Strigops habroptilus, the heavy, nocturnal, flightless ground parrot. Two things
+// define it, both built here:
+//   · FLIGHTLESS. Reuses the Kereru forage → feed → rest loop but never leaves the
+//     ground (isFlyer false, altitude pinned to 0). It does NOT flee a raptor —
+//     kākāpō freeze and rely on camouflage.
+//   · MAST BREEDING. Breeds only in a rimu/podocarp MAST YEAR (the payoff for the
+//     player's Mast Year item). _tryReproduce gates on sim.mastYear, then defers to
+//     the base, which raises the flock cap and shortens the cooldown during a mast.
+// A generalist ground forager (any plant). Class declared before its species object
+// so KAKAPO_SPECIES's typeof guard is safe.
 // ============================================================
 
 class Kakapo extends Kereru {
@@ -35,49 +21,40 @@ class Kakapo extends Kereru {
     this._perchAlt = 0;
     this._altitude = 0;
 
-    // Territorial lek tuning (see behave). Males hold a court, drive rival males off, and burn
-    // energy doing it. Fern shelters draw un-settled birds so the player can distribute the flock.
+    // Territorial lek tuning (see behave). Males hold and defend a court, burning energy.
     const sp = (speciesData && speciesData.config) ? speciesData.config : KAKAPO_SPECIES;
     this._lekRadius = sp.lekRadius ?? 140;
     this._lekRadiusSq = this._lekRadius * this._lekRadius;
     this._territoryPush = sp.territoryPush ?? 0.06;
     this._territoryHold = sp.territoryHold ?? 0.02;
     this._lekAttract = sp.lekAttract ?? 0.03;
-    this._territory = null;   // a male's claimed court (set when it settles — at a shelter if one's near)
-    // Hunger burned each frame a male is actively contesting (chasing a rival / being driven off),
-    // so packing males tight is costly and the flock spaces out.
+    this._territory = null;   // a male's claimed court
+    // Hunger burned each frame a male is actively contesting, so the flock spaces out.
     this._territoryHungerCost = (sp.territoryHungerCostPerSec ?? 0.8) / 60;
-    // Fern-shelter attraction: an un-settled kākāpō drifts to the nearest shelter (selective —
-    // only kākāpō), letting the player seed leks / spread the population by placing shelters.
+    // Fern-shelter attraction: un-settled kākāpō drift to the nearest shelter, so the
+    // player seeds leks by placing shelters.
     this._shelterAttract = sp.shelterAttract ?? 0.05;
     this._shelterAttractRadius = sp.shelterAttractRadius ?? 360;
-    this._settled = false;    // has this bird settled (male: claimed a court; female: reached a spot)
+    this._settled = false;    // has this bird settled
     this._settleTimer = 0;    // grace before a male with no shelter claims where it stands
   }
 
-  // Territorial lek behaviour. After the base ground loop steers:
-  //   · A MALE first SETTLES a court — walking to a nearby fern shelter to claim it there if one
-  //     is in reach (so the player seeds leks by placing shelters), else claiming where it stands.
-  //     Once settled it HOLDS the court and actively DRIVES RIVAL MALES OFF: it charges an
-  //     intruder inside its court and retreats when it strays into a neighbour's — a real chase
-  //     that BURNS HUNGER, so males can't pack tight (a runaway mast boom is checked, and a
-  //     well-spaced lek is worth defending).
-  //   · A FEMALE drifts to the nearest male's court in a mast to pair; otherwise the fern
-  //     shelters draw her too, so the player can spread the flock out.
-  // Skipped while storm-sheltered or not walking, so shelter and feeding aren't fought.
+  // Territorial lek behaviour, after the base ground loop steers:
+  //   · A MALE settles a court (at a nearby shelter if one's in reach, else where it
+  //     stands), then holds it and drives rival males off — a chase that burns hunger,
+  //     so males can't pack tight.
+  //   · A FEMALE drifts to the nearest court in a mast to pair, else to a shelter.
+  // Skipped while storm-sheltered or not walking.
   behave(sim, mauri, seasonManager, dt) {
     super.behave(sim, mauri, seasonManager, dt);
-    // (A flightless kākāpō is never storm-flushed — _fleeStorm ignores non-flyers — but keep
-    // the guard for parity with the other parrots.)
+    // (Never storm-flushed; guard kept for parity with the other parrots.)
     if (this._grounded || this._fleeingStorm || this.state !== KERERU_STATE.FLYING) return;
     const list = sim.otherEntities && sim.otherEntities[this.speciesKey];
     const px = this.pos.x, py = this.pos.y;
 
     if (!this.isFemale) {
       if (!this._settled) {
-        // Still un-settled: drift to a fern shelter to claim a court THERE (the player seeds
-        // leks with shelters), else settle where it stands after a grace. No court is held yet,
-        // so nothing fights the shelter pull.
+        // Un-settled: drift to a fern shelter to claim a court there, else settle after a grace.
         const shelter = this._nearestFernShelter(sim);
         if (shelter) {
           this.applyForce(this.seekPoint(shelter.pos.x, shelter.pos.y, this._shelterAttract));
@@ -113,15 +90,14 @@ class Kakapo extends Kereru {
     }
   }
 
-  // Mark this bird as settled; a male fixes its court where it now stands (if not already set).
+  // Mark this bird as settled; a male fixes its court where it stands.
   _settle() {
     if (this._settled) return;
     this._settled = true;
     if (!this.isFemale && !this._territory) this._territory = createVector(this.pos.x, this.pos.y);
   }
 
-  // The nearest live fern shelter within the attraction radius (selective: only 'shelter'
-  // placeables draw kākāpō). Cheap — there are only ever a handful of placeables.
+  // The nearest live fern shelter within the attraction radius.
   _nearestFernShelter(sim) {
     const list = sim.placeables;
     if (!list) return null;
@@ -137,9 +113,8 @@ class Kakapo extends Kereru {
     return best;
   }
 
-  // A male's active lek dispute: CHARGE the nearest rival male that has intruded on my court,
-  // and RETREAT if I've strayed into a neighbour's — so residents chase intruders off and the
-  // pair separates. Either one costs hunger, so contesting males run their energy down.
+  // A male's lek dispute: charge the nearest rival inside my court, and retreat from a
+  // neighbour's. Either costs hunger, so contesting males run their energy down.
   _contestCourt(list, dt) {
     const px = this.pos.x, py = this.pos.y;
     let contesting = false;
@@ -167,13 +142,11 @@ class Kakapo extends Kereru {
     if (contesting) this.hunger = Math.min(this.maxHunger, this.hunger + this._territoryHungerCost * dt);
   }
 
-  // Kākāpō do NOT flee a hunting raptor — they freeze and rely on camouflage. The
-  // base would otherwise burst into a panic "flight"; returning false keeps the
-  // ordinary ground loop (and the diurnal eagle hunts moa, not this nocturnal bird).
+  // Kākāpō don't flee a raptor — they freeze and rely on camouflage. Returning false
+  // keeps the ordinary ground loop.
   _fleeHarrier(sim, dt) { return false; }
 
-  // Generalist ground forage: nearest grown plant of ANY type (leaves, stems,
-  // rhizomes, fruit), not the base's FOREST_TREES-only fruit search.
+  // Generalist ground forage: nearest grown plant of any type, not FOREST_TREES only.
   _findFruitTree(sim) {
     if (!sim.getNearbyPlants) return null;
     const plants = sim.getNearbyPlants(this.pos.x, this.pos.y, this._feedRadius);
@@ -188,9 +161,7 @@ class Kakapo extends Kereru {
     return best;
   }
 
-  // Breeds ONLY in a rimu mast year — the payoff for the Mast Year item. Outside a
-  // mast, no laying at all; during one, the base handles the surge (raised cap +
-  // shortened cooldown for a well-fed, paired, mature female).
+  // Breeds only in a rimu mast year (the base handles the surge during one).
   _tryReproduce(sim) {
     if (!(sim && sim.mastYear)) return;
     return super._tryReproduce(sim);
@@ -203,8 +174,7 @@ class Kakapo extends Kereru {
 }
 
 // ------------------------------------------------------------
-// SPECIES DATA — Strigops habroptilus. Registered as its own base type + species in
-// initializeRegistry (mauri_sketch.js), carrying class: Kakapo.
+// SPECIES DATA — Strigops habroptilus. Registered in initializeRegistry.
 // ------------------------------------------------------------
 const KAKAPO_SPECIES = {
   displayName:    'Kākāpō',
@@ -213,7 +183,7 @@ const KAKAPO_SPECIES = {
   class:          (typeof Kakapo !== 'undefined') ? Kakapo : undefined,
   description:    'The flightless, nocturnal ground parrot — the heaviest parrot alive, and a rimu-mast breeder.',
   rarity:         'rare',
-  highlightColor: [190, 240, 115],  // bright moss green — player highlight (pulse + UI border)
+  highlightColor: [190, 240, 115],  // moss green; player highlight
 
   // Movement / render — a slow, heavy WALKER pinned to the ground (no flight).
   baseSpeed:        0.12,
@@ -234,8 +204,7 @@ const KAKAPO_SPECIES = {
   restSec:          10,
   disperseChance:   0.15,
 
-  // Survival — an efficient herbivore and famously long-lived, so it holds between
-  // masts: low hunger rate, slow to starve, and a floor so a lineage persists.
+  // Survival — long-lived, so it holds between masts: low hunger, slow to starve, a floor.
   maxHunger:        100,
   hungerRatePerSec: 0.9,
   feedRelief:       72,
@@ -250,9 +219,7 @@ const KAKAPO_SPECIES = {
   populationFloor:  2,
 
   // Territorial lek (kākāpō-specific) — see Kakapo.behave. Males hold spaced courts and
-  // actively chase rival males off (which burns their hunger), so a mast can't hand a runaway
-  // boom (more consistent results); a well-grown, well-spaced lek still breeds and is worth
-  // defending. Fern shelters draw un-settled birds so the player can distribute the flock.
+  // chase rivals off, so a mast can't hand a runaway boom.
   lekRadius:      140,     // males keep ~this far apart (contest rival males within it)
   territoryPush:  0.06,    // how hard a male charges an intruder / drives off a neighbour
   territoryHold:  0.02,    // how hard a male holds to its own court
@@ -262,9 +229,8 @@ const KAKAPO_SPECIES = {
   shelterAttractRadius: 360        // a fern shelter draws un-settled kākāpō within this range
 };
 
-// Register the kākāpō as a flighted-bird TYPE for egg-hatch routing (Simulation
-// ._hatchFlyerEgg reads FLYER_TYPES), even though it never actually flies — the
-// hatchling reads isFlyer=false from its own constructor and renders on the ground.
+// Register the kākāpō as a flighted-bird type for egg-hatch routing, though it never
+// flies (the hatchling reads isFlyer=false and renders on the ground).
 if (typeof FLYER_TYPES !== 'undefined') FLYER_TYPES.add('kakapo');
 
 if (typeof window !== 'undefined') {

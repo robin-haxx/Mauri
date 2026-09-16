@@ -1,36 +1,23 @@
 // ============================================
 // GL BATCH — DOM-stacked WebGL entity layer  (opt-in: ?render=gl)
 // ============================================
-// The world is drawn on p5's 2D canvas. At 4K (spriteSupersample 2) the frame is
-// fill-rate bound and every sprite is a separate Canvas2D drawImage with real
-// per-call overhead — the ~20fps cap the perf review found. This module draws the
-// ENTITY SPRITES (and their shadow/halo ellipses) as batched textured quads on a
-// WebGL canvas that is STACKED in the DOM between two 2D canvases, so the browser's
-// compositor blends the three layers on the GPU with no per-frame readback:
-//
+// The world is drawn on p5's 2D canvas, which is fill-rate bound at 4K. This module
+// draws the entity sprites (and their shadow/halo ellipses) as batched textured quads
+// on a WebGL canvas DOM-stacked between two 2D canvases, so the compositor blends the
+// three layers on the GPU with no per-frame readback:
 //   bottom  (p5 _terrainLayer canvas) : terrain + water + seasonal washes
 //   middle  (this GL canvas)          : entity sprites + shadows/halos
-//   top     (p5 main canvas)          : hearts/rings indicators + GEO + HUD
+//   top     (p5 main canvas)          : indicators + HUD
+// DOM-stacking (vs an earlier GL→2D blit) is what captures the batch's speed, by
+// removing the per-frame context sync.
 //
-// An earlier build composited the GL canvas into the 2D frame with drawImage; that
-// worked and was pixel-correct but the GL→2D blit forced a context sync each frame
-// that gave the batch win back (measured ≈break-even). DOM-stacking removes the
-// drawImage entirely — the compositor does the blend — which is what captures the
-// batch's speed. See md / the perf memory.
+// OPT-IN and reversible: without ?render=gl (or if GL init fails) the engine renders
+// the unchanged single-canvas 2D path.
 //
-// OPT-IN and reversible: without ?render=gl (or if GL init fails) none of this runs
-// and the engine renders the unchanged single-canvas 2D atlas path.
-//
-// How entity code stays untouched:
-//   • The atlas already wrapped global image() (mauri_spriteatlas.js); in GL mode
-//     that wrapper calls tryCapture() first — reading the live 2D transform, image
-//     mode, tint and alpha — so a sprite draw becomes a quad with no code change.
-//   • ellipse()/circle() are wrapped here so the per-entity shadow and species-halo
-//     draws in render() are captured to the GL layer too (a baked soft-disc texture,
-//     tinted by the live fill), keeping them correctly UNDER the sprites.
-//   • The capture span is open only across the sprite passes; Simulation.render()
-//     ends it (GLBatch.composite → endSpan) before the indicator over-pass, so
-//     hearts/rings and the HUD draw on the top 2D canvas, above everything.
+// Entity code stays untouched: the atlas's global image() wrapper calls tryCapture()
+// first (reading the live 2D transform, image mode, tint and alpha), so a sprite draw
+// becomes a quad; ellipse()/circle() are wrapped here so per-entity shadows and halos
+// are captured too. The capture span is open only across the sprite passes.
 
 const GLBatch = {
   enabled: false,        // ?render=gl asked for it AND init succeeded
@@ -43,12 +30,9 @@ const GLBatch = {
   W: 0, H: 0,
 
   // ---- edge fade --------------------------------------------------------------
-  // Sprites (and their shadow/halo discs) fade toward transparent as they approach
-  // the canvas edge, so the cast dissolves off-screen instead of hard-clipping at
-  // the frame. Computed PER VERTEX from the vertex's distance to the nearest edge,
-  // so a large sprite straddling the edge gradates smoothly across its own quad.
-  // marginFrac is the share of the SHORTER canvas dimension the fade spans (so the
-  // band is the same pixel width top/bottom as left/right). Console-tunable.
+  // Sprites (and their shadow/halo discs) fade toward transparent near the canvas edge,
+  // per-vertex from the distance to the nearest edge. marginFrac is the share of the
+  // shorter canvas dimension the fade spans (same pixel width on all sides).
   edgeFade: { on: true, marginFrac: 0.08 },
   _edgeMarginPx: 0,      // marginFrac × min(W,H), recomputed each begin()
 
@@ -58,10 +42,8 @@ const GLBatch = {
   _tex: new Map(),       // source HTMLCanvasElement -> { tex, w, h }
   _discTex: null,        // baked soft-disc texture for captured ellipses (shadows/halos)
 
-  // Silhouette mode (GL_PORT.md Phase 3): while true, captured sprite quads output
-  // the per-quad COLOUR wherever the texture is opaque (ignoring texel rgb) — a
-  // pure-colour cut-out of the sprite shape. Used to draw the field-guide outline
-  // as a ring of tinted silhouette quads with no baked halo. Off = normal texturing.
+  // Silhouette mode: while true, captured sprite quads output the per-quad colour where
+  // the texture is opaque (a pure-colour cut-out), for the field-guide outline ring.
   _silhouette: false,
 
   // Batch buffer: interleaved [x, y, u, v, r, g, b, a, sil] per vertex, 6 verts / quad.
@@ -71,20 +53,16 @@ const GLBatch = {
   _curTex: null,
 
   // ---- URL flag + init --------------------------------------------------------
-  // During the Mauri GL port (GL_PORT.md) GL is OPT-IN: enable it with ?render=gl
-  // (or =webgl / =on). Anything else — including no flag — stays on the proven 2D
-  // path. Flip this default to on only once Phase 4 validation passes. If the
-  // context can't be created init() returns false and 2D is used regardless.
+  // GL is opt-in: enable with ?render=gl (or =webgl / =on); anything else stays on 2D.
+  // If the context can't be created init() returns false and 2D is used regardless.
   applyURLFlag() {
     if (typeof window === 'undefined' || !window.location) { this.requested = false; return; }
     const q = new URLSearchParams(window.location.search).get('render');
     this.requested = (q === 'gl' || q === 'webgl' || q === 'on');
   },
 
-  // Drop to the 2D path for the rest of the session. Used by the WebGL
-  // context-lost handler: an unattended kiosk must degrade, not go black. The 2D
-  // render() paints an opaque background over the now-stale GL/terrain DOM layers,
-  // so nothing more is needed than flipping these flags.
+  // Drop to the 2D path for the rest of the session (WebGL context-lost handler). The
+  // 2D render() paints over the stale GL/terrain layers, so flipping these flags suffices.
   _fallbackTo2D(reason) {
     if (!this.enabled && !this.domStack) return;
     this.enabled = false; this.domStack = false; this._open = false;
@@ -99,11 +77,8 @@ const GLBatch = {
       if (!cnv) return false;
       cnv.width = width; cnv.height = height;
       const opts = { premultipliedAlpha: false, antialias: false, alpha: true, depth: false };
-      // Prefer WebGL2: it mipmaps NON-power-of-two textures (WebGL1 cannot), which is what
-      // lets the sprite atlas pages carry a proper mip chain so downscaled sprites (the birds
-      // especially) stay crisp instead of aliasing — the whole point of not needing to
-      // supersample the frame. The existing GLSL 1.00 shaders compile unchanged on WebGL2.
-      // Fall back to WebGL1 (no sprite mipmaps, LINEAR only) if WebGL2 is unavailable.
+      // Prefer WebGL2: it mipmaps non-power-of-two textures (WebGL1 cannot), so atlas pages
+      // carry a mip chain and downscaled sprites stay crisp. Fall back to WebGL1 (no sprite mipmaps).
       let gl = cnv.getContext('webgl2', opts);
       this._gl2 = !!gl;
       if (!gl) gl = cnv.getContext('webgl', opts) || cnv.getContext('experimental-webgl', opts);
@@ -122,8 +97,7 @@ const GLBatch = {
       gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
       gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
 
-      // Unattended-kiosk safety: if the GPU drops the context, degrade to 2D for the
-      // rest of the session rather than going black (the nightly reload recovers it).
+      // If the GPU drops the context, degrade to 2D rather than going black.
       if (cnv.addEventListener) {
         cnv.addEventListener('webglcontextlost', (e) => { e.preventDefault(); this._fallbackTo2D('context lost'); }, false);
       }
@@ -142,8 +116,6 @@ const GLBatch = {
   },
 
   // Stack the three canvases: bottom (terrain), middle (this GL canvas), top (main).
-  // Called once the p5 main canvas and the terrain buffer exist. Positions are set
-  // to match the p5 main canvas each layout (see layout()).
   mount(mainEl, bottomEl) {
     if (!this.enabled || !mainEl) return;
     this._mainEl = mainEl; this._bottomEl = bottomEl || this._bottomEl;
@@ -163,17 +135,13 @@ const GLBatch = {
     this.layout();
   },
 
-  // Point the bottom layer at the terrain buffer's canvas. The buffer is a detached
-  // p5.Graphics, so its canvas is inserted into the DOM ahead of the GL canvas; when
-  // the buffer is rebuilt on resize this is called with the new canvas and the old
-  // one is removed. A no-op when the canvas is unchanged (called every frame).
+  // Point the bottom layer at the terrain buffer's canvas, inserted ahead of the GL
+  // canvas. Called each frame; a no-op when the canvas is unchanged.
   setBottom(bottomEl) {
     if (!this.enabled || !bottomEl) return;
     if (bottomEl === this._bottomEl) {
-      // Same terrain buffer as last frame. The GPU-terrain (3D) path HIDES this bottom
-      // layer (display:none) while it draws the mesh into the GL canvas instead; toggling
-      // back to the flat 2D view calls setBottom again with the SAME canvas, so we must
-      // re-show it here or the flat terrain stays invisible (the "3D↔2D breaks 2D" bug).
+      // Same terrain buffer as last frame. The 3D path hides this layer (display:none);
+      // re-show it here or toggling back to flat 2D leaves the terrain invisible.
       if (bottomEl.style && bottomEl.style.display === 'none') bottomEl.style.display = 'block';
       return;
     }
@@ -189,8 +157,7 @@ const GLBatch = {
     this.layout();
   },
 
-  // Copy the main canvas's on-screen CSS box onto the other two layers so they
-  // register pixel-for-pixel. Called from scaleCanvasToFit / on resize.
+  // Copy the main canvas's CSS box onto the other two layers so they register pixel-for-pixel.
   layout() {
     if (!this._mounted || !this._mainEl) return;
     const s = this._mainEl.style;
@@ -216,16 +183,11 @@ const GLBatch = {
     const vs = 'attribute vec2 aPos;attribute vec2 aUV;attribute vec4 aCol;attribute float aSil;' +
       'varying vec2 vUV;varying vec4 vCol;varying float vSil;' +
       'void main(){vUV=aUV;vCol=aCol;vSil=aSil;gl_Position=vec4(aPos,0.0,1.0);}';
-    // Normal: texel.rgb × colour. Silhouette (vSil=1): the colour alone wherever the
-    // texel is opaque — a pure-colour cut-out of the sprite (the highlight outline).
-    // Silhouette alpha is HARDENED (smoothstep) so soft, anti-aliased sprite edges —
-    // e.g. the birds' feathered art — still cut a SOLID outline instead of a faint,
-    // washed-out one. Crisp pixel-art (moa) is already ~1.0, so it's unaffected. This
-    // is the "non-moa highlight is weak" fix (GL path).
-    // uCold (0..1) applies the SAME glacial grade the terrain uses — desaturate + cool +
-    // slightly darken — so plants/animals share the cold mood as the ice deepens. It's
-    // skipped for silhouette highlights (vSil=1) so a field-guide/selection outline keeps
-    // its pure colour, and it is 0 unless the GPU terrain publishes it (GLBatch._cold).
+    // Normal: texel.rgb × colour. Silhouette (vSil=1): the colour alone where the texel is
+    // opaque (a pure-colour cut-out). Silhouette alpha is hardened (smoothstep) so soft
+    // sprite edges still cut a solid outline.
+    // uCold (0..1) applies the same glacial grade the terrain uses (desaturate + cool +
+    // darken), skipped for silhouettes. 0 unless the GPU terrain publishes it.
     const fs = 'precision mediump float;varying vec2 vUV;varying vec4 vCol;varying float vSil;' +
       'uniform sampler2D uTex;uniform float uCold;uniform vec3 uColdTint;' +
       'void main(){vec4 t=texture2D(uTex,vUV);' +
@@ -278,17 +240,13 @@ const GLBatch = {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-    // Upload the alpha-BLED ImageData (edge colour extended under alpha 0) when the atlas
-    // prepared one for mipmapping — a canvas can't hold colour under alpha 0 (premultiplied
-    // storage), but a texture uploaded from raw ImageData with premultiply OFF can, so the
-    // mip chain doesn't fringe. Falls back to the canvas itself when there's no bled source.
+    // Upload the alpha-bled ImageData when the atlas prepared one for mipmapping (a canvas
+    // can't hold colour under alpha 0, but a texture with premultiply off can, so no fringe).
     const upload = (this._gl2 && src._glMipSource) ? src._glMipSource : src;
     try { gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, upload); }
     catch (err) { console.warn('[glbatch] texImage2D failed:', err && err.message); return null; }
-    // Sprite sources (atlas pages / standalone images) are static, so build a mip chain ONCE
-    // and sample it trilinearly — this is the anti-aliasing that keeps a downscaled sprite
-    // crisp without supersampling the frame. WebGL2 mipmaps any size; WebGL1 can't do NPOT,
-    // so it stays on a single LINEAR level (the pre-mipmap behaviour, unchanged).
+    // Sprite sources are static, so build a mip chain once and sample trilinearly — the
+    // anti-aliasing that keeps a downscaled sprite crisp. WebGL1 can't do NPOT, so LINEAR only.
     if (this._gl2) {
       gl.generateMipmap(gl.TEXTURE_2D);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
@@ -323,8 +281,7 @@ const GLBatch = {
       ? this.edgeFade.marginFrac * Math.min(this.W, this.H) : 0;
   },
 
-  // Renderer state, read live each capture (push/pop restore _imageMode/_tint
-  // internally, so a wrapper would go stale — read from the renderer instead).
+  // Renderer state, read live each capture (push/pop restore it, so a cache would go stale).
   _renderer: null,
   _R() { return this._renderer || (this._renderer =
     (typeof window !== 'undefined' && window._renderer) ? window._renderer : null); },
@@ -372,11 +329,8 @@ const GLBatch = {
   // the default ellipseMode(CENTER); w,h the diameters. Returns true if consumed.
   tryCaptureEllipse(x, y, w, h) {
     if (!this.enabled || !this._open || !this._discTex) return false;
-    // Only FILLED ellipses are discs (shadows, halos, icon dots). A no-fill stroke
-    // (an effect-radius ring / border) would otherwise be stamped as a solid disc
-    // tinted by the STALE last fill — a filled blob where a ring belongs. Let those
-    // fall through to the 2D path (they land on the top canvas in GL mode, where
-    // their stroke + shadow-blur glow render correctly).
+    // Only filled ellipses are discs (shadows, halos, icon dots). A no-fill stroke (a ring
+    // or border) falls through to the 2D path, where its stroke + glow render correctly.
     const R = this._R();
     if (R && R._doFill === false) return false;
     const ctx = this._ctx();
@@ -388,9 +342,8 @@ const GLBatch = {
     return true;
   },
 
-  // Edge fade: 1 in the interior, smoothstep down to 0 at the very edge across the
-  // outer _edgeMarginPx px. Nearest of the four screen edges wins. A method (not a
-  // per-_emit closure) so the hot capture path allocates nothing — see _emit.
+  // Edge fade: 1 in the interior, smoothstep to 0 across the outer _edgeMarginPx px.
+  // Nearest of the four edges wins. A method (not a closure) so the hot path allocates nothing.
   _edgeAlpha(sx, sy, a) {
     const mp = this._edgeMarginPx;
     if (mp <= 0) return a;
@@ -403,10 +356,8 @@ const GLBatch = {
     return a * t * t * (3 - 2 * t);
   },
 
-  // Map a local rect through the CTM to clip space and push two triangles.
-  // sil: 1 = silhouette (pure-colour) quad, 0 = normal textured quad.
-  // Fully inlined (no per-call closures): this runs once per sprite AND once per shadow
-  // disc — hundreds of times a frame — so any allocation here becomes GC-pause churn.
+  // Map a local rect through the CTM to clip space and push two triangles (sil: 1 =
+  // silhouette, 0 = textured). Fully inlined — runs hundreds of times a frame, so no allocation.
   _emit(te, m, lx0, ly0, lx1, ly1, u0, v0, u1, v1, r, g, b, a, sil) {
     if (te.tex !== this._curTex) { this._flush(); this._curTex = te.tex; }
     if (this._n + 6 > this._cap) this._flush();
@@ -453,9 +404,8 @@ const GLBatch = {
     this._n = 0;
   },
 
-  // End the capture span. In DOM-stack mode the GL canvas IS a layer, so there is
-  // no drawImage — just flush the batch to it. Named composite() for the call site
-  // in Simulation.render() shared with the old blit build. ctx2d is ignored here.
+  // End the capture span (flush the batch to the GL canvas — no drawImage in DOM-stack
+  // mode). Named composite() for the shared call site; ctx2d is ignored here.
   composite(/* ctx2d */) {
     if (!this.enabled || !this._open) return;
     this._flush();
@@ -464,13 +414,9 @@ const GLBatch = {
   endSpan() { this.composite(); },
 
   // ---- fill parsing -----------------------------------------------------------
-  // Read the disc colour from the live fillStyle p5 set with fill(). p5 emits
-  // 'rgba(r,g,b,a)' / 'rgb(r,g,b)' / '#rrggbb'. Cached on the exact string.
-  // MULTI-ENTRY cache: a single entry thrashed in the real mixed render order (plant
-  // shadows at alpha 20, moa shadows at 25, dormant at 10, UI dots…), re-parsing — and
-  // re-allocating — a colour object every frame. Keyed on the exact fillStyle string,
-  // each distinct colour is parsed once; steady state allocates nothing. Bounded so an
-  // unusual spread of colours can't grow it without limit.
+  // Read the disc colour from the live fillStyle (p5 emits 'rgba(...)'/'rgb(...)'/'#rrggbb').
+  // Multi-entry cache keyed on the exact string, so each distinct colour is parsed once
+  // and steady state allocates nothing. Bounded so a spread of colours can't grow it.
   _fillCache: null, _fillCacheN: 0, _fillCacheVal: { r: 0, g: 0, b: 0, a: 1 },
   _parseFill(style) {
     if (typeof style !== 'string') return this._fillCacheVal;

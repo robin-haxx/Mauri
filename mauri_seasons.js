@@ -7,7 +7,7 @@ const SEASONS = {
   summer: {
     name: "Summer",
     icon: "☀️",
-    color: '#f5c542',   // golden yellow (was a sandy tan #f4a460 — more yellow now)
+    color: '#f5c542',   // golden yellow
     plantModifiers: {
       coastal: 0.2, grassland: 0.3, podocarp: 0.4,
       montane: 0.9, subalpine: 1.3,
@@ -31,7 +31,7 @@ const SEASONS = {
   autumn: {
     name: "Autumn",
     icon: "🍂",
-    color: '#e6852f',   // lighter, more orange & less red than the old chocolate #d2691e
+    color: '#e6852f',   // orange
     plantModifiers: {
       coastal: 0.6, grassland: 1.0, podocarp: 1.2,
       montane: 1.0, subalpine: 0.6,
@@ -169,20 +169,16 @@ class SeasonManager {
     this._fbFrame = -1;
     this._fbCache = null;
 
-    // Free Play climate drift. coldIndex in [0,1] is the glacial severity of the
-    // current year, set each frame by Game from ClimateDrift (0 on every level that
-    // doesn't opt in, so the folds below are inert). It deepens the WINTER end of
-    // the seasonal getters — never summer, never the authored base values (those
-    // stay in SEASONS; writing back would compound — see MISTAKES.md).
+    // Free Play climate drift. coldIndex in [0,1] is the glacial severity of the year,
+    // set each frame by Game (0 when the level doesn't opt in). Deepens only the winter
+    // end of the getters, never the authored SEASONS values.
     this.coldIndex = 0;
     this.CLIMATE_SNOW_DROP = 0.20;       // snow line drop at full glacial (0.77 winter -> ~0.57)
     this.CLIMATE_FOREST_SQUEEZE = 0.05;  // forest refuge band narrows at full glacial
     this.CLIMATE_HUNGER_MULT = 0.6;      // extra winter hunger at full glacial (+60%)
 
-    // Free Play Mast Year: set true by Game while a bought mast year is live. Surges
-    // FOREST_TREES growth (rimu most — the fruiting podocarp) in getPlantTypeModifier,
-    // and keeps forest fruit edible through the cold (mauri_plant.js). Read-time only;
-    // never written back into SEASONS.
+    // Free Play Mast Year: set by Game while a mast year is live. Surges FOREST_TREES
+    // growth (rimu most) and keeps forest fruit edible through the cold. Read-time only.
     this.mastYear = false;
     this.MAST_PODO_MULT = 3.0;    // rimu (podocarp) growth multiplier in a mast year
     this.MAST_FOREST_MULT = 2.0;  // other forest trees (beech/fern) in a mast year
@@ -194,9 +190,8 @@ class SeasonManager {
   get nextKey() { return this.seasonOrder[(this.currentSeasonIndex + 1) % 4]; }
   get progress() { return this.timer / this.config.seasonDuration; }
 
-  // 0..1 "how wintry it looks" — ramps up across the autumn->winter transition,
-  // holds at 1 through winter, and fades back to 0 across the winter->spring
-  // transition. Used to fade the frost overlay so it glides rather than snaps.
+  // 0..1 "how wintry it looks": ramps up over autumn→winter, holds at 1 through winter,
+  // fades to 0 over winter→spring. Fades the frost overlay so it glides.
   getWinterness() {
     const k = this.currentKey;
     if (k === 'winter') {
@@ -218,13 +213,8 @@ class SeasonManager {
       : 0;
     
     if (this.timer >= this.config.seasonDuration) {
-      // Carry the overshoot instead of resetting to 0. dt is a variable frame-time
-      // multiplier (see draw()), so a season nearly always ends a fraction PAST its
-      // duration. Zeroing the timer discarded that fraction every season, so the season
-      // clock drifted behind Game.playTime — and the endless year boundary (and its
-      // camera pan) is driven off playTime (cycle = playTime / 4 seasons). Carrying the
-      // remainder keeps the season index locked to playTime for the whole run, so the
-      // pan always lands exactly on the spring→summer boundary, year after year.
+      // Carry the overshoot instead of resetting to 0, so the season clock stays locked to
+      // Game.playTime (which drives the endless year boundary and camera pan).
       this.timer -= this.config.seasonDuration;
       this.currentSeasonIndex = (this.currentSeasonIndex + 1) % 4;
       this.transitionProgress = 0;
@@ -237,10 +227,8 @@ class SeasonManager {
   // ============================================
   // SEASONAL BLEND (inlined, allocation-free)
   // ============================================
-  // Each getter below inlines the current->next transition blend directly. A prior
-  // closure-taking helper (_lerpSeasonal(getCur, getNext)) allocated two arrow
-  // functions per call on a per-entity, per-frame path — the sim's single largest
-  // GC source in the Te Manawa fork. Do NOT reintroduce it. See MISTAKES.md.
+  // Each getter inlines the current->next transition blend directly. Do NOT extract a
+  // closure-taking helper — it allocated per call on a per-entity, per-frame path.
 
   // ============================================
   // SNOW & WEATHER
@@ -249,8 +237,7 @@ class SeasonManager {
   getSnowLineElevation() {
     const cur = this.current.snowLine;
     let sl = (this.transitionProgress > 0) ? lerp(cur, this.next.snowLine, this.transitionProgress) : cur;
-    // Free Play: a deepening glacial pushes the snow line down year-round (shrinking
-    // walkable high country), most strongly through winter.
+    // Free Play: a deepening glacial pushes the snow line down, most in winter.
     if (this.coldIndex > 0) {
       sl -= this.coldIndex * this.CLIMATE_SNOW_DROP * (0.5 + 0.5 * this.getWinterness());
       if (sl < 0.5) sl = 0.5;
@@ -271,10 +258,8 @@ class SeasonManager {
     return 0;
   }
 
-  // Forest productive band — contracts seasonally (treeline retreats in the
-  // glacial). Lerped smoothly per frame like the snow line, so no biome
-  // reclassification is needed (avoids stutter). Cached per frame. Returns
-  // null when the level does not enable forest contraction.
+  // Forest productive band, contracting seasonally (lerped per frame, cached). Returns
+  // null when the level doesn't enable forest contraction.
   getForestBand() {
     const M = (typeof LEVEL_MECHANICS !== 'undefined') ? LEVEL_MECHANICS : null;
     if (!M || !M.forestContraction || !M.forestBandBySeason) return null;
@@ -291,9 +276,8 @@ class SeasonManager {
     } else {
       band = { min: cur.min, max: cur.max };
     }
-    // Free Play: a deepening glacial tightens the refuge — the treeline creeps up
-    // from below and eases down from above, so the productive band narrows over the
-    // run, not just within a winter. Keep a sliver so it never inverts.
+    // Free Play: a deepening glacial narrows the refuge from both sides. Keep a sliver
+    // so it never inverts.
     if (this.coldIndex > 0) {
       const sq = this.coldIndex * this.CLIMATE_FOREST_SQUEEZE;
       const min = band.min + sq;
@@ -316,8 +300,7 @@ class SeasonManager {
       const nxt = this.next.plantTypeModifiers?.[plantType] || 1.0;
       m = lerp(cur, nxt, this.transitionProgress);
     }
-    // Free Play Mast Year: the podocarp forest fruits abundantly — forest plants surge,
-    // rimu (the podocarp) most of all. Read-time only; never written back (MISTAKES.md).
+    // Free Play Mast Year: forest plants surge, rimu most. Read-time only.
     if (this.mastYear && typeof FOREST_TREES !== 'undefined' && FOREST_TREES.has(plantType)) {
       m *= (plantType === 'rimu') ? this.MAST_PODO_MULT : this.MAST_FOREST_MULT;
     }
@@ -340,9 +323,8 @@ class SeasonManager {
   getHungerModifier() {
     const cur = this.current.hungerModifier;
     let h = (this.transitionProgress > 0) ? lerp(cur, this.next.hungerModifier, this.transitionProgress) : cur;
-    // Free Play: cold costs energy. Concentrated in winter via winterness, so a
-    // glacial winter is hungrier than an interglacial one, and deep glacials hungrier
-    // still. (Per-species cold tolerance is applied on top, in mauri_moa.js.)
+    // Free Play: cold costs energy, concentrated in winter via winterness. (Per-species
+    // cold tolerance is applied on top, in mauri_moa.js.)
     if (this.coldIndex > 0) h *= (1 + this.CLIMATE_HUNGER_MULT * this.coldIndex * this.getWinterness());
     return h;
   }
@@ -390,7 +372,7 @@ class SeasonManager {
   // MIGRATION MESSAGING
   // ============================================
 
-  // Extract unique alive species from moa array (shared helper)
+  // Unique alive species from the moa array.
   _getSpeciesPresent(moas) {
     const species = new Set();
     for (const moa of moas) {

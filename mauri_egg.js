@@ -2,7 +2,7 @@
 // EGG CLASS - Simplified rendering
 // ============================================
 
-// Pre-computed egg colors (avoid creating in render loop)
+// Pre-computed egg colors (avoid creating in render loop).
 const EGG_COLORS = {
   base: null,
   stroke: null,
@@ -51,13 +51,10 @@ class Egg {
     // Species inheritance
     this.parentSpecies = null;  // Set by parent moa (or eagle)
 
-    // What this egg hatches into: 'moa' (default) or 'eagle'. Emergent eagles
-    // lay eggs in their nest with offspringType='eagle'; the simulation branches
-    // on this in updateEggs so the same egg lifecycle serves both.
+    // What this egg hatches into: 'moa' (default) or 'eagle'. updateEggs branches on it.
     this.offspringType = 'moa';
 
-    // Optional forced sex for the hatchling (true=female, false=male, null=auto).
-    // Used to seed the founding eagle pair with an egg opposite the spawned bird.
+    // Optional forced sex (true=female, false=male, null=auto); seeds the eagle pair.
     this.forcedSex = null;
     
     // Visual - pre-calculate speckle positions
@@ -84,16 +81,10 @@ class Egg {
     }
   }
   
-  /**
-   * Get the species key for the offspring
-   * Can include mutation/variation logic here
-   */
+  // Species key for the offspring (with a small mutation chance).
   getOffspringSpecies() {
-    // If parent species is set, usually inherit it
     if (this.parentSpecies) {
-      // Small chance of mutation to a related species — unless the level turns
-      // speciation off (LEVEL_MECHANICS.noSpeciation), in which case offspring
-      // always inherit the parent's species (fixed cast, no off-level moa).
+      // Small mutation chance to a related species, unless LEVEL_MECHANICS.noSpeciation.
       const _noSpeciation = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS && LEVEL_MECHANICS.noSpeciation);
       if (!_noSpeciation && random() < 0.05) {  // 5% mutation chance
         return this.getMutatedSpecies();
@@ -105,9 +96,7 @@ class Egg {
     return 'upland_moa';
   }
   
-  /**
-   * Get a mutated species (related to parent)
-   */
+  // A mutated species related to the parent.
   getMutatedSpecies() {
     if (typeof REGISTRY === 'undefined') return this.parentSpecies;
     
@@ -226,7 +215,7 @@ class Egg {
     fill(EGG_COLORS.barBg);
     rect(barX, barY, barWidth, barHeight, 1);
     
-    // Progress fill - interpolate color manually (faster than lerpColor)
+    // Progress fill (manual lerp, faster than lerpColor).
     const c = EGG_COLORS;
     const r = c.barStart[0] + (c.barEnd[0] - c.barStart[0]) * progress;
     const g = c.barStart[1] + (c.barEnd[1] - c.barStart[1]) * progress;

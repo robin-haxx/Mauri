@@ -1,18 +1,10 @@
 // ============================================
 // FREE PLAY: Kahurangi — the deepening glacials (endless)
-// ------------------------------------------------------------
-// An endless survival mode. The same glacial Kahurangi as Level 2, but with no win:
-// the climate OSCILLATES between glacial and interglacial years and DEEPENS across the
-// run (stark swings, ramped ends, brutal by ~cycle 10 — see mauri_climate_drift.js).
-//
-// Each YEAR the game sets soft population goals on the TWO most-endangered species
-// (nearest their floor). EVERY species present that year holds at a survival floor — a
-// hunted or thinned species quietly returns to the floor rather than vanishing (the focus
-// species additionally carry the goals, highlight and income weighting). Winter
-// takes FOOD VALUE, not plants — the evergreen flora stands frosted but stops feeding,
-// so the forest refuge becomes the lifeline. Lose all your moa and the run ends.
-//
-// See FREEPLAY_PLAN.md. Reuses Level 2's terrain, biomes and cast almost verbatim.
+// An endless survival mode: glacial Kahurangi as Level 2 but with no win. The climate
+// oscillates between glacial and interglacial years and deepens across the run. Each
+// year sets soft goals on the two most-endangered species; every species present holds
+// at a survival floor. Winter takes food value, not plants. Lose all your moa and the
+// run ends. Reuses Level 2's terrain, biomes and cast.
 // ============================================
 
 const LEVEL_FREEPLAY_KAHURANGI = {
@@ -20,18 +12,14 @@ const LEVEL_FREEPLAY_KAHURANGI = {
   name: 'Taihekenga Mutunga-kore',   // "the endless descent into cold"
   unlockCondition: null,             // open for playtesting
 
-  // Endless: no phases, no timed end, no win. checkGoals() short-circuits on this
-  // flag to the rolling yearly-goal engine (an empty goals array would otherwise win
-  // on frame one — see MISTAKES.md).
+  // Endless: no phases, no timed end, no win. checkGoals() short-circuits to the
+  // yearly-goal engine.
   endless: true,
 
   zoom: 1.667,
-  // Endless years run SUMMER → autumn → winter → SPRING, so a year opens on summer and
-  // closes on spring's nesting season. The camera pans to the next 2×2 area only at the
-  // year boundary (spring→summer), so a whole year — including spring breeding and its
-  // hatch — plays out in ONE quadrant before you move on, and you see the results of the
-  // breeding season as that area's year-end population. (Classic levels stay spring-start;
-  // the season↔year lock that keeps the pan on this boundary lives in mauri_seasons.js.)
+  // Endless years run summer → autumn → winter → spring; the camera pans to the next
+  // 2×2 area only at the year boundary (spring→summer), so a whole year plays out in
+  // one quadrant. (Classic levels stay spring-start.)
   startSeason: 'summer',
 
   terrain: {
@@ -41,24 +29,19 @@ const LEVEL_FREEPLAY_KAHURANGI = {
   },
 
   // ---- 2×2 continuous terrain grid: the camera pans a new area each year -----------
-  // ONE continuous landmass — a single alps→shore descent (east = high alps, west =
-  // shore) spanning cols×rows play windows. Year 1 frames the EAST window (alps →
-  // podocarp forest, no shore); each year the CAMERA PANS across the land to the next
-  // area in a circular tour, unloading the old area's plants/fauna and regenerating
-  // them for the new one: east/alps → west/shore → across → back upslope → repeat.
-  // The opening is GENTLE (softer alps, broad forest); a full loop deepens the glacial
-  // share so glacial habitats climb higher over the run. See TerrainGenerator +
-  // Game._scrollWorldGrid. `order` may override the [col,row] tour.
+  // One continuous alps→shore landmass (east = high alps, west = shore) spanning
+  // cols×rows play windows. Each year the camera pans to the next area in a circular
+  // tour, regenerating that area's plants/fauna. A full loop deepens the glacial share.
+  // See TerrainGenerator + Game._scrollWorldGrid.
   worldGrid: {
     cols: 2, rows: 2,
-    openLandScale: 0.58,     // opening: scale land elevation toward the coast (lower = gentler alps, broader forest)
-    glacialPerLoop: 0.22,    // each full 4-year loop releases the scale toward full height (glacial climbs back)…
-    glacialCap: 0.6,         // …up to here (glacial dominates, but never wholly)
+    openLandScale: 0.58,     // opening: scale land elevation (lower = gentler alps, broader forest)
+    glacialPerLoop: 0.22,    // each 4-year loop releases the scale toward full height…
+    glacialCap: 0.6,         // …up to here
     glacialAdvance: 0        // year-1 advance (the mild opening)
   },
 
-  // Glacial biome bands (identical to Level 2): a thin, contested forest refuge amid
-  // open glacial flats, frost shrubland and subalpine tussock.
+  // Glacial biome bands (identical to Level 2).
   biomes: {
     sea: { key: 'sea', name: "Sea", minElevation: 0, maxElevation: 0.10,
       colors: ['#1a3a52', '#1e4d6b', '#236384'], contourColor: '#0f2533',
@@ -95,7 +78,7 @@ const LEVEL_FREEPLAY_KAHURANGI = {
       'heavy_footed_moa'        // forest-edge Pachyornis
     ],
     eagle: ['haasts_eagle'],
-    other: ['kokako', 'kea', 'kaka', 'kakapo']   // kererū retired from Free Play (kea/kākā/kākāpō/kōkako carry it)
+    other: ['kokako', 'kea', 'kaka', 'kakapo']   // kererū retired from Free Play
   },
   startingSpecies: 'upland_moa',
 
@@ -110,7 +93,7 @@ const LEVEL_FREEPLAY_KAHURANGI = {
 
   economy: {
     startingMauri: 80,
-    seasonDuration: 3600,        // 1 min/season → a year = 4 x 3600 = ~4 min; ~cycle 10 (~40 min) is brutal
+    seasonDuration: 3600,        // 1 min/season → a year ≈ 4 min
     eggIncubationTime: 600,
     securityTimeToLay: 900,
     securityTimeVariation: 300,
@@ -124,63 +107,50 @@ const LEVEL_FREEPLAY_KAHURANGI = {
     speargrass: { cost: 25 },  // slot 2 — upland moa
     shelter:   { cost: 35 },
     nest:      { cost: 50 },
-    forestBoost: { cost: 35 }, // Year-2 forest cultivator (see freeplaySchedule per-year palettes)
+    forestBoost: { cost: 35 }, // Year-2 forest cultivator
     Storm:     { cost: 40 },
-    keaLure:   { cost: 30 },   // Year-1 kea magnet (see freeplaySchedule per-year palettes)
+    keaLure:   { cost: 30 },   // Year-1 kea magnet
     nestRaid:  { cost: 0 },    // toolbar interaction → nest-raid dialog (charged per raid)
     rimuScramble: { cost: 40 } // mast-year interaction → 20% of rimu drop berries for the kākāpō
-    // NOTE: the Mast Year is no longer a bought item. It is EARNED — Year 2's mast-mauri
-    // goal (see `mastGoal` below) invokes it a year early (year 3) on success, or lets the
-    // rimu mast fall late (year 4) on a miss. Driven by freeplaySchedule `mast:true` years.
+    // The Mast Year is earned, not bought: Year 2's mast-mauri goal invokes it early
+    // (year 3) on success, or lets it fall late (year 4) on a miss.
   },
 
   // ---- Year-2 Mast objective (see Game._beginFreeplayYear / _renderMastGoalPanel) -----
-  // The 2nd year of each 4-year loop (the kākā year) sets a MAST goal: gain this much
-  // mauri DURING that year (by the end of its spring). Reaching it invokes the mast a
-  // year early — year 3, the milder downslope area — so the kākāpō breed there and a
-  // South Island kōkako stretch goal opens in year 4. Missing it delays the rimu mast to
-  // year 4 (the cold upslope), where the kākāpō must be grown the hard way, and no kōkako
-  // stretch is offered. Progress shows as a bar in the Nest-Raid panel's slot.
-  // Target is a fixed mauri-gain bar for the kākā year (task: 250, up from 220). No mauri
-  // REWARD — accomplishing a goal no longer hands a mauri boost (see freeplayGoalReward: 0);
-  // reaching it still pays off by invoking the mast a year early.
+  // The kākā year sets a MAST goal: gain this much mauri during the year. Reaching it
+  // invokes the mast a year early (year 3, downslope) so the kākāpō breed and a kōkako
+  // stretch opens in year 4; missing it delays the mast to year 4 (the cold upslope).
   mastGoal: { loopYear: 2, target: 400, reward: 0 },
 
-  // Per-species recovery targets for the yearly focus goals (fall back to
-  // freeplayDefaultTarget). Big lowland browsers ask for fewer than the smaller,
-  // faster-breeding species.
+  // Per-species recovery targets for the yearly focus goals (else freeplayDefaultTarget).
   freeplayTargets: {
     upland_moa: 10,
     little_bush_moa: 8,
     stout_legged_moa: 6,
     south_island_giant_moa: 5,
     heavy_footed_moa: 6,
-    // Flighted-bird focus targets (kākā/kākāpō land in later slices; harmless until then).
+    // Flighted-bird focus targets.
     kea: 8,
     kaka: 10,
     kakapo: 10,
     kokako: 6
   },
 
-  // How many NEW player-grown nesting sites a "moa focus" year asks for (grow a patch
-  // of the moa's favoured plant to draw them in — see Simulation._updateMoaNestingFormation).
+  // New player-grown nesting sites a "moa focus" year asks for.
   freeplayNestingGoal: 2,
 
   // ---- Authored year schedule (read by Game._scheduledYearEntry / _beginFreeplayYear) --
-  // A repeating 4-YEAR loop, aligned to the 2×2 terrain tour (year 1 = east/alps,
-  // 2 = west/shore, 3 = across/downslope, 4 = back upslope/cold). Each `years[pos]`:
-  //   focus:        species this year's goals + protection + highlight track (moa OR birds)
-  //   moaFocus:     a keystone moa paired in with population + (if nestingGoal) nesting goals
-  //   nestingGoal:  the moaFocus year also asks the player to grow NEW nesting sites
-  //   mast:         force a mast year (rimu bloom) this year
-  //   mastGoalYear: run Year-2's mast-mauri objective this year (see `mastGoal`)
-  //   kokakoStretch: the kōkako goal here is a bonus stretch (only in the reached branch)
-  //   introduce:    newcomers to seed this year ([{type, count}]) if not already present
+  // A repeating 4-year loop aligned to the 2×2 terrain tour. Each `years[pos]`:
+  //   focus:        species this year's goals + protection + highlight track
+  //   moaFocus:     a keystone moa paired in with population + nesting goals
+  //   nestingGoal:  the moaFocus year also asks for NEW nesting sites
+  //   mast:         force a mast year (rimu bloom)
+  //   mastGoalYear: run the mast-mauri objective this year (see `mastGoal`)
+  //   kokakoStretch: the kōkako goal here is a bonus stretch
+  //   introduce:    newcomers to seed this year ([{type, count}])
   //   note:         a line shown at the year's start
-  //   branch:       { reached, missed } — years 3 & 4 pick a variant by the mast-goal outcome
-  // On the FIRST loop the pos-0/pos-1 moa pairing is withheld (moaFromLoop) so the opening
-  // eases the player in; years 3–4 always carry their own moa focus. Unbuilt species are
-  // skipped gracefully; a year left with no usable focus falls back to the dynamic ranker.
+  //   branch:       { reached, missed } — years 3 & 4 pick a variant by the mast outcome
+  // moaFromLoop withholds the pos-0/pos-1 moa pairing on the first loop.
   freeplaySchedule: {
     loopYears: 4,
     moaFromLoop: 1,   // pos-0/pos-1 moaFocus starts from this 0-based loop index
@@ -189,19 +159,14 @@ const LEVEL_FREEPLAY_KAHURANGI = {
         focus: ['kea'],
         introduce: [{ type: 'kaka', count: 3 }],
         moaFocus: 'upland_moa', nestingGoal: true,
-        // Kea year nesting: two FEWER moa nests than the default (5 → 3) and all of them
-        // on the LEFT (west/downslope) half of the map, in the podocarp forest the kea
-        // want. You must actively drive the moa off a live nest to raid it — an empty
-        // site can't be claimed (see mechanics.nestingSites + Game._raidSuccessChance).
+        // Kea year: fewer moa nests (3), all on the left/downslope half in the podocarp forest.
         nesting: { forestCount: 2, openCount: 1, region: 'left' },
         note: "Year of the Kea — the alpine parrots come down to nest in the podocarp forest below. Kākā are introduced to that forest. Plant kawakawa now while the forest is still warm — it will not survive the first winter.",
-        // Kawakawa is a frost-tender lowland plant of this warm opening ONLY: it can be
-        // planted this year but is stripped from the palette at the first winter and can
-        // never be established again (the LGM closing in — see Game._banKawakawa).
+        // Kawakawa is frost-tender: plantable this year only, stripped at the first winter.
         availablePlaceables: { kawakawa: { cost: 25, duration: 3600 }, keaLure: {}, nestRaid: {}, lancewood: {}, speargrass: {}, Storm: {}, shelter: {} }
       },
-      { // pos 1 — Year of the Kākā (west / shore). The MAST GOAL runs here; its progress
-        // bar takes the Nest-Raid slot, so this year carries no nest-raid tool.
+      { // pos 1 — Year of the Kākā (west / shore). The mast goal runs here (takes the
+        // Nest-Raid slot).
         focus: ['kaka'],
         moaFocus: 'little_bush_moa', nestingGoal: true,
         mastGoalYear: true,
@@ -254,66 +219,52 @@ const LEVEL_FREEPLAY_KAHURANGI = {
     coldToleranceMattersMult: 1.0,
 
     // ---- Free Play yearly-goal engine ---------------------------------------
-    freeplayProtectFloor: 2,    // last N of EVERY species present this year are protected (topped back up if thinned)
+    freeplayProtectFloor: 2,    // last N of every species present this year are protected
     freeplayRefoundCount: 3,    // extinct non-focus species refound with this many
     freeplayDefaultTarget: 8,   // recovery target when a species isn't in freeplayTargets
-    freeplayGoalReward: 0,      // accomplishing a goal no longer gives a mauri boost (was 80)
+    freeplayGoalReward: 0,      // a goal gives no mauri boost
 
     // ---- Passive mauri: a healthy, EVEN ecosystem pays (the core income) ------
-    // Income per second = (avg population of non-eagle species ABOVE their floor)
-    // × BALANCE = the equality coefficient (1 − worst species shortfall below the top). So it
-    // rewards breadth + evenness, not farming one species. `focusInequalityWeight` weights the
-    // current year's FOCUS species 2× (neglecting a focus species while others boom hurts income
-    // twice as hard — the incentive to rebuild the two protected species). `imbalanceHarshness`
-    // raises the penalty a little each YEAR; `inequalityWeight` is a flat exponent on top (1 =
-    // off — the 2× now lives in the focus weighting). Eagles never count.
+    // Income/sec = (avg population above floor) × balance (1 − worst species shortfall),
+    // so it rewards breadth + evenness. focusInequalityWeight weights the year's focus
+    // species 2×; imbalanceHarshness raises the penalty each year. Eagles never count.
     freeplayPassive: { scale: 1.0, imbalanceHarshness: 0.03, inequalityWeight: 1, focusInequalityWeight: 2 },
 
     // ---- Year-to-year reset: fall back to defaults, nudged by past performance ----
-    // A new year is a NEW HABITAT — populations do NOT haul across. Each species falls
-    // back to its default (moa: initialSpeciesDistribution; birds: initialEntityCounts,
-    // else `birdDefault`), nudged up a little if you held a lot of it the LAST time you
-    // were in THIS area (per-area memory): nudge = round((lastHere − default)·influence),
-    // capped at `maxNudge`. Forest you grew here partly persists (`forestLegacy`). Keeps
-    // the game from snowballing on current performance while still rewarding cultivation.
+    // A new year is a new habitat: each species falls back to its default, nudged up by
+    // how much you held here last time (per-area memory), capped at maxNudge. Forest you
+    // grew here partly persists (forestLegacy).
     freeplayYearReset: { influence: 0.25, maxNudge: 3, birdDefault: 3, forestLegacy: 0.4 },
 
-    // Moa laying earns no mauri here (breeding income is the small hatch bonus below,
-    // and the steady passive stream); keeps moa from out-earning the flighted birds.
+    // Moa laying earns no mauri here (keeps moa from out-earning the flighted birds).
     noEggLaidMauri: true,
 
     // ---- Egg-hatch bonus: small, and for EVERY species -----------------------
-    // A little mauri per hatch (moa AND birds) while that species is still below the
-    // taper: `fullAmount` at/under `full`, `reducedAmount` up to `reduced`, then 0. Small
-    // by design — the passive ecosystem stream is the main income, this just nudges growth.
+    // A little mauri per hatch while the species is below the taper: fullAmount at/under
+    // full, reducedAmount up to reduced, then 0.
     hatchReward: { perSpecies: true, full: 6, reduced: 10, fullAmount: 2, reducedAmount: 1, allSpecies: true },
 
     // ---- Introduced-bird floors ---------------------------------------------
-    // The kākā are introduced by hand each loop; a small static floor means the last
-    // pair can't be hunted or starved, so a flock with podocarp forest to feed in never
-    // dies off entirely (it can still be pressured down to the floor). See mauri_kaka.js.
+    // A small static floor so the last kākā pair can't be hunted or starved out.
     populationFloors: { kaka: 2 },
 
     // ---- Mast Year interactable (buy with the palette; see Game.triggerMastYear) ----
     mastFlockMult: 1.6,         // fruit-bird flock caps swell by this ×  during a mast year
 
-    // ---- Year-1 kea trophic cascade (see YEARS_PLAN.md) -----------------------------
-    // Link 4 — eagles opportunistically hunt ADULT flighted birds when hungry (moa
-    // always preferred; grounded kākāpō exempt). Flyers flee slowly (flyerFleeMult),
-    // so a hungry eagle over the forest is a real threat to them.
+    // ---- Year-1 kea trophic cascade -----------------------------
+    // Eagles opportunistically hunt adult flighted birds when hungry (moa preferred;
+    // grounded kākāpō exempt). Flyers flee slowly, so a hungry eagle is a real threat.
     eagleHuntsFlyers: true,
     eagleFlyerHungerGate: 50,   // eagle bothers with a bird once this hungry
     eagleFlyerPreyPenalty: 1.6, // birds "feel" this× farther than moa (lower = easier prey)
     eagleFlyerFeed: 60,         // hunger a bird kill relieves (a moa relieves 90)
     flyerFleeMult: 0.9,         // fleeing birds only reach 0.9× cruise → easy to run down
-    // Link 1 — kea AUTO-raid of eggs is now OFF: raiding is a player action on a
-    // nesting site (Kea Raid v2, Slice D). Kea instead station on perch trees near a
-    // site (mauri_kea.js), and the player triggers the raid.
+    // Kea auto-raid of eggs is OFF: raiding is a player action on a nesting site.
     keaRaidsEggs: false,
     keaRaidRadius: 95, keaRaidNutrition: 46, keaRaidCooldownSec: 5,   // (dormant)
-    // Link 3 — eagle patrol re-centres on moa NESTS (eggs), not on adult moa.
+    // Eagle patrol re-centres on moa nests (eggs), not adult moa.
     eaglePatrolTracksNests: true,
-    // Link 2 — moa vacate disturbed nesting areas (emergent + this lever; 0 = pure emergent).
+    // Moa vacate disturbed nesting areas.
     moaNestDisturbance: true,
     moaDisturbanceAvoidance: 1.0,
     disturbanceRadius: 75,      // spatial reach of one raid's disturbance
@@ -331,14 +282,12 @@ const LEVEL_FREEPLAY_KAHURANGI = {
       drawRadius: 520           // a ready-to-lay moa is drawn to a site within this range
     },
 
-    // ---- Kea Raid v2: the player-driven raid action (Slice D) ----------------------
-    // When ≥ stationCount kea are perched within stationRadius of a nesting site, a
-    // raid indicator appears over it. Clicking spends `cost` and rolls success:
-    // baseSuccess minus moaPenalty per moa within moaRadius (so clear the moa first).
+    // ---- Kea Raid v2: the player-driven raid action ----------------------
+    // When ≥ stationCount kea perch within stationRadius of a site, a raid indicator
+    // appears. Clicking spends cost and rolls baseSuccess − moaPenalty per moa in moaRadius.
     keaRaid: {
       stationCount: 3,
-      stationRadius: 260,       // kea count as stationed from further off (they perch across the
-                               // forest patch, not only right on the nest — avoids a raid softlock)
+      stationRadius: 260,       // kea count as stationed from further off (avoids a raid softlock)
       cost: 60,
       baseSuccess: 0.9,
       moaPenalty: 0.12,
@@ -365,20 +314,15 @@ const LEVEL_FREEPLAY_KAHURANGI = {
     breedingSoftCap: 12, breedingCarryingCap: 34, breedingSuppressFloor: 0.12,
     breedingCooldownMult: 1.3, matingAge: 1200, winterBreedingCooldownMult: 2,
     noSpeciation: true,
-    focalSpecies: ['upland_moa', 'little_bush_moa'],   // STABLE balance set (generalist bonus),
-                                                       // distinct from the DYNAMIC yearly focus
+    focalSpecies: ['upland_moa', 'little_bush_moa'],   // STABLE balance set, distinct from the dynamic yearly focus
     maxPerSpecies: 20,
 
-    // NOTE: no static populationFloors — Free Play protects only the CURRENT year's
-    // two focus species, via the engine's dynamic floors (see Game._beginFreeplayYear).
+    // No static populationFloors — Free Play protects only the current year's focus species.
 
-    // ---- Emergent eagles. In Free Play their extinction is NOT a loss: it unleashes
-    // a dominant-moa boom and they re-immigrate next year (see Game._updateEagleBoom).
-    // eagleTargetRatioPerLoop nudges the eagles-per-prey ratio UP a little each 4-year loop
-    // (applied in Game._maybeGlacialDeepen), so predation pressure climbs over the run.
-    // eaglePursuitRadius: when no moa sits in the tight huntRadius, an eagle still SEEKS the
-    // nearest huntable moa within this range directly (a committed chase) instead of orbiting
-    // and lurching — kills the rubber-banding on the last straggler in an area (mauri_eagle.js).
+    // ---- Emergent eagles. In Free Play their extinction is not a loss: it unleashes a
+    // dominant-moa boom and they re-immigrate next year. eagleTargetRatioPerLoop climbs
+    // the eagles-per-prey ratio each loop. eaglePursuitRadius: an eagle directly seeks the
+    // nearest huntable moa in range (a committed chase) instead of rubber-banding.
     eaglePursuitRadius: 320,
     emergentEagles: true, eagleTargetRatio: 1 / 8, eagleTargetRatioPerLoop: 0.012, eagleMaxPopulation: 8, eagleHungerRate: 0.02,
       eagleStarveThreshold: 90, eagleStarveTimeout: 2400, eagleReproChance: 0.4, eagleReproCooldown: 2600,
@@ -404,9 +348,8 @@ const LEVEL_FREEPLAY_KAHURANGI = {
     subtitle: "",
     areaLabel: "NW Nelson, Te Waipounamu",
     areaSubtitle: "Upper West Coast, South Island",
-    // Free Play features its three flighted stars — the kea, kākā and kākāpō — the
-    // birds the yearly focus loop is built around (the moa are the backdrop). The
-    // menu renderer lays an ARRAY of featured species out in a row (see renderMenu).
+    // Free Play features its three flighted stars (kea, kākā, kākāpō). The menu renderer
+    // lays an array of featured species out in a row.
     featuredSpecies: [
       { key: 'kea',    displayName: 'Kea',    localName: 'Nestor notabilis',     spriteKey: 'kea' },
       { key: 'kaka',   displayName: 'Kākā',   localName: 'Nestor meridionalis',  spriteKey: 'kaka' },

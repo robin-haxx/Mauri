@@ -120,27 +120,22 @@ class Moa extends Boid {
     this.mateCooldown = 0;
     this.mateCooldownTime = s.eggCooldownTime;
 
-    // Focal (the level's protected founders) vs non-focal (competitors). When a
-    // level names its focalSpecies, the OTHER moa sustain themselves better: they
-    // breed a bit faster and favour their own kind more strongly. With no focal
-    // list set, every moa behaves as focal (unchanged).
+    // Focal (the level's protected founders) vs non-focal (competitors): non-focal moa
+    // breed a bit faster and favour their own kind more. No focal list → all focal.
     const _focal = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.focalSpecies) || null;
     this.isFocal = _focal ? _focal.indexOf(this.speciesKey) !== -1 : true;
     this.mateCrossPenalty = this.isFocal ? 40 : 80;
     this.reproCooldownMult = this.isFocal ? 1 : 0.7;
 
-    // When the level forbids speciation, same-species pairing is mandatory:
-    // cross-species is not a fallback but forbidden (see findPotentialMate).
+    // When the level forbids speciation, cross-species pairing is forbidden (see findPotentialMate).
     this._noSpeciation = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.noSpeciation) || false;
-    // Later maturity (measured reproduction): a level may raise the age at which
-    // a moa can first breed. Defaults to the global MOA_AGE.MATING_AGE.
+    // Later maturity: a level may raise the age at which a moa can first breed.
     this._matingAge = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.matingAge) || MOA_AGE.MATING_AGE;
     // Soft carrying-capacity breeding gate, recomputed each tick in behave().
     // 1 = unsuppressed; <1 = probability the moa initiates courtship this tick.
     this._breedDensityFactor = 1;
 
-    // Vulnerable-founder highlight: while this species sits at/below its threshold
-    // it pulses in a highlight colour so the player can find and protect it.
+    // Vulnerable-founder highlight: pulses while the species is at/below its threshold.
     this._vhl = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.vulnerableHighlight &&
                  LEVEL_MECHANICS.vulnerableHighlight[this.speciesKey]) || null;
     this._highlightActive = false;
@@ -188,9 +183,8 @@ class Moa extends Boid {
     c.key = sm.currentKey;
     c.hungerMod = sm.getHungerModifier();
     c.migrationStrength = sm.getMigrationStrength();
-    // Smooth 0..1 "winterness": ramps up across late autumn, holds at 1 through
-    // winter, fades across the winter->spring thaw. Winter penalties scale by
-    // this instead of snapping on at the hard season boundary.
+    // Smooth 0..1 "winterness": ramps up over late autumn, holds through winter, fades in
+    // the thaw. Winter penalties scale by it instead of snapping at the season boundary.
     c.winterness = sm.getWinterness ? sm.getWinterness() : (c.key === 'winter' ? 1 : 0);
     c.coldIndex = sm.coldIndex || 0;   // Free Play deepening-glacial severity (0 otherwise)
     const sp = sm.getPreferredElevation();
@@ -245,12 +239,9 @@ class Moa extends Boid {
       this.hunger < this.matingHungerThreshold * 1.5;
   }
 
-  // Soft carrying-capacity taper (opt-in via LEVEL_MECHANICS.breedingSoftCap).
-  // Returns 1 while the total moa population is at/below the soft cap, then
-  // falls linearly to breedingSuppressFloor as it climbs toward the carrying
-  // cap. Used as a per-tick probability that a ready moa starts courtship, so
-  // the unprompted spring boom flattens into a measured climb, and — because it
-  // keys off live population — breeding rebounds automatically after a crash.
+  // Soft carrying-capacity taper (opt-in via LEVEL_MECHANICS.breedingSoftCap): 1 at/below
+  // the soft cap, falling to breedingSuppressFloor at the carrying cap. A per-tick courtship
+  // probability, so the spring boom flattens and breeding rebounds after a crash.
   _computeBreedDensityFactor(simulation) {
     // Free Play eagle-loss boom: with no predator, the dominant species breeds
     // unsuppressed until eagles re-immigrate (see Game._updateEagleBoom).
@@ -283,15 +274,13 @@ class Moa extends Boid {
     this.hungerRate = this.baseHungerRate * sc.hungerMod * hungerMod * (this.isJuvenile() ? 1.3 : 1);
     this.hunger = Math.min(this.hunger + this.hungerRate * dt, this.maxHunger);
 
-    // Vulnerable-founder highlight flag (drawn in render): active while the
-    // species is still below its threshold.
+    // Vulnerable-founder highlight flag (drawn in render): active while below threshold.
     if (this._vhl) {
       this._highlightActive = simulation.getCachedSpeciesCount(this.speciesKey) < this._vhl.until;
     }
 
-    // Habitat stress (opt-in per level): a moa sitting far outside its
-    // species' preferred elevation band burns extra energy. This keeps each
-    // species genuinely tethered to its habitat rather than roaming freely.
+    // Habitat stress (opt-in): a moa far outside its preferred elevation band burns extra
+    // energy, tethering each species to its habitat.
     if (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.habitatStress) {
       const niche = this.speciesConfig.preferredElevation;
       if (niche) {
@@ -308,10 +297,8 @@ class Moa extends Boid {
       }
     }
 
-    // Free Play cold-tolerance axis (opt-in): a deepening glacial taxes low
-    // cold-tolerance species (the lowland browsers) far more than the cold-adapted
-    // upland moa, so the surviving flock drifts upland-ward as the run cools. Scaled
-    // by baseHungerRate so it stays proportionate to a species' metabolism.
+    // Free Play cold-tolerance axis (opt-in): a deepening glacial taxes low cold-tolerance
+    // species far more than the upland moa, so the flock drifts upland-ward as the run cools.
     if (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.coldToleranceMatters
         && sc.coldIndex > 0 && sc.winterness > 0) {
       const tol = this.speciesConfig.temperatureTolerance?.cold ?? 0.5;
@@ -367,8 +354,7 @@ class Moa extends Boid {
     
     if (this.isPregnant) this.executePregnancy(simulation, mauri, placeables, dt);
 
-    // Density-dependent breeding gate (recomputed here so determineState can
-    // read it without threading simulation through its signature).
+    // Density-dependent breeding gate (recomputed here so determineState can read it).
     this._breedDensityFactor = this._computeBreedDensityFactor(simulation);
 
     // Determine and execute state
@@ -446,23 +432,18 @@ class Moa extends Boid {
     
     this.targetMate = null;
     
-    // Actively eating at a placeable: stay on the food. (This used to rank
-    // below MIGRATING, so a seasonal elevation shift pulled moa off feeders
-    // mid-meal — a classic "starved out of nowhere".)
+    // Actively eating at a placeable: stay on the food (ranks above MIGRATING so a
+    // seasonal shift doesn't pull moa off feeders mid-meal).
     if (this.isFeeding) return MOA_STATE.FEEDING;
 
-    // Hunger deadband: start foraging above the threshold but keep foraging
-    // until comfortably below it. Without it, one bite dropped hunger just
-    // under the threshold → IDLE → home-range spring yanked the moa back →
-    // hunger re-crossed → out again (rubber-banding).
+    // Hunger deadband: start foraging above the threshold but keep foraging until well
+    // below it, so a moa doesn't rubber-band in and out on a single bite.
     const _wasForaging = this.currentState === MOA_STATE.FORAGING || this.currentState === MOA_STATE.FEEDING;
     const _forageExit = Math.max(this.hungerThreshold - 10, 5);
     const _hungry = this.hunger > (_wasForaging ? _forageExit : this.hungerThreshold);
 
-    // Food outranks migration when urgent or actually available: a starving
-    // moa always eats first; a merely-hungry one eats first unless local food
-    // is scarce (in which case migrating IS the path to food — and it still
-    // forages opportunistically while travelling).
+    // Food outranks migration when urgent or available: a starving moa always eats first;
+    // a merely-hungry one eats first unless local food is scarce (then migrating finds food).
     if (_hungry && (this.hunger > this.criticalHunger || this.localFoodScore >= 0.3)) {
       return MOA_STATE.FORAGING;
     }
@@ -570,9 +551,8 @@ class Moa extends Boid {
   // MATING
   // ============================================
 
-  // Mating search radius — widened near good food, since a well-fed spot is a
-  // good place to pair up from. A player-placed plant expands it 1.5x; a plant
-  // favoured by this species is stronger still at 2x (takes precedence).
+  // Mating search radius, widened near food. A placed plant expands it 1.5x; a favoured
+  // plant, 2x (takes precedence).
   effectiveMatingRadius() {
     let mult = 1;
     if (this._nearPlacedPlant) mult = 1.5;
@@ -581,9 +561,8 @@ class Moa extends Boid {
   }
 
   findPotentialMate(moas) {
-    // Two buckets: any same-species mate always beats a cross-species one, so a
-    // small founder population reliably pairs within itself instead of being
-    // forced to hybridise when both members happen to share a sex nearby.
+    // Two buckets: any same-species mate beats a cross-species one, so a small founder
+    // population pairs within itself instead of hybridising.
     let best = null, bestScore = Infinity;            // same species
     let bestCross = null, bestCrossScore = Infinity;  // other species
     const _mateR = this.effectiveMatingRadius();
@@ -704,8 +683,7 @@ class Moa extends Boid {
       // Cold-season breeding slowdown ramps in with winterness instead of snapping
       // on at the winter boundary.
       let _wm = LEVEL_MECHANICS.winterBreedingCooldownMult ?? 1;
-      // Free Play: a deepening glacial lengthens the winter breeding slowdown further,
-      // so growth genuinely gets harder cycle over cycle (the mode's whole point).
+      // Free Play: a deepening glacial lengthens the winter breeding slowdown further.
       const _ci = (moa._seasonCache && moa._seasonCache.coldIndex) || 0;
       if (_ci > 0) _wm = 1 + (_wm - 1) * (1 + _ci);
       _cd *= 1 + (_wm - 1) * ((moa._seasonCache && moa._seasonCache.winterness) || 0);
@@ -731,9 +709,8 @@ class Moa extends Boid {
       }
     }
 
-    // Kea Raid v2: a ready-to-lay moa is drawn to its nearest nesting site, so the
-    // flock gathers there to breed and eggs cluster at the nest. Gentle, so urgent
-    // feeding/fleeing still win.
+    // A ready-to-lay moa is drawn to its nearest nesting site, so the flock gathers there
+    // and eggs cluster. Gentle, so feeding/fleeing still win.
     if (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.nestingSites && simulation.getNearestNestingSite) {
       const draw = LEVEL_MECHANICS.nestingSites.drawRadius ?? 520;
       const site = simulation.getNearestNestingSite(this.pos.x, this.pos.y, draw, this.speciesKey);
@@ -756,14 +733,11 @@ class Moa extends Boid {
       return;
     }
     
-    // First-egg tutorial beat: only MOA eggs count. Eagle eggs (the emergent
-    // founder egg, or a bred clutch) would otherwise suppress the "An Egg!"
-    // tip for the player's actual first moa egg.
+    // First-egg tutorial beat: only moa eggs count, so eagle eggs don't suppress the tip.
     const aliveMoaEggs = simulation.eggs.filter(
       e => e.alive && !e.hatched && e.offspringType !== 'eagle');
 
-    // Kea Raid v2: lay at the nearest established nesting site if one is close, so
-    // eggs CLUSTER at sites (the nests eagles patrol and kea raid). Else lay in place.
+    // Lay at the nearest established nesting site if one is close, so eggs cluster. Else in place.
     let ex = this.pos.x, ey = this.pos.y;
     if (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.nestingSites && simulation.getNearestNestingSite) {
       const snap = LEVEL_MECHANICS.nestingSites.laySnapRadius ?? 160;
@@ -781,8 +755,7 @@ class Moa extends Boid {
       simulation.game.tutorial.fireEvent(TUTORIAL_EVENTS.FIRST_EGG, { egg });
     }
     
-    // Laying earns mauri unless the level opts out (Free Play: breeding income is the
-    // small per-hatch bonus + the steady ecosystem stream, not a per-egg payout).
+    // Laying earns mauri unless the level opts out (noEggLaidMauri).
     if (!(typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.noEggLaidMauri)) {
       mauri.earn(mauri.onEggLaid, this.pos.x, this.pos.y, 'egg');
     }
@@ -925,26 +898,19 @@ class Moa extends Boid {
       const dx = best.pos.x - this.pos.x, dy = best.pos.y - this.pos.y;
       const distSq = dx * dx + dy * dy;
       if (distSq > r * r) {
-        // GUIDE phase: steer toward the patch at cruising speed with NO arrival
-        // braking, so the moa reaches it carrying momentum instead of
-        // decelerating onto the centre point. The old arrive-vs-attract tug (and
-        // the vel*0.9 brake once in range) is what rubber-banded big, fast movers
-        // like the giant moa as they hit a stand.
+        // GUIDE phase: steer toward the patch at cruising speed with no arrival braking,
+        // so the moa reaches it carrying momentum instead of rubber-banding onto the centre.
         this.applyForce(this.seek(best.pos, 0.8));
       } else {
-        // ACROSS phase: once inside the patch, stop pulling the moa to the
-        // centre. Preserve its heading so it grazes straight across and out the
-        // far side — a *line* of favoured plants then behaves like a corridor
-        // that conveys the herd along, letting the player steer where moa go
-        // rather than trapping each one sliding to a centre point.
+        // ACROSS phase: once inside the patch, stop pulling the moa to the centre. Preserve
+        // its heading so it grazes across and out the far side, so a line of plants acts as a corridor.
         const vMagSq = this.vel.x * this.vel.x + this.vel.y * this.vel.y;
         if (vMagSq > 0.0001) {
           const s = (this.maxForce * 0.6) / Math.sqrt(vMagSq);
           this._tempForce.set(this.vel.x * s, this.vel.y * s);
           this.applyForce(this._tempForce);
         } else {
-          // Stalled dead inside a patch — nudge it back into motion through the
-          // stand instead of letting it park on the centre.
+          // Stalled inside a patch — nudge it back into motion.
           this.applyForce(this.seek(best.pos, 0.5));
         }
       }
@@ -955,10 +921,8 @@ class Moa extends Boid {
 
   forage(simulation, mauri) {
     if (!this.targetPlant?.alive || this.targetPlant.growth < 0.5) {
-      // Re-scan for a plant, but if the last scan came up empty don't repeat the
-      // (relatively costly) grid search every single frame — back off ~20 frames.
-      // A successful search resets the backoff, so normal foraging is unaffected;
-      // this only throttles hungry moa stuck where no food is in range.
+      // Re-scan for a plant, but back off ~20 frames after an empty scan so a hungry moa
+      // with no food in range doesn't repeat the costly grid search every frame.
       if (frameCount >= this._nextForageSearch) {
         this.targetPlant = this.findPlant(simulation);
         this._nextForageSearch = this.targetPlant ? 0 : frameCount + 20;
@@ -972,17 +936,13 @@ class Moa extends Boid {
       if (dSq < this.eatRadiusSq) {
         let gain = this.targetPlant.consume();
 
-        // Forest competition (opt-in per level): when the forest is crowded,
-        // each moa wins less from a given plant (interference competition).
-        // Combined with a glacially-scarce forest this makes habitat contested.
+        // Forest competition (opt-in): a crowded forest yields less per moa, so a glacially-
+        // scarce forest is contested.
         if (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.forestCompetition
             && FOREST_BIOMES.has(this.targetPlant.biomeKey)) {
           const radius = LEVEL_MECHANICS.forestCompetitionRadius ?? 45;
-          // Count competitors WITHOUT the shared getNearbyMoas() list buffer.
-          // That buffer is the same array behave() still holds as its neighbour
-          // list; re-querying it here would overwrite the neighbours used by the
-          // separation force applied after executeState() — which showed up as
-          // jittery moa movement. countNearbyMoas() counts in place, no buffer.
+          // Count competitors without the shared getNearbyMoas() buffer (re-querying it would
+          // overwrite behave()'s neighbour list). countNearbyMoas() counts in place.
           const competitors = simulation.countNearbyMoas(
             this.pos.x, this.pos.y, radius, m => m.alive && m !== this);
           const tolerance = LEVEL_MECHANICS.forestCompetitionTolerance ?? 2;
@@ -995,12 +955,8 @@ class Moa extends Boid {
           }
         }
 
-        // Diet breadth. A species-specific planted resource (lancewood, speargrass)
-        // yields little to species it isn't favoured by, so it stays a targeted
-        // founder subsidy (aggregation model of coexistence). Meanwhile the
-        // non-focal competitors are dietary generalists: they win MORE from the
-        // wild background flora than the specialist founders do, which is their
-        // niche edge rather than nibbling the founders' planted food.
+        // Diet breadth. A favoured planted resource yields little to species it isn't favoured
+        // by (a targeted founder subsidy); non-focal competitors instead win more from wild flora.
         if (this.targetPlant.favouredSpecies) {
           if (this.targetPlant.favouredSpecies !== this.speciesKey) {
             gain *= (typeof LEVEL_MECHANICS !== 'undefined' ? (LEVEL_MECHANICS.unfavouredBrowsePenalty ?? 0.25) : 0.25);
@@ -1031,9 +987,8 @@ class Moa extends Boid {
     for (let i = 0; i < plants.length; i++) {
       const p = plants[i];
       if (!p.alive || p.growth < 0.5) continue;
-      // Free Play: a winter-inedible plant still stands (frosted) but has no food
-      // value — skip it as forage like a dormant plant, so the flock must seek the
-      // evergreen refuge rather than nibbling worthless standing browse.
+      // Free Play: a winter-inedible plant still stands (frosted) but has no food value —
+      // skip it as forage, so the flock must seek the evergreen refuge.
       if (p.winterInedible) continue;
       if (p.seasonalModifier < 0.3 && this.hunger < 70) continue;
       
@@ -1062,9 +1017,8 @@ class Moa extends Boid {
     const p = this.preferredElevation;
     const err = elev < p.min ? p.min - elev : (elev > p.max ? elev - p.max : 0);
 
-    // LINK 2 — a moa standing in a disturbed nesting area (kea robbing nests nearby)
-    // wants to leave, so the flock vacates the raided forest. The avoidance lever
-    // scales it; 0 makes disturbance inert (pure-emergent mode).
+    // A moa in a disturbed nesting area (kea robbing nests nearby) wants to leave, so the
+    // flock vacates the raided forest. moaDisturbanceAvoidance scales it (0 = inert).
     if (simulation && typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.moaNestDisturbance &&
         simulation.disturbanceAt) {
       const dist = simulation.disturbanceAt(this.pos.x, this.pos.y) *
@@ -1102,7 +1056,7 @@ class Moa extends Boid {
       (simulation && typeof FOREST_TREES !== 'undefined' &&
        this.speciesConfig.forestAffinity) || 0;
 
-    // LINK 2 — steer migration AWAY from disturbed nesting areas (raided forest).
+    // Steer migration away from disturbed nesting areas (raided forest).
     const dAvoid = (simulation && typeof LEVEL_MECHANICS !== 'undefined' &&
       LEVEL_MECHANICS.moaNestDisturbance && simulation.disturbanceAt)
       ? (LEVEL_MECHANICS.moaDisturbanceAvoidance ?? 1) : 0;
@@ -1196,20 +1150,16 @@ class Moa extends Boid {
     push();
     translate(this.pos.x, this.pos.y);
 
-    // Species highlight (player toggle) + field-guide selection now share ONE
-    // sprite-shaped outline, emitted below at the sprite draw site so it lines up
-    // in the rotated/mirrored frame. It replaces the old soft pulsing disc, which
-    // read like an effect radius; the low-population warning stays a separate red
-    // ring (renderLowPopRing) drawn in renderIndicators so it sits above trees.
+    // Species highlight + field-guide selection share one sprite-shaped outline, emitted
+    // below at the sprite draw so it lines up. The low-pop warning ring stays separate.
 
     // Shadow — sprite-shaped on GL (bake-free silhouette), ellipse blob on 2D.
     const _shW = this.size * 2.5 * (this.speciesConfig.spriteScale || 1);
     EntitySprites.drawSpriteShadow(sprite, 1.5, 1.5, _shW, _shW,
       { alpha: 0.11, squash: 0.34, wide: 0.72, fbW: this.size * 1.0, fbH: this.size * 0.5 });
     
-    // Only update facing while actually moving: heading() of a near-zero
-    // velocity is pure noise and made stationary moa spin on the spot
-    // (mating, feeding, uphill crawls). Below the gate, keep the last facing.
+    // Only update facing while moving: heading() of a near-zero velocity is noise and made
+    // stationary moa spin. Below the gate, keep the last facing.
     if (this.vel.magSq() > 0.0025) {
       this._displayAngle = SpriteAngle.snapWithHysteresis(this._displayAngle, this.vel.heading());
     }
@@ -1218,20 +1168,17 @@ class Moa extends Boid {
     
     if (SpriteAngle.shouldMirror(this._displayAngle)) scale(1, -1);
     
-    // Per-species tint (by genus), skipped for species with their own dedicated
-    // sprite set (e.g. bush moa) so their art shows unaltered.
+    // Per-species tint (by genus), skipped for species with their own sprite set.
     const _tint = variant ? null : this.speciesConfig.tint;
     imageMode(CENTER);
     const _drawSize = this.size * 2.5 * (this.speciesConfig.spriteScale || 1);
-    // Highlight outline (field-guide selection OR the player's species toggle),
-    // drawn in this rotated/mirrored frame so it lines up. On GL it's a bake-free
-    // silhouette ring; on 2D a once-baked halo (see EntitySprites.drawSpriteOutline).
+    // Highlight outline (field-guide selection or the player's species toggle), drawn in
+    // this rotated/mirrored frame so it lines up.
     const _olCol = (typeof highlightOutlineColor !== 'undefined')
       ? highlightOutlineColor(this.speciesKey, this.speciesConfig.highlightColor) : null;
     if (_olCol) EntitySprites.drawSpriteOutline(sprite, _drawSize, _drawSize, _olCol);
-    // GL_PORT.md Phase 3: on the GL layer a live tint() is FREE (the batch multiplies
-    // the per-quad colour), so use it and skip the bake; on 2D fall back to the cached
-    // pre-tinted frame (p5's tint() is the slow per-draw path there).
+    // On the GL layer a live tint() is free (the batch multiplies the per-quad colour), so
+    // use it; on 2D fall back to the cached pre-tinted frame.
     if (_tint && typeof GLBatch !== 'undefined' && GLBatch.enabled && GLBatch._open) {
       tint(_tint[0], _tint[1], _tint[2]);
       image(sprite, 0, 0, _drawSize, _drawSize);
@@ -1243,20 +1190,15 @@ class Moa extends Boid {
     pop();
   }
 
-  // Vulnerable-founder marker. The red pulsing ring was removed (it read as a harsh
-  // "red circle" over the highlighted/focus species); the species highlight now shows
-  // ONLY as the coloured sprite-silhouette outline (highlightOutlineColor), which the
-  // focus/vulnerable species already carry via SPECIES_HIGHLIGHT. Kept as a no-op so the
-  // renderIndicators / tutorial-overlay callers need no change.
+  // Vulnerable-founder marker: now a no-op (the highlight shows only as the sprite-
+  // silhouette outline). Kept so renderIndicators / tutorial-overlay callers need no change.
   renderLowPopRing() {}
 
   renderIndicators() {
     const px = this.pos.x, py = this.pos.y, s = this.size;
     const yOff = -s * 0.8 - 4;
 
-    // Low-population warning: a pulsing red ring. Drawn here (the indicator
-    // pass, top render layer) rather than under the body, so it stays visible
-    // over trees and other plants.
+    // Low-population warning ring, drawn in the indicator pass so it stays visible over trees.
     this.renderLowPopRing();
     
     // Heart indicator

@@ -22,9 +22,8 @@ class TerrainGenerator {
       spring: null
     };
 
-    // Fixed-3D relief buffers: the same four seasons re-projected so the ranges
-    // stand up (see _bakeReliefBuffer). Baked LAZILY the first time the 3D view
-    // is switched on — a one-time hitch — then cached until the terrain regenerates.
+    // Fixed-3D relief buffers: the four seasons re-projected so the ranges stand up. Baked
+    // lazily on first 3D switch-on, then cached until the terrain regenerates.
     this.reliefBuffers = {
       summer: null,
       autumn: null,
@@ -61,16 +60,11 @@ class TerrainGenerator {
     this.zoom = zoom;
 
     // ---- 2×2 (N×M) CONTINUOUS TERRAIN GRID (endless "years") ------------------
-    // ONE continuous landmass, generated once, spanning worldW×worldH = cols×rows
-    // play windows. The island falloff runs the FULL width, so it is a single
-    // alps→shore descent (east = high alps, west = shore); a window shows only PART
-    // of it (year 1 = the alps→podocarp-forest upper slope, no shore). Each YEAR the
-    // CAMERA PANS across the continuous land to the next area in a circular tour, and
-    // the year's plants/fauna are unloaded and regenerated for the new area (see
-    // Game._scrollWorldGrid). The play window itself is unchanged (mapWidth/mapHeight,
-    // simulation, projection, clip and entity bounds are all one-window sized); the
-    // world only shows up in the heightmap/buffers (full-world) and a scroll offset.
-    //   Tour (E–W slope): east/alps → west/shore → across → back upslope.
+    // One continuous landmass spanning worldW×worldH = cols×rows play windows. The island
+    // falloff runs the full width, so it's a single alps→shore descent; a window shows only
+    // part of it. Each year the camera pans to the next area in a circular tour and that
+    // area's plants/fauna are regenerated (Game._scrollWorldGrid). The play window itself is
+    // unchanged; the world shows up only in the heightmap/buffers and a scroll offset.
     this.viewW = this.mapWidth;    // one area / play window, world units
     this.viewH = this.mapHeight;
     const wg = config.worldGrid || null;
@@ -84,12 +78,9 @@ class TerrainGenerator {
     // Circular tour order [col,row]. Default (2×2) starts at the east/alps window and
     // loops west → across → east, so year 1 is the alps→podo upper slope.
     this._quadOrder = (wg && wg.order) || this._defaultQuadOrder(this.worldGridCols, this.worldGridRows);
-    // "Less drastic alps, more podo forest": at the opening, SCALE the whole land
-    // elevation toward the coast so the alps top out low and the forest/subalpine band
-    // spreads far up the slope (a window then reads alps→podo, not wall-to-wall ice).
-    // `openLandScale` (0..1, lower = gentler) releases to 1.0 as `glacialAdvance` grows,
-    // so glacial habitats climb back up over the years. Seed-independent (a proportion,
-    // not a subtractive drop). Sea/coast (below `seaLevel`) are never touched.
+    // At the opening, scale the whole land elevation toward the coast so the alps top out
+    // low and the forest band spreads up the slope. openLandScale (lower = gentler) releases
+    // to 1.0 as glacialAdvance grows. Seed-independent; sea/coast below seaLevel are untouched.
     this.gridOpenLandScale = (wg && wg.openLandScale != null) ? wg.openLandScale : 0.6;
     this.gridSeaLevel = (wg && wg.seaLevel != null) ? wg.seaLevel : 0.14;
     this.gridGlacialFull = (wg && wg.glacialCap != null) ? wg.glacialCap : 0.6;  // advance at which "fully deep"
@@ -106,15 +97,13 @@ class TerrainGenerator {
     this._pan = null;   // { fromX, fromY, toX, toY, t } while a year pan runs
 
     // Island Y-pad: on a classic (single-window) level the island falloff spans
-    // mapHeight + 2·worldPadY so the window is the CENTRE of a larger island (the 3D
-    // over-scan reveals the rest). A world grid is already a larger-than-window land,
-    // so it needs no pad — the neighbouring areas ARE the "beyond".
+    // mapHeight + 2·worldPadY so the window is the centre of a larger island (the 3D over-scan
+    // reveals the rest). A world grid needs no pad — the neighbouring areas are the "beyond".
     this.worldPadY = this.hasWorldGrid ? 0
       : Math.max(0, (config.view3DWorldPad != null ? config.view3DWorldPad : 0)) * this.mapHeight;
 
-    // Gameplay grid resolution. A world grid covers cols×rows windows; scale the
-    // pixel size up so the full-world heightmap keeps ~the same cell count (and bake
-    // cost) as a single window — coarser gameplay precision, same visuals via detail.
+    // Gameplay grid resolution. A world grid scales the pixel size up so the full-world
+    // heightmap keeps ~the same cell count (and bake cost) as a single window.
     const gridMult = this.hasWorldGrid
       ? ((wg && wg.pixelScaleMult) || Math.sqrt(this.worldGridCols * this.worldGridRows)) : 1;
     this.scale = config.pixelScale * gridMult;
@@ -122,15 +111,12 @@ class TerrainGenerator {
     this.gridCols = Math.ceil(this.worldW * this.invScale);
     this.gridRows = Math.ceil(this.worldH * this.invScale);
 
-    // Render-only detail multiplier: bakes terrain buffers at N x the
-    // resolution without touching the gameplay grid (pixelScale).
-    // Supports fractions (e.g. 0.5 = half-resolution buffers).
+    // Render-only detail multiplier: bakes terrain buffers at N× the resolution without
+    // touching the gameplay grid. Supports fractions (0.5 = half-res).
     this.detail = Math.max(0.25, config.terrainDetail || 1);
 
-    // PERF: getElevation() runs its OWN octave loop (config.octaves), so p5's default
-    // per-call noiseDetail of 4 octaves was compounding — every noise() sample did 4
-    // hidden Perlin evaluations on top of our fractal loop. Halve it: near-identical
-    // terrain, ~2× faster noise across the whole heightmap + relief bake. (MISTAKES.md)
+    // PERF: getElevation() runs its own octave loop, so p5's default 4-octave noiseDetail
+    // compounded it. Halve it: near-identical terrain, ~2× faster noise.
     if (typeof noiseDetail === 'function') noiseDetail(2, 0.5);
 
     this._initBiomeIndex();
@@ -145,10 +131,8 @@ class TerrainGenerator {
   // WORLD-GRID (continuous 2×2 land / yearly camera pan) HELPERS
   // ============================================
 
-  // Circular tour of the grid areas. For a 2×2 E–W slope (col 1 = east/alps, col 0 =
-  // west/shore) start at the east/alps window and loop west → down → east → up, so
-  // year 1 is the alps→podocarp upper slope and year 2 pans down to the shore.
-  // Falls back to a row-major snake for other shapes.
+  // Circular tour of the grid areas. For a 2×2 E–W slope, start at the east/alps window
+  // and loop west → down → east → up. Falls back to a row-major snake for other shapes.
   _defaultQuadOrder(cols, rows) {
     if (cols === 2 && rows === 2) return [[1, 0], [0, 0], [0, 1], [1, 1]];
     const order = [];
@@ -171,15 +155,10 @@ class TerrainGenerator {
 
   _lerp(a, b, t) { return a + (b - a) * t; }
 
-  // Reshape a raw elevation for the world's year (glacial advance). The alps→shore
-  // SLOPE itself comes from the island falloff spanning the full width; this only
-  // controls how HIGH the high country climbs.
-  //
-  // Opening (glacialAdvance 0): SCALE the land elevation toward the coast so the whole
-  // slope is gentler — the alps top out low and the forest/subalpine band spreads far
-  // up, so a window reads alps→podocarp rather than wall-to-wall scree & ice. Over the
-  // years the scale releases to 1.0, so the alps rise back and glacial habitats come to
-  // dominate. Seed-independent (a proportion). Coast/sea (≤ seaLevel) are never touched.
+  // Reshape a raw elevation for the world's year (glacial advance). This only controls
+  // how high the high country climbs (the alps→shore slope comes from the island falloff).
+  // At the opening the land scales toward the coast (gentler); over the years the scale
+  // releases to 1.0 so the alps rise back. Coast/sea (≤ seaLevel) are untouched.
   _applyGridProfile(e) {
     if (!this.hasWorldGrid) return e;
     const sea = this.gridSeaLevel;
@@ -368,10 +347,8 @@ class TerrainGenerator {
       falloff += ridgeNoise * landProgress;
     }
     
-    // Clamp ny into [0,1] for the edge-softness term. Gameplay only ever samples
-    // y ∈ [0,mapHeight] (a no-op here), but the fixed-3D relief bake samples rows
-    // ABOVE the map (the far over-scan) where ny < 0 would make sin() negative and
-    // pow(neg,0.3) = NaN. Saturating at the edge keeps the over-scan low coastal land.
+    // Clamp ny into [0,1] for the edge-softness term: the 3D relief bake samples rows above
+    // the map (ny < 0) where pow(sin(neg),0.3) = NaN. Saturating keeps the over-scan low.
     const nyC = ny < 0 ? 0 : (ny > 1 ? 1 : ny);
     const edgeSoftness = Math.pow(Math.sin(nyC * Math.PI), 0.3);
     falloff *= 0.6 + edgeSoftness * 0.4;
@@ -380,19 +357,15 @@ class TerrainGenerator {
   }
   
   getElevation(x, y) {
-    // (x, y) are FULL-WORLD coordinates. On a world grid the whole land is one
-    // continuous noise field + falloff, so no per-area offset — neighbouring areas
-    // flow into each other (podo forest stretches downslope from area to area).
-
-    // changing falloff
+    // (x, y) are full-world coordinates. The whole land is one continuous noise field, so
+    // neighbouring areas flow into each other.
     const base = this.fractalNoise(x, y);
     const ridge = this.ridgeNoise(x, y);
     let elevation = base * (1 - this.config.ridgeInfluence) + ridge * this.config.ridgeInfluence;
     elevation = Math.pow(elevation, this.config.elevationPower);
 
     if (this.config.useLakes) {
-      // Inland terrain: no coastal falloff
-      // Instead, create lake basins by depressing low areas further
+      // Inland terrain: no coastal falloff; instead depress low areas into lake basins.
       elevation = this._applyLakeBasins(x, y, elevation);
     } else {
       // Original coastal island behavior
@@ -428,9 +401,8 @@ class TerrainGenerator {
       }
     }
     
-    // Soft edge falloff at map borders (not ocean, just prevents
-    // entities walking off the edge). Y through the padded island domain so the
-    // play window is interior and the near/far over-scan tapers at the world edge.
+    // Soft edge falloff at map borders (prevents entities walking off). Y runs through the
+    // padded island domain so the play window is interior.
     const pad = this.worldPadY || 0;
     const nx = x / this.worldW;
     const ny = (y + pad) / (this.worldH + 2 * pad);
@@ -487,9 +459,8 @@ class TerrainGenerator {
     return this.getEffectiveBiomeAt(x, y).walkable;
   }
 
-  // Is this point open water (sea/lake)? Distinct from merely un-walkable: alpine scree and
-  // glacier are un-walkable too, but they are dry LAND a strong flier (kea) can cross. Only
-  // water is a true barrier to relocation. Used by the flyer passability check.
+  // Is this point open water (sea/lake)? Distinct from un-walkable: alpine scree/glacier are
+  // dry land a kea can cross. Only water is a true barrier. Used by the flyer passability check.
   isWater(x, y) {
     const b = this.getEffectiveBiomeAt(x, y);
     return b === this._waterBiome || !!b.isWater;
@@ -632,11 +603,8 @@ class TerrainGenerator {
     return steps;
   }
 
-  /**
-   * Build render-resolution height/biome maps (detail x the gameplay grid).
-   * Used only for baking terrain buffers — gameplay lookups stay on the
-   * coarse heightMap/biomeIndexMap.
-   */
+  // Build render-resolution height/biome maps (detail × the gameplay grid), used only for
+  // baking terrain buffers. Gameplay lookups stay on the coarse maps.
   _buildRenderMaps() {
     const detail = this.detail;
 
@@ -657,13 +625,9 @@ class TerrainGenerator {
     this.renderHeightMap = new Float32Array(renderCols * renderRows);
     this.renderBiomeIndexMap = new Uint8Array(renderCols * renderRows);
 
-    // PERF: the render map is VISUAL-ONLY (bakes the terrain buffers). It used to
-    // re-sample getElevation() — i.e. run the full multi-octave noise stack — for
-    // every one of renderCols×renderRows cells (detail² × the gameplay grid), which
-    // was ~85% of world-gen time (≈20s at detail 2). Instead, bilinearly UPSCALE the
-    // coarse heightMap the gameplay grid already built: a smooth interpolation, no
-    // noise, ~free. Biome is derived from the interpolated elevation, keeping the
-    // coarse-grid water fallback so lakes/sea still match gameplay. (See MISTAKES.md.)
+    // PERF: the render map is visual-only. Instead of re-sampling getElevation() per cell
+    // (~85% of world-gen time), bilinearly upscale the coarse heightMap the gameplay grid
+    // built. Biome is derived from the interpolated elevation, keeping the water fallback.
     const gc = this.gridCols, gr = this.gridRows, hm = this.heightMap;
     let idx = 0;
     for (let row = 0; row < renderRows; row++) {
@@ -691,9 +655,7 @@ class TerrainGenerator {
     }
   }
 
-  /**
-   * Compute base terrain colors once (reused for all seasons)
-   */
+  // Compute base terrain colors once (reused for all seasons).
   _computeBaseCellColors() {
     const gridCols = this.renderCols;
     const gridRows = this.renderRows;
@@ -792,9 +754,7 @@ class TerrainGenerator {
     const gridRows = this.renderRows;
     const cellColors = this._computeSeasonCellColors(seasonKey);
 
-    // Fill buffer pixels
-    // Buffer is (mapWidth*detail) wide; a render cell covers scale/detail
-    // world px = scale buffer px, so px -> cell mapping is px * invScale / d
+    // Fill buffer pixels. Buffer is (mapWidth*detail) wide; px→cell mapping is px * invScale / d.
     const fullWidth = buf.width * d;
     const fullHeight = buf.height * d;
     const invScaleD = this.invScale / d;
@@ -848,9 +808,8 @@ class TerrainGenerator {
       snowContourRGB = [red(snowContourColor), green(snowContourColor), blue(snowContourColor)];
     }
 
-    // How strongly a contour cell is pulled toward contourColor.
-    // 1.0 = the old behaviour (flat replacement), 0.35 = a gentle shading of
-    // whatever the ground colour already was, 0 = invisible.
+    // How strongly a contour cell is pulled toward contourColor (1 = flat replace, 0.35 =
+    // gentle shading, 0 = invisible).
     const contourStrength = (this.config.contourStrength != null)
       ? this.config.contourStrength : 1.0;
 
@@ -959,11 +918,9 @@ class TerrainGenerator {
     const overFar = Math.max(0, cfg.view3DOverscan != null ? cfg.view3DOverscan : 0.45);
     const overNear = Math.max(0, cfg.view3DOverscanNear != null ? cfg.view3DOverscanNear : 0.28);
 
-    // PER-ROW relief: bake only the ACTIVE ROW's window depth, full width, so ONE
-    // window fills the frame (no full-world depth squash). The over-scan reads the
-    // neighbouring rows — real terrain already in the render maps — or, past the world's
-    // top/bottom edge, samples the falloff. A horizontal (E–W) pan then just scrolls X
-    // across this buffer; a row change (N–S) re-bakes (see _ensureReliefBuffers).
+    // PER-ROW relief: bake only the active row's window depth, full width, so one window
+    // fills the frame. The over-scan reads neighbouring rows (or the falloff past the edge).
+    // An E–W pan scrolls X across this buffer; an N–S row change re-bakes.
     const winRows = this.hasWorldGrid ? Math.round(fullRows / this.worldGridRows) : fullRows;
     const rowOff = this.hasWorldGrid ? (this.activeRow * winRows) : 0;
     const marginFar = Math.round(overFar * winRows);
@@ -984,8 +941,8 @@ class TerrainGenerator {
       const dstRow = er * cols;
 
       if (worldRow >= 0 && worldRow < fullRows) {
-        // In the world (the active window OR a real neighbouring row): copy the render
-        // maps so the visible relief matches the flat bake exactly.
+        // In the world (active window or a neighbouring row): copy the render maps so the
+        // relief matches the flat bake.
         const srcRow = worldRow * cols;
         for (let c = 0; c < cols; c++) {
           extHeight[dstRow + c] = this.renderHeightMap[srcRow + c];
@@ -1058,9 +1015,8 @@ class TerrainGenerator {
     this._reliefDrawY = -P0 * renderScale;             // world y of the buffer's top row (< 0: above frame)
 
     const buf = createGraphics(cols, bufH);
-    // Full-world grid buffers are large and always drawn scaled, so bake them at
-    // device density 1 (¼ the pixels of a retina bake) — a big win on the 4×-area
-    // relief bake, invisible once the buffer is scaled to the viewport.
+    // Full-world grid buffers are large and always drawn scaled, so bake them at device
+    // density 1 (¼ the pixels) — a big win, invisible once scaled to the viewport.
     if (this.hasWorldGrid && buf.pixelDensity) buf.pixelDensity(1);
     buf.loadPixels();
     const d = buf.pixelDensity();
@@ -1090,9 +1046,8 @@ class TerrainGenerator {
     const edgeRGB = (typeof CONFIG !== 'undefined' && CONFIG.view3DEdge) || [38, 46, 42];
     const reR = edgeRGB[0], reG = edgeRGB[1], reB = edgeRGB[2];
 
-    // Aerial perspective: blend each cell toward the haze colour by DISTANCE (how
-    // far it is up-map), so the body dissolves smoothly into the haze at the far
-    // end instead of ending in a hard, flatter-looking band. Near stays crisp.
+    // Aerial perspective: blend each cell toward the haze colour by distance up-map, so the
+    // far end dissolves into haze while the near end stays crisp.
     const FADE_MAX = (typeof CONFIG !== 'undefined' && CONFIG.view3DHazeFade != null) ? CONFIG.view3DHazeFade : 0.72;
     const FADE_POW = 1.5;
     const distDen = (inRows - 1 + marginFar) || 1;    // rw at near map edge → 0, farthest → 1
@@ -1107,8 +1062,7 @@ class TerrainGenerator {
         const i = er * cols + scol;
         const e = heightMap[i];
         let liftE = (biomeIdxMap[i] === waterIdx) ? 0 : e;  // water stays flat (no cliff at the shore)
-        // Taper relief to zero across the coastal shelf so the waterline is a
-        // clean edge, not a blocky wall (paint-only; terrain shape unchanged).
+        // Taper relief to zero across the coastal shelf so the waterline is a clean edge.
         if (liftE > 0 && liftE < 0.25) {
           const ct = (liftE - 0.10) / 0.15;
           liftE *= ct < 0 ? 0 : ct > 1 ? 1 : ct;
@@ -1160,9 +1114,8 @@ class TerrainGenerator {
         farR = tr; farG = tg; farB = tb; painted = true;
       }
 
-      // Sky above the far-most ridge → fade the ridge colour up into haze. With
-      // the over-scan the far land reaches most of the way up, so this is now just
-      // a thin band above the highest distant peak.
+      // Sky above the far-most ridge → fade the ridge colour up into haze. With the over-scan
+      // this is now just a thin band above the highest distant peak.
       for (let y = 0; y < ceiling; y++) {
         let rr, gg, bb;
         if (painted) {
@@ -1184,9 +1137,8 @@ class TerrainGenerator {
   // A one-time hitch of a few hundred ms — the same cost class as the flat bake.
   _ensureReliefBuffers() {
     if (typeof Projection === 'undefined') return;
-    // Re-bake if any bake-time 3D knob changed since the cached bake (so tuning
-    // view3DK / view3DLiftFrac / over-scan / haze fade at runtime takes effect on
-    // the next toggle); otherwise reuse the cache so toggling stays instant.
+    // Re-bake if any bake-time 3D knob changed since the cached bake; else reuse the cache
+    // so toggling stays instant.
     const cfg = (typeof CONFIG !== 'undefined') ? CONFIG : {};
     const overFar = cfg.view3DOverscan != null ? cfg.view3DOverscan : 0.45;
     const overNear = cfg.view3DOverscanNear != null ? cfg.view3DOverscanNear : 0.28;
@@ -1288,9 +1240,8 @@ class TerrainGenerator {
     // an E–W pan is an X source-crop and the row's depth is fixed (Y not scrolled).
     const dt = this.detail;
     const blit = (img, alpha) => {
-      // Opaque buffers, so a partial blit uses globalAlpha (0..1), NOT tint() — tint()
-      // forces a per-call tinted-canvas composite in p5; globalAlpha is identical here
-      // and much cheaper. alpha arrives 0..255, so scale it.
+      // Opaque buffers, so a partial blit uses globalAlpha, not tint() (tint() forces a tinted-
+      // canvas composite in p5). alpha arrives 0..255, so scale it.
       const _ga = _dc.globalAlpha;
       if (alpha != null) _dc.globalAlpha = alpha / 255;
       if (this.hasWorldGrid) {
@@ -1313,9 +1264,8 @@ class TerrainGenerator {
       if (alpha != null) _dc.globalAlpha = _ga;
     };
 
-    // N–S year move (3D): crossfade the OLD row's relief into the new one across the pan
-    // so the row change dissolves smoothly instead of snapping. _reliefPrev is only held
-    // for a row-change pan (see _ensureReliefBuffers); it's dropped when the pan settles.
+    // N–S year move (3D): crossfade the old row's relief into the new one across the pan.
+    // _reliefPrev is held only for a row-change pan; dropped when the pan settles.
     if (this._reliefPrev && !this._pan) this._disposeReliefPrev();
     if (isRelief && this._reliefPrev && this._pan) {
       const cf = this._smoothstep(0, 1, this._pan.t);       // 0 → old row, 1 → new row
@@ -1387,9 +1337,8 @@ class TerrainGenerator {
     return true;
   }
 
-  // Deepen the glacial share (glacial habitats climb higher). Regenerates the SAME
-  // land (seed kept) at the new advance + re-bakes — a heavy op, so used sparingly
-  // (e.g. once per full grid loop, not every year).
+  // Deepen the glacial share. Regenerates the same land (seed kept) at the new advance +
+  // re-bakes — heavy, so used sparingly (e.g. once per grid loop).
   setGlacialAdvance(adv) {
     if (Math.abs((this.glacialAdvance || 0) - adv) < 1e-4) return;
     this.glacialAdvance = adv;

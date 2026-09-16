@@ -1,46 +1,22 @@
 // ============================================
 // SPRITE ATLAS — runtime texture consolidation
 // ============================================
-// Every sprite PNG is loaded individually in preload() (fauna via EntitySprites,
-// flora via plantSprites, weather via placeableSprites). At draw time that is
-// ~150 distinct GPU textures, so the Canvas2D rasteriser binds/flushes a new
-// texture for almost every image() call — up to ~1500 a frame. This module packs
-// all of those loaded frames into a handful of large GPU pages ONCE, at setup(),
-// so the whole cast draws from one (or a few) shared textures. It is the packed
-// multi-animation atlas the strip loader's header (mauri_atlas.js) anticipated.
+// Sprite PNGs are loaded individually in preload(), giving ~150 GPU textures at
+// draw time. This packs all loaded frames into a few large pages once, at setup(),
+// so the cast draws from one or a few shared textures — cutting texture binds, the
+// texture count, and VRAM fragmentation (not fill rate, so not a frame-rate fix).
 //
-// What it does and does NOT change:
-//   • It is NOT a frame-rate fix. On Canvas2D the per-frame cost is dominated by
-//     DESTINATION pixels (fill rate × the supersample backing), which an atlas
-//     does not touch. What it cuts is texture BINDS, the texture COUNT (GPUs cap
-//     it), VRAM fragmentation, and — because the loose source images become
-//     unreferenced and free their textures — the transient double-allocation that
-//     makes a reload stutter. See the perf review notes.
-//
-// How it stays invisible to the render code:
-//   • build() replaces each loaded p5.Image reference (in place, aliases and all)
-//     with a lightweight AtlasFrame {__atlas, __page, sx, sy, sw, sh, width,
-//     height}. width/height mirror the ORIGINAL image, so every aspect-ratio and
-//     isValid() check in the render code is unchanged.
-//   • It then wraps the global image() so image(frame, dx,dy[,dw,dh]) expands to
-//     the 9-arg sub-rectangle draw on the frame's page. No render site changes.
-//     Real p5.Images (kawakawa buffer, water strips, HUD buffers) fall straight
-//     through the wrapper untouched.
-//   • The two places that draw a sprite into an OFFSCREEN buffer via the graphics
-//     METHOD g.image() — the tint bake and the plant gallery — are not covered by
-//     the global wrap, so they call SpriteAtlas.drawTo() with a typeof guard.
-//
-// Failure is a no-op: an image that failed to load (width 0) or is larger than a
-// page is simply left as its original reference and drawn the old way. If build()
-// is never reached (headless harness with stubbed graphics) nothing is packed and
-// the wrapper is a pure pass-through.
+// build() replaces each loaded p5.Image (in place, aliases and all) with a
+// lightweight AtlasFrame whose width/height mirror the original, then wraps the
+// global image() so image(frame, …) expands to the sub-rectangle draw. Real
+// p5.Images fall through untouched; the two offscreen graphics-method g.image()
+// sites (tint bake, plant gallery) call SpriteAtlas.drawTo() instead. Failure is a
+// no-op: an unloadable or oversized image is left as its original reference.
 
 const SpriteAtlas = {
   MAX_PAGE: 4096,   // page dimension cap — Chrome guarantees >= 4096; kiosk-safe
-  // Transparent px between frames. Sized for MIPMAPPING (GLBatch WebGL2): a downscaled sprite
-  // samples a mip level whose footprint is ~source/drawSize texels, so the gutter must exceed
-  // that footprint or a small sprite would pull in a NEIGHBOUR across the seam. 16 keeps sprites
-  // clean down to ~1/16 scale; below that the sprite is tiny and any bleed is invisible.
+  // Transparent px between frames, sized for mipmapping (GLBatch WebGL2): the gutter
+  // must exceed the mip footprint or a small sprite pulls in a neighbour. 16 = clean to ~1/16.
   GUTTER: 16,
 
   enabled: false,
@@ -52,9 +28,8 @@ const SpriteAtlas = {
   // An AtlasFrame? (what the global-image wrapper and drawTo() branch on.)
   isFrame(o) { return !!(o && o.__atlas); },
 
-  // A loaded source image we can pack: a real object with real dims, not already a
-  // frame, and small enough to sit on a page. A failed load (width 0), a boolean
-  // flag (placeableSprites.loaded), or a meta object all fail this and are skipped.
+  // A loaded source image we can pack: real dims, not already a frame, fits on a page.
+  // A failed load, a boolean flag, or a meta object all fail this.
   _packable(o) {
     const lim = this.MAX_PAGE - 2 * this.GUTTER;   // must fit on a fresh shelf, gutter included
     return !!(o && typeof o === 'object' && !o.__atlas &&
@@ -67,10 +42,8 @@ const SpriteAtlas = {
     if (this.enabled) return;
     if (typeof createGraphics !== 'function') return;
 
-    // 1. Walk the known sprite containers, recording every SLOT that holds a
-    //    packable image and the SET of unique images (dedup by identity, so an
-    //    aliased frame — eagle.dive === eagle.fly[n], plant idle === growing[0] —
-    //    is packed once and every slot that names it lands on the same page rect).
+    // 1. Walk the known sprite containers, recording every slot that holds a packable
+    //    image and the set of unique images (dedup by identity, so aliases pack once).
     const slots = [];          // { holder, key }  (works for object props and array indices)
     const uniq = [];
     const seen = new Set();
@@ -86,9 +59,7 @@ const SpriteAtlas = {
 
     if (!uniq.length) { this._installShim(); return; }   // nothing to pack, but the wrapper is harmless
 
-    // 2. Shelf bin-pack the unique images into pages. Sort tallest-first so shelves
-    //    stay tight. Simple and good enough — packing efficiency only affects how
-    //    many pages we end up with, not correctness.
+    // 2. Shelf bin-pack the unique images into pages, tallest-first so shelves stay tight.
     const order = uniq.slice().sort((a, b) => b.height - a.height);
     const G = this.GUTTER, MAX = this.MAX_PAGE;
     const placements = [];     // { img, page, x, y }
@@ -104,10 +75,8 @@ const SpriteAtlas = {
     }
     const nPages = pageIdx + 1;
 
-    // 3. Create each page at just the size it needs (never larger than MAX) and blit
-    //    every source into it at native 1:1 (no scaling, so the copy is pixel-exact).
-    //    pixelDensity(1) matches the project convention — the page backing must be
-    //    logical-sized or the sub-rect coordinates would be off on a hi-dpi buffer.
+    // 3. Create each page at the size it needs and blit every source into it at 1:1.
+    //    pixelDensity(1): the page backing must be logical-sized or sub-rect coords drift.
     const pageDims = new Array(nPages).fill(0).map(() => ({ w: 0, h: 0 }));
     for (const p of placements) {
       const d = pageDims[p.page];
@@ -127,12 +96,9 @@ const SpriteAtlas = {
       if (pg && pg.image) pg.image(p.img, p.x, p.y);   // graphics-method draw of a REAL image — 1:1, crisp
     }
 
-    // 3b. ALPHA BLEED — only when the pages will be MIPMAPPED (GLBatch WebGL2). The sprite
-    //     art has hard transparency (transparent px are RGB 0), so a mip level that averages
-    //     an opaque edge with its transparent neighbours would pull the edge toward black —
-    //     a dark fringe on downscaled sprites. Extend each sprite's edge COLOUR outward into
-    //     the surrounding transparent px (alpha stays 0) so the average keeps the right hue.
-    //     One-time, on the loading screen. Skipped on WebGL1 / 2D (no mipmaps, no fringe).
+    // 3b. ALPHA BLEED — only when pages will be mipmapped (GLBatch WebGL2). Extend each
+    //     sprite's edge colour into surrounding transparent px (alpha stays 0) so a mip
+    //     level doesn't average the edge toward black (a dark fringe on downscaled sprites).
     if (typeof GLBatch !== 'undefined' && GLBatch._gl2) {
       for (const pg of this.pages) {
         const cnv = pg.drawingContext && pg.drawingContext.canvas;
@@ -140,9 +106,8 @@ const SpriteAtlas = {
       }
     }
 
-    // 4. Build image -> frame, then write the frame into every recorded slot. The
-    //    frame's width/height mirror the source so downstream aspect maths are
-    //    unchanged; sx/sy/sw/sh are the sub-rectangle on the page.
+    // 4. Build image -> frame and write it into every recorded slot. width/height mirror
+    //    the source; sx/sy/sw/sh are the sub-rectangle on the page.
     const frameFor = new Map();
     for (const p of placements) {
       frameFor.set(p.img, {
@@ -165,12 +130,9 @@ const SpriteAtlas = {
   },
 
   // Return an ImageData copy of the page with each opaque edge colour extended `radius` px
-  // into the surrounding transparent pixels (alpha kept at 0), so MIPMAPPING can't average a
-  // sprite edge toward transparent-black (a dark fringe on downscaled sprites). We can't write
-  // this back to the CANVAS — a canvas stores premultiplied alpha, so colour under alpha 0 is
-  // discarded — so GLBatch uploads this ImageData straight to the (non-premultiplied) texture
-  // instead. A bounded outward dilation: each pass copies a solid 4-neighbour's RGB into a
-  // still-empty pixel; `solid` updates only AFTER the pass so colour spreads exactly 1 px/pass.
+  // into surrounding transparent px (alpha kept 0), so mipmapping can't average edges toward
+  // black. Not written back to the canvas (premultiplied alpha discards colour under alpha 0);
+  // GLBatch uploads this ImageData to the texture instead. A bounded outward dilation, 1 px/pass.
   _bleedEdges(page, radius) {
     const ctx = page.drawingContext, w = page.width, h = page.height;
     if (!ctx || !ctx.getImageData || !w || !h) return null;
@@ -206,14 +168,11 @@ const SpriteAtlas = {
   },
 
   // ---- container enumeration --------------------------------------------------
-  // Explicit, not a blind deep-walk: we only ever touch the structures we know
-  // hold loaded sprites, so nothing unexpected (a p5.Image internal, a cycle) is
-  // ever recursed into. `consider(holder, key)` records holder[key] if packable.
+  // Explicit, not a blind deep-walk: only the known sprite containers are touched.
+  // consider(holder, key) records holder[key] if packable.
   _collectRoots(consider) {
-    // A holder is an object of image slots OR an array of frames; consider() every
-    // enumerable slot (arrays via index), recursing one level into a nested array
-    // (e.g. moa.walk[]). Non-images are filtered by _packable, so a stray flag or
-    // meta object is harmless. 'meta' is skipped explicitly to avoid its sub-props.
+    // A holder is an object of slots or an array of frames; consider() each slot,
+    // recursing one level into a nested array (e.g. moa.walk[]). 'meta' is skipped.
     const eachIn = (obj) => {
       if (!obj || typeof obj !== 'object') return;
       for (const k in obj) {
@@ -224,9 +183,7 @@ const SpriteAtlas = {
       }
     };
 
-    // Fauna — EntitySprites (mauri_entity_sprites.js): moa {walk[],idle,juvenile},
-    // moaVariants[key] {walk[],idle}, eagle {fly[],dive,glide}, flyers {kea,kaka,
-    // kakapo,kokako}. (No huia/kereru containers here — that's the fork's cast.)
+    // Fauna — EntitySprites: moa, moaVariants[key], eagle, flyers.
     if (typeof EntitySprites !== 'undefined' && EntitySprites) {
       const E = EntitySprites;
       eachIn(E.moa);
@@ -235,9 +192,7 @@ const SpriteAtlas = {
       eachIn(E.flyers);
     }
 
-    // Flora — PLANT_SPRITES[type] = { <state>:img } (=== plantSprites after
-    // initPlantSprites) and PORTRAIT_PLANT_SPRITES[type] = [img, img] (arrays).
-    // eachIn handles both an object-of-states and an array-of-variants.
+    // Flora — PLANT_SPRITES[type] = { state:img } and PORTRAIT_PLANT_SPRITES[type] = [img, img].
     const collectPlants = (PS) => {
       if (!PS) return;
       for (const key in PS) eachIn(PS[key]);
@@ -247,28 +202,23 @@ const SpriteAtlas = {
     collectPlants((typeof PORTRAIT_PLANT_SPRITES !== 'undefined' && PORTRAIT_PLANT_SPRITES)
       ? PORTRAIT_PLANT_SPRITES : (typeof portraitPlantSprites !== 'undefined' ? portraitPlantSprites : null));
 
-    // Weather — placeableSprites (clouds, bolt, ash). 'loaded' is a boolean and is
-    // skipped by _packable.
+    // Weather — placeableSprites (clouds, bolt). 'loaded' is a boolean, skipped by _packable.
     if (typeof placeableSprites !== 'undefined' && placeableSprites) {
       for (const k in placeableSprites) consider(placeableSprites, k);
     }
   },
 
   // ---- draw shim --------------------------------------------------------------
-  // Wrap the global image() so an AtlasFrame first argument expands into the 9-arg
-  // sub-rectangle draw; everything else passes straight through. Installed lazily
-  // (from build(), inside setup()) because p5 global mode only binds image() on
-  // window once the sketch is running. Idempotent.
+  // Wrap the global image() so an AtlasFrame expands into the sub-rectangle draw; else
+  // it passes through. Installed lazily from build() (p5 binds image() once running).
   _installShim() {
     if (this._shimInstalled) return;
     if (typeof image !== 'function') return;
     const orig = image;
     this._origImage = orig;
     const shim = function (img, a, b, c, d) {
-      // WebGL entity layer (opt-in): during an open batch span, an entity sprite
-      // draw is captured as a GPU quad instead of drawn here. tryCapture() returns
-      // false when GL is off/closed or the image is not GL-drawable, so the 2D
-      // paths below still run for terrain buffers, water strips and the HUD.
+      // WebGL entity layer: during an open batch span, a sprite draw is captured as a GPU
+      // quad. tryCapture() returns false when GL is off or the image isn't GL-drawable.
       if (typeof GLBatch !== 'undefined' && GLBatch.enabled && GLBatch._open &&
           GLBatch.tryCapture(img, a, b, c, d)) return;
       if (img && img.__atlas) {
@@ -283,10 +233,8 @@ const SpriteAtlas = {
     this._shimInstalled = true;
   },
 
-  // Draw an AtlasFrame (or a plain image) into an offscreen graphics buffer `g`.
-  // For the two graphics-method g.image() sites the global wrap cannot see (the
-  // tint bake and the plant gallery). Safe to call with either a frame or a raw
-  // p5.Image.
+  // Draw an AtlasFrame (or plain image) into an offscreen graphics buffer g, for the
+  // two g.image() sites the global wrap can't see (tint bake, plant gallery).
   drawTo(g, img, dx, dy, dw, dh) {
     if (!g || !g.image) return;
     if (img && img.__atlas) {

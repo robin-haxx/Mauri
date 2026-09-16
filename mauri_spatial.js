@@ -28,9 +28,7 @@ class SpatialGrid {
     this._resultBuffer2 = [];
   }
   
-  /**
-   * Get grid dimensions
-   */
+  // Grid dimensions.
   getDimensions() {
     return {
       width: this.width,
@@ -63,9 +61,7 @@ class SpatialGrid {
     return row * this.cols + col;
   }
   
-  /**
-   * Get the cell coordinates for a given position
-   */
+  // Cell coordinates for a position.
   getCellCoords(x, y) {
     return {
       col: (x * this.invCellSize) | 0,
@@ -84,9 +80,7 @@ class SpatialGrid {
     cell.push(entity);
   }
   
-  /**
-   * Insert entity at specific position (useful for predictive queries)
-   */
+  // Insert at a specific position (predictive queries).
   insertAt(entity, x, y) {
     const idx = this.getCellIndex(x, y);
     if (idx === -1) return;

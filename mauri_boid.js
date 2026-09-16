@@ -150,10 +150,8 @@ class Boid {
     return result;
   }
   
-  // Optimized seek using coordinates.
-  // arriveRadius > 0 enables arrival: desired speed ramps down inside the
-  // radius so the boid settles on the target instead of overshooting and
-  // oscillating across it (rubber-banding).
+  // Seek toward coordinates. arriveRadius > 0 ramps speed down inside the radius so
+  // the boid settles instead of overshooting.
   seekPoint(tx, ty, urgency = 1, arriveRadius = 0) {
     const result = this._tempVec3;
     const dx = tx - this.pos.x;
@@ -209,18 +207,15 @@ class Boid {
     return this.fleePoint(target.x, target.y, radius);
   }
   
-  // Delta-time compatible wander — steers RELATIVE to the current heading
-  // (noise drifts the heading up to ~±100°) and is clamped to maxForce, so it
-  // produces gentle meandering curves instead of overpowering every steered
-  // force with a random absolute direction (which read as spinning in place).
+  // Wander: steers relative to the current heading (noise drifts it up to ~±100°),
+  // clamped to maxForce, for gentle meandering instead of spinning in place.
   wander(dt = 1) {
     // Advance wander time based on delta
     this.wanderTime += 0.008 * dt;
 
     const result = this._tempVec1;
 
-    // Remember the last real heading so a near-stationary boid resumes in a
-    // sensible direction instead of one derived from velocity noise.
+    // Remember the last real heading so a near-stationary boid resumes sensibly.
     if (this.vel.x * this.vel.x + this.vel.y * this.vel.y > 0.0001) {
       this._wanderHeading = Math.atan2(this.vel.y, this.vel.x);
     }
@@ -315,9 +310,8 @@ class Boid {
     this.vel.x += this.acc.x * dt;
     this.vel.y += this.acc.y * dt;
 
-    // Speed ramp: the effective cap eases toward the state's maxSpeed instead
-    // of snapping, so state changes (idle→flee, flee→idle, terrain slowdowns)
-    // accelerate/decelerate over ~10-20 frames rather than teleport-clamping.
+    // Speed ramp: the effective cap eases toward maxSpeed instead of snapping, so
+    // state changes accelerate/decelerate over ~10-20 frames.
     const targetMax = this.maxSpeed * this.personality.speedVariation;
     if (this._speedCap === null) this._speedCap = targetMax;
     this._speedCap += (targetMax - this._speedCap) * Math.min(1, 0.12 * dt);

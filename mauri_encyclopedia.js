@@ -1,14 +1,8 @@
 // ============================================
-// MAURI — FIELD GUIDE / ENCYCLOPEDIA (gamewide)
-// ------------------------------------------------------------
-// A browsable, pausing dialog that holds the ecology of the game — species, plants,
-// biomes, climate and concepts — so it lives somewhere the player can revisit, rather
-// than flashing past in tutorial tips and notifications (which shrink to how-to-play).
-// Available on every level: open with E, close with E or Esc.
-//
-// Content is DATA (the ENCYCLOPEDIA array), grounded in the research summarised in
-// FREEPLAY_PLAN.md §2/§5. No emoji in bodies — drawn text only. Entries link via
-// seeAlso. Add entries freely; the renderer paginates the list.
+// MAURI — FIELD GUIDE / ENCYCLOPEDIA
+// Browsable docked panel of game ecology (species, plants, biomes, climate,
+// concepts). Content is the ENCYCLOPEDIA data array; entries cross-link via
+// seeAlso. Open/close with E, Esc to close. Available on every level.
 // ============================================
 
 const ENCYCLOPEDIA = [
@@ -143,35 +137,35 @@ const ENCYCLOPEDIA = [
   // ---- Plants ----------------------------------------------------------------
   { id: 'beech', category: 'Plants', title: 'Beech', subtitle: 'Tawhai · Nothofagus/Fuscospora',
     body: [
-      "The evergreen backbone of the southern forest. In good years it produces heavy",
-      "'mast' seed crops. Because it keeps its leaves year-round, beech is the best",
-      "winter browse a moa can find — the value of the forest refuge in the cold.",
-      "",
-      "Its winter food value is the highest of the wild flora, but a deepening glacial",
-      "erodes even that."
+      "Evergreen canopy trees that dominate the southern forest, growing from the",
+      "lowlands to the treeline and often on poorer soils. The small, hard leaves are",
+      "held year round. In some years the forest produces heavy synchronised 'mast'",
+      "seed crops, cued by a warm previous summer."
     ], seeAlso: ['beech_refuge', 'winter_food'] },
 
   { id: 'tussock', category: 'Plants', title: 'Snow Tussock', subtitle: 'Chionochloa',
     body: [
-      "The big bunch-grasses of the high country. They evolved with no browsing mammals",
-      "— only moa and insects — and stand through the hardest winters. But they are",
-      "coarse and low-value in the cold: standing food with little in it."
+      "Large bunch-grasses that dominate the tussock grasslands above the treeline.",
+      "Long-lived and slow-growing, they evolved with only moa and insects browsing",
+      "them and stand through the hardest winters. The foliage is coarse and low in",
+      "nutrients. They flower heavily in occasional mast years."
     ], seeAlso: ['winter_food', 'subalpine'] },
 
   { id: 'rimu', category: 'Plants', title: 'Rimu', subtitle: 'Podocarp',
     body: [
-      "An ancient podocarp bearing bright fleshy fruit that birds prize. But the fruit",
-      "is a summer-autumn thing: in winter a rimu offers almost no food at all."
+      "An ancient podocarp and a tall emergent of lowland conifer-broadleaf forest.",
+      "Slow-growing and long-lived, with weeping juvenile foliage, and male and female",
+      "cones borne on separate trees. In some years it carries bright fleshy fruit",
+      "through summer and autumn, prized by kererū, kākāpō and other birds."
     ], seeAlso: ['winter_food', 'kereru'] },
 
   { id: 'favoured_plants', category: 'Plants', title: 'Lancewood & Speargrass', subtitle: 'Horoeka · Taramea',
     body: [
-      "Tough, spiky, browse-resistant plants you can place from the palette. Each feeds",
-      "essentially one moa — lancewood the bush moa, speargrass the upland moa — so a",
-      "planted stand draws its own species and few others.",
-      "",
-      "A tended stand also holds more of its food value through winter than wild flora,",
-      "which makes the palette your deliberate answer to a hard glacial."
+      "Two tough, browse-resistant plants of the open country. Lancewood (horoeka)",
+      "spends years as a juvenile, a single unbranched stem hung with long, hard,",
+      "downward-angled leaves, before it forms an adult crown, a habit widely read as",
+      "a defence against moa browsing. Speargrass (taramea) grows as a stiff rosette",
+      "of sharp, spine-tipped leaves in tussock grassland and rocky subalpine sites."
     ], seeAlso: ['coexistence', 'winter_food'] },
 
   // ---- Biomes ----------------------------------------------------------------
@@ -249,11 +243,8 @@ const ENCYCLOPEDIA = [
 const ENCYCLOPEDIA_BY_ID = {};
 for (const e of ENCYCLOPEDIA) ENCYCLOPEDIA_BY_ID[e.id] = e;
 
-// Field-guide selection highlight. When the guide is open, the currently
-// selected entry's species gets a bright, light-green sprite-shaped outline in
-// the world (drawn by EntitySprites.drawSpriteOutline in each entity's render).
-// Returns [r,g,b] for a species to outline, or null. Cheap — just an id compare
-// against the selected entry, evaluated once per entity per frame.
+// Highlight colour for the guide's selected species: [r,g,b] to outline in the
+// world (via EntitySprites.drawSpriteOutline), or null.
 const GUIDE_OUTLINE_COLOR = [150, 255, 130];
 function guideOutlineColor(speciesKey) {
   if (!speciesKey || typeof game === 'undefined' || !game || !game.encyclopedia) return null;
@@ -261,23 +252,15 @@ function guideOutlineColor(speciesKey) {
   if (!enc.open) return null;                       // only while the guide is showing
   const entry = ENCYCLOPEDIA[enc.index];
   if (!entry) return null;
-  // Animal speciesKey === encyclopedia id (moa species, kereru, kokako, haasts_eagle).
+  // Animal speciesKey matches encyclopedia id.
   if (entry.id === speciesKey) return GUIDE_OUTLINE_COLOR;
-  // The single eagle entry covers every eagle species (adult + juvenile).
+  // One eagle entry covers all eagle species.
   if (entry.id === 'haasts_eagle' && speciesKey.indexOf('haasts_eagle') !== -1) return GUIDE_OUTLINE_COLOR;
   return null;
 }
 
-// Unified in-world highlight colour for an animal sprite. Both the field-guide
-// selection AND the player's SPECIES_HIGHLIGHT toggle now draw as the SAME
-// sprite-shaped outline (EntitySprites.drawSpriteOutline) — the field guide's
-// bright green (a deliberate, transient focus) wins over a toggled species' own
-// highlightColor. Returns [r,g,b] or null.
-//
-// This replaces the old soft pulsing DISC that sat under the sprite: an outline
-// hugs the silhouette, so it always reads as "this animal", never as an effect
-// radius, and stays legible on a crowded map. The gentle attention pulse lives in
-// drawSpriteOutline's ALPHA (never its size), so nothing appears to grow/shrink.
+// In-world highlight colour for an animal sprite: [r,g,b] or null. The guide's
+// selection (green) overrides the player's SPECIES_HIGHLIGHT toggle colour.
 function highlightOutlineColor(speciesKey, highlightColor) {
   const g = guideOutlineColor(speciesKey);
   if (g) return g;
@@ -286,27 +269,24 @@ function highlightOutlineColor(speciesKey, highlightColor) {
   return null;
 }
 
-// Docked field guide. Lives in the right-bar column (below the other panels) in
-// both the windowed (full) UI and the fullscreen (focus) overlay — it does NOT
-// pause the sim, so the world keeps running while you read. One view at a time:
-// the entry LIST, or a single entry's DETAIL with a "back to encyclopedia" toggle
-// at the top. GameUI computes the panel box and routes clicks; see renderDocked /
-// handleDockedClick and mauri_UI.js (renderGuideButton, renderSidebar).
+// Docked field guide in the right-bar column; does not pause the sim. Shows one
+// view at a time: the entry list, or a single entry's detail. GameUI computes the
+// panel box and routes clicks.
 class Encyclopedia {
   constructor() {
     this.open = false;
-    this.viewMode = 'list';  // 'list' (choose an entry) | 'detail' (one entry)
+    this.viewMode = 'list';  // 'list' | 'detail'
     this.index = 0;          // selected entry
-    this.listOffset = 0;     // first visible list row (for scrolling long lists)
+    this.listOffset = 0;     // first visible list row
     this._rowRects = [];     // hit rects rebuilt each render
     this._seeAlsoRects = [];
     this._backRect = null;
     this._closeRect = null;
-    this._panelRect = null;  // last docked box (for wheel hit-testing)
+    this._panelRect = null;  // last docked box (wheel hit-testing)
   }
 
   toggle(game) { this.open ? this.close(game) : this.openGuide(game); }
-  openGuide() { this.open = true; }   // docked panel — the sim keeps running
+  openGuide() { this.open = true; }   // docked; sim keeps running
   close() { this.open = false; }
 
   select(idOrIndex) {
@@ -319,8 +299,7 @@ class Encyclopedia {
     this.viewMode = 'detail';
   }
 
-  // Returns true only for keys it actually consumes — the guide is no longer modal,
-  // so gameplay keys must still reach the game while it's open.
+  // Returns true only for keys it consumes, so gameplay keys still reach the game.
   handleGlobalKey(k, game) {
     const key = (k || '').toLowerCase();
     if (key === 'e') { this.toggle(game); return true; }
@@ -375,10 +354,9 @@ class Encyclopedia {
   }
 
   // ---- docked render (right-bar column) ---------------------------------------
-  // x,y,w,h is the panel box GameUI reserved below the other sidebar content.
-  // opts.translucent softens the fill for the fullscreen overlay.
+  // x,y,w,h is the panel box. opts.translucent softens the fill for the overlay.
   renderDocked(x, y, w, h, opts = {}) {
-    if (h < 60) { this._panelRect = null; return; }   // no usable room — skip
+    if (h < 60) { this._panelRect = null; return; }   // no usable room
     this._panelRect = { x, y, w, h };
     const pad = 12, headerH = 30;
 

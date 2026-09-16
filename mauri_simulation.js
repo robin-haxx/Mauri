@@ -11,9 +11,8 @@ class Simulation {
     this.moas = [];
     this.eagles = [];
     this.plants = [];
-    // Render-only partition of `plants` by draw layer (type never changes), so
-    // render() walks each layer directly instead of scanning the whole plants
-    // list twice with a type filter. Kept in sync by addPlant().
+    // Render-only partition of `plants` by draw layer, so render() walks each layer
+    // directly. Kept in sync by addPlant().
     this.groundPlants = [];   // drawn under entities
     this.treePlants = [];     // rimu / beech / fern — drawn above entities
     this.eggs = [];
@@ -40,9 +39,8 @@ class Simulation {
     this._speciesStableTimes = {};
     this._speciesLastAlive = {};
 
-    // Free Play Mast Year: set true by Game while a bought mast year is live. The
-    // fruit-birds (kererū/kōkako) breed harder — a higher flock cap and shorter egg
-    // cooldown (mauri_kereru.js._tryReproduce / _hatchFlyerEgg).
+    // Free Play Mast Year: set by Game while a mast year is live. The fruit-birds breed
+    // harder (higher flock cap + shorter egg cooldown).
     this.mastYear = false;
 
     this._speciesStableTimes = {};
@@ -60,22 +58,17 @@ class Simulation {
     this.placeableGrid = new SpatialGrid(worldWidth, worldHeight, 80);
     this.eggGrid = new SpatialGrid(worldWidth, worldHeight, 40);
 
-    // Grids are split by whether their entities MOVE.
-    //  • Moving grids (moa/eagle/placeable) are rebuilt every frame because the
-    //    entities change position. Only live entities are inserted so a dead-
-    //    but-not-yet-cleaned entity is never a phantom neighbour/threat.
-    //  • Static grids (plants/eggs) never move, so each only needs rebuilding
-    //    when its LIST membership changes (a plant/egg added or removed) —
-    //    flagged by a per-grid `dirty` bit. This skips an O(plants) rebuild
-    //    every frame, which was the dominant per-frame cost on big maps.
+    // Grids are split by whether their entities move.
+    //  • Moving grids (moa/eagle/placeable) are rebuilt every frame; only live entities
+    //    are inserted, so a dead entity is never a phantom neighbour.
+    //  • Static grids (plants/eggs) rebuild only when their list membership changes
+    //    (a `dirty` bit), skipping an O(plants) rebuild every frame.
     this._movingGridPairs = [
       { grid: this.moaGrid, list: this.moas },
       { grid: this.eagleGrid, list: this.eagles },
       { grid: this.placeableGrid, list: this.placeables }
     ];
-    // Independent dirty flags per static grid so frequent egg churn (breeding)
-    // never forces a plant-grid rebuild, and vice-versa. `dirty: true` builds
-    // each once on the first frame.
+    // Independent dirty flags per static grid, so egg churn never forces a plant-grid rebuild.
     this._plantGridPair = { grid: this.plantGrid, list: this.plants, dirty: true };
     this._eggGridPair   = { grid: this.eggGrid,   list: this.eggs,   dirty: true };
     this._staticGridPairs = [this._plantGridPair, this._eggGridPair];
@@ -131,15 +124,13 @@ class Simulation {
     // { x, y, strength }; strength ebbs to 0 and is pruned. Read via disturbanceAt().
     this._disturbances = [];
 
-    // Established moa nesting sites (Kea Raid v2). Seeded in init() when the level
-    // opts in (LEVEL_MECHANICS.nestingSites); moa lay at their nearest site.
+    // Established moa nesting sites. Seeded in init() when the level opts in; moa lay at their nearest site.
     this.nestingSites = [];
     this._nestingRecomputeTimer = 0;
 
-    // Player-grown moa nesting sites (endless "moa focus" year goal). While
-    // moaNestingWatch is set (by Game._beginFreeplayYear) to { speciesKey, plantType },
-    // a dense patch of the moa's favoured plant (lancewood / speargrass) with that moa
-    // drawn to it forms a NEW nesting site. Off (null) outside a nesting-goal year.
+    // Player-grown moa nesting sites (endless "moa focus" year goal). While moaNestingWatch
+    // is set, a dense patch of the moa's favoured plant with that moa drawn to it forms a
+    // new site. Null outside a nesting-goal year.
     this.moaNestingWatch = null;
     this._moaNestTimer = 0;
   }
@@ -159,9 +150,8 @@ class Simulation {
       this.spawnMoas(this.config.initialMoaCount, this.config.startingSpecies || null);
     }
 
-    // Founder sexing bias: the two same-species moa that spawn closest together
-    // get a 50% higher chance of being opposite sex (0.5 → 0.75 under random
-    // sexing), so the most likely first encounter can lead to a breeding pair.
+    // Founder sexing bias: the two closest same-species moa get a higher chance of being
+    // opposite sex, so the likely first encounter can lead to a breeding pair.
     this._biasClosestPairSexes();
 
     this.spawnEagles(this.config.eagleCount);
@@ -186,11 +176,9 @@ class Simulation {
   // ============================================
   // WORLD-GRID AREA CHANGE (endless "years" camera pan)
   // ============================================
-  // The world is one continuous landmass, but only the active area (window) is ever
-  // populated. At a year boundary the camera pans to the next area; these two calls
-  // unload the old area's trees/fauna and regenerate them on the new ground, carrying
-  // the living POPULATIONS across (the flock the player built, relocated to a new
-  // country) rather than resetting them. See Game._scrollWorldGrid / _updateWorldGridPan.
+  // The world is one continuous landmass, but only the active area is populated. At a year
+  // boundary the camera pans to the next area; these calls unload the old area's trees/fauna
+  // and regenerate them, carrying the living populations across.
 
   // Snapshot the living populations, then clear every spatial entity. Called as the pan begins.
   unloadAreaEntities() {
@@ -227,9 +215,8 @@ class Simulation {
     this._restoreForestLegacy();   // partly re-grow the forest you cultivated here last visit
     const yp = this._yearStartPops;
     if (yp) {
-      // Reset-to-default (+ per-area nudge): populations don't haul across areas — Game
-      // computed this year's starting counts (defaults nudged by past performance here),
-      // so spawn exactly those on the fresh ground.
+      // Reset-to-default (+ per-area nudge): Game computed this year's starting counts, so
+      // spawn exactly those on the fresh ground.
       if (yp.moa && Object.keys(yp.moa).length) this._spawnDistributedMoas(yp.moa);
       this._biasClosestPairSexes();
       for (let i = 0; i < (yp.eagles || 0); i++) this.spawnEagle();
@@ -257,9 +244,8 @@ class Simulation {
     return n;
   }
 
-  // Forest legacy: after fresh plants are laid for the new area, grow back a fraction of
-  // the forest you had here last visit (Game sets _forestLegacyTarget). A head start on the
-  // podocarp refuge for areas you tended — without hauling the whole forest across.
+  // Forest legacy: after fresh plants are laid, grow back a fraction of the forest you had
+  // here last visit (Game sets _forestLegacyTarget), a head start for areas you tended.
   _restoreForestLegacy() {
     const target = this._forestLegacyTarget || 0;
     this._forestLegacyTarget = 0;
@@ -278,17 +264,15 @@ class Simulation {
   // NESTING SITES (Kea Raid v2) — see mauri_nesting.js
   // ============================================
 
-  // Seed the established moa nests: a few in the downslope forest, the rest across
-  // open moa country. Count/placement from LEVEL_MECHANICS.nestingSites; inert on
-  // levels that don't opt in.
+  // Seed the established moa nests: some in the downslope forest, the rest across open moa
+  // country. Count/placement from LEVEL_MECHANICS.nestingSites; inert when not opted in.
   _seedNestingSites() {
     this.nestingSites = [];
     const M = (typeof LEVEL_MECHANICS !== 'undefined') ? LEVEL_MECHANICS : {};
     const cfg = M.nestingSites;
     if (!cfg || typeof NestingSite === 'undefined') return;
-    // Per-year override (Game._beginFreeplayYear sets this from the schedule): fewer
-    // sites and/or a half-map region constraint (the kea year seeds all sites on the
-    // left/forest half). Falls back to the level's defaults.
+    // Per-year override (from the schedule): fewer sites and/or a half-map region constraint.
+    // Falls back to the level's defaults.
     const ov = this._nestingOverride || null;
     const forestBand = cfg.forestBand || { min: 0.36, max: 0.48 };
     const openBand = cfg.openBand || { min: 0.18, max: 0.34 };
@@ -301,8 +285,7 @@ class Simulation {
       if (region === 'right') return x >= this.worldWidth * 0.5;
       return true;
     };
-    // Keep sites from overlapping: a new site must sit at least minGap from every
-    // existing one (default 2.6 radii apart, so their raid/egg circles never touch).
+    // Keep sites from overlapping: at least minGap from every existing one.
     const minGap = cfg.minGap != null ? cfg.minGap : radius * 2.6;
     const minGapSq = minGap * minGap;
     const farEnough = (x, y) => {
@@ -317,9 +300,8 @@ class Simulation {
       for (let tries = 0; tries < 24; tries++) {
         const p = this.findWalkablePosition(band.min, band.max);
         if (!p) continue;
-        // Reject findWalkablePosition's centre-of-map fallback (and any out-of-band or
-        // unwalkable spot): never seed a nest on scree/ice the moa can't nest on. If the
-        // area has no room in the band, we simply place fewer sites.
+        // Reject the centre-of-map fallback and any out-of-band/unwalkable spot; if the area
+        // has no room in the band, place fewer sites.
         const e = this.terrain.getElevationAt(p.x, p.y);
         if (e <= band.min || e >= band.max || !this.terrain.isWalkable(p.x, p.y)) continue;
         if (!inRegion(p.x)) continue;
@@ -432,11 +414,9 @@ class Simulation {
     }
   }
 
-  // For each species, find the closest pair of founders; if they're same-sex,
-  // make them opposite-sex with 50% probability. That takes P(opposite) from
-  // p to p + (1-p)/2 — for the random-sexing baseline p = 0.5 that's 0.75,
-  // i.e. a 50% higher chance. Sexes are swapped with another founder where
-  // possible so the species' overall sex balance is unchanged.
+  // For each species, find the closest pair of founders; if same-sex, make them opposite
+  // with 50% probability. Swapped with another founder where possible, so the overall sex
+  // balance is unchanged.
   _biasClosestPairSexes() {
     const bySpecies = {};
     for (let i = 0; i < this.moas.length; i++) {
@@ -480,8 +460,7 @@ class Simulation {
   }
 
   _spawnOtherEntities(type, count) {
-    // This is a hook for weka, kea, etc.
-    // For now, create the list and spawn using registry
+    // Hook for weka, kea, etc.; create the list and spawn via registry.
     if (!this.otherEntities[type]) {
       this.otherEntities[type] = [];
     }
@@ -587,10 +566,8 @@ class Simulation {
       const pos = this.findWalkablePosition(pref.min, pref.max);
       const moa = this._createFromRegistry('moa', speciesKey, pos.x, pos.y, Moa);
       if (moa) {
-        // Deterministic founder sexing: alternate F/M so the starting flock is
-        // as evenly split as possible (e.g. 6 founders → 3♀/3♂) instead of the
-        // lopsided draws random per-moa sexing can give. Matches the
-        // multi-species spawn path; _biasClosestPairSexes() preserves the split.
+        // Deterministic founder sexing: alternate F/M so the starting flock is evenly
+        // split (e.g. 6 founders → 3♀/3♂) instead of a lopsided random draw.
         moa.isFemale = (i % 2 === 0);
         this.moas.push(moa);
       }
@@ -641,13 +618,11 @@ class Simulation {
     }
   }
 
-  // Choose a fixed nest site for an emergent eagle: the highest, rockiest walkable
-  // spot in a small neighbourhood (a crag eyrie) near the given point. Falls back
-  // to the point itself. Also seeds patrolCenter so the bird orbits its nest.
+  // Choose a fixed nest site for an emergent eagle near the given point, and seed
+  // patrolCenter so the bird orbits it.
   _assignEagleNest(eagle, x, y) {
-    // Home near prey rather than on the barren high crags, so winter glaciation
-    // doesn't strand eagles in the empty alps with nothing to hunt. Falls back to
-    // the spawn point when no moa are nearby.
+    // Home near prey rather than the barren high crags, so glaciation doesn't strand eagles
+    // in the empty alps. Falls back to the spawn point when no moa are near.
     let cx = x, cy = y;
     const prey = this.getClosestMoa(x, y, 600);
     if (prey) {
@@ -658,9 +633,8 @@ class Simulation {
     eagle.patrolCenter.set(cx, cy);
   }
 
-  // Highest, rockiest walkable spot near (x,y): a crag/cliff-edge eyrie. Samples
-  // several walkable candidates and keeps the one with the greatest elevation, so
-  // the site sits at the alpine edge without stranding an egg on impassable ice.
+  // Highest walkable spot near (x,y): a crag eyrie. Samples several candidates and keeps
+  // the highest, so the site sits at the alpine edge without stranding an egg on ice.
   _findCragEyrie(x, y, radius = 240) {
     let bx = x, by = y, bestE = this.terrain.getElevationAt(x, y);
     for (let i = 0; i < 12; i++) {
@@ -749,13 +723,10 @@ class Simulation {
     }
   }
 
-  // Hatch a flighted-bird egg (kererū / kōkako / …) into a juvenile in its flock.
-  // Emergent reproduction, mirroring _hatchEagleEgg; the bird lives in
-  // otherEntities[type]. Cap-guarded by the species' own maxPopulation — an
-  // over-cap egg is simply lost rather than lingering.
-  // Diminishing per-hatch mauri. With LEVEL_MECHANICS.hatchReward: `fullAmount` (or
-  // mauri.onEggHatch) at/under `full`, `reducedAmount` up to `reduced`, then 0 — counted
-  // per species when `perSpecies`. Without the knob: the default 10 / half>10 / 0>15 taper.
+  // Hatch a flighted-bird egg into a juvenile in its flock (mirrors _hatchEagleEgg).
+  // Cap-guarded by the species' maxPopulation; an over-cap egg is lost.
+  // Diminishing per-hatch mauri. With LEVEL_MECHANICS.hatchReward: fullAmount at/under
+  // `full`, reducedAmount up to `reduced`, then 0 (per species when `perSpecies`).
   _hatchRewardFor(speciesKey, mauri) {
     const t = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.hatchReward) || null;
     if (!t) {
@@ -901,11 +872,9 @@ class Simulation {
     this._invalidateCache();
   }
 
-  // LINK 4 — an eagle takes an adult flighted bird (kea/kākā/kererū/kōkako). Leaner
-  // than the moa catch: no mauri reward (this is the loss the player is trying to
-  // prevent) and no MOA_KILLED tutorial event. Two floors shield the last few so
-  // predation pressures without guaranteeing extinction: the year's dynamic floor
-  // (via isSpeciesProtected) AND the bird's own species populationFloor.
+  // An eagle takes an adult flighted bird. Leaner than the moa catch: no mauri reward
+  // and no MOA_KILLED event. Two floors shield the last few (the year's dynamic floor via
+  // isSpeciesProtected, and the bird's own species populationFloor).
   handleEagleCatchFlyer(eagle, prey) {
     const key = prey.speciesKey;
     const ownFloor = (typeof prey._populationFloor === 'function') ? prey._populationFloor() : 0;
@@ -942,8 +911,8 @@ class Simulation {
     return egg;
   }
 
-  // LINK 1 — a kea robs a moa nest: destroy the egg and seed a disturbance the moa
-  // avoid (LINK 2). Only moa eggs are raidable; other birds' eggs are left alone.
+  // A kea robs a moa nest: destroy the egg and seed a disturbance the moa avoid.
+  // Only moa eggs are raidable.
   raidMoaEgg(egg, raider) {
     if (!egg || !egg.alive || egg.hatched) return;
     if (egg.offspringType && egg.offspringType !== 'moa') return;
@@ -954,7 +923,7 @@ class Simulation {
     this._invalidateCache();
   }
 
-  // LINK 2 — disturbance field. Seeded by a raid; decays over disturbanceDecaySec.
+  // Disturbance field. Seeded by a raid; decays over disturbanceDecaySec.
   _addDisturbance(x, y) {
     const M = (typeof LEVEL_MECHANICS !== 'undefined') ? LEVEL_MECHANICS : {};
     if (!M.moaNestDisturbance) return;
@@ -996,9 +965,8 @@ class Simulation {
     const placeable = new PlaceableObject(x, y, type, this.terrain, this, this.seasonManager);
     this.placeables.push(placeable);
     if (type === 'nest') this._nestCacheValid = false;
-    // A freshly placed Berry Cache should VISIBLY pull the flock: clear every kea's cache-choice
-    // timer so they re-evaluate this frame (and pick up the new cache) instead of drifting on
-    // their old target for up to a couple of seconds. Cheap — the flock is tiny.
+    // A freshly placed Berry Cache clears every kea's cache-choice timer so they re-evaluate
+    // this frame and pick it up, instead of drifting on their old target.
     if (type === 'keaLure' && this.otherEntities && this.otherEntities.kea) {
       for (const k of this.otherEntities.kea) { if (k && k.alive) k._lureChoiceTimer = 0; }
     }
@@ -1024,10 +992,8 @@ class Simulation {
         if (k) sc[k] = (sc[k] || 0) + 1;
       }
     }
-    // Other entities (kererū/kōkako/kea/kākā/kākāpō) counted into the per-species map
-    // too, so getCachedSpeciesCount / isSpeciesProtected work for them (e.g. the
-    // Year-1 kea floor that stops eagles wiping the last kea). They do NOT add to
-    // moaCount — that stays a moa-only tally.
+    // Other entities counted into the per-species map too, so getCachedSpeciesCount /
+    // isSpeciesProtected work for them. They do NOT add to moaCount (a moa-only tally).
     for (const type in this.otherEntities) {
       const list = this.otherEntities[type];
       let n = 0;
@@ -1052,9 +1018,8 @@ class Simulation {
     return (this._speciesCountCache && this._speciesCountCache[speciesKey]) || 0;
   }
 
-  // A species is "protected" once it has fallen to its configured population floor
-  // (LEVEL_MECHANICS.populationFloors) — its remaining members can't be hunted or
-  // starved, so the species can never be wiped out below that floor.
+  // A species is "protected" once it has fallen to its configured population floor —
+  // its remaining members can't be hunted or starved.
   isSpeciesProtected(speciesKey) {
     const staticFloors = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.populationFloors) || null;
     const dynFloors = this.dynamicFloors || null;   // Free Play: this year's protected focus species
@@ -1124,13 +1089,9 @@ class Simulation {
       }
     }
 
-    // Static entities (plants, eggs): positions never change, so rebuild a grid
-    // only when its list membership changed (its `dirty` bit). Insert ALL of
-    // them — including plants that are momentarily eaten (alive=false) and will
-    // regrow — because the entry stays positionally valid and every plant-grid
-    // consumer already filters on `.alive`. If we inserted only live plants
-    // here, a plant that regrew between rebuilds would be missing from the grid
-    // until the next membership change, and foragers couldn't find it.
+    // Static entities (plants, eggs): rebuild only when list membership changed (the `dirty`
+    // bit). Insert all of them, including momentarily-eaten plants (consumers filter on
+    // `.alive`), so a plant that regrows between rebuilds isn't missing from the grid.
     for (const pair of this._staticGridPairs) {
       if (!pair.dirty) continue;
       pair.grid.clear();
@@ -1156,16 +1117,13 @@ class Simulation {
     }
   }
 
-  // Flag a static grid for a rebuild on the next frame. Call whenever a plant or
-  // egg is ADDED or REMOVED from its list. Not needed when a plant is merely
-  // eaten or regrows — it stays in the grid and consumers read its live
-  // `.alive` state.
+  // Flag a static grid for a rebuild next frame. Call when a plant or egg is added or
+  // removed. Not needed when a plant is merely eaten or regrows.
   markPlantGridDirty() { this._plantGridPair.dirty = true; }
   markEggGridDirty()   { this._eggGridPair.dirty = true; }
 
-  // Single entry point for adding a plant: keeps the master list, the render
-  // partition (ground/tree) and the plant grid all in sync. Use this instead of
-  // pushing to `this.plants` directly.
+  // Single entry point for adding a plant: keeps the master list, render partition and
+  // grid in sync. Use this instead of pushing to `this.plants` directly.
   addPlant(plant) {
     this.plants.push(plant);
     if (FOREST_TREES.has(plant.type)) this.treePlants.push(plant);
@@ -1173,17 +1131,10 @@ class Simulation {
     this.markPlantGridDirty();
   }
 
-  // Plant a forest seedling where a kererū / kōkako dropped a seed — the one runtime
-  // path that grows the plant population (see mauri_kereru.js). Cap-guarded and
-  // FOREST-ONLY: a seed establishes only on plant-bearing ground whose biome grows a
-  // forest tree, never carpets an already-dense stand, and starts as a young recruit
-  // that grows in. Returns true if it planted. A level can switch it off with
-  // LEVEL_MECHANICS.seedDispersal = false.
-  // Kea Raid v2 (Slice B) — CULTIVATE forest: plant a podocarp/beech tree within
-  // radius, even where the biome isn't already forest (the player expanding the
-  // podocarp forest downslope). Density-gated per spot and capped per patch, so it
-  // grows a grove rather than a carpet. Distinct from disperseSeed, which refuses
-  // non-forest biomes (that's natural recruitment; this is deliberate planting).
+  // Cultivate forest: plant a podocarp/beech tree within radius, even where the biome
+  // isn't already forest (the player expanding the forest downslope). Density-gated per
+  // spot and capped per patch, so it grows a grove not a carpet. Distinct from disperseSeed
+  // (natural recruitment, which refuses non-forest biomes).
   growForestAt(x, y, radius, patchCap = 8) {
     if (typeof Plant === 'undefined' || typeof FOREST_TREES === 'undefined') return false;
     const M = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS) ? LEVEL_MECHANICS : {};
@@ -1261,9 +1212,8 @@ class Simulation {
   // ============================================
   
   getNearbyMoas(x, y, radius) { return this.moaGrid.getInRadius(x, y, radius); }
-  // Count-only query: returns a number and touches NO shared result buffer, so
-  // it's safe to call while a getNearbyMoas() list is still being held (and it's
-  // cheaper — no array is built).
+  // Count-only query: returns a number and touches no shared result buffer, so it's safe
+  // to call while a getNearbyMoas() list is still held.
   countNearbyMoas(x, y, radius, filter = null) { return this.moaGrid.countInRadius(x, y, radius, filter); }
   getNearbyEagles(x, y, radius) { return this.eagleGrid.getInRadius(x, y, radius); }
   getNearbyPlants(x, y, radius) { return this.plantGrid.getInRadius(x, y, radius); }
@@ -1271,7 +1221,7 @@ class Simulation {
   getNearbyEggs(x, y, radius) { return this.eggGrid.getInRadius(x, y, radius); }
   getClosestPlant(x, y, radius, filter = null) { return this.plantGrid.getClosest(x, y, radius, filter); }
   getClosestMoa(x, y, radius, filter = null) { return this.moaGrid.getClosest(x, y, radius, filter); }
-  // Nearest un-hatched MOA egg (a moa "nest") — LINK 3, so eagles patrol where moa breed.
+  // Nearest un-hatched moa egg (a moa "nest"), so eagles patrol where moa breed.
   getClosestMoaNest(x, y, radius) {
     return this.eggGrid.getClosest(x, y, radius,
       e => e.alive && !e.hatched && (!e.offspringType || e.offspringType === 'moa'));
@@ -1348,10 +1298,8 @@ class Simulation {
     
     this._updateSpeciesStability(dt);
 
-    // Predator-prey coupling: eagle numbers track the moa population, thinning
-    // in the cold seasons and rebuilding in the warm ones. This is the top-down
-    // controller — skipped entirely when emergentEagles is on, because then the
-    // population arises from individual births (nests) and deaths (starvation).
+    // Predator-prey coupling: the top-down eagle controller (eagle numbers track the moa
+    // population). Skipped when emergentEagles is on (then the population is per-bird).
     if (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.eaglePreyCoupling
         && !LEVEL_MECHANICS.emergentEagles) {
       this._eagleRegTimer += dt;
@@ -1368,16 +1316,14 @@ class Simulation {
       this.cleanup();
     }
 
-    this._decayDisturbances(dt);   // LINK 2 — age out raided-nest disturbance
+    this._decayDisturbances(dt);   // age out raided-nest disturbance
     this._updateNestingSites(dt);  // refresh site egg tallies (raid indicator)
     this._updateMoaNestingFormation(dt);   // grow player nesting sites (moa focus year)
   }
 
-  // Endless "moa focus" year: form a NEW nesting site where the player has grown a
-  // patch of the focus moa's favoured plant (lancewood → little bush moa, speargrass →
-  // upland moa) and that moa has been drawn in. One site per throttle tick; each counts
-  // toward the year's nesting goal (stats.nestingSitesMade). Inert when moaNestingWatch
-  // is null (every non-focus year). See Game._beginFreeplayYear.
+  // Endless "moa focus" year: form a new nesting site where the player has grown a patch
+  // of the focus moa's favoured plant and that moa has been drawn in. One site per tick,
+  // each counting toward the nesting goal. Inert when moaNestingWatch is null.
   _updateMoaNestingFormation(dt) {
     const watch = this.moaNestingWatch;
     if (!watch || typeof NestingSite === 'undefined') return;
@@ -1580,10 +1526,8 @@ class Simulation {
           const newMoa = this._createFromRegistry('moa', offspringSpecies, egg.pos.x, egg.pos.y, Moa);
 
           if (newMoa) {
-            // Sex-balance the hatchling: take the minority sex of its own living
-            // species so small populations keep both sexes and stay able to pair
-            // within themselves (only fall back to the constructor's coin flip
-            // when the species is already balanced).
+            // Sex-balance the hatchling: take the minority sex of its own living species so
+            // small populations keep both sexes (else the constructor's coin flip stands).
             let _sf = 0, _sm = 0;
             for (let mi = 0; mi < this.moas.length; mi++) {
               const _m = this.moas[mi];
@@ -1604,10 +1548,6 @@ class Simulation {
               this.stats.birthsBySpecies[offspringKey]++;
             }
             this._invalidateCache();
-            // Diminishing hatch reward. Levels may define their own tiers via
-            // LEVEL_MECHANICS.hatchReward = { full, reduced, reducedAmount }:
-            // full reward while the TOTAL flock (before this hatch) is at/below
-            // `full`, a flat `reducedAmount` up to `reduced`, nothing beyond.
             // Diminishing per-hatch mauri (see _hatchRewardFor).
             const _hatchReward = this._hatchRewardFor(newMoa.speciesKey, mauri);
             if (_hatchReward > 0) mauri.earn(_hatchReward, egg.pos.x, egg.pos.y, 'hatch');
@@ -1826,8 +1766,8 @@ class Simulation {
     // Layer 4: Moas (body)
     this._renderFiltered(moas, 0, null, true, inView, 'render');
 
-    // Ground-dwelling other entities render here (below the trees); flighted birds
-    // (isFlyer: kererū, kōkako) are held back to a pass above the trees, below.
+    // Ground-dwelling other entities render here (below the trees); flighted birds are held
+    // back to a pass above the trees.
     for (const [type, list] of Object.entries(this.otherEntities)) {
       this._renderFiltered(list, 0, e => !e.isFlyer, true, inView, 'render');
     }
@@ -1865,15 +1805,8 @@ class Simulation {
     if (CONFIG.debugMode && CONFIG.showGridStats) this.renderGridStats();
   }
   
-  /**
-   * Render entities that pass filter and viewport check.
-   * @param {Array} list - entity array
-   * @param {number} extraMargin - additional viewport margin
-   * @param {Function|null} filter - optional type filter (null = all)
-   * @param {boolean} aliveCheck - whether to check .alive
-   * @param {Function} inView - viewport test function
-   * @param {string} method - render method name (default: 'render')
-   */
+  // Render entities that pass the filter and viewport check. extraMargin widens the cull;
+  // aliveCheck skips dead; method is the render method name (default 'render').
   _renderFiltered(list, extraMargin, filter, aliveCheck, inView, method = 'render') {
     for (let i = 0, len = list.length; i < len; i++) {
       const e = list[i];
@@ -1888,12 +1821,9 @@ class Simulation {
   // ============================================
   // FIXED-3D RENDER
   // ============================================
-  // Each entity draws itself relative to its own pos (sprite + shadow + bars), so
-  // wrapping its render in translate(0, dy) lifts the WHOLE entity so its feet sit
-  // on the relief — that is the billboard: an upright, unsquashed sprite pinned to
-  // the projected ground point (screenX is unchanged in plan-oblique). The cast is
-  // then painted back-to-front by projected ground y so nearer things overlap
-  // farther ones — the layered 2D order can't express depth once the land tilts.
+  // Each entity draws relative to its own pos, so wrapping its render in translate(0, dy)
+  // lifts its feet onto the relief — an upright sprite pinned to the projected ground point.
+  // The cast is painted back-to-front by projected ground y so nearer things overlap farther.
 
   _render3D(inView) {
     const P = Projection;

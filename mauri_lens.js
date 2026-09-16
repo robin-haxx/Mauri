@@ -1,18 +1,11 @@
 // ============================================
 // LENS — debug visualisation overlays (toggle: key L in debug mode)
 // ============================================
-// A lens draws otherwise-INVISIBLE simulation state in world space so balance can be
-// tuned BY EYE. Each lens is a tiny object { id, label, drawWorld(game, z), drawScreen? }
-// registered below; the manager renders the active ones over the world (under the HUD)
-// and paints a small clickable legend. `z` is CONFIG.viewZoom, passed so a lens can keep
-// its strokes/text a constant ON-SCREEN size (divide world sizes by z).
-//
-// Design intent (per the brief): this is a PROTOTYPING surface. A lens that proves its
-// worth — e.g. the kea→cache "pull" below, which makes the nebulous flock-steering legible
-// — is meant to graduate into real, player-facing game UI, not live in debug forever.
-//
-// Reversible + inert: nothing runs unless Lens.enabled (gated to CONFIG.debugMode via the
-// 'L' key), and every hook is `typeof Lens !== 'undefined'`-guarded at the call sites.
+// A lens draws otherwise-invisible simulation state in world space so balance can
+// be tuned by eye. Each lens is { id, label, drawWorld(game, z), drawScreen? }
+// registered below; the manager renders the active ones over the world (under the
+// HUD) and paints a clickable legend. `z` is CONFIG.viewZoom, so a lens can keep a
+// constant on-screen size (divide world sizes by z). Inert unless Lens.enabled.
 
 const Lens = {
   enabled: false,
@@ -29,8 +22,7 @@ const Lens = {
   COLORS: [[255,196,64],[86,180,255],[255,120,190],[120,230,140],[190,150,255],[255,150,90]],
   colOf(i) { return this.COLORS[((i % this.COLORS.length) + this.COLORS.length) % this.COLORS.length]; },
 
-  // World-space geometry. Called INSIDE the game-area transform (translate+scale+clip),
-  // after the cast + GL composite, so it draws on top of the world but under the HUD.
+  // World-space geometry, drawn inside the game-area transform (over world, under HUD).
   renderWorld(game) {
     if (!this.enabled) return;
     const z = (typeof CONFIG !== 'undefined' && CONFIG.viewZoom) ? CONFIG.viewZoom : 1;
@@ -43,8 +35,7 @@ const Lens = {
     }
   },
 
-  // Screen-space legend + any per-lens readouts. Called after game.render() (logical
-  // 1080-space, same coords as handleClick), so the legend rows are directly clickable.
+  // Screen-space legend + per-lens readouts, in logical 1080-space (clickable rows).
   renderScreen(game) {
     this._rows = [];
     if (!this.enabled) return;
@@ -77,8 +68,7 @@ const Lens = {
     }
   },
 
-  // Legend hit-test (called from Game.handleClick before the palette/UI, so a toggle
-  // click is not also read as a placement). Returns true if a row was clicked.
+  // Legend hit-test. Returns true if a row was clicked.
   handleClick(mx, my) {
     if (!this.enabled) return false;
     for (const r of this._rows) {
@@ -94,11 +84,9 @@ const Lens = {
 // --------------------------------------------------------------------------------------
 // LENS: Kea ▸ Berry Cache "pull"
 // --------------------------------------------------------------------------------------
-// Makes the flock-steering readable: each Berry Cache (keaLure) shows its effect radius
-// and (faintly) its full attract reach; a coloured line runs from every COMMITTED kea to
-// the cache it has chosen, so you SEE the pull redistribute as you place/move caches and
-// as crowding sheds birds to emptier ones. Moa nests + eggs are marked for context (the
-// thing you're usually steering the flock toward or away from). See mauri_kea.js _chooseLure.
+// Each Berry Cache shows its effect radius and (faintly) its attract reach; a line
+// runs from every committed kea to its chosen cache. Moa nests + eggs marked for
+// context. See mauri_kea.js _chooseLure.
 Lens.register({
   id: 'keaPull',
   label: 'Kea ▸ Berry Cache pull',
@@ -108,7 +96,7 @@ Lens.register({
     const lw = 1.4 / z;                 // ~1.4 logical px strokes regardless of zoom
     const rMark = (base) => base / z;   // marker radii in logical px
 
-    // Gather caches + committed kea (crowd per cache), mirroring _chooseLure's model.
+    // Gather caches + committed kea (crowd per cache).
     const caches = [];
     const list = sim.placeables || [];
     for (const p of list) if (p.alive && p.type === 'keaLure') caches.push(p);
@@ -150,7 +138,7 @@ Lens.register({
       stroke(col[0], col[1], col[2], 42); strokeWeight(lw);
       circle(c.pos.x, c.pos.y, rAtt * 2);                    // full pull reach (wide → kept faint)
       stroke(col[0], col[1], col[2], 215); strokeWeight(lw * 1.35);
-      circle(c.pos.x, c.pos.y, rEff * 2);                    // food/effect radius (the destination zone)
+      circle(c.pos.x, c.pos.y, rEff * 2);                    // food/effect radius
       const base = (c.def && c.def.keaLureNutrition != null) ? c.def.keaLureNutrition : 6;
       const draw = base + (c._keaFood || 0);
       const rCore = Math.min(rEff * 0.85, rMark(4) + draw * (0.45 / z));

@@ -137,35 +137,31 @@ const ENCYCLOPEDIA = [
   // ---- Plants ----------------------------------------------------------------
   { id: 'beech', category: 'Plants', title: 'Beech', subtitle: 'Tawhai · Nothofagus/Fuscospora',
     body: [
-      "Evergreen canopy trees that dominate the southern forest, growing from the",
-      "lowlands to the treeline and often on poorer soils. The small, hard leaves are",
-      "held year round. In some years the forest produces heavy synchronised 'mast'",
-      "seed crops, cued by a warm previous summer."
+      "Evergreen canopy trees that dominate southern forest, from the lowlands to the",
+      "treeline and onto poor soils where other trees fail. Some years, cued by a warm",
+      "previous summer, the forest sets a heavy synchronised 'mast' seed crop."
     ], seeAlso: ['beech_refuge', 'winter_food'] },
 
   { id: 'tussock', category: 'Plants', title: 'Snow Tussock', subtitle: 'Chionochloa',
     body: [
-      "Large bunch-grasses that dominate the tussock grasslands above the treeline.",
-      "Long-lived and slow-growing, they evolved with only moa and insects browsing",
-      "them and stand through the hardest winters. The foliage is coarse and low in",
-      "nutrients. They flower heavily in occasional mast years."
+      "Large snow-grasses that dominate the grasslands above the treeline, long-lived",
+      "and slow-growing on cold, poor ground. The coarse foliage is low in nutrients,",
+      "and in occasional mast years they flower heavily."
     ], seeAlso: ['winter_food', 'subalpine'] },
 
   { id: 'rimu', category: 'Plants', title: 'Rimu', subtitle: 'Podocarp',
     body: [
-      "An ancient podocarp and a tall emergent of lowland conifer-broadleaf forest.",
-      "Slow-growing and long-lived, with weeping juvenile foliage, and male and female",
-      "cones borne on separate trees. In some years it carries bright fleshy fruit",
-      "through summer and autumn, prized by kererū, kākāpō and other birds."
+      "A tall, slow-growing podocarp that emerges above the lowland conifer-broadleaf",
+      "forest, long-lived and weeping-leaved when young. In some years it carries bright",
+      "fleshy fruit through summer and autumn, prized by kererū and kākāpō."
     ], seeAlso: ['winter_food', 'kereru'] },
 
   { id: 'favoured_plants', category: 'Plants', title: 'Lancewood & Speargrass', subtitle: 'Horoeka · Taramea',
     body: [
       "Two tough, browse-resistant plants of the open country. Lancewood (horoeka)",
-      "spends years as a juvenile, a single unbranched stem hung with long, hard,",
-      "downward-angled leaves, before it forms an adult crown, a habit widely read as",
-      "a defence against moa browsing. Speargrass (taramea) grows as a stiff rosette",
-      "of sharp, spine-tipped leaves in tussock grassland and rocky subalpine sites."
+      "spends its early years as a single stem hung with long, hard, downward-angled",
+      "leaves, widely read as a defence against moa browsing. Speargrass (taramea)",
+      "forms a stiff rosette of sharp, spine-tipped leaves in tussock and rocky ground."
     ], seeAlso: ['coexistence', 'winter_food'] },
 
   // ---- Biomes ----------------------------------------------------------------
@@ -196,46 +192,52 @@ const ENCYCLOPEDIA = [
   // ---- Climate & concepts ----------------------------------------------------
   { id: 'glacial_cycles', category: 'Climate', title: 'Glacial Cycles', subtitle: 'Ice ages come in waves',
     body: [
-      "The ice ages came in waves — long cold glacials broken by shorter warm",
-      "interglacials — and over the last million years the cold peaks grew deeper.",
+      "The ice ages came in waves. Long cold glacials broke against shorter warm",
+      "interglacials, and over the last million years the cold peaks grew deeper each",
+      "time. Beech recovered from a glacial faster than the slow podocarps, so it came",
+      "to dominate later on, while the podocarps kept their hold on the wetter west.",
       "",
-      "Free Play compresses that into your run: the climate swings between glacial and",
-      "interglacial years, and each glacial is a little colder than the last, until the",
-      "land can no longer keep the flock fed. Warm years are your chance to rebuild."
+      "Free Play folds all of that into your run. The climate swings between glacial and",
+      "interglacial years, each glacial biting a little harder than the last, until the",
+      "land can no longer keep the flock fed. The warm years are your chance to rebuild."
     ], seeAlso: ['winter_food', 'beech_refuge'] },
 
   { id: 'winter_food', category: 'Climate', title: 'Why Winter Starves', subtitle: 'Food, not bare ground',
     body: [
-      "New Zealand's plants are almost all evergreen — beech, tussock and the shrubs",
-      "hold their leaves all year. So a glacial winter here doesn't leave bare ground;",
-      "it leaves standing food with nothing in it. Fruit and berries end, new growth",
-      "stops, frost toughens the leaves.",
+      "Almost all of New Zealand's plants are evergreen. Beech, tussock and the hardy",
+      "shrubs hold their leaves right through the year, so a glacial winter here doesn't",
+      "strip the land back to bare ground. It leaves standing food with nothing left in",
+      "it: the fruit and berries finish, new growth stops, frost toughens the old leaves.",
       "",
-      "The problem for a moa isn't finding a plant — it's finding one worth eating. As",
-      "the climate deepens, only the best evergreen browse keeps any value, and the",
-      "forest refuge becomes the lifeline."
+      "So a moa's problem in winter is never finding a plant, but finding one still worth",
+      "eating. As the climate deepens, only the best evergreen browse keeps any value,",
+      "and the forest refuge becomes the lifeline."
     ], seeAlso: ['beech_refuge', 'beech', 'tussock'] },
 
   { id: 'coexistence', category: 'Concepts', title: 'How Many Moa Coexist', subtitle: 'Niches & favoured plants',
     body: [
-      "Several moa species shared this land by NOT competing head-on: each kept to its",
-      "own elevation band and its own foods. Browse-resistant favoured plants let a weak",
-      "forest specialist persist beside a dominant browser, while the shared forest",
-      "refuge is the one patch everyone contends for — and crowding it hurts everyone."
+      "Several moa species shared this land by not competing head-on. Each kept to its",
+      "own band of country and its own foods: the upland moa worked the tough subalpine",
+      "tops, the little bush moa the dense forest, the stout-legged moa the eastern",
+      "lowlands. Where their ranges met, a browse-resistant favoured plant let a weaker",
+      "forest specialist hold on beside a dominant browser. The one patch they all",
+      "contend for is the forest refuge, and crowding it hurts everyone."
     ], seeAlso: ['favoured_plants', 'beech_refuge'] },
 
   { id: 'predator_prey', category: 'Concepts', title: 'Predator & Prey', subtitle: 'Eagles lag the moa',
     body: [
-      "Eagle numbers are not set by hand — each bird feeds or starves and breeds on its",
-      "own. So the classic predator-prey lag emerges: eagles climb after the moa boom,",
-      "and crash behind the moa when a hard winter thins the herds."
+      "No one sets the eagle numbers by hand. Each bird feeds or starves and breeds on",
+      "its own, so the classic predator-prey lag falls out on its own: the eagles climb",
+      "a season behind a moa boom, then crash behind the moa again when a hard winter",
+      "thins the flock."
     ], seeAlso: ['haasts_eagle'] },
 
   { id: 'mauri', category: 'Concepts', title: 'Mauri', subtitle: 'The life force you spend',
     body: [
-      "Mauri is life force — your currency as kaitiaki (guardian). A healthy ecosystem",
-      "earns it; you spend it on the palette to feed, shelter and draw the moa. In Free",
-      "Play, banking mauri in the warm years pays for surviving the cold ones."
+      "Mauri is life force, and it is your currency as kaitiaki, the guardian of this",
+      "land. A healthy, balanced ecosystem earns it for you, and you spend it from the",
+      "palette to feed, shelter and draw the moa. In Free Play the mauri you bank in the",
+      "warm years is what pays for surviving the cold ones."
     ], seeAlso: ['favoured_plants'] }
 ];
 

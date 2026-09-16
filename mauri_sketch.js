@@ -447,7 +447,7 @@ const TERRAIN_DETAIL_OPTIONS = [
 const PLACEABLES = {
   kawakawa: {
     name: "Kawakawa Grove",
-    description: "Rich feeding ground",
+    description: "Hardy + nutritious (and spicy!)",
     cost: 25,
     icon: '🌿',
     color: '#2d8a4e',

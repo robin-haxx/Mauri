@@ -218,7 +218,7 @@ const KAKAPO_SPECIES = {
   // Movement / render — a slow, heavy WALKER pinned to the ground (no flight).
   baseSpeed:        0.12,
   maxForce:         0.04,
-  size:             7.5,
+  size:             8,
   perceptionRadius: 60,
   cruiseAlt:        0,      // flightless
   perchAlt:         0,

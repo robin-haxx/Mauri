@@ -87,7 +87,7 @@ const KAKA_SPECIES = {
   // short hops, but still BELOW the eagle's hunt speed so a chase resolves.
   baseSpeed:        0.34,
   maxForce:         0.055,
-  size:             6,
+  size:             8,
   perceptionRadius: 70,
   cruiseAlt:        22,
   perchAlt:         8,

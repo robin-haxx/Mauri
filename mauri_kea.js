@@ -499,7 +499,7 @@ const KEA_SPECIES = {
   // kererū, but still kept BELOW the eagle's hunt speed so a chase resolves.
   baseSpeed:        0.40,
   maxForce:         0.06,
-  size:             6.5,
+  size:             8,
   perceptionRadius: 80,
   cruiseAlt:        30,     // soars higher than the kererū (24)
   perchAlt:         8,

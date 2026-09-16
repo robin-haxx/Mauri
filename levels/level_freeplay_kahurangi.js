@@ -68,16 +68,16 @@ const LEVEL_FREEPLAY_KAHURANGI = {
       walkable: true, canHavePlants: false, canPlace: true },
     glacialFlats: { key: 'glacialFlats', name: "Glacial Flats", minElevation: 0.15, maxElevation: 0.28,
       colors: ['#9aa878', '#a6b484', '#b2c090'], contourColor: '#6f7d52',
-      walkable: true, canHavePlants: true, plantTypes: ['tussock', 'coprosma', 'flax', 'pohuehue'], canPlace: true },
+      walkable: true, canHavePlants: true, plantTypes: ['tussock', 'coprosma', 'flax'], canPlace: true },// 'pohuehue'
     shrubland: { key: 'shrubland', name: "Frost Shrubland", minElevation: 0.28, maxElevation: 0.36,
       colors: ['#7c8858', '#889464', '#94a070'], contourColor: '#5a6640',
-      walkable: true, canHavePlants: true, plantTypes: ['coprosma', 'patotara', 'tussock', 'dracophyllum', 'pohuehue', 'toatoa'], canPlace: true },
+      walkable: true, canHavePlants: true, plantTypes: ['coprosma', 'patotara', 'tussock', 'dracophyllum'], canPlace: true },// 'pohuehue', 'toatoa'
     forestRefuge: { key: 'forestRefuge', name: "Forest Refuge", minElevation: 0.36, maxElevation: 0.48,
       colors: ['#2d5240', '#345e48', '#3b6a50'], contourColor: '#1e3a2c',
       walkable: true, canHavePlants: true, plantTypes: ['beech', 'rimu', 'fern'], canPlace: true },
     subalpine: { key: 'subalpine', name: "Subalpine Tussock", minElevation: 0.48, maxElevation: 0.66,
       colors: ['#9a9a62', '#a6a66e', '#b2b27a'], contourColor: '#70703f',
-      walkable: true, canHavePlants: true, plantTypes: ['tussock', 'dracophyllum', 'patotara', 'toatoa'], canPlace: true },
+      walkable: true, canHavePlants: true, plantTypes: ['tussock', 'dracophyllum', 'patotara'], canPlace: true },//toatoa
     alpine: { key: 'alpine', name: "Alpine Scree", minElevation: 0.66, maxElevation: 0.80,
       colors: ['#9098a0', '#9ea6ae', '#acb4bc'], contourColor: '#606870',
       walkable: false, canHavePlants: false, canPlace: false },

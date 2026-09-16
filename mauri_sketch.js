@@ -14,11 +14,10 @@ let fpsHistory = [];
 const FPS_HISTORY_SIZE = 30;
 let currentFPS = 60;
 
-// ---- Honest frame-cost tracking (perf HUD) ---------------------------------
-// The debug Update/Render numbers only time CPU command submission; the GPU runs
-// after render() returns, so they stay low while the frame is slow. deltaTime (rAF
-// wall clock) is the honest measure. We EMA the real frame time and the two CPU
-// spans, plus a decaying worst-frame reading that surfaces hitches.
+// ---- Frame-cost tracking (perf HUD) ----------------------------------------
+// CPU Update/Render timings miss the GPU cost; deltaTime (rAF wall clock) is the
+// true frame time. EMA the real frame time, the two CPU spans, and a decaying
+// worst frame that surfaces hitches.
 let perfFrameMs = 16.667;   // EMA of the real (unclamped) frame time
 let perfUpdateMs = 0;       // EMA of game.update() CPU time
 let perfRenderMs = 0;       // EMA of game.render() CPU submit time
@@ -27,16 +26,15 @@ const PERF_EMA = 0.1;       // smoothing for the averages
 const PERF_WORST_DECAY = 0.98;
 
 // ---- Dynamic resolution (terrain-targeted) ---------------------------------
-// Sprites + HUD stay at the full CONFIG.spriteSupersample ceiling; the adaptive scaler
-// steers only the GPU terrain buffer (the expensive full-screen fill): drop it when the
-// frame time is bad, raise it when there's headroom. Hysteresis + a cooldown stop
+// Scales only the GPU terrain buffer (sprites/HUD keep their supersample): drop it
+// when frame time is bad, raise it with headroom. Hysteresis + cooldown stop
 // oscillation. Off unless CONFIG.dynamicResolution is set.
 let dynResCooldownUntil = 0;    // millis() before which we won't change again
 const DYNRES_UP_MS = 13.5;      // frame faster than this (~74fps) → raise terrain res
 const DYNRES_DOWN_MS = 20.0;    // frame slower than this (~50fps) → drop terrain res
 const DYNRES_COOLDOWN = 1200;   // ms between changes
 const DYNRES_TERRAIN_MIN = 0.5; // floor for the terrain buffer scale (soft, hazed distance)
-const DYNRES_TERRAIN_MAX = 1.0; // ceiling — terrain gains nothing above native 1080
+const DYNRES_TERRAIN_MAX = 1.0; // ceiling; terrain gains nothing above native 1080
 
 function preload(){
   OpenDyslexic = loadFont('typefaces/OpenDyslexic.ttf');
@@ -114,19 +112,17 @@ const CONFIG = {
   get height() { return this.gameAreaHeight; },
 
   pixelScale: 1,
-  terrainDetail: 2,  // render-only: 1 = single-res terrain buffers (fast world-gen), 2 =
-                     // double-res bake (crisper terrain, ~2-3x slower gen — viable thanks
-                     // to the interpolation/noise/colour perf fixes). DEFAULT is now 2x
-                     // (the '2x' end of the menu's TERRAIN RESOLUTION slider).
+  terrainDetail: 2,  // render-only: 1 = single-res terrain buffers (fast gen), 2 = double-res
+                     // bake (crisper terrain, ~2-3x slower gen). 2x is the default (the '2x'
+                     // end of the menu's TERRAIN RESOLUTION slider).
 
-  // WebGL renderer preference — the "Enhanced graphics" main-menu toggle (renderMenu).
-  // false = Classic 2D (default). Turned on via the menu (setRenderGL, persisted) or a
-  // ?render=gl URL override. Enables the whole GPU path: entity batch + GPU terrain/water.
+  // WebGL renderer preference: the GPU path (entity batch + GPU terrain/water). false =
+  // Classic 2D. Set by setRenderGL (menu toggle, persisted) or a ?render override.
   useGL: false,
 
   // Frame supersample factor (backing = spriteSupersample × logical 1080). 1 = native 1080p;
-  // the mipmapped sprite atlas keeps sprites crisp at 1×, so whole-frame supersampling isn't
-  // needed. Raise to 2 for extra sharpness on a strong GPU. ?sprites=1|2|3 overrides at startup.
+  // the mipmapped atlas keeps sprites crisp at 1×. Raise to 2 for extra sharpness on a strong
+  // GPU. ?sprites=1|2|3 overrides at startup.
   spriteSupersample: 1,
 
   // Dynamic resolution: when the frame is GPU fill-bound, shrink the terrain buffer
@@ -142,9 +138,9 @@ const CONFIG = {
   debugMode: false,
 
   // ===== VIEW TRANSFORM =====
-  // The transform the world actually renders through. Normal mode mirrors
-  // gameAreaX/Y + zoom; fullscreen mode scales the map to fill the canvas.
-  // Written by Game._updateViewTransform() — read, never set, elsewhere.
+  // The transform the world renders through. Normal mode mirrors gameAreaX/Y + zoom;
+  // fullscreen scales the map to fill the canvas. Written by Game._updateViewTransform();
+  // read, never set, elsewhere.
   fullscreen: true,   // default view: maximised play area with the overlay HUD (toggle with F)
   viewX: 0,
   viewY: 180,
@@ -159,14 +155,13 @@ const CONFIG = {
   view3DLiftFrac: 0.28,  // range height at elevation 1.0, as a fraction of map height
   view3DHaze: [206, 220, 230],   // atmospheric haze behind the far ridge
   view3DEdge: [38, 46, 42],      // dark ink lip on prominent relief silhouettes
-  // World pad: the terrain island spans a domain this much taller than the play area on
-  // each side, so the play area is a window into the centre of a larger island. 3D reveals
-  // the rest as one continuous landmass. Applied at generation. 0 = whole-island.
+  // World pad: the island domain extends this far beyond the play area on each side, so the
+  // play area is a window into a larger island that 3D reveals. Applied at gen. 0 = whole-island.
   view3DWorldPad: 0.5,
   // Over-scan: how much of that larger island the 3D relief bake draws beyond the play
   // window. FAR fills the distance past the top; NEAR continues under the HUD bar. Keep ≤ view3DWorldPad.
   view3DOverscan: 0.45,       // far (up-map) over-scan
-  view3DOverscanNear: 0.28,   // near (down-map) over-scan — hides the near cut under the HUD
+  view3DOverscanNear: 0.28,   // near (down-map) over-scan; hides the near cut under the HUD
   // Aerial perspective: 0 = off (the over-scan renders as plain terrain). Raise toward ~0.5
   // to mute a busy far distance into haze.
   view3DHazeFade: 0,
@@ -257,11 +252,9 @@ let FOREST_BIOMES = new Set();
 
 // ============================================
 // GLOBAL TEXT SCALE
-// One knob for all small screen-space UI text (labels, costs, hotkeys,
-// log entries, sidebar rows...). Call sites with base sizes ≤ 13 use
-// smallTextSize(base) instead of textSize(base); raising SMALL_TEXT_BUMP
-// nudges them all together. World-space text (drawn inside the zoomed view
-// transform) deliberately keeps plain textSize.
+// One knob for all small screen-space UI text. Call sites with base sizes ≤ 13
+// use smallTextSize(base) instead of textSize(base); SMALL_TEXT_BUMP nudges them
+// together. World-space text (inside the zoomed view) keeps plain textSize.
 // ============================================
 let SMALL_TEXT_BUMP = 2;
 function smallTextSize(base) { textSize(base + SMALL_TEXT_BUMP); }
@@ -276,7 +269,7 @@ function applyLevelToConfig(levelDef) {
   // Opt-in gameplay mechanics (habitat stress, forest competition, ...)
   LEVEL_MECHANICS = levelDef.mechanics || {};
   FOREST_BIOMES = new Set(LEVEL_MECHANICS.forestBiomes || []);
-  // Restore the base eagle target ratio (the loop ramp mutates it live — see
+  // Restore the base eagle target ratio (the loop ramp mutates it live, see
   // Game._maybeGlacialDeepen) so a restart doesn't inherit last run's ramped pressure.
   if (LEVEL_MECHANICS._eagleTargetRatioBase != null) {
     LEVEL_MECHANICS.eagleTargetRatio = LEVEL_MECHANICS._eagleTargetRatioBase;
@@ -485,12 +478,11 @@ const PLACEABLES = {
     seasonalBonus: { summer: 1.0, autumn: 1.0, winter: 1.2, spring: 1.0 }
   },
   
-  // A GLOBAL one-shot interactable (Free Play), not a spatial placement: invoking it
-  // makes the NEXT year a mast year — the podocarp forest fruits abundantly (huge
-  // forest growth, fruit edible through the cold) and the fruit-birds (kererū, kōkako)
-  // boom. Costs a lot of mauri. Handled by Game._useGlobalInteractable / triggerMastYear
-  // (the `global` flag routes it past tryPlace's spatial checks). Beech mast is cued a
-  // year ahead by the previous summer's warmth — hence the deliberate one-year delay.
+  // A GLOBAL one-shot interactable (Free Play), not a spatial placement: invoking it makes
+  // the NEXT year a mast year (forest fruits abundantly, fruit edible through the cold, the
+  // fruit-birds boom). Costly. Handled by Game._useGlobalInteractable / triggerMastYear; the
+  // `global` flag routes it past tryPlace's spatial checks. The one-year delay mirrors a real
+  // mast, cued a year ahead by the previous summer's warmth.
   mastYear: {
     name: "Mast Year",
     description: "Invoke a bumper year: next year the podocarp forest blooms and the fruit-birds boom",
@@ -498,7 +490,7 @@ const PLACEABLES = {
     icon: '🌰',
     color: '#c98a3a',
     effect: 'mastYear',
-    global: true,           // gamewide one-shot — no map placement
+    global: true,           // gamewide one-shot, no map placement
     cooldown: 3600,         // recharge (~1 year @ this level's seasonDuration); also gated by "next year"
     radius: 0,
     minSpacing: 0,
@@ -592,11 +584,9 @@ const PLACEABLES = {
     attractionStrength: 1.4
   },
 
-  // Year-1 kea interaction (Free Play). A cache of subalpine berries (Coprosma /
-  // snowberry) that the gregarious, food-driven kea flock to — the player places it
-  // DOWNSLOPE to draw the kea onto the forest, where they rob moa nests and set the
-  // cascade going (see YEARS_PLAN.md). Behaviour read by mauri_kea.js (attractsKea /
-  // keaAttractRadius); no plants spawned, no moa effect — it is purely a kea magnet.
+  // Year-1 kea interaction (Free Play). A cache of subalpine berries that the food-driven
+  // kea flock to; placed DOWNSLOPE to draw the kea onto the forest, where they rob moa nests
+  // and start the cascade. Behaviour read by mauri_kea.js (attractsKea / keaAttractRadius).
   keaLure: {
     name: "Berry Cache",
     description: "Can station Kea by moa nests....",
@@ -605,10 +595,8 @@ const PLACEABLES = {
     color: '#6a4a7a',
     effect: 'keaLure',
     radius: 70,                // berry + forest cultivation footprint (tight, around the cache)
-    // The RENDERED ring is this larger COVERAGE radius, not the tight cultivation radius: it
-    // marks the effective area to lay over the target moa nest — a nest inside it is where the
-    // drawn kea (they cluster within ~a cultivation radius of the cache) end up stationed and
-    // able to raid, since the kea-raid stationRadius (~260) then easily reaches the nest.
+    // The RENDERED ring is this larger COVERAGE radius: the effective area to lay over the
+    // target moa nest. A nest inside it is where the drawn kea settle and can raid it.
     coverRadius: 150,
     duration: 3600,
     minSpacing: 30,
@@ -616,10 +604,9 @@ const PLACEABLES = {
     // Berries (kea food) planted on placement…
     plantSpawnCount: 4,
     plantType: 'coprosma',
-    // …but the berry SPECIES follows the habitat it's cached on, keyed by biome and read in
-    // Placeable.spawnPlantsInRadius() (falls back to plantType above where a biome isn't listed):
-    // pātōtara up in the subalpine tussock, coprosma across the lowland shrub/flats/forest floor.
-    // 'grassland' is kept for other levels that use that biome key.
+    // …but the berry SPECIES follows the biome it's cached on, read in
+    // Placeable.spawnPlantsInRadius() (falls back to plantType where a biome isn't listed):
+    // pātōtara in subalpine tussock, coprosma across the lowland shrub/flats/forest floor.
     biomePlantType: {
       subalpine:    'patotara',      // alpine/subalpine cushion berry up high
       shrubland:    'coprosma',      // frost-shrubland berry
@@ -628,7 +615,7 @@ const PLACEABLES = {
       coastal:      'coprosma',      // glacial-outwash flats
       grassland:    'patotara'       // other levels' grassland key
     },
-    // …and podocarp forest cultivated over the cache's life (Slice B).
+    // …and podocarp forest cultivated over the cache's life.
     growsForest: true,
     growEverySec: 5,           // seed a rimu/beech in-radius this often
     growCap: 9,                // stop once the grove holds this many forest trees
@@ -640,11 +627,10 @@ const PLACEABLES = {
     seasonalBonus: { summer: 1.0, autumn: 1.0, winter: 1.0, spring: 1.0 }
   },
 
-  // Year-2 forest cultivator (Free Play). Unlike the Berry Cache it draws no kea and
-  // spawns no berries — it simply CULTIVATES podocarp forest: over its life it seeds
-  // rimu/beech in its radius (the same growForestAt path), spreading the forest into the
-  // lowland. Placed on lowland ground NEAR an existing grove (requiresNearForest), so it
-  // extends the podocarp refuge that feeds the kākā rather than founding forest anywhere.
+  // Year-2 forest cultivator (Free Play). Draws no kea and spawns no berries: it simply
+  // CULTIVATES podocarp forest, seeding rimu/beech in its radius over its life. Placed on
+  // lowland NEAR an existing grove (requiresNearForest), so it extends the podocarp refuge
+  // that feeds the kākā rather than founding forest anywhere.
   forestBoost: {
     name: "Forest Seed",
     description: "Cultivates new podocarp forest — plant on lowland near an existing grove to spread rimu and beech",
@@ -652,18 +638,18 @@ const PLACEABLES = {
     icon: '🌱',
     color: '#3b6a50',
     effect: 'forestBoost',
-    radius: 95,                // wider grove so the spread reads clearly (was 70)
+    radius: 95,                // wide grove so the spread reads clearly
     duration: 3600,
     minSpacing: 30,
     ignoresSpacing: false,
-    // Podocarp forest cultivated over the seed's life (reuses the Berry Cache path). Tuned for
-    // a MUCH more visible spread than the cache: a burst of saplings on placement, then a
-    // fast, multi-tree cadence up to a big cap, filling the radius into an obvious new grove.
+    // Podocarp forest cultivated over the seed's life (reuses the Berry Cache path), tuned
+    // for a much more visible spread: a burst of saplings on placement, then a fast
+    // multi-tree cadence up to a big cap, filling the radius into an obvious new grove.
     growsForest: true,
     growInitial: 8,            // saplings dropped the instant it's placed (immediate feedback)
     growPerTick: 2,            // trees seeded per grow tick
-    growEverySec: 2,           // …and it ticks this often (was one tree every 4s)
-    growCap: 24,               // stop once the grove holds this many forest trees (was 12)
+    growEverySec: 2,           // and it ticks this often
+    growCap: 24,               // stop once the grove holds this many forest trees
     // Lowland ground near existing forest only.
     allowedBiomes: ['forestRefuge', 'shrubland', 'glacialFlats'],
     requiresNearForest: true,
@@ -672,10 +658,10 @@ const PLACEABLES = {
     seasonalBonus: { summer: 1.0, autumn: 1.0, winter: 1.0, spring: 1.0 }
   },
 
-  // A toolbar INTERACTION (not a placement): selecting it TOGGLES the non-modal nest-raid
-  // panel (Game._openRaidPanel) that lists the moa nesting sites to raid. The mauri cost is
-  // charged per raid from the panel (mechanics.keaRaid.cost), so this shows 0 and
-  // opensDialog routes it past selection's affordability check.
+  // A toolbar INTERACTION (not a placement): selecting it toggles the non-modal nest-raid
+  // panel (Game._openRaidPanel) listing the moa nesting sites to raid. Cost is charged per
+  // raid from the panel (mechanics.keaRaid.cost), so this shows 0 and opensDialog routes it
+  // past selection's affordability check.
   nestRaid: {
     name: "KEA: Nest Raid",
     description: "Attempt to raid eggs and chase out moa!",
@@ -689,10 +675,10 @@ const PLACEABLES = {
     seasonalBonus: { summer: 1.0, autumn: 1.0, winter: 1.0, spring: 1.0 }
   },
 
-  // Mast-year interaction (Free Play): shakes a fifth of the mature rimu into a berry
-  // glut — ripe berry patches spring up beside them, and the kākāpō nearby gorge (fed +
-  // crop-full, so they can breed). A gamewide one-shot; replaces Nest Raid in mast years.
-  // Handled by Game._useGlobalInteractable → _triggerRimuScramble.
+  // Mast-year interaction (Free Play): shakes a fifth of the mature rimu into a berry glut.
+  // Ripe berry patches spring up beside them and nearby kākāpō gorge (fed + crop-full, so
+  // they can breed). A gamewide one-shot; replaces Nest Raid in mast years. Handled by
+  // Game._useGlobalInteractable.
   rimuScramble: {
     name: "Rimu Berry Scramble",
     description: "Shakes the trees for fruit!",
@@ -700,7 +686,7 @@ const PLACEABLES = {
     icon: '🍒',
     color: '#a23a4a',
     effect: 'rimuScramble',
-    global: true,              // gamewide one-shot — no map placement
+    global: true,              // gamewide one-shot, no map placement
     cooldown: 1800,            // ~half a year at this seasonDuration
     radius: 0, minSpacing: 0, ignoresSpacing: true,
     seasonalBonus: { summer: 1.0, autumn: 1.0, winter: 1.0, spring: 1.0 }
@@ -766,11 +752,11 @@ const BIOMES = {
 // ============================================
 // PLANT DEFINITIONS
 // ============================================
-// winterEdibility (0..1): fraction of a plant's food value that survives the cold.
-// Read ONLY by the Free Play winter-inedibility mechanic (LEVEL_MECHANICS.winterInedibility);
-// inert on every other level. NZ's flora is evergreen, so winter takes FOOD, not the
-// plant: berry/fruit sources drop to ~0, the evergreen beech refuge keeps the most.
-// See FREEPLAY_PLAN.md §4.2. A deepening glacial erodes these floors further (in Plant).
+// winterEdibility (0..1): fraction of a plant's food value that survives the cold. Read
+// only by the Free Play winter-inedibility mechanic (LEVEL_MECHANICS.winterInedibility),
+// inert elsewhere. NZ's flora is evergreen, so winter takes FOOD not the plant: berry/fruit
+// sources drop to ~0, the evergreen beech refuge keeps the most. A deepening glacial erodes
+// these floors further (in Plant).
 const PLANT_TYPES = {
   tussock: { name: "Tussock", nutrition: 25, color: '#8ea040', size: 24, growthTime: 200,
     winterEdibility: 0.20, description: "Hardy grass that covers the high country" },
@@ -788,7 +774,7 @@ const PLANT_TYPES = {
     winterEdibility: 0.0, description: "Alpine shrub with summer berries" },
 
   // --- Glacial-flora (LGM) additions. Coprosma & dracophyllum are sprite-rendered;
-  // matagouri, toatoa & pohuehue are procedural (no sprite assets yet — generic blob). ---
+  // matagouri, toatoa & pohuehue are procedural (no sprite assets yet, generic blob). ---
   coprosma: { name: "Coprosma", nutrition: 30, color: '#5c7d3e', size: 22, growthTime: 190,
     winterEdibility: 0.15, description: "Divaricating shrub; hardy glacial browse with orange berries" },
   dracophyllum: { name: "Dracophyllum", nutrition: 28, color: '#9a7b4f', size: 30, growthTime: 250,
@@ -834,9 +820,8 @@ class MauriManager {
     this.eagleSpawnedAt = new Set();
   }
 
-  // Seed the milestone tracker to the starting population so milestones already
-  // satisfied at level start (e.g. a level that opens with 16 moa clears the 10
-  // and 15 marks) don't retroactively pay out — only genuine growth is rewarded.
+  // Seed the milestone tracker to the starting population, so milestones already met at
+  // level start don't retroactively pay out; only genuine growth is rewarded.
   primeMilestones(startPop) {
     let m = 0;
     for (const t of this.populationMilestones) if (startPop >= t) m = t;
@@ -1040,18 +1025,17 @@ class Game {
       }));
     }
 
-    // Timed end (classic-goals levels): when set, the level always runs to
-    // this playTime and then completes — goals are en-route rewards, not the
-    // win condition. Phased levels have their own built-in timed end.
+    // Timed end (classic-goals levels): when set, the level always runs to this playTime
+    // then completes; goals are en-route rewards, not the win condition. Phased levels
+    // have their own built-in timed end.
     this.timeLimit = levelDef.timeLimit || null;
 
-    // NEW: Load illustration assets for this level's start screen
+    // Load illustration assets for this level's start screen.
     this.menuArt.loadForLevel(levelDef);
 
-    // NOTE: init() is intentionally NOT called here. The level splash only
-    // needs the level def + menu art; the heavy work (terrain generation,
-    // buffer baking, simulation setup) is deferred to _startLoading(),
-    // triggered by the Start Level button.
+    // init() is intentionally NOT called here: the level splash only needs the level def +
+    // menu art. The heavy work (terrain gen, buffer baking, sim setup) is deferred to
+    // _startLoading(), triggered by the Start Level button.
   }
 
   // Enter the loading screen. The heavy work (terrain gen, sim seed, setup) then
@@ -1102,8 +1086,8 @@ class Game {
     // _initFinalize (the last chunk) flips state to PLAYING; nothing more to do.
   }
 
-  // Synchronous full init (used by the benchmark's restart path). The loading
-  // screen runs the SAME pieces stepped across frames — see _buildLoadingPlan.
+  // Synchronous full init (used by the benchmark's restart path). The loading screen runs
+  // the SAME pieces stepped across frames (see _buildLoadingPlan).
   init() {
     if (!this.currentLevel) return;
     this._initTerrainAndSeason();
@@ -1194,7 +1178,7 @@ class Game {
       TUTORIAL_REGISTRY.get('default')
     );
     if (BENCHMARK.pending) this.tutorial.enabled = false;   // benchmark runs clean
-    // Endless (Free Play) skips the tutorial/intro for now — it opens straight into play.
+    // Endless (Free Play) skips the tutorial/intro for now; it opens straight into play.
     if (this.currentLevel && this.currentLevel.endless) this.tutorial.enabled = false;
     this.tutorial.init();
 
@@ -1250,7 +1234,7 @@ class Game {
       mapWidth: this.terrain.mapWidth,
       mapHeight: this.terrain.mapHeight
     });
-    // Relief (plan-oblique 3D) is GL-only — never enable it in Classic 2D, whose relief bake
+    // Relief (plan-oblique 3D) is GL-only: never enable it in Classic 2D, whose relief bake
     // is broken. This is the single master switch the bake, billboards and pointer maths read,
     // so gating it here keeps every consumer top-down in Classic 2D even if view3D drifts true.
     Projection.relief = !!CONFIG.view3D && !!CONFIG.useGL;
@@ -1270,9 +1254,9 @@ class Game {
     return { x: px, y: py };
   }
 
-  // Paint-space y for a world point — where a thing standing at (x, y) is drawn.
-  // In 2D this is just y; in 3D it lifts onto the relief so placement rings and
-  // ghosts sit on the ground like the billboarded cast. Used only by previews.
+  // Paint-space y for a world point: where a thing standing at (x, y) is drawn. In 2D this
+  // is just y; in 3D it lifts onto the relief so placement rings and ghosts sit on the
+  // ground like the billboarded cast. Used only by previews.
   _groundPaintY(x, y) {
     if (CONFIG.view3D && typeof Projection !== 'undefined' && Projection.relief) {
       return Projection.groundY(y, this.terrain.getElevationAt(x, y));
@@ -1389,15 +1373,15 @@ class Game {
     }
 
     this.checkGoals();
-    // Endless skips the one-time total-moa milestone bonuses — its economy is the steady
+    // Endless skips the one-time total-moa milestone bonuses; its economy is the steady
     // ecosystem stream above, not lump-sum growth rewards.
     if (!(this.currentLevel && this.currentLevel.endless)) {
       this.mauri.checkMilestones(this._cachedMoaCount, this.simulation, this);
     }
 
-    // While the world grid is panning between areas (or waiting to repopulate the
-    // new one), the cast is unloaded — an empty map then is a transition, not a wipe,
-    // so hold the loss / fail / apex-extinction verdicts until it settles.
+    // While the world grid is panning between areas (or waiting to repopulate the new one),
+    // the cast is unloaded: an empty map then is a transition, not a wipe, so hold the loss /
+    // fail / apex-extinction verdicts until it settles.
     const _areaTransition = this.terrain && this.terrain.hasWorldGrid && !!this._yearTransition;
 
     if (!_areaTransition && this._cachedMoaCount === 0 && this._cachedEggCount === 0) {
@@ -1406,10 +1390,9 @@ class Game {
       if (audioManager) audioManager.playLoss();
     }
 
-    // Level-wide fail condition: the non-phased counterpart of a phase's
-    // `fail` hook. Lets a level lose on conditions the generic all-moa check
-    // misses — e.g. level 1's focal Upland Moa dying out while mutated
-    // cousin species carry the headcount.
+    // Level-wide fail condition: the non-phased counterpart of a phase's `fail` hook. Lets
+    // a level lose on conditions the generic all-moa check misses, e.g. level 1's focal
+    // Upland Moa dying out while mutated cousin species carry the headcount.
     if (!_areaTransition && this.state === GAME_STATE.PLAYING && this.currentLevel &&
         this.currentLevel.fail && this.currentLevel.fail(this.simulation, this)) {
       this.state = GAME_STATE.LOST;
@@ -1417,10 +1400,10 @@ class Game {
       if (audioManager) audioManager.playLoss();
     }
 
-    // Eagle extinction (emergent-eagle levels): the apex predator dying out is a
-    // loss — EXCEPT in Free Play, where it instead unleashes a dominant-moa boom
-    // (handled in _updateEagleBoom) and eagles re-immigrate next year. A grace
-    // period holds while an eagle egg is still incubating.
+    // Eagle extinction (emergent-eagle levels): the apex predator dying out is a loss,
+    // EXCEPT in Free Play, where it instead unleashes a dominant-moa boom (handled in
+    // _updateEagleBoom) and eagles re-immigrate next year. A grace period holds while an
+    // eagle egg is still incubating.
     if (this.state === GAME_STATE.PLAYING && !(this.currentLevel && this.currentLevel.endless) &&
         typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.emergentEagles &&
         this.simulation.countAliveEagles() === 0) {
@@ -1448,9 +1431,8 @@ class Game {
     }
   }
   
-  // Headline for the WON overlay. Only claims "all goals achieved" when it's
-  // actually true — timed levels (and phased ones) can end with goals unmet.
-  // Levels may override with an `endMessage` string.
+  // Headline for the WON overlay. Only claims "all goals achieved" when it's actually true;
+  // timed and phased levels can end with goals unmet. Levels may override with `endMessage`.
   _endMessage() {
     if (this.currentLevel && this.currentLevel.endMessage) return this.currentLevel.endMessage;
     const goals = this.goals || [];
@@ -1471,9 +1453,8 @@ class Game {
   }
 
   checkGoals() {
-    // Free Play is endless: rolling yearly goals, and NEVER a win (an empty goals
-    // array would otherwise win on frame one — see MISTAKES.md). Loss stays with the
-    // all-moa-gone check in update().
+    // Free Play is endless: rolling yearly goals, and NEVER a win (an empty goals array
+    // would otherwise win on frame one). Loss stays with the all-moa-gone check in update().
     if (this.currentLevel && this.currentLevel.endless) { this._checkFreeplayYear(); return; }
     if (this.phases) { this._checkPhases(); return; }
     const goals = this.goals;
@@ -1530,7 +1511,7 @@ class Game {
 
     // Entering a new phase
     if (idx !== this._phaseIndex) {
-      // Completing a survival phase means you endured it — mark its goals met.
+      // Completing a survival phase means you endured it; mark its goals met.
       if (this._phaseIndex >= 0) {
         for (const g of this.goals) {
           if (g.survive && !g.achieved) {
@@ -1546,7 +1527,7 @@ class Game {
       this.addNotification(`Phase ${idx + 1}: ${this.phases[idx].name}`, 'success');
     }
 
-    // Growth objectives reward the moment they are met (soft — no penalty if missed)
+    // Growth objectives reward the moment they are met (soft; no penalty if missed)
     for (const goal of this.goals) {
       if (!goal.survive && !goal.achieved && goal.condition()) {
         goal.achieved = true;
@@ -1565,10 +1546,9 @@ class Game {
       return;
     }
 
-    // Win: survived to the end of the final phase. Enduring to the clock
-    // completes the final phase's SURVIVE goals (same rule as a phase
-    // transition) — but unmet growth goals stay unmet, so the end screen
-    // reports an honest tally instead of claiming everything was achieved.
+    // Win: survived to the end of the final phase. Enduring to the clock completes the final
+    // phase's SURVIVE goals (same rule as a phase transition), but unmet growth goals stay
+    // unmet, so the end screen reports an honest tally rather than claiming a full clear.
     if (this.playTime >= total) {
       for (const g of this.goals) {
         if (g.survive && !g.achieved) {
@@ -1585,8 +1565,8 @@ class Game {
   }
   
   // ============================================
-  // FREE PLAY — endless yearly goals, refounding & the eagle-loss boom
-  // (see FREEPLAY_PLAN.md §4.4 / §4.5). Only reached for a level with endless:true.
+  // FREE PLAY: endless yearly goals, refounding & the eagle-loss boom.
+  // Only reached for a level with endless:true.
   // ============================================
 
   _freeplaySpeciesName(key) {
@@ -1602,13 +1582,12 @@ class Game {
     return key;
   }
 
-  // The authored schedule entry for a given year (0-based cycle), fully resolved, or
-  // null. The primary format is level.freeplaySchedule = { years:[...], loopYears }: a
-  // repeating loop where each position may carry a `branch: { reached, missed }` picked
-  // by THIS loop's mast-goal outcome (_mastGoalReached), plus a `moaFocus` pairing that
-  // eases in from `moaFromLoop`. A legacy { opening:[...], cycle:[...] } form is still
-  // honoured. Each resolved entry may carry focus/moaFocus/nestingGoal/mast/mastGoalYear/
-  // kokakoStretch/introduce/note/availablePlaceables (see level_freeplay_kahurangi).
+  // The authored schedule entry for a given year (0-based cycle), fully resolved, or null.
+  // Primary format: level.freeplaySchedule = { years:[...], loopYears }, a repeating loop
+  // where each position may carry a `branch: { reached, missed }` picked by this loop's
+  // mast-goal outcome, plus a `moaFocus` pairing that eases in from `moaFromLoop`. A legacy
+  // { opening, cycle } form is still honoured. Each resolved entry may carry focus/moaFocus/
+  // nestingGoal/mast/mastGoalYear/kokakoStretch/introduce/note/availablePlaceables.
   _scheduledYearEntry(cycle) {
     const sched = this.currentLevel && this.currentLevel.freeplaySchedule;
     if (!sched) return null;
@@ -1696,16 +1675,15 @@ class Game {
     return best;
   }
 
-  // Free Play economy snapshot — the passive-income drivers, also shown in the HUD.
+  // Free Play economy snapshot: the passive-income drivers, also shown in the HUD.
   //   avgPop      = mean population of non-eagle species ABOVE their floor
-  //   balance     = the equality coefficient: 1 − (worst species SHORTFALL below the top),
+  //   balance     = equality coefficient: 1 − (worst species' SHORTFALL below the top),
   //                 where a FOCUS species' shortfall counts `focusInequalityWeight`× (2 =
-  //                 focus inequality bites double — neglecting a focus species while others
-  //                 boom hurts income twice as hard). Raised to a power that grows each year
-  //                 so imbalance bites a little harder over the run. With no focus species it
-  //                 reduces to the old min/max evenness.
+  //                 focus inequality bites double). Raised to a power that grows each year,
+  //                 so imbalance bites harder over the run. With no focus species it reduces
+  //                 to plain min/max evenness.
   //   mauriPerSec = avgPop × balance × scale
-  // Eagles never count toward either. Reused by the population HUD and the avg-pop dial.
+  // Eagles never count. Reused by the population HUD and the avg-pop dial.
   ecosystemStats() {
     const sim = this.simulation;
     const M = (typeof LEVEL_MECHANICS !== 'undefined') ? LEVEL_MECHANICS : {};
@@ -1751,9 +1729,8 @@ class Game {
     }
 
     // Mast-mauri objective (the kākā year): track mauri gained SINCE the year began and
-    // latch success the moment the target is hit — the deadline is the end of this year's
-    // spring, i.e. this year's whole run. A reached goal invokes the mast a year early
-    // (year 3); a miss (never latched by year end) defers it to year 4. See _beginFreeplayYear.
+    // latch success the moment the target is hit. The deadline is the end of this year's
+    // run. A reached goal invokes the mast a year early (year 3); a miss defers it to year 4.
     if (this._mastGoalActive && this.mauri && !this._mastGoalReached) {
       const gained = this.mauri.totalEarned - (this._mastGoalStartEarned || 0);
       if (gained >= (this._mastGoalTarget || Infinity)) {
@@ -1766,11 +1743,10 @@ class Game {
     }
 
     // Floor watch: keep every protected species at its floor. isSpeciesProtected already
-    // stops hunting/starving at the floor, but a same-frame double-catch (two eagles read
-    // the cached count before either kill lands) or a species that regenerated below it can
-    // still dip under. Every ~1.5s, respawn the shortfall so a hunted/thinned species quietly
-    // returns to the floor instead of vanishing for the year. Only species already in
-    // dynamicFloors (present this year) are topped up — nothing is conjured from nothing.
+    // stops hunting/starving at the floor, but a same-frame double-catch or a species that
+    // regenerated below it can still dip under. Every ~1.5s, respawn the shortfall so a
+    // thinned species returns to the floor instead of vanishing for the year. Only species
+    // already in dynamicFloors (present this year) are topped up; nothing is conjured anew.
     this._floorWatchTimer = (this._floorWatchTimer || 0) - 1;
     if (this._floorWatchTimer <= 0) {
       this._floorWatchTimer = 90;
@@ -1794,12 +1770,12 @@ class Game {
     this._updateEagleBoom();
   }
 
-  // This year's starting populations for the area being entered. Each species falls back
-  // to its default (moa: initialSpeciesDistribution; birds: initialEntityCounts, else
+  // This year's starting populations for the area being entered. Each species falls back to
+  // its default (moa: initialSpeciesDistribution; birds: initialEntityCounts, else
   // freeplayYearReset.birdDefault), nudged up by how many you held HERE last visit (per-area
-  // memory) — nudge = round((lastHere − default)·influence), capped at maxNudge. Then this
-  // year's introduces and the focus floor are layered on. Birds appear only if they're part
-  // of the default cast, were established here, are a focus, or are introduced this year.
+  // memory): nudge = round((lastHere − default)·influence), capped at maxNudge. Then this
+  // year's introduces and the focus floor are layered on. Birds appear only if part of the
+  // default cast, established here, a focus, or introduced this year.
   _computeYearStartPops(entry, focus, protectFloor, enterIdx) {
     const reset = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.freeplayYearReset) || {};
     const influence = reset.influence ?? 0.25;
@@ -1812,13 +1788,13 @@ class Game {
     const nudge = (k, def) => Math.min(maxNudge, Math.max(0, Math.round(((hist[k] || 0) - def) * influence)));
 
     const moa = {}, others = {};
-    // Moa — the persistent cast: every roster species resets to default + nudge.
+    // Moa: the persistent cast, every roster species resets to default + nudge.
     for (const k of ((this.activeSpecies && this.activeSpecies.moa) || [])) {
       if (!this._speciesUsable(k)) continue;
       const def = (moaDefaults[k] != null) ? moaDefaults[k] : birdDefault;
       moa[k] = def + nudge(k, def);
     }
-    // Birds — present only if part of the default cast (initialEntityCounts), established
+    // Birds: present only if part of the default cast (initialEntityCounts), established
     // here last visit, a focus this year, or introduced this year.
     const focusSet = new Set(focus || []);
     const introSet = new Set(((entry && entry.introduce) || []).map(s => s && s.type).filter(Boolean));
@@ -1867,20 +1843,18 @@ class Game {
     const targets = this.currentLevel.freeplayTargets || M.freeplayTargets || {};
     const defaultTarget = M.freeplayDefaultTarget ?? 8;
 
-    // 1) This year's FOCUS. An authored freeplaySchedule (see the level) wins; its
-    //    focus can name ANY species — moa or the flighted birds (kea/kākā/kākāpō).
-    //    Species not yet registered are dropped; if that empties the scheduled focus
-    //    (e.g. a kākāpō year before kākāpō is built), we fall back to the dynamic
-    //    "two most-endangered moa" ranker so a year never lacks a focus. Non-scheduled
-    //    years use the ranker too.
+    // 1) This year's FOCUS. An authored freeplaySchedule wins; its focus can name any
+    //    species, moa or the flighted birds. Species not yet registered are dropped, and
+    //    if that empties the scheduled focus we fall back to the dynamic "two most-endangered
+    //    moa" ranker so a year never lacks a focus. Non-scheduled years use the ranker too.
     const ranked = this._rankFreeplaySpecies();
     const entry = this._scheduledYearEntry(this.cycle);
 
-    // Per-area memory: what you hold as this year opens = what you carried out of LAST
-    // year's area. Record it (every non-eagle species + the forest you'd grown) against
-    // that departing area, so returning there next loop nudges your restart up a little and
-    // partly re-grows the forest. Different areas are different habitats — populations do
-    // NOT haul across; they fall back to defaults per area (see _computeYearStartPops).
+    // Per-area memory: what you hold as this year opens = what you carried out of LAST year's
+    // area. Record it (every non-eagle species + the forest grown) against that departing
+    // area, so returning next loop nudges your restart up and partly re-grows the forest.
+    // Different areas are different habitats: populations do NOT haul across; they fall back
+    // to defaults per area (see _computeYearStartPops).
     const t = this.terrain;
     if (t && t._quadIndexForCycle && this.cycle > 0) {
       if (!this._areaMoaBest) this._areaMoaBest = {};
@@ -1894,9 +1868,8 @@ class Game {
     }
 
     // 1a) Mast-mauri goal lifecycle. STARTING the mast-goal year arms a fresh objective
-    //     (gain `target` mauri during this year). Starting any OTHER year closes it — the
-    //     _mastGoalReached latch then stands as this loop's outcome, which the year-3/4
-    //     branch resolution above already read. (Reached before the deadline stays reached.)
+    //     (gain `target` mauri this year). Starting any OTHER year closes it: the
+    //     _mastGoalReached latch then stands as this loop's outcome for the year-3/4 branch.
     const mastGoalCfg = this.currentLevel.mastGoal || null;
     if (entry && entry.mastGoalYear && mastGoalCfg) {
       this._mastGoalActive = true;
@@ -1907,8 +1880,8 @@ class Game {
       this._mastGoalActive = false;
     }
 
-    // 1b) Force a mast (rimu bloom) this year when the schedule says so — this is how a
-    //     reached goal (mast in year 3) or a missed goal (late mast in year 4) lands.
+    // 1b) Force a mast (rimu bloom) this year when the schedule says so: how a reached goal
+    //     (mast in year 3) or a missed goal (late mast in year 4) lands.
     if (entry && entry.mast) this._mastYearTargetCycle = this.cycle;
 
     // 1c) FOCUS: the schedule's bird/moa focus, plus a paired keystone moa (moaFocus).
@@ -1928,9 +1901,9 @@ class Game {
     this.freeplayFocus = focus;
 
     // 2–4) YEAR-START POPULATIONS (reset-to-default + per-area nudge). Populations don't
-    //   haul across areas — each species falls back to its default, nudged up a little by
-    //   how many you held HERE last visit, then this year's introduces + the focus floor
-    //   are layered on. Computed for the area we're MOVING to (enterIdx).
+    //   haul across areas: each species falls back to its default, nudged up by how many you
+    //   held HERE last visit, then this year's introduces + the focus floor are layered on.
+    //   Computed for the area we're MOVING to (enterIdx).
     const enterIdx = (t && t._quadIndexForCycle) ? t._quadIndexForCycle(this.cycle) : 0;
     const yearPops = this._computeYearStartPops(entry, this.freeplayFocus, protectFloor, enterIdx);
 
@@ -1943,11 +1916,11 @@ class Game {
     }
 
     if (this.cycle === 0) {
-      // Year 1: no camera pan — the initial spawn already placed the moa/bird defaults, so
+      // Year 1: no camera pan; the initial spawn already placed the moa/bird defaults, so
       // just top up to this year's start (adds the introduced kākā, tops focus to floor).
       this._applyYearStartTopUp(yearPops);
     } else {
-      // Later years: the pan regenerates the cast on the new ground — hand it the counts,
+      // Later years: the pan regenerates the cast on the new ground; hand it the counts,
       // plus how much cultivated forest to re-grow here (forest legacy).
       sim._yearStartPops = yearPops;
       const forestBest = (this._areaForest && this._areaForest[enterIdx]) || 0;
@@ -1955,13 +1928,11 @@ class Game {
       sim._forestLegacyTarget = Math.round(forestBest * legacyFrac);
     }
 
-    // 5) Protect EVERY species present this year from a total wipe (dynamic floor).
-    //    Non-focus species used to be left to die out and refound only next year; now
-    //    they quietly hold at the floor too, so a hunted/thinned species never vanishes
-    //    for the rest of the year. Any dip below the floor is topped back up by the
-    //    per-frame floor watch in _checkFreeplayYear. Focus species share the same floor.
-    //    Only species the area actually holds this year are floored (a start count > 0),
-    //    so a bird absent from the cast isn't conjured into existence.
+    // 5) Protect EVERY species present this year from a total wipe (dynamic floor). Each
+    //    holds at the floor, so a thinned species never vanishes for the rest of the year;
+    //    any dip below it is topped back up by the per-frame floor watch in _checkFreeplayYear.
+    //    Only species the area actually holds this year are floored (start count > 0), so a
+    //    bird absent from the cast isn't conjured into existence.
     const floors = {};
     for (const k in yearPops.moa)    if (yearPops.moa[k] > 0)    floors[k] = protectFloor;
     for (const k in yearPops.others) if (yearPops.others[k] > 0) floors[k] = protectFloor;
@@ -2003,8 +1974,8 @@ class Game {
         : null;
     }
 
-    // 8) Build this year's goals: a population goal per focus species, plus — for a
-    //    nesting-goal year — a "settle N new nesting sites" goal for the paired moa. A
+    // 8) Build this year's goals: a population goal per focus species, plus, for a
+    //    nesting-goal year, a "settle N new nesting sites" goal for the paired moa. A
     //    kōkako goal in the reached branch is a bonus STRETCH (worth more, opt-in).
     const goalReward = Math.round((M.freeplayGoalReward ?? 80) * (1 + this.coldIndex));
     const nestTarget = this.currentLevel.freeplayNestingGoal ?? M.freeplayNestingGoal ?? 2;
@@ -2044,7 +2015,7 @@ class Game {
     }
     this.goals = goals;
 
-    // 9) Announce the year — the schedule's own note if it has one, else the generic
+    // 9) Announce the year: the schedule's own note if it has one, else the generic
     //    "protect X & Y".
     const stage = (typeof ClimateDrift !== 'undefined' && this._climateCfg)
       ? ClimateDrift.stageName(this.coldIndex) : '';
@@ -2066,23 +2037,23 @@ class Game {
     }
 
     // Per-year nesting-site override (e.g. the kea year: two fewer sites, all on the
-    // LEFT/forest half — so you must drive moa off a live forest nest, not claim an empty
-    // one). Read by Simulation._seedNestingSites. Year 1 has no camera pan, so re-seed
-    // here; later years re-seed inside the pan's spawnAreaEntities with this set.
+    // LEFT/forest half, so you must drive moa off a live forest nest, not claim an empty
+    // one). Read by Simulation._seedNestingSites. Year 1 has no camera pan, so re-seed here;
+    // later years re-seed inside the pan's spawnAreaEntities with this set.
     sim._nestingOverride = (entry && entry.nesting) ? entry.nesting : null;
     if (this.cycle === 0) sim._seedNestingSites();
 
-    // World grid: LAST, once this year's populations are settled — pan the camera to
-    // the year's area of the continuous land and regenerate the cast there (a no-op on
-    // year 1 / classic levels). Snapshots the populations above, so they carry across.
+    // World grid: LAST, once this year's populations are settled, pan the camera to the
+    // year's area of the continuous land and regenerate the cast there (a no-op on year 1 /
+    // classic levels). Snapshots the populations above, so they carry across.
     this._scrollWorldGrid();
   }
 
-  // World grid (endless years): at each year boundary, move to this year's area of the
-  // one continuous landmass via a staged transition — the cast FADES OUT, the camera PANS
-  // (unloading the old area's plants/fauna/placed items), then the new area's cast is
-  // computed and FADES IN. Kicks off the transition here; _updateWorldGridPan drives its
-  // phases. Year 1 (cycle 0) opens on the start area (east / alps→podocarp) with no move.
+  // World grid (endless years): at each year boundary, move to this year's area of the one
+  // continuous landmass via a staged transition. The cast FADES OUT, the camera PANS
+  // (unloading the old area's cast), then the new area's cast is computed and FADES IN. Kicks
+  // off the transition here; _updateWorldGridPan drives its phases. Year 1 opens on the start
+  // area with no move.
   _scrollWorldGrid() {
     const t = this.terrain;
     if (!t || !t.hasWorldGrid) return;
@@ -2114,8 +2085,8 @@ class Game {
     const cap = (wg.glacialCap != null) ? wg.glacialCap : 0.6;
     if (perLoop > 0) t.setGlacialAdvance(Math.min(cap, loops * perLoop));
 
-    // Eagle pressure climbs a little each loop — more eagles per prey over the run. Ramps
-    // off a stored base so a restart (which re-restores the base at load) starts fresh.
+    // Eagle pressure climbs a little each loop: more eagles per prey over the run. Ramps off
+    // a stored base so a restart (which re-restores the base at load) starts fresh.
     const M = (typeof LEVEL_MECHANICS !== 'undefined') ? LEVEL_MECHANICS : {};
     const perLoopRatio = M.eagleTargetRatioPerLoop || 0;
     if (perLoopRatio > 0) {
@@ -2181,9 +2152,9 @@ class Game {
     return a;
   }
 
-  // Endless eagle-loss consequence: with no apex predator, the current dominant
-  // (non-focus) moa surges unchecked, filling the population budget and crowding the
-  // focus species out of the forest — until eagles re-immigrate next year.
+  // Endless eagle-loss consequence: with no apex predator, the current dominant (non-focus)
+  // moa surges unchecked, filling the population budget and crowding the focus species out
+  // of the forest, until eagles re-immigrate next year.
   _updateEagleBoom() {
     const sim = this.simulation;
     if (!(typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.emergentEagles)) return;
@@ -2200,8 +2171,8 @@ class Game {
     }
   }
 
-  // Free Play HUD: the deepening-climate gauge — current year, glacial stage, a
-  // cold thermometer, and years survived. Drawn in screen space over the game.
+  // Free Play HUD: the deepening-climate gauge (current year, glacial stage, a cold
+  // thermometer, years survived). Drawn in screen space over the game.
   _renderClimateGauge() {
     if (this.state !== GAME_STATE.PLAYING && this.state !== GAME_STATE.PAUSED) return;
     const W = CONFIG.canvasWidth;
@@ -2223,8 +2194,8 @@ class Game {
     fill(150, 168, 158); textAlign(LEFT, CENTER); textSize(10);
     text(`survived: ${this._yearsSurvived}`, bx, gy + 30);
 
-    // Mast Year tag: shown while a mast is booked — "coming" next year, then live this
-    // year — so the player sees their (costly) investment on its way and landing.
+    // Mast Year tag: shown while a mast is booked ("coming" next year, then live this year),
+    // so the player sees their costly investment on its way and landing.
     if (this._mastYearTargetCycle >= 0 && this._mastYearTargetCycle >= this.cycle) {
       const active = this._isMastYear();
       const label = active ? 'MAST YEAR' : 'mast year next';
@@ -2238,7 +2209,7 @@ class Game {
   }
 
   // ============================================
-  // KEA RAID v2 — the player-driven raid action (Slice D)
+  // KEA RAID: the player-driven raid action
   // ============================================
 
   // World ground point → screen pixel (inverse of _pointerWorld; uses the relief lift
@@ -2254,7 +2225,7 @@ class Game {
   }
 
   // How many kea are STATIONED at a site: alive kea whose perch tree sits within the
-  // station radius (a kea with no perch yet doesn't count — it hasn't settled).
+  // station radius (a kea with no perch yet doesn't count; it hasn't settled).
   keaStationedCount(site) {
     const cfg = this._keaRaidCfg(); if (!cfg) return 0;
     const list = this.simulation.otherEntities && this.simulation.otherEntities.kea;
@@ -2297,7 +2268,7 @@ class Game {
   attemptRaid(site) {
     const cfg = this._keaRaidCfg();
     if (!cfg || !site || !site.alive) return;
-    if ((site.eggCount || 0) <= 0) {   // nothing to raid — an empty site can't be claimed
+    if ((site.eggCount || 0) <= 0) {   // nothing to raid; an empty site can't be claimed
       this.addNotification(`No clutch to raid here — the kea need a nest with eggs. Draw the moa onto a site, then thin them.`, 'error');
       return;
     }
@@ -2318,13 +2289,11 @@ class Game {
     }
   }
 
-  // Nest Raid is a NON-MODAL side panel (it does NOT grey out the play area). The UI
-  // draws it in the right column — in fullscreen below the focus-species row and above
-  // the field guide; in the docked view below the goals panel and above the population
-  // panel (half the event log's height). It lists the moa nesting sites with their
-  // stationed-kea count + live success%; HOVERING a row tints that nest in the play area
-  // (green = raidable, red = not) and shows its success% at the nest's centre (see
-  // NestingSite.render). Selecting the Nest Raid tool toggles the panel.
+  // Nest Raid is a NON-MODAL side panel (it does NOT grey out the play area), drawn in the
+  // right column. It lists the moa nesting sites with their stationed-kea count and live
+  // success%; hovering a row tints that nest in the play area (green = raidable, red = not)
+  // and shows its success% at the nest's centre (see NestingSite.render). Selecting the Nest
+  // Raid tool toggles the panel.
   _openRaidPanel() {
     this._raidPanelOpen = !this._raidPanelOpen;   // the tool toggles it
     this._raidPanelRows = null;
@@ -2354,8 +2323,8 @@ class Game {
     return { gained: Math.round(gained), target, frac, reached: !!this._mastGoalReached };
   }
 
-  // The mast-goal bar shows in place of the Nest-Raid panel during the (active) kākā
-  // mast-goal year. They never both apply — that year carries no nest-raid tool.
+  // The mast-goal bar shows in place of the Nest-Raid panel during the active kākā mast-goal
+  // year. They never both apply; that year carries no nest-raid tool.
   _mastGoalPanelActive() { return !!this._mastGoalActive; }
 
   // Draw the mast objective as a progress bar (non-modal, no clicks): a title, the fill
@@ -2493,8 +2462,8 @@ class Game {
     return !!(p && mx >= p.x && mx <= p.x + p.w && my >= p.y && my <= p.y + p.h);   // swallow clicks on the panel body
   }
 
-  // Tap a moa egg on the map → the nearest HUNGRY kea within range flies over to eat
-  // it — a quick, direct nudge, distinct from the strategic site raid.
+  // Tap a moa egg on the map → the nearest HUNGRY kea within range flies over to eat it:
+  // a quick, direct nudge, distinct from the strategic site raid.
   _tryDirectKeaToEgg(mx, my) {
     const M = (typeof LEVEL_MECHANICS !== 'undefined') ? LEVEL_MECHANICS : {};
     if (!M.keaTapEgg || !this.simulation) return false;
@@ -2551,11 +2520,11 @@ class Game {
       this.addNotification("The glacial winter drives a hungry eagle to hunt.", 'error');
     }
 
-    // Endless (= the area entering the LGM): the FIRST winter closes the door on the
-    // warm forest. Kawakawa — a frost-tender lowland plant of the mild opening — can no
-    // longer be established (stripped from the palette for good), and any standing
-    // groves wither out over that winter. One-shot per run; the endless year opens on
-    // summer, so the first winter (and this ban) still falls within Year 1. See _banKawakawa.
+    // Endless (the area entering the LGM): the FIRST winter closes the door on the warm
+    // forest. Kawakawa, a frost-tender lowland plant of the mild opening, can no longer be
+    // established (stripped from the palette for good), and any standing groves wither out
+    // over that winter. One-shot per run; the year opens on summer, so this ban still falls
+    // within Year 1. See _banKawakawa.
     if (this.currentLevel && this.currentLevel.endless && seasonKey === 'winter' && !this._kawakawaBanned) {
       this._banKawakawa();
     }
@@ -2574,9 +2543,9 @@ class Game {
     }
   }
 
-  // First-winter kawakawa lock (endless mode — see onSeasonChange). Removes kawakawa
-  // from the toolbar permanently for this run, drops it if it was the selected tool,
-  // and frost-kills any standing groves so they wither out over the winter.
+  // First-winter kawakawa lock (endless mode, see onSeasonChange). Removes kawakawa from
+  // the toolbar permanently for this run, drops it if it was the selected tool, and
+  // frost-kills any standing groves so they wither out over the winter.
   _banKawakawa() {
     this._kawakawaBanned = true;
     if (this.activePlaceables && this.activePlaceables.kawakawa) {
@@ -2763,7 +2732,7 @@ class Game {
     if (!def) return false;
 
     // Global one-shot interactables (e.g. Mast Year) fire a gamewide effect instead of
-    // placing an object — route them past the spatial checks below.
+    // placing an object; route them past the spatial checks below.
     if (def.global) return this._useGlobalInteractable(this.selectedPlaceable, def);
 
     if (this.selectedPlaceable === 'Storm' && this.playTime < this._stormCooldownUntil) {
@@ -2819,9 +2788,8 @@ class Game {
     return true;
   }
 
-  // Use a GLOBAL one-shot interactable (a placeable flagged `global`): spend its cost,
-  // fire its gamewide effect, and start its own recharge — no map placement. Currently
-  // just Mast Year, but written so another gamewide tool can slot in the same way.
+  // Use a GLOBAL one-shot interactable (a placeable flagged `global`): spend its cost, fire
+  // its gamewide effect, and start its own recharge, with no map placement.
   _useGlobalInteractable(type, def) {
     const until = this._globalCooldownUntil[type] || 0;
     if (this.playTime < until) {
@@ -2855,10 +2823,10 @@ class Game {
     return true;
   }
 
-  // Rimu Berry Scramble (mast-year interaction): shake a fifth of the mature rimu into
-  // fruit. A ripe berry patch springs up beside each shaken tree (lasting kākāpō forage),
-  // and every kākāpō near a shaken rimu gorges at once — hunger eased and crop filled, so
-  // a mast-year female is breeding-ready. "Food and security to the kākāpō."
+  // Rimu Berry Scramble (mast-year interaction): shake a fifth of the mature rimu into fruit.
+  // A ripe berry patch springs up beside each shaken tree (lasting kākāpō forage), and every
+  // kākāpō near a shaken rimu gorges at once (hunger eased and crop filled), so a mast-year
+  // female is breeding-ready.
   _triggerRimuScramble() {
     const sim = this.simulation;
     const rimus = [];
@@ -2873,7 +2841,7 @@ class Game {
     }
     const picked = rimus.slice(0, count);
 
-    // A ripe berry patch beside each shaken rimu — real, forageable kākāpō food.
+    // A ripe berry patch beside each shaken rimu: real, forageable kākāpō food.
     let berries = 0;
     for (const tree of picked) {
       tree._berryDropFrame = (typeof frameCount !== 'undefined') ? frameCount : 0;   // (visual hook)
@@ -2882,7 +2850,7 @@ class Game {
       const biome = sim.terrain.getBiomeAt(bx, by);
       if (biome && biome.canHavePlants && sim.terrain.isWalkable(bx, by) && typeof Plant !== 'undefined') {
         const berry = new Plant(bx, by, 'coprosma', sim.terrain, biome.key);
-        berry.growth = 1.0;                          // ripe at once — immediate forage
+        berry.growth = 1.0;                          // ripe at once, immediate forage
         sim.addPlant(berry);
         berries++;
       }
@@ -2910,11 +2878,10 @@ class Game {
     return true;
   }
 
-  // Book a mast year for the NEXT full year (a real beech/rimu mast is cued a year
-  // ahead by the previous summer's warmth). While that year runs, _isMastYear() is
-  // true: mauri_seasons.js surges forest growth and keeps forest fruit edible through
-  // the cold, and the fruit-birds (kererū/kōkako) breed hard (mauri_kereru.js /
-  // Simulation._hatchFlyerEgg). The onset is announced in _beginFreeplayYear.
+  // Book a mast year for the NEXT full year (a real mast is cued a year ahead by the previous
+  // summer's warmth). While that year runs, _isMastYear() is true: mauri_seasons.js surges
+  // forest growth and keeps forest fruit edible through the cold, and the fruit-birds breed
+  // hard. The onset is announced in _beginFreeplayYear.
   triggerMastYear() {
     this._mastYearTargetCycle = this.cycle + 1;
     this.addNotification('Mast year invoked — next year the podocarp forest will bloom.', 'success');
@@ -2926,9 +2893,9 @@ class Game {
   }
 
   // ---- split-resolution ground tier ---------------------------------------
-  // The screen-size offscreen buffer the terrain is composited into. Lazily
-  // (re)allocated to the LOGICAL canvas size (never × SS) so terrain work stays cheap.
-  // A p5 createGraphics is a real canvas — remove() the old one on resize.
+  // The screen-size offscreen buffer the terrain is composited into. Lazily (re)allocated
+  // to the LOGICAL canvas size (never × SS) so terrain work stays cheap. A p5 createGraphics
+  // is a real canvas, so remove() the old one on resize.
   _ensureTerrainLayer() {
     const w = CONFIG.canvasWidth, h = CONFIG.canvasHeight;
     let tg = this._terrainLayer;
@@ -2946,10 +2913,10 @@ class Game {
     this._terrainLayer = null;
   }
 
-  // Paint the ground into the screen-size buffer `tg` under the same camera transform
-  // and footprint clip the cast uses, so the blit up (in render) lands pixel-aligned
-  // with the entities. Cleared each frame — its letterbox stays transparent, so the
-  // canvas background shows through when blitted.
+  // Paint the ground into the screen-size buffer `tg` under the same camera transform and
+  // footprint clip the cast uses, so the blit up (in render) lands pixel-aligned with the
+  // entities. Cleared each frame; its letterbox stays transparent, so the canvas background
+  // shows through when blitted.
   _composeTerrainLayer(tg, clipW, clipH) {
     tg.clear();
     tg.push();
@@ -2979,9 +2946,9 @@ class Game {
   }
 
   render() {
-    // GL_PORT.md Phase 2: in DOM-stacked GL mode the main canvas is the TOP layer
-    // (indicators + HUD) and must be transparent so the terrain (bottom) and GL
-    // sprites (middle) show through — clear() instead of an opaque background().
+    // GL_PORT.md Phase 2: in DOM-stacked GL mode the main canvas is the TOP layer (indicators
+    // + HUD) and must be transparent so the terrain (bottom) and GL sprites (middle) show
+    // through; clear() instead of an opaque background().
     const _domGL = (typeof GLBatch !== 'undefined' && GLBatch.domStack);
     if (_domGL) clear(); else background(20, 30, 25);
 
@@ -3028,13 +2995,13 @@ class Game {
     const tg = this._ensureTerrainLayer();
     this._composeTerrainLayer(tg, _clipW, _clipH);
     if (_domGL) {
-      // The terrain buffer IS the bottom DOM layer (it also carries the winter-frost
-      // ground overlay in this mode, drawn into it by _composeTerrainLayer) — no blit
-      // to the main canvas, which stays a transparent top layer.
+      // The terrain buffer IS the bottom DOM layer (it also carries the winter-frost ground
+      // overlay in this mode, drawn into it by _composeTerrainLayer); no blit to the main
+      // canvas, which stays a transparent top layer.
       GLBatch.setBottom(tg.canvas || tg.elt);
     } else {
       push();
-      // Soft (bilinear) upscale of the screen-res ground onto the supersampled backing —
+      // Soft (bilinear) upscale of the screen-res ground onto the supersampled backing,
       // the same enlargement the browser used to do when it CSS-scaled the whole canvas.
       if ('imageSmoothingEnabled' in drawingContext) drawingContext.imageSmoothingEnabled = true;
       image(tg, 0, 0, CONFIG.canvasWidth, CONFIG.canvasHeight);
@@ -3043,7 +3010,7 @@ class Game {
     }   // end !_glTerrain (CPU terrain compose/blit)
 
     // ---- ABOVE THE GROUND (supersampled) -------------------------------------
-    // Frost, every entity and the placement previews — clipped to the same footprint and
+    // Frost, every entity and the placement previews: clipped to the same footprint and
     // drawn in the same camera transform, straight onto the high-res backing.
     push();
     drawingContext.save();
@@ -3054,10 +3021,10 @@ class Game {
     translate(CONFIG.viewX, CONFIG.viewY);
     scale(CONFIG.viewZoom);
 
-    // Winter frost: a single cool haze laid over the ground (under the animals),
-    // fading in through late autumn and out into spring. One rect — no perf cost.
-    // In GL mode this ground overlay is drawn into the terrain (bottom) buffer by
-    // _composeTerrainLayer instead, so it stays UNDER the GL sprites; skip it here.
+    // Winter frost: a single cool haze laid over the ground (under the animals), fading in
+    // through late autumn and out into spring. One rect, no perf cost. In GL mode this ground
+    // overlay is drawn into the terrain (bottom) buffer by _composeTerrainLayer instead, so it
+    // stays UNDER the GL sprites; skip it here.
     const _frost = this.seasonManager.getWinterness ? this.seasonManager.getWinterness() : 0;
     if (_frost > 0.001 && !_domGL) {
       push();
@@ -3102,8 +3069,8 @@ class Game {
     drawingContext.restore();
     pop();
 
-    // 3D: the terrain filled behind the bottom bar — repaint the bar over it so the
-    // near over-scan is hidden and the palette sits on a clean panel again.
+    // 3D: the terrain filled behind the bottom bar; repaint the bar over it so the near
+    // over-scan is hidden and the palette sits on a clean panel again.
     if (_clip3D) {
       const bb = this.ui.bottomBar;
       this.ui.renderPanelBackground(bb.x, bb.y, bb.width, bb.height, 'bottom');
@@ -3303,7 +3270,7 @@ class Game {
     return `Goals completed: ${this._goalsCompleted || 0} / ${this._goalsTotal}`;
   }
 
-  // Unified overlay renderer (replaces renderPauseOverlay, renderWinOverlay, renderLoseOverlay)
+  // Unified overlay renderer for the paused / won / lost screens.
   _renderOverlay(r, g, b, a, opts) {
     const cw = CONFIG.fullscreen ? CONFIG.canvasWidth : CONFIG.gameAreaWidth;
     const ch = CONFIG.fullscreen ? CONFIG.canvasHeight : CONFIG.gameAreaHeight;
@@ -3371,9 +3338,8 @@ class Game {
     pop();
   }
 
-  // Render settings shared by the gamemode-select screen: the terrain-resolution
-  // slider + the Enhanced/Classic graphics toggle. Sets _detailSliderBounds and
-  // _glToggleBounds (handled in handleClick's LEVEL_SELECT branch). Returns bottom Y.
+  // Render settings on the gamemode-select screen: the terrain-resolution slider. Sets
+  // _detailSliderBounds (handled in handleClick's LEVEL_SELECT branch). Returns bottom Y.
   _renderRenderSettings(cx, topY, w) {
     const opts = TERRAIN_DETAIL_OPTIONS;
     const sliderX = cx - w / 2, sliderW = w, sliderY = topY;
@@ -3399,10 +3365,8 @@ class Game {
     fill(CACHED_COLORS.btnNormal); stroke(200, 240, 210); strokeWeight(2); ellipse(hx, trackY, 16, 16); noStroke();
     this._detailSliderBounds = { x: sliderX, y: sliderY, w: sliderW, h: trackY + 12 - sliderY, trackPad, stepW };
 
-    // The Classic-2D / Enhanced-3D graphics toggle was removed: the GL path now renders at
-    // native 1080p (mipmapped sprites — GLBatch WebGL2 + atlas alpha-bleed) so it's both
-    // faster and more capable than the old 2D path, which only ever did a flat top-down view.
-    // GL is the sole path; the 2D renderer survives only as an automatic fallback when WebGL
+    // The Classic-2D / Enhanced-3D graphics toggle was removed: GL is the sole path, renders
+    // at native 1080p, and the 2D renderer survives only as an automatic fallback when WebGL
     // is unavailable (setRenderGL). `?render=2d` still forces it for debugging.
     this._glToggleBounds = null;
     pop();
@@ -3526,7 +3490,7 @@ class Game {
       });
     }
 
-    // Render settings (terrain resolution + Enhanced/Classic graphics), below the cards.
+    // Render settings (terrain resolution), below the cards.
     this._renderRenderSettings(centerX, cardY + cardH + 34, 240);
 
     fill(CACHED_COLORS.menuFooter);
@@ -3599,13 +3563,12 @@ class Game {
     const centerY = ch * 0.5;
     const menu = this.currentLevel.menu;
 
-    // NEW: Render illustration layers (or plain background if no art)
-    // This replaces the old manual background fill + vignette
+    // Render illustration layers (or plain background if no art).
     this.menuArt.render(cw, ch);
 
     textAlign(CENTER, CENTER);
 
-    // Title — from level def
+    // Title (from level def)
     fill(CACHED_COLORS.menuTitle);
     textSize(64);
     push(); textFont(FreckleFace);
@@ -3617,9 +3580,8 @@ class Game {
     text(menu.subtitle || "A New Zealand Ecosystem Strategy Game",
          centerX, centerY - 240);
 
-    // Plants — from level def, arranged in two vertical columns (one each side
-    // of the featured species) so their descriptions stack vertically instead
-    // of colliding horizontally, keeping the central level info uncluttered.
+    // Plants (from level def), arranged in two vertical columns, one each side of the
+    // featured species, so their descriptions stack instead of colliding horizontally.
     const displayPlants = menu.displayPlants || [];
     const plantY = centerY - 80;
     const spriteSize = 64;
@@ -3644,9 +3606,8 @@ class Game {
     placeColumn(leftPlants, leftColX);
     placeColumn(rightPlants, rightColX);
 
-    // Featured species — from level def. Either ONE object (classic levels), or an
-    // ARRAY to promote several side by side (Free Play features the kea, kākā and
-    // kākāpō — the birds its yearly focus loop turns on).
+    // Featured species (from level def). Either ONE object (classic levels), or an ARRAY to
+    // promote several side by side (Free Play features the kea, kākā and kākāpō).
     const featured = menu.featuredSpecies;
     if (Array.isArray(featured)) {
       const n = featured.length;
@@ -3694,7 +3655,7 @@ class Game {
       text(featured.localName || '', centerX, plantY + 98);
     }
 
-    // Flavor text — from level def
+    // Flavor text (from level def)
     fill(CACHED_COLORS.menuText);
     textSize(16);
     const flavorLines = [
@@ -3797,9 +3758,8 @@ class Game {
   }
   
   _getMenuSprite(spriteKey) {
-    // Flighted-bird sprites (kea/kākā/kākāpō/kōkako) resolve to their own art, or
-    // null while still loading — return that as-is so the caller draws nothing
-    // rather than a stand-in moa.
+    // Flighted-bird sprites (kea/kākā/kākāpō/kōkako) resolve to their own art, or null while
+    // still loading; return that as-is so the caller draws nothing rather than a stand-in moa.
     const birds = {
       'kea':    EntitySprites.getKeaSprite?.(),
       'kaka':   EntitySprites.getKakaSprite?.(),
@@ -3850,7 +3810,7 @@ class Game {
     pop();
   }
 
-  // Extracted word-wrap helper (was inline in _renderMenuPlant)
+  // Word-wrap helper for plant descriptions.
   _renderWrappedText(desc, x, y, maxWidth) {
     if (textWidth(desc) <= maxWidth) {
       text(desc, x, y);
@@ -3977,7 +3937,7 @@ class Game {
   }
 
   renderPlacementPreview() {
-    // Global one-shot interactables (Mast Year) place nothing on the map — no ghost.
+    // Global one-shot interactables (Mast Year) place nothing on the map; no ghost.
     const _gdef = this.activePlaceables && this.activePlaceables[this.selectedPlaceable];
     if (_gdef && _gdef.global) return;
     if (!this.isInGameArea(mouseX, mouseY)) return;
@@ -4019,9 +3979,9 @@ class Game {
     ellipse(0, 0, 18, 18);
     pop();
 
-    // Berry Cache: show what this placement will AFFECT — its coverage ring (lay it over the
+    // Berry Cache: show what this placement will AFFECT: its coverage ring (lay it over the
     // target moa nest), the wide invisible-in-play kea draw reach, and every moa nest + kea
-    // the cache will touch, highlighted. Helps the player aim the cache at a real nest.
+    // the cache will touch, highlighted. Helps aim the cache at a real nest.
     if (this.selectedPlaceable === 'keaLure') this._renderKeaLurePreview(tx, ty, def);
 
     if (!spacingCheck.allowed && spacingCheck.blocker) {
@@ -4042,8 +4002,8 @@ class Game {
   }
   
   // Berry Cache placement overlay (see renderPlacementPreview). Drawn in the world/game
-  // transform. Marks: the COVERAGE ring at the cursor (the effective area — cover the target
-  // moa nest with it), a faint dashed ring for the wide kea DRAW reach (invisible in normal
+  // transform. Marks: the COVERAGE ring at the cursor (the effective area to cover the target
+  // moa nest with), a faint dashed ring for the wide kea DRAW reach (invisible in normal
   // play), each moa nesting site the coverage will hold (green = clutched & raidable, amber =
   // empty), and each kea inside the draw reach that this cache will pull.
   _renderKeaLurePreview(tx, ty, def) {
@@ -4052,7 +4012,7 @@ class Game {
     const attract = def.keaAttractRadius || 520;
     const dc = drawingContext;
 
-    // Wide draw reach — dashed + faint (a placement guide only).
+    // Wide draw reach: dashed + faint (a placement guide only).
     push();
     translate(tx, this._groundPaintY(tx, ty));
     noFill();
@@ -4060,7 +4020,7 @@ class Game {
     stroke(176, 132, 214, 70); strokeWeight(1);
     ellipse(0, 0, attract * 2, attract * 2);
     dc.setLineDash([]);
-    // Coverage ring — the effective area to lay over the nest.
+    // Coverage ring: the effective area to lay over the nest.
     stroke(196, 156, 228, 210); strokeWeight(1.5);
     ellipse(0, 0, cover * 2, cover * 2);
     pop();
@@ -4105,7 +4065,7 @@ class Game {
   }
 
   // Shared click handling for the level-select render settings (terrain-resolution slider).
-  // The graphics-mode toggle was removed — GL is the sole path (see _renderRenderSettings).
+  // The graphics-mode toggle was removed; GL is the sole path (see _renderRenderSettings).
   _handleRenderSettingsClick(mx, my) {
     if (this._detailSliderBounds) {
       const s = this._detailSliderBounds;
@@ -4204,8 +4164,8 @@ class Game {
       if (this.movingPlaceable) { this.tryDropMove(tx, ty); return; }
       if (this.selectedPlaceable) { this.tryPlace(tx, ty); return; }
 
-      // Nothing selected: pressing near a placed item's center arms a
-      // touch-and-hold — held ~1s it becomes a move (see updateHoldToMove).
+      // Nothing selected: pressing near a placed item's center arms a touch-and-hold;
+      // held ~1s it becomes a move (see updateHoldToMove).
       const held = this.simulation &&
         this.simulation.getClosestPlaceable(tx, ty, 26, (pl) => pl.alive);
       if (held) {
@@ -4317,8 +4277,8 @@ function setup() {
   applySpriteSupersampleFromURL();   // sets CONFIG.spriteSupersample before the canvas is made
 
   pixelDensity(1); // must run BEFORE scaleCanvasToFit: it resets the canvas's inline CSS size.
-                   // pixelDensity stays 1 — we supersample MANUALLY (backing = logical × SS)
-                   // so the terrain can opt out of it via the screen-size offscreen layer.
+                   // pixelDensity stays 1; we supersample manually (backing = logical × SS)
+                   // so the terrain can opt out via the screen-size offscreen layer.
   const _ss = spriteSS();
   let cnv = createCanvas(Math.round(CONFIG.canvasWidth * _ss), Math.round(CONFIG.canvasHeight * _ss));
   _mainCanvasEl = (cnv && cnv.elt) ? cnv.elt : document.querySelector('canvas');
@@ -4337,10 +4297,10 @@ function setup() {
   initPortraitPlantSprites(portraitPlantSprites);
   initializeRegistry();
 
-  // WebGL renderer (GL_PORT.md §12) — the whole GPU path (entity batch + GPU terrain/
-  // water & ecology lighting). Bring the GL context up FIRST so the atlas build below can
-  // see whether it's WebGL2 (GLBatch._gl2) and alpha-bleed its pages for mipmapping. If GL
-  // is unavailable this falls back to the untouched 2D path.
+  // WebGL renderer (GL_PORT.md §12): the whole GPU path (entity batch + GPU terrain/water &
+  // ecology lighting). Bring the GL context up FIRST so the atlas build below can see whether
+  // it's WebGL2 and alpha-bleed its pages for mipmapping. If GL is unavailable this falls back
+  // to the 2D path.
   setRenderGL(resolveUseGLPreference(), false);
 
   // WebGL port (GL_PORT.md), Phase 1: consolidate every loaded sprite PNG into
@@ -4363,10 +4323,10 @@ function windowResized() {
   // Recalculate layout for actual window dimensions
   CONFIG.recalculateLayout(windowWidth, windowHeight);
 
-  // Resize the p5 canvas to the new computed dimensions (backing = logical × SS).
-  // Round the backing ONCE and share it with the GL canvas so a fractional SS (dynamic
-  // resolution) can never leave the two layers a sub-pixel apart — GLBatch.W must equal
-  // the GL canvas's real pixel width for the terrain's clip-space projection to line up.
+  // Resize the p5 canvas to the new computed dimensions (backing = logical × SS). Round the
+  // backing ONCE and share it with the GL canvas so a fractional SS (dynamic resolution) can
+  // never leave the two layers a sub-pixel apart: GLBatch.W must equal the GL canvas's real
+  // pixel width for the terrain's clip-space projection to line up.
   const _ss = spriteSS();
   const _bw = Math.round(CONFIG.canvasWidth * _ss);
   const _bh = Math.round(CONFIG.canvasHeight * _ss);
@@ -4414,11 +4374,10 @@ function scaleCanvasToFit() {
   if (typeof GLBatch !== 'undefined' && GLBatch.domStack) GLBatch.layout();
 }
 
-// Backing-canvas supersample factor, clamped. 1 = logical 1080 (old behaviour);
-// 2 = 2× sprites/HUD. The one place SS is read, so the clamp lives here. Sprites + HUD
-// (the bird art especially) are ALWAYS drawn at this ceiling — they are never scaled by
-// dynamic resolution, so the cast stays crisp. Load is shed from the terrain buffer
-// instead (see updateDynamicResolution / CONFIG.terrainMaxSS).
+// Backing-canvas supersample factor, clamped. 1 = logical 1080; 2 = 2× sprites/HUD. The one
+// place SS is read, so the clamp lives here. Sprites + HUD are ALWAYS drawn at this ceiling,
+// never scaled by dynamic resolution, so the cast stays crisp. Load is shed from the terrain
+// buffer instead (see updateDynamicResolution / CONFIG.terrainMaxSS).
 function spriteSS() {
   return Math.max(1, Math.min(3,
     Math.round((typeof CONFIG !== 'undefined' && CONFIG.spriteSupersample) || 1)));
@@ -4427,13 +4386,12 @@ function spriteSS() {
 // Alias kept for callers that want the authored ceiling explicitly.
 function spriteSSCeiling() { return spriteSS(); }
 
-// Dynamic resolution controller — called once per frame from draw() when
+// Dynamic resolution controller: called once per frame from draw() when
 // CONFIG.dynamicResolution is on. Steers the TERRAIN buffer's scale (CONFIG.terrainMaxSS)
-// toward the load — down fast when the real frame time is bad, up gently when there's
-// headroom — while the sprites/HUD keep their full supersample. The terrain FBO
-// reallocates itself to the new scale next frame (no canvas resize), and a cooldown +
-// wide dead-band (13.5–20ms) stop it oscillating. perfFrameMs includes the GPU/composite
-// time the CPU timers miss, so it is the right signal to steer on.
+// toward the load (down fast when the frame time is bad, up gently with headroom) while the
+// sprites/HUD keep their full supersample. The terrain FBO reallocates to the new scale next
+// frame (no canvas resize), and a cooldown + wide dead-band (13.5–20ms) stop it oscillating.
+// perfFrameMs includes the GPU/composite time the CPU timers miss, so it's the signal to use.
 function updateDynamicResolution() {
   if (!game) return;                                         // not in a live frame yet
   const now = (typeof millis === 'function') ? millis() : Date.now();
@@ -4469,21 +4427,17 @@ function applySpriteSupersampleFromURL() {
   }
 }
 
-// ---- WebGL renderer switch (main-menu "Enhanced graphics" toggle) --------------
-// GL_PORT.md §12. One switch drives the whole GPU path (entity batch + GPU terrain/
-// water & ecology lighting). It lives as a MAIN-MENU setting (renderMenu), persisted in
-// localStorage and live-toggleable, replacing the old ?render=/?terrain= URL flags.
-// The URL flags still work as a dev override. Enhanced (WebGL) is the out-of-box
-// default; a saved menu choice or ?render=2d override still wins. Flip to false to
-// ship Classic 2D by default.
+// ---- WebGL renderer switch --------------------------------------------------------
+// GL_PORT.md §12. One switch drives the whole GPU path (entity batch + GPU terrain/water &
+// ecology lighting). GL is the out-of-box default; a ?render=2d dev override still wins.
 const GL_DEFAULT_ON = true;
 const GL_PREF_KEY = 'mauri_useGL';
 
 function resolveUseGLPreference() {
-  // GL is the sole renderer now (the graphics toggle was removed), so it's always on —
-  // except a `?render=2d` dev override, and the automatic fallback if the context can't be
-  // created (setRenderGL). The old localStorage menu choice is deliberately IGNORED: a stale
-  // '0' from before the toggle was removed must not trap a session in the retired 2D path.
+  // GL is the sole renderer now (the graphics toggle was removed), so it's always on except
+  // a `?render=2d` dev override and the automatic fallback if the context can't be created
+  // (setRenderGL). The old localStorage menu choice is deliberately IGNORED, so a stale '0'
+  // can't trap a session in the retired 2D path.
   try {
     const q = (typeof window !== 'undefined' && window.location)
       ? new URLSearchParams(window.location.search).get('render') : null;
@@ -4503,7 +4457,7 @@ function setRenderGL(on, persist = true) {
 
   if (on) {
     if (!GLBatch.gl) {
-      // First enable this session — create the context at the backing resolution + mount.
+      // First enable this session: create the context at the backing resolution + mount.
       GLBatch.requested = true;
       const ss = (typeof spriteSS === 'function') ? spriteSS() : 1;
       if (!GLBatch.init(CONFIG.canvasWidth * ss, CONFIG.canvasHeight * ss)) { CONFIG.useGL = false; return false; }
@@ -4518,11 +4472,11 @@ function setRenderGL(on, persist = true) {
   }
   CONFIG.useGL = !!(GLBatch.enabled);
 
-  // The plan-oblique 3D view is a GL-only feature: the CPU relief bake is no longer
-  // maintained (it renders flat and drops the billboarded cast), so Classic 2D is LOCKED
-  // to the top-down view. Bind the view to the renderer here — Enhanced → 3D, Classic → 2D
-  // top-down — so flipping the graphics toggle also flips the view (and, crucially, switching
-  // back to Enhanced restores 3D). _configureProjection mirrors this onto Projection.relief.
+  // The plan-oblique 3D view is a GL-only feature: the CPU relief bake is no longer maintained
+  // (it renders flat and drops the billboarded cast), so Classic 2D is LOCKED to the top-down
+  // view. Bind the view to the renderer here (Enhanced → 3D, Classic → 2D top-down), so
+  // flipping the renderer also flips the view. _configureProjection mirrors this onto
+  // Projection.relief.
   CONFIG.view3D = CONFIG.useGL;
   if (typeof game !== 'undefined' && game && game.terrain && game._configureProjection) {
     game._configureProjection();
@@ -4534,10 +4488,9 @@ function initializeRegistry() {
   REGISTRY.registerAnimalType('moa', {}, Moa);
   REGISTRY.registerAnimalType('eagle', {}, HaastsEagle);
 
-  // Flighted birds — each its own base type + list (Simulation.otherEntities[key]),
-  // seeded per level via initialEntityCounts and bred emergently, the way the moa
-  // are seeded (see mauri_kereru.js / mauri_kokako.js). kea / kākā / kākāpō extend
-  // the same Kereru base later.
+  // Flighted birds: each its own base type + list (Simulation.otherEntities[key]), seeded
+  // per level via initialEntityCounts and bred emergently, the way the moa are seeded (see
+  // mauri_kereru.js / mauri_kokako.js). kea / kākā / kākāpō extend the same Kereru base.
   if (typeof Kereru !== 'undefined') {
     REGISTRY.registerAnimalType('kereru', {}, Kereru);
     REGISTRY.registerSpecies('kereru', 'kereru', KERERU_SPECIES);
@@ -4627,9 +4580,8 @@ function draw() {
   game.render();
   const t2 = _dbg ? performance.now() : 0;
 
-  // (The old Free Play "Year X / glacial stage / survived" climate gauge was removed —
-  // the season/year ring now carries the year + season, and the mast is signalled by the
-  // mast-goal panel, the mast-year kākāpō goal, and the onset notification.)
+  // (The old Free Play climate gauge was removed; the season/year ring now carries the year
+  // and season, and the mast is signalled by the mast-goal panel and the onset notification.)
 
   // Debug lenses: screen-space legend (clickable) + per-lens readouts, over the HUD.
   if (typeof Lens !== 'undefined' && game) Lens.renderScreen(game);
@@ -4687,10 +4639,9 @@ function mousePressed() {
   // mouseX/mouseY are in BACKING pixels (logical × SS); hit-testing is in 1080-space.
   const s = spriteSS();
   const mx = mouseX / s, my = mouseY / s;
-  // The field guide is docked in the right bar now, not a modal — its clicks are
-  // routed through GameUI (handleSidebarClick / handleFullscreenClick), so it no
-  // longer intercepts every click here.
-  // Non-modal Nest Raid panel: consume only clicks that land ON the panel; anything
+  // The field guide is docked in the right bar now, not a modal; its clicks route through
+  // GameUI (handleSidebarClick / handleFullscreenClick), so it no longer intercepts clicks
+  // here. Non-modal Nest Raid panel: consume only clicks that land ON the panel; anything
   // else falls through to the game so the play area stays interactive.
   if (game && game._raidPanelOpen && game._raidPanelClick(mx, my)) return;
   game.handleClick(mx, my);

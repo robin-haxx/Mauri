@@ -353,7 +353,7 @@ const LEVEL_FREEPLAY_KAHURANGI = {
 
   menu: {
     title: "Free Play; Kahurangi",
-    subtitle: "",
+    subtitle: "TESTING NOTE: Exports run stats .txt/JSON",
     areaLabel: "NW Nelson, Te Waipounamu",
     areaSubtitle: "Upper West Coast, South Island",
     // Free Play features its three flighted stars (kea, kākā, kākāpō). The menu renderer

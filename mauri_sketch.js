@@ -1421,7 +1421,7 @@ class Game {
       }
       if (lostKey) {
         this.state = GAME_STATE.LOST;
-        this.gameOverReason = `The ${this._freeplaySpeciesName(lostKey)} died out; a focus species is lost.`;
+        this.gameOverReason = `The ${this._freeplaySpeciesName(lostKey)} disappeared from Kahurangi..`;
         if (audioManager) audioManager.playLoss();
       }
     }
@@ -3493,7 +3493,7 @@ class Game {
           { text: `Moa hatched: ${this.simulation.stats.births}`, color: [180, 190, 170], size: 14 },
           { text: `Total mauri earned: ${this.mauri.totalEarned | 0}`, color: [180, 190, 170], size: 14 },
           { text: "", color: [200, 240, 200], size: 18 },
-          { text: _endless ? "Press R for menu  ·  X to export stats" : "Press R to return to menu",
+          { text: _endless ? "R for menu  ·  X = export run" : "Press R to return to menu",
             color: _byChoice ? [200, 230, 200] : [220, 180, 180], size: 18 }
         ],
         boxColor: _byChoice ? [30, 50, 38, 250] : [60, 35, 35, 250],

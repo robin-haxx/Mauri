@@ -1705,6 +1705,12 @@ class GameUI {
       goalY += 24;
     }
 
+    // Record the live rect so the tutorial highlighter tracks this panel wherever
+    // it lands (see TutorialUIMapper.getBounds 'goalsPanel'). In fullscreen this is
+    // called with the overlay's goals coords, which the mapper ignores in favour of
+    // its own fs bounds, so recording here is safe in both modes.
+    this._goalsPanelBounds = { x, y, w: panelWidth, h: panelHeight };
+
     return y + panelHeight;
   }
 
@@ -1793,6 +1799,9 @@ class GameUI {
       text("No recent events", x + panelWidth / 2, y + panelHeight / 2);
     }
 
+    // Live rect for the tutorial highlighter (see TutorialUIMapper 'eventLog').
+    this._eventLogBounds = { x, y, w: panelWidth, h: panelHeight };
+
     return y + panelHeight;
   }
 
@@ -1824,6 +1833,9 @@ class GameUI {
     fill(30, 45, 38, 220);
     noStroke();
     rect(x, y + 28, panelWidth, panelHeight - 28, 0, 0, 8, 8);
+
+    // Live rect for the tutorial highlighter (see TutorialUIMapper 'populationPanel').
+    this._populationPanelBounds = { x, y, w: panelWidth, h: panelHeight };
 
     const stats = this.getStats();
     const aliveMoas = this.simulation.moas.filter(m => m.alive);

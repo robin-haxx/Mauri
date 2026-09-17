@@ -75,12 +75,25 @@ class TutorialUIMapper {
       const idx = keys.indexOf(key);
       return idx >= 0 ? this._getToolButtonBounds(idx) : null;
     }
-    // Tool buttons by name (classic global order)
-    const toolButtons = {
+    // Named tool buttons: resolve to the placeable's ACTUAL slot in the level's
+    // palette (its order in game.activePlaceables), so the highlight tracks the
+    // button wherever the level puts it. The old fixed indices assumed a single
+    // global toolbar order and pointed at the wrong buttons once a level reordered
+    // its palette (e.g. StormButton landed on the nest). The classic index is kept
+    // only as a fallback for a level whose palette lacks that key.
+    const toolButtonKeys = {
+      kawakawaButton: 'kawakawa', shelterButton: 'shelter', nestButton: 'nest',
+      StormButton: 'Storm', waterholeButton: 'waterhole', harakekeButton: 'harakeke'
+    };
+    const classicToolIndex = {
       kawakawaButton: 0, shelterButton: 1, nestButton: 2,
       StormButton: 3, waterholeButton: 4, harakekeButton: 5
     };
-    if (target in toolButtons) return this._getToolButtonBounds(toolButtons[target]);
+    if (target in toolButtonKeys) {
+      const keys = Object.keys((ui.game && ui.game.activePlaceables) || {});
+      const idx = keys.indexOf(toolButtonKeys[target]);
+      return this._getToolButtonBounds(idx >= 0 ? idx : classicToolIndex[target]);
+    }
     
     // Fullscreen goals panel bounds (also stands in for the sidebar panels
     // that aren't drawn in fullscreen).
@@ -108,12 +121,23 @@ class TutorialUIMapper {
         if (fs) return { x: fs.toolbarStartX - 10, y: fs.toolbarY - 10,
                          w: layout.toolbarTotalWidth + 20, h: layout.toolbarBtnSize + 30 };
         return { x: ui.bottomBar.x, y: ui.bottomBar.y, w: ui.bottomBar.width, h: ui.bottomBar.height };
-      case 'mauriDisplay':
-        return { x: fs ? fs.mauriX : layout.mauriX, y: fs ? fs.stripY : 20, w: 180, h: 70 };
+      // The top bar's Mauri counter is now a circular dial (renderMauriRing), not
+      // the old 180x70 panel; the highlight must be the ring's bounding box.
+      case 'mauriDisplay': {
+        const cx = fs ? fs.mauriRingCX : layout.mauriRingCX;
+        const cy = fs ? fs.mauriRingCY : layout.mauriRingCY;
+        const r  = fs ? fs.mauriRingR  : layout.mauriRingR;
+        return { x: cx - r, y: cy - r, w: r * 2, h: r * 2 };
+      }
+      // Season/year/time are now one circular ring (renderSeasonRing) in place of
+      // the old season + TIME panels; both targets map to that ring.
       case 'seasonDisplay':
-        return { x: fs ? fs.seasonX : layout.seasonX, y: fs ? fs.stripY : 20, w: 280, h: 70 };
-      case 'timerDisplay':
-        return { x: fs ? fs.timerX : layout.timerX, y: fs ? fs.stripY : 20, w: 120, h: 70 };
+      case 'timerDisplay': {
+        const cx = fs ? fs.ringCX : layout.ringCX;
+        const cy = fs ? fs.ringCY : layout.ringCY;
+        const r  = fs ? fs.ringR  : layout.ringR;
+        return { x: cx - r, y: cy - r, w: r * 2, h: r * 2 };
+      }
       case 'pauseButton':
         if (fs) return { x: fs.pauseBtnX, y: fs.btnY, w: fs.btnSize, h: fs.btnSize };
         return { x: layout.pauseBtnX, y: layout.pauseBtnY, w: layout.pauseBtnSize, h: layout.pauseBtnSize };
@@ -129,17 +153,26 @@ class TutorialUIMapper {
         const _tbY = fs ? fs.toolbarY : ui.toolbarY;
         const toolbarW = (layout.toolbarBtnCount - 1) * layout.toolbarSpacing + layout.toolbarBtnSize;
         return { x: _tbX - 10, y: _tbY - 10, w: toolbarW + 20, h: layout.toolbarBtnSize + 30 };
+      // Sidebar panels report their live rect as they render (see mauri_UI.js), so
+      // these highlights follow the panels wherever the layout puts them (the
+      // POPULATION panel now sits directly under GOALS, above the EVENT LOG). Fall
+      // back to a computed rect only if the panel hasn't been drawn yet this run.
       case 'goalsPanel':
         if (fs) return _fsGoals;
-        return { x: ui.sidebar.x + 20, y: 20, w: ui.sidebar.width - 40, h: 30 + ui.game.goals.length * 28 };
-      case 'eventLog':
-        if (fs) return _fsGoals;
-        const goalsHeight = 30 + ui.game.goals.length * 28;
-        return { x: ui.sidebar.x + 20, y: goalsHeight + 35, w: ui.sidebar.width - 40, h: 320 };
+        return ui._goalsPanelBounds ||
+          { x: ui.sidebar.x + layout.sidebarPadding, y: layout.sidebarPadding,
+            w: layout.sidebarPanelWidth, h: 30 + ui.game.goals.length * 26 };
       case 'populationPanel':
         if (fs) return _fsGoals;
-        const eventLogY = 30 + ui.game.goals.length * 28 + 35 + 320;
-        return { x: ui.sidebar.x + 20, y: eventLogY + 15, w: ui.sidebar.width - 40, h: 220 };
+        return ui._populationPanelBounds ||
+          { x: ui.sidebar.x + layout.sidebarPadding,
+            y: layout.sidebarPadding + (30 + ui.game.goals.length * 26) + 12,
+            w: layout.sidebarPanelWidth, h: layout.speciesPanelHeight };
+      case 'eventLog':
+        if (fs) return _fsGoals;
+        return ui._eventLogBounds ||
+          { x: ui.sidebar.x + layout.sidebarPadding, y: layout.sidebarPadding,
+            w: layout.sidebarPanelWidth, h: layout.eventLogHeight };
       default:
         console.warn(`TutorialUIMapper: Unknown target "${target}"`);
         return null;

@@ -438,8 +438,8 @@ const TIPS = {
     },
     title: "A new upland moa in the flock!",
     content: [
-      "A baby moa has hatched, and wants something to eat.",
-      "Try making a safe patch of forest, and be wary:",
+      "A baby moa has hatched, and she's hungry!.",
+      "Try making a safe patch of forest. Just be wary:",
       "A growing community of moa also means a growing community of Eagles!"
     ],
     guidePosition: 'center',
@@ -542,13 +542,16 @@ const TIPS = {
       "But it will become scarce when winter arrives!"
     ],
     guidePosition: 'bottomLeft',
-    highlight: { type: 'element', target: 'migrationHint' },
+    // The old migration-hint bar was removed; this beat is about the seasons
+    // driving migration, so highlight the season ring (the on-screen seasonal
+    // readout) instead of a UI element that no longer exists.
+    highlight: { type: 'element', target: 'seasonDisplay' },
     nextTip: null,
     pauseGame: true,
     showOnce: true,
     priority: 4
   },
-  
+
   waterhole_tip: {
     id: 'waterhole_tip',
     trigger: { type: TRIGGER_TYPE.TIME, delay: 7600 },

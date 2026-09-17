@@ -269,11 +269,13 @@ function applyLevelToConfig(levelDef) {
   // Opt-in gameplay mechanics (habitat stress, forest competition, ...)
   LEVEL_MECHANICS = levelDef.mechanics || {};
   FOREST_BIOMES = new Set(LEVEL_MECHANICS.forestBiomes || []);
-  // Restore the base eagle target ratio (the loop ramp mutates it live, see
-  // Game._maybeGlacialDeepen) so a restart doesn't inherit last run's ramped pressure.
-  if (LEVEL_MECHANICS._eagleTargetRatioBase != null) {
-    LEVEL_MECHANICS.eagleTargetRatio = LEVEL_MECHANICS._eagleTargetRatioBase;
+  // Restore the base eagle cap and clear the per-loop predator-pressure bonus (the yearly
+  // ramp in Game._applyFreeplayYearPressure mutates these live) so a restart doesn't inherit
+  // last run's ramped pressure.
+  if (LEVEL_MECHANICS._eagleMaxPopulationBase != null) {
+    LEVEL_MECHANICS.eagleMaxPopulation = LEVEL_MECHANICS._eagleMaxPopulationBase;
   }
+  LEVEL_MECHANICS._eagleTargetLoopBonus = 0;
 
   // View & calendar (per-level, with engine defaults for levels that omit them)
   CONFIG.zoom = (levelDef.zoom != null) ? levelDef.zoom : 2.5;
@@ -987,7 +989,8 @@ class Game {
     
     this.notifications = [];
     this.gameOverReason = '';
-    
+    this._runEndedByChoice = false;   // set when a Free Play run is ended from the pause menu
+
     this._cachedMoaCount = 0;
     this._cachedEggCount = 0;
     this._cachedThrivingCount = 0;
@@ -1137,6 +1140,7 @@ class Game {
     this._freeplayYear = -1;
     this.freeplayFocus = [];
     this._yearsSurvived = 0;
+    this._runEndedByChoice = false;   // fresh run: not a player-ended run
     this._resetRunStats();            // Free Play stats-export accumulator (see exportFreeplayStats)
     this._yearTransition = null;      // clear any in-flight area transition on (re)load
     this._areaMoaBest = {};           // per-area species memory for the year-start reset (fresh run)
@@ -1395,6 +1399,35 @@ class Game {
       this.state = GAME_STATE.LOST;
       this.gameOverReason = "All moa here were hunted...";
       if (audioManager) audioManager.playLoss();
+    }
+
+    // Free Play loss: the year's FOCUS MOA are no longer death-protected, so failing to keep
+    // them alive ends the run. Lost when every focus-moa species is extinct (0 alive, no egg
+    // of theirs still incubating). Held during an area transition (the new focus may not be
+    // present in the outgoing area yet) and skipped in years with no moa focus.
+    if (!_areaTransition && this.state === GAME_STATE.PLAYING &&
+        this.currentLevel && this.currentLevel.endless && typeof MOA_SPECIES !== 'undefined') {
+      const focusMoa = (this.freeplayFocus || []).filter(k => !!MOA_SPECIES[k]);
+      if (focusMoa.length) {
+        let alive = false;
+        for (const k of focusMoa) if (this.simulation.getSpeciesCount(k) > 0) { alive = true; break; }
+        if (!alive) {
+          let incubating = false;
+          const eggs = this.simulation.eggs;
+          for (let i = 0; i < eggs.length; i++) {
+            const e = eggs[i];
+            if (e.alive && !e.hatched && e.offspringType === 'moa' && focusMoa.includes(e.parentSpecies)) {
+              incubating = true; break;
+            }
+          }
+          if (!incubating) {
+            this.state = GAME_STATE.LOST;
+            const names = focusMoa.map(k => this._freeplaySpeciesName(k)).join(' & ');
+            this.gameOverReason = `The ${names} died out; the focus species is lost.`;
+            if (audioManager) audioManager.playLoss();
+          }
+        }
+      }
     }
 
     // Level-wide fail condition: the non-phased counterpart of a phase's `fail` hook. Lets
@@ -1694,19 +1727,20 @@ class Game {
   }
 
   // Free Play economy snapshot: the passive-income drivers, also shown in the HUD.
-  //   avgPop      = mean population of non-eagle species ABOVE their floor
-  //   balance     = equality coefficient: 1 − (worst species' SHORTFALL below the top),
-  //                 where a FOCUS species' shortfall counts `focusInequalityWeight`× (2 =
-  //                 focus inequality bites double). Raised to a power that grows each year,
-  //                 so imbalance bites harder over the run. With no focus species it reduces
-  //                 to plain min/max evenness.
+  //   avgPop      = mean population of the non-eagle species PRESENT this area
+  //   balance     = equality coefficient: worst species' balance ratio (c / top), where a
+  //                 FOCUS species' shortfall counts `focusInequalityWeight`× (2 = focus
+  //                 inequality bites double). Raised to a power that grows each year (capped),
+  //                 then rescaled into [minBalance, 1] so imbalance bites harder over the run
+  //                 without ever craters income to nothing.
   //   mauriPerSec = avgPop × balance × scale
-  // Eagles never count. Reused by the population HUD and the avg-pop dial.
+  // Only species actually present (count > 0) count, matching the POPULATION panel: a species
+  // that isn't in play this area (a bird not yet introduced, one retired for the year) no
+  // longer drags the coefficient toward zero. Eagles never count. Reused by the HUD dial.
   ecosystemStats() {
     const sim = this.simulation;
     const M = (typeof LEVEL_MECHANICS !== 'undefined') ? LEVEL_MECHANICS : {};
     const cfg = M.freeplayPassive || {};
-    const floor = M.freeplayProtectFloor ?? 2;
     const focus = this.freeplayFocus || [];
     const fW = cfg.focusInequalityWeight ?? 2;
     const keys = [...((this.activeSpecies && this.activeSpecies.moa) || []),
@@ -1714,17 +1748,15 @@ class Game {
     let sum = 0, mx = 0, n = 0;
     const items = [];
     if (sim) for (const k of keys) {
-      const c = Math.max(1, sim.getSpeciesCount(k));   // treat absent (0) as 1
+      const c = sim.getSpeciesCount(k);
+      if (c <= 0) continue;                            // absent species don't count (matches the HUD)
       sum += c; n++; if (c > mx) mx = c; items.push([k, c]);
     }
     if (n === 0) return { avgPop: 0, balance: 0, rawBalance: 0, mauriPerSec: 0, aboveFloor: 0 };
     const avgPop = sum / n;
     // Worst per-species balance ratio (c / top), with a FOCUS species' shortfall biting
-    // fW× harder. The focus weight is applied as an EXPONENT on the ratio (ratio^w) rather
-    // than by clamping a linear w×shortfall: every counted species has ≥ 1 member (the
-    // Math.max(1,…) above), so ratio ∈ (0,1] and ratio^w ∈ (0,1]; always strictly > 0.
-    // Inequality therefore shrinks the coefficient (focus inequality bites w× harder), but
-    // a lopsided species; even the focus one; can never zero out all passive income.
+    // fW× harder. The focus weight is applied as an EXPONENT on the ratio (ratio^w): every
+    // counted species has ≥ 1 member, so ratio ∈ (0,1] and ratio^w ∈ (0,1]; always > 0.
     let worstBalance = 1, rawImbalance = 0;
     for (const [k, c] of items) {
       const ratio = mx > 0 ? c / mx : 1;              // (0,1]; 1 = at the top, →0 = far below
@@ -1734,9 +1766,14 @@ class Game {
       if (b < worstBalance) worstBalance = b;
     }
     const rawBalance = 1 - rawImbalance;              // == min/max (unweighted), for reference
-    // Per-year ramp (imbalanceHarshness) × an optional flat exponent (inequalityWeight).
-    const harsh = (1 + (cfg.imbalanceHarshness ?? 0) * (this.cycle || 0)) * (cfg.inequalityWeight ?? 1);
-    const balance = Math.pow(worstBalance, harsh);
+    // Per-year ramp (imbalanceHarshness · year), CAPPED so a steady spread can't be taxed
+    // into oblivion late in a long run, × an optional flat exponent (inequalityWeight).
+    const ramp = Math.min(cfg.imbalanceHarshnessCap ?? 0.6, (cfg.imbalanceHarshness ?? 0) * (this.cycle || 0));
+    const harsh = (1 + ramp) * (cfg.inequalityWeight ?? 1);
+    // Rescale the coefficient into [minBalance, 1] so passive income eases with imbalance but
+    // never fully craters (the old raw power crushed a 5:1 spread to ~0.01, stalling the run).
+    const minBal = cfg.minBalance ?? 0.2;
+    const balance = minBal + (1 - minBal) * Math.pow(worstBalance, harsh);
     const mauriPerSec = avgPop * balance * (cfg.scale ?? 1);
     return { avgPop, balance, rawBalance, mauriPerSec, aboveFloor: n };
   }
@@ -1866,7 +1903,8 @@ class Game {
       levelId: this.currentLevel ? this.currentLevel.id : null,
       levelName: this.currentLevel ? this.currentLevel.name : null,
       exportedAt: new Date().toISOString(),
-      ended: (this.state === GAME_STATE.LOST) ? 'extinction' : 'in-progress',
+      ended: this._runEndedByChoice ? 'ended-by-player'
+           : (this.state === GAME_STATE.LOST) ? 'extinction' : 'in-progress',
       endReason: this.gameOverReason || null,
       summary: {
         yearsSurvived: this._yearsSurvived || 0,
@@ -2063,7 +2101,12 @@ class Game {
       const bucket = isMoaKey(k) ? moa : others;
       bucket[k] = Math.max(bucket[k] || 0, protectFloor);
     }
-    return { moa, others, eagles: 2 };
+    // Year-start eagles climb with the run's predator-pressure bonus (see
+    // _applyFreeplayYearPressure), never above the current hard cap.
+    const M = (typeof LEVEL_MECHANICS !== 'undefined') ? LEVEL_MECHANICS : {};
+    const eagleCap = M.eagleMaxPopulation ?? 8;
+    const eagles = Math.min(eagleCap, 2 + Math.round(M._eagleTargetLoopBonus || 0));
+    return { moa, others, eagles };
   }
 
   // Year 1 only (no camera pan): top the live cast UP to this year's start counts. The
@@ -2081,6 +2124,35 @@ class Game {
     }
   }
 
+  // Free Play run pressure that ramps across the 4-year tour loop, recomputed each year:
+  //   • eagles: an additive predator-pressure bonus (eaglePerLoopBonus per loop) lifts the
+  //     eagle:prey target, the hard cap and the year-start eagle count together, so predator
+  //     pressure climbs ≈ eaglePerLoopBonus more eagles every 4 years.
+  //   • plants: natural regen density eases 1 → plantDensityFloor as the year approaches
+  //     plantDensityFloorYear, tightening forage a little each year to a floor.
+  // Loops come from the terrain's quad tour (falls back to cycle/4). Bases are stored so a
+  // restart doesn't inherit last run's ramp (restored in applyLevelToConfig).
+  _applyFreeplayYearPressure(M) {
+    const t = this.terrain;
+    const loopLen = (t && t._quadOrder && t._quadOrder.length) || 4;
+    const loops = Math.floor((this.cycle || 0) / loopLen);
+
+    // Eagles: additive predator-pressure bonus, accrued per loop.
+    const bonus = (M.eaglePerLoopBonus || 0) * loops;
+    M._eagleTargetLoopBonus = bonus;                   // read by the eagle target/restraint (mauri_eagle.js)
+    if (M._eagleMaxPopulationBase == null) M._eagleMaxPopulationBase = M.eagleMaxPopulation ?? 8;
+    M.eagleMaxPopulation = M._eagleMaxPopulationBase + Math.round(bonus);
+
+    // Plants: density multiplier eases 1 → floor as the year approaches plantDensityFloorYear.
+    const pd = M.freeplayPlantDensity;
+    const base = this.currentLevel && this.currentLevel.terrain && this.currentLevel.terrain.plantDensity;
+    if (pd && base != null) {
+      const floorMult = (pd.floor != null) ? pd.floor : 1;
+      const frac = Math.max(0, Math.min(1, (this.cycle || 0) / (pd.floorYear || 8)));
+      CONFIG.plantDensity = base * (1 + (floorMult - 1) * frac);
+    }
+  }
+
   _beginFreeplayYear() {
     const sim = this.simulation;
     const M = (typeof LEVEL_MECHANICS !== 'undefined') ? LEVEL_MECHANICS : {};
@@ -2088,6 +2160,9 @@ class Game {
     const refoundCount = M.freeplayRefoundCount ?? 3;
     const targets = this.currentLevel.freeplayTargets || M.freeplayTargets || {};
     const defaultTarget = M.freeplayDefaultTarget ?? 8;
+
+    // 0) Per-year run pressure. Both ease relative to the 4-year tour loop.
+    this._applyFreeplayYearPressure(M);
 
     // 1) This year's FOCUS. An authored freeplaySchedule wins; its focus can name any
     //    species, moa or the flighted birds. Species not yet registered are dropped, and
@@ -2174,15 +2249,20 @@ class Game {
       sim._forestLegacyTarget = Math.round(forestBest * legacyFrac);
     }
 
-    // 5) Protect EVERY species present this year from a total wipe (dynamic floor). Each
-    //    holds at the floor, so a thinned species never vanishes for the rest of the year;
+    // 5) Protect the background species present this year from a total wipe (dynamic floor).
+    //    Each holds at the floor, so a thinned species never vanishes for the rest of the year;
     //    any dip below it is topped back up by the per-frame floor watch in _checkFreeplayYear.
     //    Only species the area actually holds this year are floored (start count > 0), so a
     //    bird absent from the cast isn't conjured into existence.
+    //    EXCEPTION: this year's FOCUS MOA are NOT floored. They are the species you must keep
+    //    alive; letting them be hunted/starved to extinction is how a Free Play run ends (see
+    //    the focus-moa loss check in update()). Focus BIRDS keep their protection.
+    const isMoaKey = (k) => (typeof MOA_SPECIES !== 'undefined' && !!MOA_SPECIES[k]);
+    const focusMoa = new Set((this.freeplayFocus || []).filter(isMoaKey));
     const floors = {};
-    for (const k in yearPops.moa)    if (yearPops.moa[k] > 0)    floors[k] = protectFloor;
-    for (const k in yearPops.others) if (yearPops.others[k] > 0) floors[k] = protectFloor;
-    for (const k of this.freeplayFocus) floors[k] = protectFloor;   // focus always protected
+    for (const k in yearPops.moa)    if (yearPops.moa[k] > 0 && !focusMoa.has(k)) floors[k] = protectFloor;
+    for (const k in yearPops.others) if (yearPops.others[k] > 0)                  floors[k] = protectFloor;
+    for (const k of this.freeplayFocus) if (!focusMoa.has(k)) floors[k] = protectFloor;   // focus birds protected; focus moa are mortal
     sim.dynamicFloors = floors;
 
     // 6) Highlight the focus species in the UI.
@@ -2334,15 +2414,7 @@ class Game {
     const perLoop = (wg.glacialPerLoop != null) ? wg.glacialPerLoop : 0;
     const cap = (wg.glacialCap != null) ? wg.glacialCap : 0.6;
     if (perLoop > 0) t.setGlacialAdvance(Math.min(cap, loops * perLoop));
-
-    // Eagle pressure climbs a little each loop: more eagles per prey over the run. Ramps off
-    // a stored base so a restart (which re-restores the base at load) starts fresh.
-    const M = (typeof LEVEL_MECHANICS !== 'undefined') ? LEVEL_MECHANICS : {};
-    const perLoopRatio = M.eagleTargetRatioPerLoop || 0;
-    if (perLoopRatio > 0) {
-      if (M._eagleTargetRatioBase == null) M._eagleTargetRatioBase = M.eagleTargetRatio ?? (1 / 8);
-      M.eagleTargetRatio = M._eagleTargetRatioBase + perLoopRatio * loops;
-    }
+    // (Eagle & plant pressure now ramps every year in _applyFreeplayYearPressure, not here.)
   }
 
   // Per-frame: drive the year transition. fadeOut → (unload + pan) → fadeIn. The cast's
@@ -2826,6 +2898,18 @@ class Game {
     this.selectedPlaceable = null;
     this.movingPlaceable = null;
     this.state = GAME_STATE.LEVEL_SELECT;
+  }
+
+  // End a Free Play run on the player's terms (pause screen's "End Run" button): stop play and
+  // drop to the final-stats card (a neutral "RUN ENDED", not an extinction), which offers the
+  // run-stats export. Reuses the LOST state's stats screen via the _runEndedByChoice flag.
+  _endFreeplayRun() {
+    if (this.encyclopedia) this.encyclopedia.close();
+    this.selectedPlaceable = null;
+    this.movingPlaceable = null;
+    this._runEndedByChoice = true;
+    this.gameOverReason = `You ended the run after ${this._yearsSurvived || 0} year${(this._yearsSurvived === 1) ? '' : 's'}.`;
+    this.state = GAME_STATE.LOST;
   }
 
   selectPlaceable(type) {
@@ -3346,11 +3430,15 @@ class Game {
     // A tutorial-tip pause shows only the tip (its own overlay dims the
     // world); the PAUSED dialog is for pauses the player asked for.
     const _tutorialPause = this.tutorial && this.tutorial._pausedByTutorial;
-    // Overlay button hit-rect is rebuilt each frame by _renderOverlay (only the
-    // paused screen sets one); clear it so a stale rect never eats a click.
-    this._overlayBtn = null;
+    // Overlay button hit-rects are rebuilt each frame by _renderOverlay (only the paused /
+    // game-over screens set them); clear them so a stale rect never eats a click.
+    this._overlayBtns = null;
 
     if (this.state === GAME_STATE.PAUSED && !_tutorialPause) {
+      // Free Play: an "End Run" button ends the run to the final-stats screen (with export).
+      const _endless = !!(this.currentLevel && this.currentLevel.endless);
+      const _pauseButtons = [{ label: "Exit to Menu", action: () => this._exitToMenu() }];
+      if (_endless) _pauseButtons.unshift({ label: "End Run", action: () => this._endFreeplayRun() });
       this._renderOverlay(...CONFIG.col_UI.slice(0,3), 100, {
         title: "PAUSED",
         titleColor: [255, 255, 255],
@@ -3360,7 +3448,7 @@ class Game {
         ],
         boxColor: [30, 45, 35, 240],
         strokeColor: [70, 110, 80],
-        button: { label: "Exit to Menu", action: () => this._exitToMenu() }
+        buttons: _pauseButtons
       });
     } else if (this.state === GAME_STATE.WON) {
       // "Thriving" is reserved for a full-clear; a win with unmet goals is
@@ -3385,23 +3473,27 @@ class Game {
       });
     } else if (this.state === GAME_STATE.LOST) {
       const _endless = !!(this.currentLevel && this.currentLevel.endless);
-      this._renderOverlay(80, 30, 30, 150, {
-        title: "EXTINCTION",
-        titleColor: [255, 180, 180],
+      // A run ended from the pause menu isn't an extinction: show a neutral "RUN ENDED"
+      // final-stats card instead of the red loss screen.
+      const _byChoice = !!this._runEndedByChoice;
+      this._renderOverlay(...(_byChoice ? [30, 45, 35] : [80, 30, 30]), 150, {
+        title: _byChoice ? "RUN ENDED" : "EXTINCTION",
+        titleColor: _byChoice ? [200, 230, 200] : [255, 180, 180],
         lines: [
-          { text: this.gameOverReason, color: [220, 150, 150], size: 16 },
+          { text: this.gameOverReason, color: _byChoice ? [180, 210, 180] : [220, 150, 150], size: 16 },
           { text: this._goalsTally(), color: [200, 180, 140], size: 14 },
-          { text: `Time survived: ${(this.playTime / 60) | 0} seconds`, color: [180, 120, 120], size: 14 },
-          { text: `Moa hatched: ${this.simulation.stats.births}`, color: [180, 120, 120], size: 14 },
-          { text: `Total mauri earned: ${this.mauri.totalEarned | 0}`, color: [180, 120, 120], size: 14 },
+          { text: `Years survived: ${(this._yearsSurvived || 0)}`, color: [180, 190, 170], size: 14 },
+          { text: `Time survived: ${(this.playTime / 60) | 0} seconds`, color: [180, 190, 170], size: 14 },
+          { text: `Moa hatched: ${this.simulation.stats.births}`, color: [180, 190, 170], size: 14 },
+          { text: `Total mauri earned: ${this.mauri.totalEarned | 0}`, color: [180, 190, 170], size: 14 },
           { text: "", color: [200, 240, 200], size: 18 },
           { text: _endless ? "Press R for menu  ·  X to export stats" : "Press R to return to menu",
-            color: [220, 180, 180], size: 18 }
+            color: _byChoice ? [200, 230, 200] : [220, 180, 180], size: 18 }
         ],
-        boxColor: [60, 35, 35, 250],
-        strokeColor: [150, 100, 100],
+        boxColor: _byChoice ? [30, 50, 38, 250] : [60, 35, 35, 250],
+        strokeColor: _byChoice ? [100, 160, 120] : [150, 100, 100],
         // Free Play: a one-click export of the whole run's season-by-season stats.
-        button: _endless ? { label: "Export run stats", action: () => this.exportFreeplayStats() } : null
+        buttons: _endless ? [{ label: "Export run stats", action: () => this.exportFreeplayStats() }] : null
       });
     }
 
@@ -3547,8 +3639,10 @@ class Game {
     noStroke();
     rect(0, cy, cw, ch);
     
-    // Box (reserve extra height for the optional button so it sits inside the panel)
-    const boxH = 60 + opts.lines.length * 40 + (opts.button ? 66 : 0);
+    // Buttons: accept a `buttons` array (stacked), or a single `button` for back-compat.
+    const buttons = opts.buttons || (opts.button ? [opts.button] : []);
+    // Box (reserve extra height for any buttons so they sit inside the panel)
+    const boxH = 60 + opts.lines.length * 40 + (buttons.length ? 20 + buttons.length * 56 : 0);
     const boxW = Math.max(300, 400);
     
     push();
@@ -3579,24 +3673,29 @@ class Game {
       lineY += line.size + 10;
     }
 
-    // Optional clickable button (e.g. pause-screen "Exit to Menu"). Bounds are
-    // stored in canvas space (accounting for the translate) on this._overlayBtn,
-    // and hit-tested in handleClick.
-    if (opts.button) {
-      const bw = 220, bh = 46;
+    // Clickable buttons (e.g. pause-screen "End Run" / "Exit to Menu"), stacked. Bounds are
+    // stored in canvas space (accounting for the translate) on this._overlayBtns, and
+    // hit-tested in handleClick.
+    if (buttons.length) {
+      const bw = 220, bh = 46, gap = 10;
       const bx = centerX - bw / 2;
-      const by = lineY + 12;
-      const hovBtn = mouseX > bx && mouseX < bx + bw &&
-                     mouseY > (cy + by) && mouseY < (cy + by + bh);
-      fill(hovBtn ? [70, 110, 85] : [45, 75, 55]);
-      stroke(120, 180, 140);
-      strokeWeight(2);
-      rect(bx, by, bw, bh, 10);
-      noStroke();
-      fill(210, 240, 220);
-      textSize(18);
-      text(opts.button.label, centerX, by + bh / 2);
-      this._overlayBtn = { x: bx, y: cy + by, w: bw, h: bh, action: opts.button.action };
+      const rects = [];
+      let by = lineY + 12;
+      for (const btn of buttons) {
+        const hovBtn = mouseX > bx && mouseX < bx + bw &&
+                       mouseY > (cy + by) && mouseY < (cy + by + bh);
+        fill(hovBtn ? [70, 110, 85] : [45, 75, 55]);
+        stroke(120, 180, 140);
+        strokeWeight(2);
+        rect(bx, by, bw, bh, 10);
+        noStroke();
+        fill(210, 240, 220);
+        textSize(18);
+        text(btn.label, centerX, by + bh / 2);
+        rects.push({ x: bx, y: cy + by, w: bw, h: bh, action: btn.action });
+        by += bh + gap;
+      }
+      this._overlayBtns = rects;
     }
 
     pop();
@@ -4401,12 +4500,14 @@ class Game {
       return;
     }
 
-    // Pause-screen overlay button (e.g. "Exit to Menu") takes precedence while shown.
-    if (this._overlayBtn &&
-        mx > this._overlayBtn.x && mx < this._overlayBtn.x + this._overlayBtn.w &&
-        my > this._overlayBtn.y && my < this._overlayBtn.y + this._overlayBtn.h) {
-      this._overlayBtn.action();
-      return;
+    // Pause / game-over overlay buttons (e.g. "End Run", "Exit to Menu") take precedence.
+    if (this._overlayBtns) {
+      for (const btn of this._overlayBtns) {
+        if (mx > btn.x && mx < btn.x + btn.w && my > btn.y && my < btn.y + btn.h) {
+          btn.action();
+          return;
+        }
+      }
     }
 
     if (this.tutorial && this.tutorial.active && this.tutorial.handleClick(mx, my)) return;

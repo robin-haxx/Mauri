@@ -212,7 +212,7 @@ class HaastsEagle extends Boid {
     if (this.emergent) {
       const _M = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS) ? LEVEL_MECHANICS : {};
       const _moaN = simulation.getMoaPopulation();
-      const _target = _moaN * (_M.eagleTargetRatio ?? (1 / 6));
+      const _target = _moaN * (_M.eagleTargetRatio ?? (1 / 6)) + (_M._eagleTargetLoopBonus || 0);
       const _eagleN = simulation.countAliveEagles ? simulation.countAliveEagles() : this.eagles?.length ?? 1;
       if (_target > 0 && _eagleN > _target) {
         const _over = _eagleN / _target;   // >1 → predators above prey capacity
@@ -775,9 +775,10 @@ class HaastsEagle extends Boid {
     }
     if (!hasMate) return;
 
-    // The tuning knob: ~one eagle per six moa by default.
+    // The tuning knob: ~one eagle per six moa by default, plus the run's per-loop
+    // predator-pressure bonus (Free Play ramps this up over the years).
     const ratio = M.eagleTargetRatio ?? (1 / 6);
-    const targetEagles = moaN * ratio;
+    const targetEagles = moaN * ratio + (M._eagleTargetLoopBonus || 0);
     if (targetEagles <= 0) return;
 
     // Pressure: 0 when at/over the target, → 1 when well below it.

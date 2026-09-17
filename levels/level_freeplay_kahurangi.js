@@ -9,7 +9,7 @@
 
 const LEVEL_FREEPLAY_KAHURANGI = {
   id: 'freeplay_kahurangi',
-  name: 'ENDLESS: Mutunga-kore',   // "the endless descent into cold"
+  name: 'ENDLESS: Mutunga kore',   // "the endless descent into cold"
   unlockCondition: null,             // open for playtesting
 
   // Endless: no phases, no timed end, no win. checkGoals() short-circuits to the
@@ -225,10 +225,16 @@ const LEVEL_FREEPLAY_KAHURANGI = {
     freeplayGoalReward: 0,      // a goal gives no mauri boost
 
     // ---- Passive mauri: a healthy, EVEN ecosystem pays (the core income) ------
-    // Income/sec = (avg population above floor) × balance (1 − worst species shortfall),
-    // so it rewards breadth + evenness. focusInequalityWeight weights the year's focus
-    // species 2×; imbalanceHarshness raises the penalty each year. Eagles never count.
-    freeplayPassive: { scale: 1.0, imbalanceHarshness: 0.03, inequalityWeight: 1, focusInequalityWeight: 2 },
+    // Income/sec = (avg population of PRESENT species) × balance, so it rewards breadth +
+    // evenness. balance is the worst species' ratio to the top, focus species weighted 2×
+    // (focusInequalityWeight), raised to a power that grows each year (imbalanceHarshness,
+    // capped by imbalanceHarshnessCap), then rescaled into [minBalance, 1] so income eases
+    // with imbalance but never craters to a crawl. Only present species count; eagles never.
+    freeplayPassive: { scale: 1.0, imbalanceHarshness: 0.03, imbalanceHarshnessCap: 0.6, inequalityWeight: 1, focusInequalityWeight: 2, minBalance: 0.2 },
+
+    // ---- Forage tightens: natural plant regen density eases down a little each year to a
+    // floor reached at plantDensityFloorYear, so late years run leaner on food. ------------
+    freeplayPlantDensity: { floor: 0.6, floorYear: 8 },
 
     // ---- Year-to-year reset: fall back to defaults, nudged by past performance ----
     // A new year is a new habitat: each species falls back to its default, nudged up by
@@ -317,14 +323,16 @@ const LEVEL_FREEPLAY_KAHURANGI = {
     focalSpecies: ['upland_moa', 'little_bush_moa'],   // STABLE balance set, distinct from the dynamic yearly focus
     maxPerSpecies: 20,
 
-    // No static populationFloors; Free Play protects only the current year's focus species.
+    // Background species are protected from a total wipe; the year's FOCUS MOA are NOT
+    // (letting them die out is how a run ends — see the focus-moa loss check in update()).
 
     // ---- Emergent eagles. In Free Play their extinction is not a loss: it unleashes a
-    // dominant-moa boom and they re-immigrate next year. eagleTargetRatioPerLoop climbs
-    // the eagles-per-prey ratio each loop. eaglePursuitRadius: an eagle directly seeks the
-    // nearest huntable moa in range (a committed chase) instead of rubber-banding.
+    // dominant-moa boom and they re-immigrate next year. eaglePerLoopBonus ramps predator
+    // pressure up over the run: the eagle target, hard cap and year-start count each climb by
+    // ~2 more eagles per 4-year loop (see Game._applyFreeplayYearPressure). eaglePursuitRadius:
+    // an eagle directly seeks the nearest huntable moa in range (a committed chase).
     eaglePursuitRadius: 320,
-    emergentEagles: true, eagleTargetRatio: 1 / 8, eagleTargetRatioPerLoop: 0.012, eagleMaxPopulation: 8, eagleHungerRate: 0.02,
+    emergentEagles: true, eagleTargetRatio: 1 / 8, eaglePerLoopBonus: 2, eagleMaxPopulation: 8, eagleHungerRate: 0.02,
       eagleStarveThreshold: 90, eagleStarveTimeout: 2400, eagleReproChance: 0.4, eagleReproCooldown: 2600,
       eagleReproCheckInterval: 220, eagleMaturityAge: 1500, eaglePreyPopThreshold: 12,
       startingEagleEggHatchTime: 1800, eagleMateRadius: 250, eagleOverhuntRestraint: 30, eagleRestraintCap: 45,

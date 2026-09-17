@@ -1421,7 +1421,7 @@ class Game {
       }
       if (lostKey) {
         this.state = GAME_STATE.LOST;
-        this.gameOverReason = `The ${this._freeplaySpeciesName(lostKey)} disappeared from Kahurangi..`;
+        this.gameOverReason = `${this._freeplaySpeciesName(lostKey)} disappeared from Kahurangi..`;
         if (audioManager) audioManager.playLoss();
       }
     }

@@ -212,7 +212,11 @@ const LEVEL_FREEPLAY_KAHURANGI = {
     climateDrift: { periodYears: 3, rampCycles: 10, coldCap: 1.0, baselineFrac: 0.2, starkness: 1.0 },
 
     // ---- Winter takes food value, not plants (the core) ---------------------
+    // winterEdibilityMult scales how much of a plant's food value survives the cold (a gentler
+    // winter starve); winterEdibilityErosion is how hard a deepening glacial erodes that floor.
     winterInedibility: true,
+    winterEdibilityMult: 1.5,      // ↑ = winter eating is less debuffed
+    winterEdibilityErosion: 0.6,   // ↓ = deep-glacial winters keep more food value (was 0.8)
 
     // ---- Cold shapes the cast: lowland browsers suffer the deepening most -----
     coldToleranceMatters: true,
@@ -327,13 +331,15 @@ const LEVEL_FREEPLAY_KAHURANGI = {
     // (letting them die out is how a run ends — see the focus-moa loss check in update()).
 
     // ---- Emergent eagles. In Free Play their extinction is not a loss: it unleashes a
-    // dominant-moa boom and they re-immigrate next year. eaglePerLoopBonus ramps predator
-    // pressure up over the run: the eagle target, hard cap and year-start count each climb by
-    // ~2 more eagles per 4-year loop (see Game._applyFreeplayYearPressure). eaglePursuitRadius:
-    // an eagle directly seeks the nearest huntable moa in range (a committed chase).
+    // dominant-moa boom and they re-immigrate next year. The eagle target stays proportional
+    // to the moa count, so a moa decline drops the target and the surplus predators starve
+    // off (eagleStarveTimeout sets how fast). eagleTargetRatioPerLoop ramps the eagle:prey
+    // ratio up over the run and eagleMaxPerLoop lifts the cap, so pressure climbs across years
+    // WITHOUT decoupling from the moa (see Game._applyFreeplayYearPressure). Year 1 opens
+    // gentle: a low base ratio + low base cap. eaglePursuitRadius: a committed chase.
     eaglePursuitRadius: 320,
-    emergentEagles: true, eagleTargetRatio: 1 / 8, eaglePerLoopBonus: 2, eagleMaxPopulation: 8, eagleHungerRate: 0.02,
-      eagleStarveThreshold: 90, eagleStarveTimeout: 2400, eagleReproChance: 0.4, eagleReproCooldown: 2600,
+    emergentEagles: true, eagleTargetRatio: 1 / 10, eagleTargetRatioPerLoop: 0.07, eagleMaxPopulation: 6, eagleMaxPerLoop: 2, eagleHungerRate: 0.02,
+      eagleStarveThreshold: 90, eagleStarveTimeout: 1500, eagleReproChance: 0.35, eagleReproCooldown: 2600,
       eagleReproCheckInterval: 220, eagleMaturityAge: 1500, eaglePreyPopThreshold: 12,
       startingEagleEggHatchTime: 1800, eagleMateRadius: 250, eagleOverhuntRestraint: 30, eagleRestraintCap: 45,
 

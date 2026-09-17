@@ -315,7 +315,12 @@ class Plant {
     const def = PLANT_TYPES[this.type];
     const we = (def && def.winterEdibility != null) ? def.winterEdibility : 0.12;
     const cold = seasonManager.coldIndex || 0;
-    const eff = Math.max(0, we * (1 - PLANT_CLIMATE_EDIBILITY_EROSION * cold));
+    // Level tuning: winterEdibilityMult scales how much food value survives the cold (a gentler
+    // winter starve); winterEdibilityErosion is how hard a deepening glacial erodes that floor.
+    const M = (typeof LEVEL_MECHANICS !== 'undefined') ? LEVEL_MECHANICS : {};
+    const mult = M.winterEdibilityMult ?? 1;
+    const erosion = (M.winterEdibilityErosion != null) ? M.winterEdibilityErosion : PLANT_CLIMATE_EDIBILITY_EROSION;
+    const eff = Math.max(0, we * mult * (1 - erosion * cold));
     const winterVal = this.baseNutrition * this.growth * eff;
     this.nutrition = this.nutrition + (winterVal - this.nutrition) * w;   // ease in by winterness
     this.winterInedible = this.nutrition < PLANT_INEDIBLE_THRESHOLD;

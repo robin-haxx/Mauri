@@ -269,13 +269,15 @@ function applyLevelToConfig(levelDef) {
   // Opt-in gameplay mechanics (habitat stress, forest competition, ...)
   LEVEL_MECHANICS = levelDef.mechanics || {};
   FOREST_BIOMES = new Set(LEVEL_MECHANICS.forestBiomes || []);
-  // Restore the base eagle cap and clear the per-loop predator-pressure bonus (the yearly
-  // ramp in Game._applyFreeplayYearPressure mutates these live) so a restart doesn't inherit
-  // last run's ramped pressure.
+  // Restore the base eagle target ratio and hard cap (the yearly ramp in
+  // Game._applyFreeplayYearPressure mutates these live) so a restart doesn't inherit last
+  // run's ramped predator pressure.
+  if (LEVEL_MECHANICS._eagleTargetRatioBase != null) {
+    LEVEL_MECHANICS.eagleTargetRatio = LEVEL_MECHANICS._eagleTargetRatioBase;
+  }
   if (LEVEL_MECHANICS._eagleMaxPopulationBase != null) {
     LEVEL_MECHANICS.eagleMaxPopulation = LEVEL_MECHANICS._eagleMaxPopulationBase;
   }
-  LEVEL_MECHANICS._eagleTargetLoopBonus = 0;
 
   // View & calendar (per-level, with engine defaults for levels that omit them)
   CONFIG.zoom = (levelDef.zoom != null) ? levelDef.zoom : 2.5;
@@ -2096,11 +2098,15 @@ class Game {
       const bucket = isMoaKey(k) ? moa : others;
       bucket[k] = Math.max(bucket[k] || 0, protectFloor);
     }
-    // Year-start eagles climb with the run's predator-pressure bonus (see
-    // _applyFreeplayYearPressure), never above the current hard cap.
+    // Year-start eagles stay low (a fresh area each year); they breed up during the year
+    // toward moaN × the ramped ratio. A very mild per-loop bump keeps later years from opening
+    // trivially safe, but year 1 always opens gentle at the base pair.
     const M = (typeof LEVEL_MECHANICS !== 'undefined') ? LEVEL_MECHANICS : {};
-    const eagleCap = M.eagleMaxPopulation ?? 8;
-    const eagles = Math.min(eagleCap, 2 + Math.round(M._eagleTargetLoopBonus || 0));
+    const t = this.terrain;
+    const loopLen = (t && t._quadOrder && t._quadOrder.length) || 4;
+    const loops = Math.floor((this.cycle || 0) / loopLen);
+    const eagleCap = M.eagleMaxPopulation ?? 6;
+    const eagles = Math.min(eagleCap, 2 + Math.floor(loops / 2));
     return { moa, others, eagles };
   }
 
@@ -2120,9 +2126,10 @@ class Game {
   }
 
   // Free Play run pressure that ramps across the 4-year tour loop, recomputed each year:
-  //   • eagles: an additive predator-pressure bonus (eaglePerLoopBonus per loop) lifts the
-  //     eagle:prey target, the hard cap and the year-start eagle count together, so predator
-  //     pressure climbs ≈ eaglePerLoopBonus more eagles every 4 years.
+  //   • eagles: the eagle:prey RATIO climbs eagleTargetRatioPerLoop each loop and the hard cap
+  //     climbs eagleMaxPerLoop, so predator pressure rises over the run — but because the eagle
+  //     target stays proportional to the moa count (mauri_eagle.js), eagle numbers still track
+  //     the moa: a moa decline drops the target and the surplus predators starve off.
   //   • plants: natural regen density eases 1 → plantDensityFloor as the year approaches
   //     plantDensityFloorYear, tightening forage a little each year to a floor.
   // Loops come from the terrain's quad tour (falls back to cycle/4). Bases are stored so a
@@ -2132,11 +2139,12 @@ class Game {
     const loopLen = (t && t._quadOrder && t._quadOrder.length) || 4;
     const loops = Math.floor((this.cycle || 0) / loopLen);
 
-    // Eagles: additive predator-pressure bonus, accrued per loop.
-    const bonus = (M.eaglePerLoopBonus || 0) * loops;
-    M._eagleTargetLoopBonus = bonus;                   // read by the eagle target/restraint (mauri_eagle.js)
-    if (M._eagleMaxPopulationBase == null) M._eagleMaxPopulationBase = M.eagleMaxPopulation ?? 8;
-    M.eagleMaxPopulation = M._eagleMaxPopulationBase + Math.round(bonus);
+    // Eagles: ramp the eagle:prey RATIO and the hard cap off stored bases (keeps the target
+    // proportional to moaN, so eagles rise and fall with the herd).
+    if (M._eagleTargetRatioBase == null) M._eagleTargetRatioBase = M.eagleTargetRatio ?? (1 / 8);
+    M.eagleTargetRatio = M._eagleTargetRatioBase + (M.eagleTargetRatioPerLoop || 0) * loops;
+    if (M._eagleMaxPopulationBase == null) M._eagleMaxPopulationBase = M.eagleMaxPopulation ?? 6;
+    M.eagleMaxPopulation = M._eagleMaxPopulationBase + Math.round((M.eagleMaxPerLoop || 0) * loops);
 
     // Plants: density multiplier eases 1 → floor as the year approaches plantDensityFloorYear.
     const pd = M.freeplayPlantDensity;

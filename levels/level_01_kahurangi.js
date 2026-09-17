@@ -100,6 +100,13 @@ const LEVEL_KAHURANGI = {
     // Diminishing hatch rewards: full mauri up to 15, a token up to 20, nothing beyond.
     hatchReward: { full: 15, reduced: 20, reducedAmount: 5 },
 
+    // Single-species intro level: eggs must always hatch upland moa. Without this,
+    // eggs mutate to a random REGISTRY moa (5% chance) that isn't part of this level
+    // at all; those hatches don't count toward the "Hatch N Upland Moa" goals (only
+    // upland_moa births are tracked) and clog the population cap, so "Hatch 20 Upland
+    // Moa" would stall. Levels 2 and Free Play already set this.
+    noSpeciation: true,
+
     emergentEagles: true,
     eagleTargetRatio: 1 / 4,      // ← the main knob: ~one eagle per eight moa
     eagleMaxPopulation: 8,        // hard safety cap on total eagles

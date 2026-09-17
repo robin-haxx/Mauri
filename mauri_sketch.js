@@ -543,6 +543,7 @@ const PLACEABLES = {
     description: "Tough browse the bush moa favour",
     cost: 30,
     icon: '🌲',
+    iconSprite: 'Lancewood.png',
     color: '#6a7a3a',
     effect: 'feeding',
     radius: 40,
@@ -592,6 +593,7 @@ const PLACEABLES = {
     description: "Can station Kea by moa nests....",
     cost: 30,
     icon: '🫐',
+    iconSprite: 'Patotara_Mature.png',   // the cache's signature subalpine berry
     color: '#6a4a7a',
     effect: 'keaLure',
     radius: 70,                // berry + forest cultivation footprint (tight, around the cache)
@@ -1153,6 +1155,7 @@ class Game {
     this.movingPlaceable = null;
     // Species highlights: reset, then enable by default for the level's focus
     // species (fall back to its vulnerable-highlight list if no focal list).
+    if (audioManager && audioManager.stopAllVoices) audioManager.stopAllVoices();
     SPECIES_HIGHLIGHT.clear();
     const _hlDefaults = LEVEL_MECHANICS.focalSpecies ||
       (LEVEL_MECHANICS.vulnerableHighlight ? Object.keys(LEVEL_MECHANICS.vulnerableHighlight) : []);
@@ -1339,6 +1342,9 @@ class Game {
     if (this.seasonManager.update(dt)) this.onSeasonChange();
     
     this.simulation.update(this.mauri, dt);
+    // Extended species voices: fade highlight tracks in/out and crossfade the kākāpō
+    // ambience to match the flock (booming in a mast, territorial when males contest).
+    if (audioManager && audioManager.update) audioManager.update(this.simulation, dt);
     // Advance a world-grid camera pan BEFORE caching counts: the frame the pan
     // settles it repopulates the new area, so the fresh cast is counted this frame
     // and the "all moa gone" check never sees the empty transition as a wipe.

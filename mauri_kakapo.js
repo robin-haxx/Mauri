@@ -37,6 +37,7 @@ class Kakapo extends Kereru {
     this._shelterAttractRadius = sp.shelterAttractRadius ?? 360;
     this._settled = false;    // has this bird settled
     this._settleTimer = 0;    // grace before a male with no shelter claims where it stands
+    this._contesting = false; // male actively disputing a court this frame (drives audio)
   }
 
   // Territorial lek behaviour, after the base ground loop steers:
@@ -47,6 +48,7 @@ class Kakapo extends Kereru {
   // Skipped while storm-sheltered or not walking.
   behave(sim, mauri, seasonManager, dt) {
     super.behave(sim, mauri, seasonManager, dt);
+    this._contesting = false;   // set true by _contestCourt when this male disputes a court
     // (Never storm-flushed; guard kept for parity with the other parrots.)
     if (this._grounded || this._fleeingStorm || this.state !== KERERU_STATE.FLYING) return;
     const list = sim.otherEntities && sim.otherEntities[this.speciesKey];
@@ -140,6 +142,7 @@ class Kakapo extends Kereru {
     if (host) { this.applyForce(this.seekPoint(px + (px - host.pos.x), py + (py - host.pos.y), this._territoryPush)); contesting = true; }
 
     if (contesting) this.hunger = Math.min(this.maxHunger, this.hunger + this._territoryHungerCost * dt);
+    this._contesting = contesting;   // audio: several contesting males → territorial call
   }
 
   // Kākāpō don't flee a raptor — they freeze and rely on camouflage. Returning false

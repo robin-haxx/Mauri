@@ -33,6 +33,10 @@ class Kokako extends Kereru {
     this._territoryRadius  = sp.territoryRadius ?? 140;
     this._secureHunger    = (sp.secureHungerFrac ?? 0.6);
     this._relocating      = false;
+    // Relocation failsafe: a displaced bird gives up flying at its new territory after this long
+    // (or when hunger bites) and forages where it is, so it never gets stuck on an unreachable point.
+    this._relocateFrames  = (sp.relocateSec ?? 6) * F;
+    this._relocateTimer   = 0;
     this._territory = createVector(x, y);
   }
 
@@ -47,12 +51,17 @@ class Kokako extends Kereru {
 
   _anchorPoint() { return this._territory; }
 
-  // While relocating, ignore trees and travel to the new territory.
+  // While relocating, travel to the new territory ignoring trees — but stop and forage normally
+  // on arrival, if the move drags on (couldn't reach), or if hunger bites, so it never gets stuck
+  // flying at an unreachable point and starving.
   _flying(sim, dt) {
     if (this._relocating) {
+      this._relocateTimer -= dt;
       const t = this._territory;
       const dx = t.x - this.pos.x, dy = t.y - this.pos.y;
-      if (dx * dx + dy * dy < 26 * 26) {
+      const arrived = dx * dx + dy * dy < 26 * 26;
+      const hungry  = this.hunger >= this.maxHunger * 0.75;
+      if (arrived || this._relocateTimer <= 0 || hungry) {
         this._relocating = false;
       } else {
         this.maxSpeed = this.speciesData?.config?.baseSpeed || 0.5;
@@ -70,6 +79,9 @@ class Kokako extends Kereru {
 
     const secure = this.hunger < this.maxHunger * this._secureHunger;
     if (secure && this._singCooldown <= 0 && (this._respondSing || this._songTimer <= 0)) {
+      // Breed before you sing: a secure, well-fed bird is exactly a ready breeder, so lay first
+      // if a mate is near — otherwise song would starve out the very birds able to reproduce.
+      this._tryReproduce(sim);
       this._enterSinging(sim);
       return;
     }
@@ -116,9 +128,16 @@ class Kokako extends Kereru {
     for (let i = 0; i < list.length; i++) {
       const o = list[i];
       if (o === this || o === nearest || !o.alive) continue;
+      if (this._isViableMate(o)) continue;   // never push a potential mate out of breeding range
       const dx = o.pos.x - px, dy = o.pos.y - py;
       if (dx * dx + dy * dy <= terrSq && typeof o._displaceFrom === 'function') o._displaceFrom(px, py);
     }
+  }
+
+  // A mature bird of the opposite sex: territoriality spaces rivals but leaves these be, so a pair
+  // can settle close enough (within mateRadius) to breed.
+  _isViableMate(o) {
+    return !!(o && o.mature && o.isFemale !== this.isFemale);
   }
 
   _answerSong() { this._respondSing = true; }
@@ -135,6 +154,7 @@ class Kokako extends Kereru {
     );
     this._territory.set(land.x, land.y);
     this._relocating = true;
+    this._relocateTimer = this._relocateFrames;   // arm the failsafe so it can't get stuck en route
     this._respondSing = false;
     this._singCooldown = Math.max(this._singCooldown, this._singFrames);
     if (this._isPerched()) {
@@ -214,7 +234,8 @@ const KOKAKO_SPECIES = {
   songEverySec:     16,
   singHearRadius:   220,
   territoryRadius:  140,
-  secureHungerFrac: 0.6
+  secureHungerFrac: 0.6,
+  relocateSec:      6        // give up flying at a displaced territory after this long, then forage
 };
 
 // Register the kōkako as a flighted-bird type.

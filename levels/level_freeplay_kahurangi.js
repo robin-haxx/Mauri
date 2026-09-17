@@ -187,7 +187,7 @@ const LEVEL_FREEPLAY_KAHURANGI = {
           missed: { // no mast yet; consolidate the bush moa and grow new nesting sites
             focus: ['little_bush_moa'], moaFocus: 'little_bush_moa', nestingGoal: true,
             note: "No mast this year. Hold the little bush moa; plant lancewood downslope to draw them into new forest groves and settle fresh nesting sites before the cold upslope year.",
-            availablePlaceables: { lancewood: {}, nestRaid: {}, shelter: {}, nest: {}, waterhole: {}, Storm: {} }
+            availablePlaceables: { lancewood: {}, speargrass: {}, keaLure: {}, shelter: {},  waterhole: {}, Storm: {} }
           }
         }
       },
@@ -197,7 +197,7 @@ const LEVEL_FREEPLAY_KAHURANGI = {
             focus: ['kokako'], moaFocus: 'little_bush_moa', nestingGoal: true, kokakoStretch: true,
             introduce: [{ type: 'kokako', count: 3 }, { type: 'upland_moa', count: 8 }],
             note: "With the kākāpō secured downslope, a stretch: grow the South Island kōkako in the forest refuge, and settle the little bush moa in new groves. The upland moa return in numbers to the high country.",
-            availablePlaceables: { lancewood: {}, nestRaid: {}, shelter: {}, nest: {}, waterhole: {}, Storm: {} }
+            availablePlaceables: { lancewood: {}, speargrass: {}, shelter: {}, forestBoost: {}, waterhole: {}, Storm: {} }
           },
           missed: { // the rimu mast falls late, in the COLD upslope; the hard kākāpō year
             focus: ['kakapo'], mast: true, moaFocus: 'upland_moa', nestingGoal: true,

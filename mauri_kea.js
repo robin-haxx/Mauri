@@ -57,6 +57,17 @@ class Kea extends Kereru {
     this._mateSeekRadius = sp.mateRadius ?? 220;
     this._mateSeekBoost  = sp.mateSeekBoost ?? 2.4;   // cache-bound leaders draw from this× farther
     this._mateSeekWeight = sp.mateSeekWeight ?? 0.5;  // gentle; below the direct cache pull
+
+    // Focus-year survival shield (Year of the Kea): a starving kea clings on instead of dying
+    // while the flock is at/below this count, so the player can grow it past the danger zone
+    // (see _starveImmune). Above the count, hunger is mortal again.
+    this._starveShieldCount = sp.starveShieldCount ?? 4;
+    this._shielded = false;   // recomputed each behave tick; drives the security bar
+
+    // Berry Cache passive feed: standing in a cache's ring cancels the hunger tick AND drains a
+    // little more, so net hunger falls while the kea is in the ring (the flock fattens and breeds
+    // on the patch you place). Stored per-frame; this is the net gain rate (see _cacheFeed).
+    this._cacheFeedBonus = (sp.cacheNetFeedPerSec ?? 1.2) / 60;
   }
 
   // Stash the season manager so _preferredElevBand can read winterness/coldIndex. After
@@ -64,6 +75,7 @@ class Kea extends Kereru {
   // airborne (the alpine↔forest migration), weak enough that a kea still detours to food.
   behave(sim, mauri, seasonManager, dt) {
     this._sm = seasonManager;
+    this._shielded = this._starveImmune(sim);   // for the security bar (see _renderExtra)
     if (this._raidCooldown > 0) this._raidCooldown -= dt;
 
     // Perch tree: each kea holds a fruiting forest tree (chosen by nearby food) as its home
@@ -75,6 +87,15 @@ class Kea extends Kereru {
     }
 
     super.behave(sim, mauri, seasonManager, dt);
+
+    // Berry Cache feed: in a cache's ring the cache tops the kea up, so net hunger goes DOWN
+    // (overrides the base hunger tick, see _cacheFeed). Keeps the flock fed and breeding where
+    // you place the cache. Skipped for a bird that died this tick.
+    if (this.alive) {
+      const fed = this._cacheFeed(sim);
+      if (fed > 0) this.hunger = Math.max(0, this.hunger - fed * dt);
+    }
+
     if (!this._grounded && !this._fleeingStorm && this.state === KERERU_STATE.FLYING) {
       // A Berry Cache pulls the flock onto the forest patch. The bird holds a committed cache
       // choice (re-picked on a jittered timer), so the flock spreads across caches rather than
@@ -97,7 +118,7 @@ class Kea extends Kereru {
         // Only pull toward the cache while still arriving; once on the patch, let the perch
         // anchor + crowd-spread fan the flock across the trees.
         if (dx * dx + dy * dy > lr * lr) {
-          this.applyForce(this.seekPoint(lure.pos.x, lure.pos.y, 0.85, lr));
+          this.applyForce(this.seekPoint(lure.pos.x, lure.pos.y, 1.1, lr));
         }
       } else {
         // No cache in reach: follow a nearby cache-bound flockmate (the social cascade), else drift to band.
@@ -136,8 +157,24 @@ class Kea extends Kereru {
     return !!(p && p.alive && !p._consumed);
   }
 
-  // Home anchor for the base flight loop: the kea's perch tree (kererū is free-ranging).
+  // Kea don't starve to DEATH during the Year of the Kea (their Free Play focus year) WHILE the
+  // flock is still small (at/below _starveShieldCount): the year's task is to GROW the flock, so
+  // a starving kea clings on at max hunger instead of dying until the population is safely past
+  // the danger zone. Hunger still bites — breeding needs a fed bird and winter still thins the
+  // food — only the starvation death is removed. Above the count, or other years, hunger is
+  // mortal again under the normal population-floor rule.
+  _starveImmune(sim) {
+    const g = sim && sim.game;
+    if (!(g && g.freeplayFocus && g.freeplayFocus.includes('kea'))) return false;
+    return !sim.getSpeciesCount || sim.getSpeciesCount('kea') <= this._starveShieldCount;
+  }
+
+  // Home anchor for the base flight loop. While commuting to a committed cache the cache IS
+  // home, so _pickHop's dispersal orbit and _landward pull the bird onto the patch; otherwise
+  // its perch tree (kererū is free-ranging).
   _anchorPoint() {
+    const c = this._commuteCache();
+    if (c) return c.pos;
     return this._perchValid() ? this._perchTree.pos : null;
   }
 
@@ -208,6 +245,37 @@ class Kea extends Kereru {
     const r = (c.def && c.def.keaAttractRadius) || 520;
     const dx = c.pos.x - this.pos.x, dy = c.pos.y - this.pos.y;
     return dx * dx + dy * dy <= r * r;
+  }
+
+  // The committed Berry Cache while the kea is still ARRIVING (outside its patch); null once
+  // on the patch or with no commitment. While commuting, the cache becomes the kea's home
+  // anchor and drift target (below), so the flock RELOCATES onto the patch instead of orbiting
+  // a local perch that local food alone chose. Without this the perch always re-homes on the
+  // nearest food and the wide cache draw never wins — the bug where kea cluster on a far tree
+  // and even fly back to it after a storm. The patch (perch-anchored foraging) resumes inside.
+  _commuteCache() {
+    if (!this._lureValid()) return null;
+    const c = this._lureChoice;
+    const r = (c.def && c.def.radius) || 70;
+    const dx = c.pos.x - this.pos.x, dy = c.pos.y - this.pos.y;
+    return (dx * dx + dy * dy > r * r) ? c : null;
+  }
+
+  // Feed-per-frame a kea gets from standing in a Berry Cache's ring; 0 outside every cache. The
+  // ring is the cache's visible coverage radius. The amount cancels the base hunger tick
+  // (this.hungerRate) plus a net bonus, so hunger falls net-positive while inside any cache.
+  _cacheFeed(sim) {
+    const list = sim.placeables;
+    if (!list) return 0;
+    const px = this.pos.x, py = this.pos.y;
+    for (let i = 0; i < list.length; i++) {
+      const p = list[i];
+      if (!p.alive || p.type !== 'keaLure') continue;
+      const r = (p.def && (p.def.coverRadius || p.def.radius)) || 150;
+      const dx = p.pos.x - px, dy = p.pos.y - py;
+      if (dx * dx + dy * dy <= r * r) return this.hungerRate + this._cacheFeedBonus;
+    }
+    return 0;
   }
 
   // Choose which in-range Berry Cache to head for. Each is scored by nutrition per bird
@@ -372,6 +440,10 @@ class Kea extends Kereru {
   //   · A hungry bird (or one near its band) eats whatever is closest.
   _findFruitTree(sim) {
     if (!sim.getNearbyPlants) return null;
+    // Commuting to a committed cache: the kea skips local grazing and heads for the patch (its
+    // cache anchor + the cache pull carry it there). Only a near-starving bird still diverts to
+    // local food, so hunger rarely interrupts being led — it feeds on the cache's berries on arrival.
+    if (this._commuteCache() && this.hunger < this.maxHunger * 0.9) return null;
     const plants = sim.getNearbyPlants(this.pos.x, this.pos.y, this._feedRadius);
     const band = this._preferredElevBand();
     const t = this.terrain;
@@ -397,8 +469,15 @@ class Kea extends Kereru {
     return bestOut;
   }
 
-  // No fruit within reach: climb or descend toward the preferred elevation band.
+  // No fruit within reach: while commuting, fly to the committed cache; otherwise climb or
+  // descend toward the preferred elevation band (the alpine↔forest migration).
   _driftHome(sim, dt) {
+    const c = this._commuteCache();
+    if (c) {
+      const r = (c.def && c.def.radius) || 70;
+      this.applyForce(this.seekPoint(c.pos.x, c.pos.y, 1.2, r));
+      return;
+    }
     const pt = this._bandwardPoint();
     if (pt) this.applyForce(this.seekPoint(pt.x, pt.y, 1.1));
     else this.applyForce(this.wander(dt));
@@ -407,6 +486,30 @@ class Kea extends Kereru {
   _getSprite(perched) {
     return (typeof EntitySprites !== 'undefined' && EntitySprites.getKeaSprite)
       ? EntitySprites.getKeaSprite(perched) : null;
+  }
+
+  // Status bars above each kea: a HUNGER bar (green when fed → red as it starves) and, when the
+  // bird is starvation-shielded (the Year of the Kea, flock at/below _starveShieldCount), a blue
+  // SECURITY pip below it so the player can see which kea can't be lost yet. Drawn in the body's
+  // lifted frame; the sprite flip is undone so the bars always read left→right.
+  _renderExtra(s, perched) {
+    const f = Math.max(0, Math.min(1, this.hunger / this.maxHunger));
+    const w = s * 1.9, h = Math.max(1.5, s * 0.22), y = -s * 1.7;
+    push();
+    if (this._flip < 0 && this._getSprite(perched)) scale(-1, 1);   // cancel the sprite mirror
+    noStroke();
+    rectMode(CORNER);
+    // Hunger: track + fill; the fill shrinks and reddens as hunger climbs.
+    fill(20, 20, 20, 150);
+    rect(-w / 2, y, w, h, 1);
+    fill(120 + f * 130, 235 - f * 140, 110);
+    rect(-w / 2, y, w * (1 - f), h, 1);
+    // Security: a short blue bar when this kea is currently shielded from starving to death.
+    if (this._shielded) {
+      fill(90, 170, 255, 235);
+      rect(-w / 2, y + h + 1.2, w, Math.max(1, h * 0.7), 1);
+    }
+    pop();
   }
 }
 
@@ -448,6 +551,8 @@ const KEA_SPECIES = {
   hungerRatePerSec: 0.9,
   feedRelief:       68,
   starveSec:        20,
+  starveShieldCount: 4,   // Year of the Kea: no starvation death while the flock is at/below this
+  cacheNetFeedPerSec: 1.2, // net hunger DROP per second while inside a Berry Cache's ring
 
   // Reproduction; sexual, emergent (the Kereru loop).
   maturitySec:      22,

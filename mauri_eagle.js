@@ -43,8 +43,8 @@ class HaastsEagle extends Boid {
     // Hunger
     this.hunger = random(20, 25);
     this.maxHunger = 100;
-    this.hungerRate = 0.015;
-    this.huntThreshold = 40;
+    this.hungerRate = 0.012;
+    this.huntThreshold = 45;
     this.kills = 0;
     
     // Patrol

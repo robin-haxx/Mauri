@@ -175,17 +175,19 @@ class Kereru extends Boid {
     // Keep to land: a forest bird never crosses open water for long.
     this.applyForce(this._landward());
 
-    // Survival: sustained max-hunger kills, but never below the population floor.
+    // Survival: sustained max-hunger kills, but never below the population floor, and never
+    // while _starveImmune (a subclass shielding a focus flock; the bird clings on instead).
     if (this.hunger >= this.maxHunger) {
       this._starveTimer += dt;
       if (this._starveTimer >= this._starveFrames) {
         const floor = this._populationFloor();
-        if (sim.getSpeciesCount && sim.getSpeciesCount(this.speciesKey) > floor) {
+        const aboveFloor = sim.getSpeciesCount && sim.getSpeciesCount(this.speciesKey) > floor;
+        if (aboveFloor && !this._starveImmune(sim)) {
           this.alive = false;
           if (sim.game) sim.game.addNotification(`A ${this._label} is lost as the forest thins.`, 'info');
           return;
         }
-        this.hunger = this.maxHunger * 0.85;         // protected floor bird; clings on
+        this.hunger = this.maxHunger * 0.85;         // protected floor / immune bird; clings on
         this._starveTimer = 0;
       }
     } else if (this._starveTimer > 0) {
@@ -342,6 +344,11 @@ class Kereru extends Boid {
     if (c && c.populationFloor != null) return c.populationFloor;
     return (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.kereruPopulationFloor) ?? 2;
   }
+
+  // May this bird starve to DEATH right now (once above its population floor)? Base: yes.
+  // A subclass can shield a focus flock for a year (see Kea) — a shielded bird still gets
+  // hungry and clings on at max hunger, it just doesn't die. Separate from the floor rule.
+  _starveImmune(sim) { return false; }
 
   // FLYING; hungry (crop == 0): find a fruiting tree, hop to it. Full (crop > 0):
   // hop away from the source, dropping a seed each leg.

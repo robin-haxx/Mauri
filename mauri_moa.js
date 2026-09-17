@@ -370,12 +370,11 @@ class Moa extends Boid {
     this.updateSecurity(eagles, dt);
     
     if (this.hunger >= this.maxHunger) {
-      // Protected floor species (e.g. the last Dinornis) don't starve to death.
-      if (simulation.isSpeciesProtected && simulation.isSpeciesProtected(this.speciesKey)) {
-        this.hunger = this.maxHunger * 0.9;
-      } else {
-        this.alive = false;
-      }
+      // Starvation is always lethal. The protection floor guards a species from being HUNTED
+      // to extinction (see handleEagleCatch), but famine can still take any moa to zero — that
+      // is how a Free Play run is lost when forage runs out. (A protected non-focus species
+      // dies only to starvation, never to eagles; focus moa die to either.)
+      this.alive = false;
     }
     
     const terrainMult = this.getTerrainSpeedMultiplier();

@@ -2022,16 +2022,17 @@ class Game {
       }
     }
 
-    // Floor watch: keep every protected species at its floor. isSpeciesProtected already
-    // stops hunting/starving at the floor, but a same-frame double-catch or a species that
-    // regenerated below it can still dip under. Every ~1.5s, respawn the shortfall so a
-    // thinned species returns to the floor instead of vanishing for the year. Only species
-    // already in dynamicFloors (present this year) are topped up; nothing is conjured anew.
+    // Floor watch: keep protected BACKGROUND BIRDS at their floor so the flighted cast doesn't
+    // silently vanish mid-year. MOA are deliberately NOT topped up — a moa species that starves
+    // out must stay out, so the ecosystem can actually collapse and the run can end (their floor
+    // is hunting-only now, see Moa.update / handleEagleCatch). Every ~1.5s, respawn any bird
+    // shortfall; only species already in dynamicFloors (present this year) are topped up.
     this._floorWatchTimer = (this._floorWatchTimer || 0) - 1;
     if (this._floorWatchTimer <= 0) {
       this._floorWatchTimer = 90;
       const floors = sim.dynamicFloors;
       if (floors) for (const k in floors) {
+        if (typeof MOA_SPECIES !== 'undefined' && MOA_SPECIES[k]) continue;   // moa can go extinct
         const short = floors[k] - sim.getSpeciesCount(k);
         if (short > 0) this._spawnFreeplaySpecies(k, short);
       }

@@ -75,7 +75,7 @@ function preload(){
 // ============================================
 const CONFIG = {
   // ===== ENGINE CONSTANTS (never change between levels) =====
-  version: 'alpha 2.1.0',
+  version: 'alpha 2.1.2',
 
   // Reference height is always 1080; width is computed from window aspect ratio
   referenceHeight: 1080,
@@ -3207,10 +3207,16 @@ class Game {
     }
     const picked = rimus.slice(0, count);
 
-    // A ripe berry patch beside each shaken rimu: real, forageable kākāpō food.
+    // A ripe berry patch beside each shaken rimu, AND a gather site on the tree: the berries
+    // are lasting forage; the gather site is a brief rendezvous that draws the flock together
+    // so pairs form (see sim.scrambleSites / Kakapo.behave). Without the gather the fed birds
+    // stay scattered across their spaced lek courts and never meet a mate.
     let berries = 0;
+    const now = (typeof frameCount !== 'undefined') ? frameCount : 0;
+    const gatherFrames = 15 * 60;   // ~15s window for the flock to converge and pair
     for (const tree of picked) {
-      tree._berryDropFrame = (typeof frameCount !== 'undefined') ? frameCount : 0;   // (visual hook)
+      tree._berryDropFrame = now;   // (visual hook)
+      sim.scrambleSites.push({ x: tree.pos.x, y: tree.pos.y, radius: 60, expireFrame: now + gatherFrames });
       const a = Math.random() * Math.PI * 2, rr = 14 + Math.random() * 22;
       const bx = tree.pos.x + Math.cos(a) * rr, by = tree.pos.y + Math.sin(a) * rr;
       const biome = sim.terrain.getBiomeAt(bx, by);
@@ -3222,10 +3228,12 @@ class Game {
       }
     }
 
-    // Food + breeding security to the kākāpō gathered near the shaken rimu.
+    // Food + breeding security to the kākāpō, and un-settle the males so they abandon their
+    // scattered courts and re-form them on the berry glut (where the females are now drawn).
+    // A generous reach so the whole small flock joins the scramble, not just birds already on it.
     const flock = (sim.otherEntities && sim.otherEntities.kakapo) || [];
     let fed = 0;
-    const R2 = 200 * 200;
+    const R2 = 360 * 360;
     for (const k of flock) {
       if (!k.alive) continue;
       let near = false;
@@ -3236,10 +3244,11 @@ class Game {
       if (!near) continue;
       k.crop = k._cropCapacity || 1;                          // crop-full → breeding-ready (security)
       k.hunger = Math.max(0, k.hunger - (k._feedRelief || 60)); // gorged (food)
+      if (!k.isFemale) { k._settled = false; k._territory = null; k._settleTimer = 0; } // re-gather at the glut
       fed++;
     }
 
-    this.addNotification(`Rimu berry scramble! ${berries} rimu drop berries; the kākāpō gorge${fed ? ` (${fed} fed)` : ''}.`, 'success');
+    this.addNotification(`Rimu berry scramble! ${berries} rimu drop berries; the kākāpō gather to breed${fed ? ` (${fed} join)` : ''}.`, 'success');
     if (audioManager && audioManager.playPlantRustle) audioManager.playPlantRustle();
     return true;
   }

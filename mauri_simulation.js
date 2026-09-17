@@ -44,6 +44,11 @@ class Simulation {
     // harder (higher flock cap + shorter egg cooldown).
     this.mastYear = false;
 
+    // Rimu Berry Scramble gather sites: {x, y, expireFrame}. A live site strongly draws the
+    // kākāpō flock together (males re-form courts on it, females pair) so a mast-year glut
+    // actually turns into chicks. Set by Game._triggerRimuScramble; pruned in update().
+    this.scrambleSites = [];
+
     this._speciesStableTimes = {};
     this.speciesLastAlive = {};
 
@@ -1271,6 +1276,12 @@ class Simulation {
   update(mauri, dt = 1) {
     this.updateSpatialGrids();
     this.updatePlantsBatched(dt);
+
+    // Prune expired Rimu Berry Scramble gather sites (see scrambleSites / Kakapo.behave).
+    if (this.scrambleSites.length) {
+      const now = (typeof frameCount !== 'undefined') ? frameCount : 0;
+      this.scrambleSites = this.scrambleSites.filter(s => s.expireFrame > now);
+    }
     
     if (this.seasonManager.justChanged) this.onSeasonChange();
     

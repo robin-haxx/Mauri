@@ -61,8 +61,7 @@ const ENCYCLOPEDIA = [
       "",
       "Its numbers rise and fall with the moa it hunts. A good year for moa means more",
       "food for eagles; as moa populations fall, it starves the eagles behind them.",
-      "In Free Play, if the eagles are lost entirely, the dominant moa surges unchecked",
-      "until eagles return the following year."
+
     ], seeAlso: ['glacial_cycles', 'predator_prey'] },
 
 

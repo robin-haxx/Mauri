@@ -35,6 +35,10 @@ class Kakapo extends Kereru {
     // player seeds leks by placing shelters.
     this._shelterAttract = sp.shelterAttract ?? 0.05;
     this._shelterAttractRadius = sp.shelterAttractRadius ?? 360;
+    // Rimu Berry Scramble gather: a live scramble site pulls the flock together hard (much
+    // stronger than a shelter) so males re-form courts on the glut and females reach them.
+    this._scrambleAttract = sp.scrambleAttract ?? 0.14;
+    this._scrambleAttractRadius = sp.scrambleAttractRadius ?? 520;
     this._settled = false;    // has this bird settled
     this._settleTimer = 0;    // grace before a male with no shelter claims where it stands
     this._contesting = false; // male actively disputing a court this frame (drives audio)
@@ -54,13 +58,20 @@ class Kakapo extends Kereru {
     const list = sim.otherEntities && sim.otherEntities[this.speciesKey];
     const px = this.pos.x, py = this.pos.y;
 
+    // A live Rimu Berry Scramble site is the flock's rendezvous: it overrides the ordinary
+    // shelter drift for BOTH sexes, so males re-form courts on the berry glut and females
+    // reach them to pair. Males were un-settled by the scramble so they re-gather here.
+    const scramble = this._nearestScrambleSite(sim);
+
     if (!this.isFemale) {
       if (!this._settled) {
-        // Un-settled: drift to a fern shelter to claim a court there, else settle after a grace.
-        const shelter = this._nearestFernShelter(sim);
-        if (shelter) {
-          this.applyForce(this.seekPoint(shelter.pos.x, shelter.pos.y, this._shelterAttract));
-          const dx = shelter.pos.x - px, dy = shelter.pos.y - py, sr = shelter.radius || 50;
+        // Un-settled: head for a live scramble site if there is one, else drift to a fern
+        // shelter to claim a court there, else settle after a grace.
+        const spot = scramble || this._nearestFernShelter(sim);
+        if (spot) {
+          const pull = scramble ? this._scrambleAttract : this._shelterAttract;
+          this.applyForce(this.seekPoint(spot.pos.x, spot.pos.y, pull));
+          const dx = spot.pos.x - px, dy = spot.pos.y - py, sr = spot.radius || 50;
           if (dx * dx + dy * dy <= sr * sr) this._settle();
         } else {
           this._settleTimer += dt;
@@ -72,6 +83,10 @@ class Kakapo extends Kereru {
         if (list && list.length >= 2) this._contestCourt(list, dt);
         this.applyForce(this.seekPoint(this._territory.x, this._territory.y, this._territoryHold));
       }
+    } else if (scramble) {
+      // Scramble live: head straight for the glut (hard pull), where the males are re-forming
+      // courts — the fastest way to put a mate in reach and lay.
+      this.applyForce(this.seekPoint(scramble.pos.x, scramble.pos.y, this._scrambleAttract));
     } else {
       // Female: pair at the nearest court in a mast; otherwise let the shelters distribute her.
       let paired = false;
@@ -97,6 +112,23 @@ class Kakapo extends Kereru {
     if (this._settled) return;
     this._settled = true;
     if (!this.isFemale && !this._territory) this._territory = createVector(this.pos.x, this.pos.y);
+  }
+
+  // The nearest live Rimu Berry Scramble gather site within reach (see sim.scrambleSites).
+  // These out-pull shelters and expire, so the gather is a brief mast-year rendezvous.
+  _nearestScrambleSite(sim) {
+    const list = sim.scrambleSites;
+    if (!list || !list.length) return null;
+    const rSq = this._scrambleAttractRadius * this._scrambleAttractRadius;
+    const px = this.pos.x, py = this.pos.y;
+    let best = null, bestSq = rSq;
+    for (let i = 0; i < list.length; i++) {
+      const s = list[i];
+      const dx = s.x - px, dy = s.y - py, dSq = dx * dx + dy * dy;
+      if (dSq < bestSq) { bestSq = dSq; best = s; }
+    }
+    // Adapt to the {x, y} record the shelter/settle code expects a .pos on.
+    return best ? { pos: { x: best.x, y: best.y }, radius: best.radius || 60 } : null;
   }
 
   // The nearest live fern shelter within the attraction radius.
@@ -229,7 +261,13 @@ const KAKAPO_SPECIES = {
   lekAttract:     0.03,    // how hard a mast-year female drifts to the nearest court
   territoryHungerCostPerSec: 0.8,  // hunger burned per second while actively contesting a court
   shelterAttract:       0.05,      // pull toward a fern shelter for an un-settled bird
-  shelterAttractRadius: 360        // a fern shelter draws un-settled kākāpō within this range
+  shelterAttractRadius: 360,       // a fern shelter draws un-settled kākāpō within this range
+
+  // Rimu Berry Scramble rendezvous (see Kakapo.behave / sim.scrambleSites). A live scramble
+  // site out-pulls shelters and reaches far, so the whole flock converges on the berry glut
+  // during the brief gather and pairs form — the mast-year glut turns into chicks.
+  scrambleAttract:       0.14,     // pull toward a live scramble gather site (≫ shelterAttract)
+  scrambleAttractRadius: 520       // a scramble site draws kākāpō from this far
 };
 
 // Register the kākāpō as a flighted-bird type for egg-hatch routing, though it never

@@ -9,7 +9,7 @@
 
 const LEVEL_FREEPLAY_KAHURANGI = {
   id: 'freeplay_kahurangi',
-  name: 'Taihekenga Mutunga-kore',   // "the endless descent into cold"
+  name: 'ENDLESS: Mutunga-kore',   // "the endless descent into cold"
   unlockCondition: null,             // open for playtesting
 
   // Endless: no phases, no timed end, no win. checkGoals() short-circuits to the

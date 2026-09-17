@@ -717,21 +717,6 @@ class GameUI {
       text(count, x + size / 2, y + size - 2);
       pop();
 
-      // Keystone badge; a small amber "!" disc so the survival group reads at a glance
-      // as "lose all of these and the run ends", distinct from the year's focus tiles.
-      if (isSurvival) {
-        push();
-        noStroke();
-        fill(220, 138, 74);
-        ellipse(x + size - 11, y + 11, 16, 16);
-        fill(30, 22, 14);
-        textAlign(CENTER, CENTER); textSize(12);
-        push(); textFont(FreckleFace);
-        text('!', x + size - 11, y + 10);
-        pop();
-        pop();
-      }
-
       this._fsFocusBtnBounds.push({ key, x, y, size });
       x += size + gap;
     }

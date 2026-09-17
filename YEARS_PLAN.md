@@ -179,12 +179,6 @@ min-gap on the real map; the mauri spend on a FAILED raid is intentional.
   so kea eating a patch down also lowers its draw. Tunables on `KEA_SPECIES` (`lureChoiceSec`,
   `lureBaseNutrition`, `lureCrowdWeight`). *Verified:* nearest when uncrowded, spreads to the far
   cache when the near one is crowded, holds on mild crowding, single-cache unchanged.
-- **Fullscreen highlight dialog shows the keystone SURVIVAL moa** (`mauri_UI.js`
-  `renderFocusSpeciesButtons`). Endless loss fires only when EVERY moa is gone, but the year's focus
-  rotates onto birds (kea/kākāpō) that never trigger it; so the dialog now ALWAYS appends the
-  keystone moa (upland + little bush = `focalSpecies`) as a warm-amber "!" survival group, de-duped
-  against any already shown as this year's focus. *Verified:* Year-1 tiles = kea + upland + bush; a
-  moa-focus year shows upland, kea, then only bush (no dup).
 - **Nest Raid is now a NON-MODAL side panel** (was a centred modal that greyed the play area).
   `Game._renderRaidPanel`/`_raidPanelClick` (selecting the tool TOGGLES it). The UI docks it in the
   right column: **fullscreen**; below the focus-species row, above the field guide (`mauri_UI.js`

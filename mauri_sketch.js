@@ -1401,32 +1401,28 @@ class Game {
       if (audioManager) audioManager.playLoss();
     }
 
-    // Free Play loss: the year's FOCUS MOA are no longer death-protected, so failing to keep
-    // them alive ends the run. Lost when every focus-moa species is extinct (0 alive, no egg
-    // of theirs still incubating). Held during an area transition (the new focus may not be
-    // present in the outgoing area yet) and skipped in years with no moa focus.
+    // Free Play loss: the FOCUS species (backbone bush/upland moa + this year's goal species,
+    // moa OR flighted bird) are not death-protected. Losing ANY of them to famine or eagles
+    // ends the run. A focus species counts as lost when it has 0 alive and no egg of its own
+    // still incubating. Held during an area transition (a newly-introduced focus species may
+    // not be placed until the pan settles).
     if (!_areaTransition && this.state === GAME_STATE.PLAYING &&
-        this.currentLevel && this.currentLevel.endless && typeof MOA_SPECIES !== 'undefined') {
-      const focusMoa = (this.freeplayFocus || []).filter(k => !!MOA_SPECIES[k]);
-      if (focusMoa.length) {
-        let alive = false;
-        for (const k of focusMoa) if (this.simulation.getSpeciesCount(k) > 0) { alive = true; break; }
-        if (!alive) {
-          let incubating = false;
-          const eggs = this.simulation.eggs;
-          for (let i = 0; i < eggs.length; i++) {
-            const e = eggs[i];
-            if (e.alive && !e.hatched && e.offspringType === 'moa' && focusMoa.includes(e.parentSpecies)) {
-              incubating = true; break;
-            }
-          }
-          if (!incubating) {
-            this.state = GAME_STATE.LOST;
-            const names = focusMoa.map(k => this._freeplaySpeciesName(k)).join(' & ');
-            this.gameOverReason = `The ${names} died out; the focus species is lost.`;
-            if (audioManager) audioManager.playLoss();
-          }
+        this.currentLevel && this.currentLevel.endless) {
+      let lostKey = null;
+      for (const k of this._freeplayFocusSet()) {
+        if (this.simulation.getSpeciesCount(k) > 0) continue;
+        let incubating = false;
+        const eggs = this.simulation.eggs;
+        for (let i = 0; i < eggs.length; i++) {
+          const e = eggs[i];
+          if (e.alive && !e.hatched && e.parentSpecies === k) { incubating = true; break; }
         }
+        if (!incubating) { lostKey = k; break; }
+      }
+      if (lostKey) {
+        this.state = GAME_STATE.LOST;
+        this.gameOverReason = `The ${this._freeplaySpeciesName(lostKey)} died out; a focus species is lost.`;
+        if (audioManager) audioManager.playLoss();
       }
     }
 
@@ -2022,17 +2018,15 @@ class Game {
       }
     }
 
-    // Floor watch: keep protected BACKGROUND BIRDS at their floor so the flighted cast doesn't
-    // silently vanish mid-year. MOA are deliberately NOT topped up — a moa species that starves
-    // out must stay out, so the ecosystem can actually collapse and the run can end (their floor
-    // is hunting-only now, see Moa.update / handleEagleCatch). Every ~1.5s, respawn any bird
-    // shortfall; only species already in dynamicFloors (present this year) are topped up.
+    // Floor watch: keep every protected (NON-FOCUS) species at its floor so the background
+    // cast never silently vanishes mid-year. dynamicFloors holds only non-focus species (focus
+    // species are unprotected and may go extinct — a loss), so this quietly respawns a hunted
+    // or thinned non-focus species back to its floor. Every ~1.5s; nothing is conjured anew.
     this._floorWatchTimer = (this._floorWatchTimer || 0) - 1;
     if (this._floorWatchTimer <= 0) {
       this._floorWatchTimer = 90;
       const floors = sim.dynamicFloors;
       if (floors) for (const k in floors) {
-        if (typeof MOA_SPECIES !== 'undefined' && MOA_SPECIES[k]) continue;   // moa can go extinct
         const short = floors[k] - sim.getSpeciesCount(k);
         if (short > 0) this._spawnFreeplaySpecies(k, short);
       }
@@ -2154,6 +2148,18 @@ class Game {
     }
   }
 
+  // The FOCUS species for the current year: the backbone moa (mechanics.focalSpecies: bush +
+  // upland) plus this year's goal species (freeplayFocus, which already folds in the year's
+  // focus birds and moaFocus). These are the species the player must keep alive — they are
+  // excluded from the protection floor, and losing any of them ends the run.
+  _freeplayFocusSet() {
+    const M = (typeof LEVEL_MECHANICS !== 'undefined') ? LEVEL_MECHANICS : {};
+    const set = new Set();
+    for (const k of (M.focalSpecies || [])) if (this._speciesUsable(k)) set.add(k);
+    for (const k of (this.freeplayFocus || [])) if (this._speciesUsable(k)) set.add(k);
+    return set;
+  }
+
   _beginFreeplayYear() {
     const sim = this.simulation;
     const M = (typeof LEVEL_MECHANICS !== 'undefined') ? LEVEL_MECHANICS : {};
@@ -2250,20 +2256,19 @@ class Game {
       sim._forestLegacyTarget = Math.round(forestBest * legacyFrac);
     }
 
-    // 5) Protect the background species present this year from a total wipe (dynamic floor).
-    //    Each holds at the floor, so a thinned species never vanishes for the rest of the year;
-    //    any dip below it is topped back up by the per-frame floor watch in _checkFreeplayYear.
-    //    Only species the area actually holds this year are floored (start count > 0), so a
-    //    bird absent from the cast isn't conjured into existence.
-    //    EXCEPTION: this year's FOCUS MOA are NOT floored. They are the species you must keep
-    //    alive; letting them be hunted/starved to extinction is how a Free Play run ends (see
-    //    the focus-moa loss check in update()). Focus BIRDS keep their protection.
-    const isMoaKey = (k) => (typeof MOA_SPECIES !== 'undefined' && !!MOA_SPECIES[k]);
-    const focusMoa = new Set((this.freeplayFocus || []).filter(isMoaKey));
+    // 5) Protect the NON-FOCUS background species present this year from any wipe (dynamic
+    //    floor). Each holds at the floor: it doesn't starve (Moa.update) and can't be hunted
+    //    below it (handleEagleCatch), and the per-frame floor watch in _checkFreeplayYear
+    //    respawns any that are thinned. Only species the area holds this year are floored
+    //    (start count > 0), so an absent bird isn't conjured into existence.
+    //    The FOCUS species are NOT floored: the backbone moa (focalSpecies: bush + upland) plus
+    //    this year's goal species (freeplayFocus). They are what you must keep alive — a focus
+    //    species that starves or is hunted to extinction ends the run (see the loss check in
+    //    update()).
+    const focusSet = this._freeplayFocusSet();
     const floors = {};
-    for (const k in yearPops.moa)    if (yearPops.moa[k] > 0 && !focusMoa.has(k)) floors[k] = protectFloor;
-    for (const k in yearPops.others) if (yearPops.others[k] > 0)                  floors[k] = protectFloor;
-    for (const k of this.freeplayFocus) if (!focusMoa.has(k)) floors[k] = protectFloor;   // focus birds protected; focus moa are mortal
+    for (const k in yearPops.moa)    if (yearPops.moa[k] > 0 && !focusSet.has(k)) floors[k] = protectFloor;
+    for (const k in yearPops.others) if (yearPops.others[k] > 0 && !focusSet.has(k)) floors[k] = protectFloor;
     sim.dynamicFloors = floors;
 
     // 6) Highlight the focus species in the UI.

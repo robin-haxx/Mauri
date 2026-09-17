@@ -370,11 +370,14 @@ class Moa extends Boid {
     this.updateSecurity(eagles, dt);
     
     if (this.hunger >= this.maxHunger) {
-      // Starvation is always lethal. The protection floor guards a species from being HUNTED
-      // to extinction (see handleEagleCatch), but famine can still take any moa to zero — that
-      // is how a Free Play run is lost when forage runs out. (A protected non-focus species
-      // dies only to starvation, never to eagles; focus moa die to either.)
-      this.alive = false;
+      // A protected (non-focus) species holds at its floor and does not starve out. FOCUS
+      // species (the backbone bush/upland moa + the year's goal species) are NOT floored, so
+      // they die of hunger — losing a focus species to famine or eagles ends the run.
+      if (simulation.isSpeciesProtected && simulation.isSpeciesProtected(this.speciesKey)) {
+        this.hunger = this.maxHunger * 0.9;
+      } else {
+        this.alive = false;
+      }
     }
     
     const terrainMult = this.getTerrainSpeedMultiplier();

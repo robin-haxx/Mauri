@@ -30,6 +30,7 @@ class Simulation {
       anySpeciesExtinct: false,
       eagleBirths: 0,
       eagleDeaths: 0,
+      eagleStrikes: 0,      // moa successfully caught by eagles (run total; see handleEagleCatch)
       nestingSitesMade: 0   // player-grown moa nesting sites (running total; see moaNestingWatch)
 
     };
@@ -831,8 +832,9 @@ class Simulation {
     }
     moa.alive = false;
     if (audioManager) audioManager.playEagleCatch();
-    
+
     eagle.kills++;
+    if (this.stats) this.stats.eagleStrikes = (this.stats.eagleStrikes || 0) + 1;
     eagle.hunger = Math.max(0, eagle.hunger - 90);
     eagle.vel.mult(0.1);
     eagle.hunting = false;

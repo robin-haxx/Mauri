@@ -505,13 +505,21 @@ class PlaceableObject {
     const _plantPlaceable = this.type === 'kawakawa' || this.type === 'harakeke' || this.type === 'lancewood' || this.type === 'speargrass';
     const _showRing = !_plantPlaceable || (typeof CONFIG !== 'undefined' && CONFIG.debugMode);
 
+    // Ring color — reused for the icon border so both read as one object.
+    // Base is the placeable's own identity color, lifted toward white so it stays
+    // visible on terrain (fern shelter reads green, not white). Seasonal state still
+    // tints it: green when boosted, warm when suppressed.
+    let rc;
+    if (this.seasonalMultiplier > 1.2) rc = [100, 255, 150];
+    else if (this.seasonalMultiplier < 0.7) rc = [255, 150, 100];
+    else {
+      const _c = this.def._parsedColor;
+      const _lift = (v) => Math.round(v + (255 - v) * 0.45);
+      rc = [_lift(red(_c)), _lift(green(_c)), _lift(blue(_c))];
+    }
+
     if (_showRing) {
       // Steady ring at the true effect radius; the glow (not the line) breathes.
-      // Seasonal tint: green when boosted, warm when suppressed, else neutral.
-      let rc;
-      if (this.seasonalMultiplier > 1.2) rc = [100, 255, 150];
-      else if (this.seasonalMultiplier < 0.7) rc = [255, 150, 100];
-      else rc = [235, 240, 245];
       // Berry Cache: the rendered ring is the larger coverage radius (in berry-mauve), not
       // the tight cultivation radius. The wide kea-draw radius stays invisible.
       const _cover = this.def.coverRadius;
@@ -543,8 +551,8 @@ class PlaceableObject {
       fill(red(col), green(col), blue(col), bgAlpha);
       ellipse(0, 0, 20, 20);
       
-      // Border
-      stroke(255, 255, 255, 150 * lifeRatio);
+      // Border — a soft, low-opacity line in the ring color rather than a hard white outline.
+      stroke(rc[0], rc[1], rc[2], 60 * lifeRatio);
       strokeWeight(2);
       noFill();
       ellipse(0, 0, 20, 20);

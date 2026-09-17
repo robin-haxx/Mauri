@@ -800,7 +800,7 @@ class HaastsEagle extends Boid {
       // Laying is costly — the parent must hunt again soon.
       this.hunger = Math.min(this.maxHunger, this.hunger + 25);
       if (simulation.game) {
-        simulation.game.addNotification('A Pouākai pair nests — an egg is laid.', 'info');
+        simulation.game.addNotification('A Pouākai pair nests. +egg', 'info');
       }
     }
   }

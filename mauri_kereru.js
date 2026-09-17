@@ -499,7 +499,7 @@ class Kereru extends Boid {
     egg.parentSpecies = this.speciesKey;
     this._eggCooldown = this._eggCooldownFrames * (mast ? 0.45 : 1);
     this.crop = Math.max(0, this.crop - 1);                 // laying spends a fruit's energy
-    if (sim.game) sim.game.addNotification(`A ${this._label} nests — an egg is laid.`, 'info');
+    if (sim.game) sim.game.addNotification(`A ${this._label} nests. +egg`, 'info');
   }
 
   _hasMateNear(sim) {

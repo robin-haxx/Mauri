@@ -1058,9 +1058,9 @@ class Game {
   // on its own frame; the label is shown under the bar as it runs.
   _buildLoadingPlan() {
     const plan = this.terrain.generateSteps();
-    plan.push({ label: 'Setting up the world', fn: () => this._initCreateSim() });
-    plan.push({ label: 'Seeding the ecosystem', fn: () => this.simulation.init() });
-    plan.push({ label: 'Bringing it to life',   fn: () => this._initFinalize() });
+    plan.push({ label: 'Laying the spatial grids',        fn: () => this._initCreateSim() });
+    plan.push({ label: 'Sowing plants and founding the flock', fn: () => this.simulation.init() });
+    plan.push({ label: 'Waking the ecosystem',            fn: () => this._initFinalize() });
     return plan;
   }
 
@@ -1137,6 +1137,7 @@ class Game {
     this._freeplayYear = -1;
     this.freeplayFocus = [];
     this._yearsSurvived = 0;
+    this._resetRunStats();            // Free Play stats-export accumulator (see exportFreeplayStats)
     this._yearTransition = null;      // clear any in-flight area transition on (re)load
     this._areaMoaBest = {};           // per-area species memory for the year-start reset (fresh run)
     this._areaForest = {};            // per-area cultivated-forest memory (forest legacy)
@@ -1427,6 +1428,14 @@ class Game {
     
     this.mauri.updateFloatingTexts(dt);
     this.updateNotifications(dt);
+
+    // Free Play stats: capture the new season's baseline AFTER this frame's sim update and
+    // any year-boundary world-grid pan have settled, so per-season deltas start from the
+    // area's real opening state (see onSeasonChange / _captureSeasonBaseline).
+    if (this.currentLevel && this.currentLevel.endless && this._seasonSnapPending) {
+      this._captureSeasonBaseline();
+      this._seasonSnapPending = false;
+    }
   }
 
   updateNotifications(dt = 1) {
@@ -1454,6 +1463,9 @@ class Game {
       totalEarned: this.mauri.totalEarned,
       playTime: this.playTime,
       goalsCompleted: this._goalsCompleted || 0,
+      // Free Play's scoreFormula rewards years survived; without this it always read
+      // undefined and the score collapsed to moaCount×5.
+      cyclesSurvived: this._yearsSurvived || 0,
       level: this.currentLevel
     };
   }
@@ -1707,21 +1719,244 @@ class Game {
     }
     if (n === 0) return { avgPop: 0, balance: 0, rawBalance: 0, mauriPerSec: 0, aboveFloor: 0 };
     const avgPop = sum / n;
-    // Worst shortfall below the top species, with focus species weighted fW×.
-    let imbalance = 0, rawImbalance = 0;
+    // Worst per-species balance ratio (c / top), with a FOCUS species' shortfall biting
+    // fW× harder. The focus weight is applied as an EXPONENT on the ratio (ratio^w) rather
+    // than by clamping a linear w×shortfall: every counted species has ≥ 1 member (the
+    // Math.max(1,…) above), so ratio ∈ (0,1] and ratio^w ∈ (0,1] — always strictly > 0.
+    // Inequality therefore shrinks the coefficient (focus inequality bites w× harder), but
+    // a lopsided species — even the focus one — can never zero out all passive income.
+    let worstBalance = 1, rawImbalance = 0;
     for (const [k, c] of items) {
-      const shortfall = mx > 0 ? 1 - c / mx : 0;      // 0 = at the top, →1 = far below it
-      if (shortfall > rawImbalance) rawImbalance = shortfall;
+      const ratio = mx > 0 ? c / mx : 1;              // (0,1]; 1 = at the top, →0 = far below
+      if (1 - ratio > rawImbalance) rawImbalance = 1 - ratio;
       const w = focus.includes(k) ? fW : 1;
-      const s = Math.min(1, w * shortfall);
-      if (s > imbalance) imbalance = s;
+      const b = Math.pow(ratio, w);                   // focus inequality bites w× harder
+      if (b < worstBalance) worstBalance = b;
     }
     const rawBalance = 1 - rawImbalance;              // == min/max (unweighted), for reference
     // Per-year ramp (imbalanceHarshness) × an optional flat exponent (inequalityWeight).
     const harsh = (1 + (cfg.imbalanceHarshness ?? 0) * (this.cycle || 0)) * (cfg.inequalityWeight ?? 1);
-    const balance = Math.pow(1 - imbalance, harsh);
+    const balance = Math.pow(worstBalance, harsh);
     const mauriPerSec = avgPop * balance * (cfg.scale ?? 1);
     return { avgPop, balance, rawBalance, mauriPerSec, aboveFloor: n };
+  }
+
+  // ============================================================================
+  // FREE PLAY STATS EXPORT (see exportFreeplayStats / the 'X' key + game-over button)
+  // A run accumulator: run-total placeable usage + a per-year record, each holding this
+  // year's focus, goal tally, climate, palette usage, and a per-season snapshot of the
+  // Mauri earned, average-population change, species-equality change, and focal-population
+  // change. Season snapshots are baselined at each season's start (deferred to after any
+  // year-boundary pan) and closed at the next season change.
+  // ============================================================================
+  _resetRunStats() {
+    this._runStats = { placeablesTotal: {}, years: [] };
+    this._curYearRec = null;
+    this._seasonSnap = null;
+    this._seasonSnapPending = true;   // capture the opening season's baseline on the first frame
+  }
+
+  _recordPlaceableUse(type) {
+    if (!this._runStats || !type) return;
+    this._runStats.placeablesTotal[type] = (this._runStats.placeablesTotal[type] || 0) + 1;
+    if (this._curYearRec) this._curYearRec.placeables[type] = (this._curYearRec.placeables[type] || 0) + 1;
+  }
+
+  // Open this year's record. Also finalizes the OUTGOING year's mast-goal outcome (the
+  // _mastGoalReached latch holds this loop's result until the next mast-goal year resets it).
+  _beginYearStatRecord(goals, entry) {
+    if (!this._runStats) return;
+    const prev = this._curYearRec;
+    if (prev && prev.mastGoalYear && prev.mastGoalResult == null) {
+      prev.mastGoalResult = this._mastGoalReached ? 'reached' : 'missed';
+    }
+    const stage = (typeof ClimateDrift !== 'undefined' && this._climateCfg)
+      ? ClimateDrift.stageName(this.coldIndex) : '';
+    const rec = {
+      year: this.cycle,
+      focus: [...(this.freeplayFocus || [])],
+      focusNames: (this.freeplayFocus || []).map(k => this._freeplaySpeciesName(k)),
+      goalNames: (goals || []).map(g => g.name),
+      goalsOffered: (goals || []).length,
+      goalsCompleted: 0,
+      goalsMet: [],
+      coldIndex: +(this.coldIndex || 0).toFixed(3),
+      coldStage: stage,
+      mastYear: !!this._isMastYear(),
+      mastGoalYear: !!(entry && entry.mastGoalYear),
+      mastGoalResult: null,
+      placeables: {},
+      seasons: {}
+    };
+    this._runStats.years[this.cycle] = rec;
+    this._curYearRec = rec;
+  }
+
+  // Snapshot the current season's opening state, to delta against at the next season change.
+  _captureSeasonBaseline() {
+    if (!this.simulation || !this.mauri) return;
+    const es = this.ecosystemStats();
+    const focus = {};
+    for (const k of (this.freeplayFocus || [])) focus[k] = this.simulation.getSpeciesCount(k);
+    this._seasonSnap = {
+      seasonKey: this.seasonManager ? this.seasonManager.currentKey : 'summer',
+      year: this._freeplayYear,
+      mauri: this.mauri.totalEarned,
+      avgPop: es.avgPop,
+      balance: es.balance,
+      focus
+    };
+  }
+
+  // Close the in-progress season: record its deltas into that season's slot of its year.
+  _closeSeasonSnapshot() {
+    const snap = this._seasonSnap;
+    if (!snap || !this._runStats || !this.simulation || !this.mauri) return;
+    const rec = this._runStats.years[snap.year];
+    if (!rec) return;
+    const es = this.ecosystemStats();
+    const focusDelta = {};
+    for (const k in snap.focus) focusDelta[k] = this.simulation.getSpeciesCount(k) - snap.focus[k];
+    rec.seasons[snap.seasonKey] = {
+      mauri: this.mauri.totalEarned - snap.mauri,
+      avgPop: es.avgPop - snap.avgPop,
+      equality: es.balance - snap.balance,
+      focus: focusDelta
+    };
+  }
+
+  // "+3", "-2", "+0.05" — signed, fixed decimals (a negative value already carries its sign).
+  _sgnNum(v, dp) {
+    const n = (typeof v === 'number' && isFinite(v)) ? v : 0;
+    return (n >= 0 ? '+' : '') + n.toFixed(dp);
+  }
+
+  _placeableName(type) {
+    return (typeof PLACEABLES !== 'undefined' && PLACEABLES[type] && PLACEABLES[type].name) || type;
+  }
+
+  _placeableBreakdown(map) {
+    const parts = [];
+    for (const k in map) if (map[k] > 0) parts.push(`${this._placeableName(k)} ${map[k]}`);
+    return parts.length ? ` (${parts.join(', ')})` : '';
+  }
+
+  _placeableTotal(map) {
+    let t = 0; for (const k in map) t += map[k]; return t;
+  }
+
+  // Assemble the run into a plain data object (also the .json payload).
+  _buildFreeplayStatsData() {
+    const sim = this.simulation;
+    const moaKeys = (this.activeSpecies && this.activeSpecies.moa) || [];
+    const bbs = (sim && sim.stats && sim.stats.birthsBySpecies) || {};
+    const moaHatchedBySpecies = {};
+    let moaHatched = 0;
+    for (const k of moaKeys) { const c = bbs[k] || 0; moaHatchedBySpecies[k] = c; moaHatched += c; }
+
+    const rs = this._runStats || { placeablesTotal: {}, years: [] };
+    const years = rs.years.filter(Boolean).map(rec => {
+      const missed = (rec.goalNames || []).filter(n => !(rec.goalsMet || []).includes(n));
+      return Object.assign({}, rec, { goalsMissed: missed });
+    });
+
+    return {
+      game: 'Avian Age: Mauri',
+      mode: 'freeplay',
+      levelId: this.currentLevel ? this.currentLevel.id : null,
+      levelName: this.currentLevel ? this.currentLevel.name : null,
+      exportedAt: new Date().toISOString(),
+      ended: (this.state === GAME_STATE.LOST) ? 'extinction' : 'in-progress',
+      endReason: this.gameOverReason || null,
+      summary: {
+        yearsSurvived: this._yearsSurvived || 0,
+        currentYear: (this.cycle || 0) + 1,
+        finalScore: computeLevelScore(this.currentLevel, this._scoreContext()),
+        goalsCompleted: this._goalsCompleted || 0,
+        goalsOffered: years.reduce((n, y) => n + (y.goalsOffered || 0), 0),
+        moaHatched,
+        moaHatchedBySpecies,
+        eagleStrikes: (sim && sim.stats && sim.stats.eagleStrikes) || 0,
+        placeablesUsedTotal: this._placeableTotal(rs.placeablesTotal),
+        placeablesUsed: rs.placeablesTotal,
+        finalMoaPopulation: this._cachedMoaCount || 0,
+        totalMauriEarned: Math.round(this.mauri ? this.mauri.totalEarned : 0),
+        playTimeSeconds: Math.round((this.playTime || 0) / 60),
+        finalColdIndex: +(this.coldIndex || 0).toFixed(3)
+      },
+      years
+    };
+  }
+
+  // Render the data object into the human-readable .txt report (array of lines).
+  _buildFreeplayStatsText(data) {
+    const s = data.summary;
+    const L = [];
+    L.push('AVIAN AGE: MAURI — Free Play stats');
+    if (data.levelName) L.push(data.levelName);
+    L.push(`Exported ${data.exportedAt}`);
+    if (data.ended === 'extinction') L.push(`Ended: extinction${data.endReason ? ' — ' + data.endReason : ''}`);
+    L.push('');
+    L.push(`Years survived: ${s.yearsSurvived}`);
+    L.push(`Final score: ${s.finalScore}`);
+    L.push(`Goals completed: ${s.goalsCompleted}/${s.goalsOffered}`);
+    L.push(`Moa hatched: ${s.moaHatched}`);
+    L.push(`Eagle strikes: ${s.eagleStrikes}`);
+    L.push(`Placeables used: ${s.placeablesUsedTotal}${this._placeableBreakdown(s.placeablesUsed)}`);
+    L.push('');
+
+    const order = ['summer', 'autumn', 'winter', 'spring'];
+    const cap = (w) => w.charAt(0).toUpperCase() + w.slice(1);
+    for (const y of data.years) {
+      L.push(`Year ${y.year + 1} (Focus: ${(y.focusNames || []).join(', ')}):`);
+      if (y.coldStage) L.push(`  Deepening: ${y.coldStage} (cold index ${(+y.coldIndex).toFixed(2)})`);
+      if (y.mastYear) L.push('  Mast year: the rimu bloom');
+      if (y.mastGoalYear) L.push(`  Mast goal: ${y.mastGoalResult || 'pending'}`);
+      L.push(`  Goals completed: ${y.goalsCompleted}/${y.goalsOffered}`);
+      if ((y.goalsMet || []).length) L.push(`    met: ${y.goalsMet.join('; ')}`);
+      if ((y.goalsMissed || []).length) L.push(`    missed: ${y.goalsMissed.join('; ')}`);
+      L.push(`  Placeables used: ${this._placeableTotal(y.placeables)}${this._placeableBreakdown(y.placeables)}`);
+      for (const sk of order) {
+        const rec = y.seasons[sk];
+        if (!rec) continue;
+        let line = `  ${cap(sk)}: Mauri ${this._sgnNum(rec.mauri, 0)}` +
+                   `, average population ${this._sgnNum(rec.avgPop, 1)}` +
+                   `, species equality ${this._sgnNum(rec.equality, 2)}`;
+        const fparts = [];
+        for (const fk in rec.focus) fparts.push(`${this._freeplaySpeciesName(fk)} ${this._sgnNum(rec.focus[fk], 0)}`);
+        if (fparts.length) line += `, ${fparts.join(', ')}`;
+        L.push(line);
+      }
+      L.push('');
+    }
+    return L;
+  }
+
+  // Export the current Free Play run as a .txt (your format) + a .json (for aggregation).
+  // Triggered by the 'X' key or the game-over "Export run stats" button.
+  exportFreeplayStats() {
+    if (!(this.currentLevel && this.currentLevel.endless) || !this._runStats ||
+        !this.simulation || !this.mauri) {
+      this.addNotification('Stats export is only available during a Free Play run.', 'error');
+      return;
+    }
+    const data = this._buildFreeplayStatsData();
+    const lines = this._buildFreeplayStatsText(data);
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-').replace('T', '_').slice(0, 19);
+    const base = `mauri_freeplay_${data.summary.yearsSurvived}y_${stamp}`;
+    try {
+      if (typeof saveStrings === 'function') saveStrings(lines, base, 'txt');
+      // Stagger the second download so the browser doesn't drop it as a duplicate gesture.
+      setTimeout(() => {
+        try { if (typeof saveJSON === 'function') saveJSON(data, base); }
+        catch (e) { console.error('Stats JSON export failed:', e); }
+      }, 220);
+      this.addNotification('Exported run stats (.txt + .json) to your downloads.', 'success');
+    } catch (e) {
+      console.error('Stats export failed:', e);
+      console.log(lines.join('\n'));   // fallback: at least surface it
+      this.addNotification('Export failed — stats logged to the console.', 'error');
+    }
   }
 
   _checkFreeplayYear() {
@@ -1741,6 +1976,7 @@ class Game {
       const gained = this.mauri.totalEarned - (this._mastGoalStartEarned || 0);
       if (gained >= (this._mastGoalTarget || Infinity)) {
         this._mastGoalReached = true;
+        if (this._curYearRec && this._curYearRec.mastGoalYear) this._curYearRec.mastGoalResult = 'reached';
         const rew = (this.currentLevel.mastGoal && this.currentLevel.mastGoal.reward) || 0;
         if (rew) this.mauri.earn(rew, halfWidth, 80, 'goal');
         this.addNotification(`Mast goal reached! The rimu will mast early — the kākāpō breed downslope next year.${rew ? ' +' + rew + ' mauri' : ''}`, 'success');
@@ -1768,6 +2004,10 @@ class Game {
       if (!goal.achieved && goal.condition && goal.condition()) {
         goal.achieved = true;
         this._goalsCompleted = (this._goalsCompleted || 0) + 1;
+        if (this._curYearRec) {   // stats export: tally this year's met goals
+          this._curYearRec.goalsCompleted++;
+          this._curYearRec.goalsMet.push(goal.name);
+        }
         if (goal.reward) this.mauri.earn(goal.reward, halfWidth, 80, 'goal');
         this.addNotification(`Recovered: ${goal.name}!${goal.reward ? ' +' + goal.reward + ' mauri' : ''}`, 'success');
       }
@@ -2020,6 +2260,10 @@ class Game {
       });
     }
     this.goals = goals;
+
+    // 8b) Stats export: open this year's record (focus, goals offered, climate, palette
+    //     usage + per-season snapshots fill in as the year plays). See exportFreeplayStats.
+    this._beginYearStatRecord(goals, entry);
 
     // 9) Announce the year: the schedule's own note if it has one, else the generic
     //    "protect X & Y".
@@ -2517,6 +2761,14 @@ class Game {
     const season = this.seasonManager.current;
     const seasonKey = this.seasonManager.currentKey;
 
+    // Free Play stats: close out the season that just ended (record its Mauri / avg-pop /
+    // equality / focal-population deltas against the baseline), then re-arm the baseline so
+    // the incoming season starts fresh once this frame's pan settles (see update()).
+    if (this.currentLevel && this.currentLevel.endless) {
+      this._closeSeasonSnapshot();
+      this._seasonSnapPending = true;
+    }
+
     this.addNotification(`Season changed to ${season.name} ${season.icon}`, 'info');
     if (audioManager) audioManager.playSeasonChange(seasonKey);
 
@@ -2777,6 +3029,7 @@ class Game {
     
     this.simulation.addPlaceable(x, y, this.selectedPlaceable);
     BENCHMARK.recordPlacement(this.selectedPlaceable);
+    this._recordPlaceableUse(this.selectedPlaceable);   // stats export tally
     if (this.selectedPlaceable === 'Storm') {
       this._stormCooldownDuration = 600;   // 10s @60fps (UI reads this for the cooldown sweep)
       this._stormCooldownUntil = this.playTime + this._stormCooldownDuration;
@@ -2824,6 +3077,7 @@ class Game {
 
     this._globalCooldownUntil[type] = this.playTime + (def.cooldown || 3600);
     if (typeof BENCHMARK !== 'undefined') BENCHMARK.recordPlacement(type);
+    this._recordPlaceableUse(type);   // stats export tally
     if (audioManager) audioManager.playPlantRustle();
     if (!keyIsDown(SHIFT)) this.selectedPlaceable = null;
     return true;
@@ -3130,6 +3384,7 @@ class Game {
         strokeColor: [100, 180, 120]
       });
     } else if (this.state === GAME_STATE.LOST) {
+      const _endless = !!(this.currentLevel && this.currentLevel.endless);
       this._renderOverlay(80, 30, 30, 150, {
         title: "EXTINCTION",
         titleColor: [255, 180, 180],
@@ -3140,10 +3395,13 @@ class Game {
           { text: `Moa hatched: ${this.simulation.stats.births}`, color: [180, 120, 120], size: 14 },
           { text: `Total mauri earned: ${this.mauri.totalEarned | 0}`, color: [180, 120, 120], size: 14 },
           { text: "", color: [200, 240, 200], size: 18 },
-          { text: "Press R to return to menu", color: [220, 180, 180], size: 18 }
+          { text: _endless ? "Press R for menu  ·  X to export stats" : "Press R to return to menu",
+            color: [220, 180, 180], size: 18 }
         ],
         boxColor: [60, 35, 35, 250],
-        strokeColor: [150, 100, 100]
+        strokeColor: [150, 100, 100],
+        // Free Play: a one-click export of the whole run's season-by-season stats.
+        button: _endless ? { label: "Export run stats", action: () => this.exportFreeplayStats() } : null
       });
     }
 
@@ -3289,8 +3547,8 @@ class Game {
     noStroke();
     rect(0, cy, cw, ch);
     
-    // Box
-    const boxH = 60 + opts.lines.length * 40;
+    // Box (reserve extra height for the optional button so it sits inside the panel)
+    const boxH = 60 + opts.lines.length * 40 + (opts.button ? 66 : 0);
     const boxW = Math.max(300, 400);
     
     push();
@@ -4193,6 +4451,13 @@ class Game {
     }
 
     if (key === 'd' || key === 'D') { CONFIG.debugMode = !CONFIG.debugMode; return; }
+
+    // Free Play: export this run's season-by-season stats (.txt + .json). Works during
+    // play, while paused, and on the game-over screen.
+    if ((key === 'x' || key === 'X') && this.currentLevel && this.currentLevel.endless) {
+      this.exportFreeplayStats();
+      return;
+    }
 
     // Debug lenses: L toggles the overlay + its clickable legend (see mauri_lens.js).
     if (key === 'l' || key === 'L') {

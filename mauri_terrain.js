@@ -591,12 +591,12 @@ class TerrainGenerator {
   // screen's sub-caption.
   generateSteps() {
     const steps = [
-      { label: 'Shaping the land', fn: () => { this._disposeReliefBuffers(); this._genHeightMap(); } },
-      { label: 'Mapping the habitats', fn: () => this._genBiomeMap() },
-      { label: 'Detailing the terrain', fn: () => { this._buildRenderMaps(); this._initSnowColors(); this._computeBaseCellColors(); } }
+      { label: 'Raising the land from fractal noise', fn: () => { this._disposeReliefBuffers(); this._genHeightMap(); } },
+      { label: 'Sorting elevation into habitat bands', fn: () => this._genBiomeMap() },
+      { label: 'Painting the ground and snow line', fn: () => { this._buildRenderMaps(); this._initSnowColors(); this._computeBaseCellColors(); } }
     ];
-    const seasonLabels = { summer: 'Warming the summer hills', autumn: 'Turning the autumn leaves',
-                           winter: 'Drawing down the winter snow', spring: 'Greening the spring valleys' };
+    const seasonLabels = { summer: 'Baking the summer terrain', autumn: 'Baking the autumn terrain',
+                           winter: 'Baking the winter snowpack', spring: 'Baking the spring terrain' };
     for (const season of ['summer', 'autumn', 'winter', 'spring']) {
       steps.push({ label: seasonLabels[season], fn: () => { this.seasonBuffers[season] = this._bakeSeasonBuffer(season); } });
     }

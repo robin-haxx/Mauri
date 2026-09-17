@@ -49,7 +49,7 @@ const MOA_SPECIES = {
     seasonalModifiers: {
       summer: { hungerRate: 1.1, speed: 1.0 },
       autumn: { hungerRate: 1.0, speed: 1.0 },
-      winter: { hungerRate: 0.75, speed: 0.9 }, // strongly cold-adapted
+      winter: { hungerRate: 0.8, speed: 0.9 }, // strongly cold-adapted
       spring: { hungerRate: 1.0, speed: 1.1 }
     }
   },
@@ -359,7 +359,7 @@ const MOA_SPECIES = {
     maxForce: 0.028,
     
     maxHunger: 70,        // Smallest needs least food
-    baseHungerRate: 0.03,
+    baseHungerRate: 0.025,
     hungerThreshold: 28,
     criticalHunger: 58,
     

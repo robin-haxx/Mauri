@@ -333,8 +333,15 @@ class TerrainGenerator {
     coastNoise += noise(warpedNy * 1.5 + this.seed, this.seed * 0.5) * 0.4;
     coastNoise += noise(warpedNy * 3 + this.seed * 1.5, warpedNx * 0.5) * 0.2;
     coastNoise += noise(x * 0.02 + this.seed * 2, y * 0.02 + this.seed * 2) * 0.1;
-    
-    const coastlinePosition = 0.02 + coastNoise * 0.4;
+
+    // Coastline placement (how far east the sea reaches). Tunable per world grid so a
+    // shore-heavy grid can pull the sea back off the western windows; defaults preserve the
+    // original coast for every other level. A smaller range also lifts the near-shore land a
+    // little (landProgress rises), so the lowland forest reaches a touch further downslope.
+    const wg = this._worldGridCfg || {};
+    const coastBase = (wg.coastBase != null) ? wg.coastBase : 0.02;
+    const coastRange = (wg.coastRange != null) ? wg.coastRange : 0.4;
+    const coastlinePosition = coastBase + coastNoise * coastRange;
     
     let falloff;
     if (warpedNx < coastlinePosition) {

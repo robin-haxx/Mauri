@@ -2020,31 +2020,39 @@ class Game {
       }
     }
 
-    // Floor watch: keep every protected (NON-FOCUS) species at its floor so the background
-    // cast never silently vanishes mid-year. dynamicFloors holds only non-focus species (focus
-    // species are unprotected and may go extinct — a loss), so this quietly respawns a hunted
-    // or thinned non-focus species back to its floor. Every ~1.5s; nothing is conjured anew.
-    this._floorWatchTimer = (this._floorWatchTimer || 0) - 1;
-    if (this._floorWatchTimer <= 0) {
-      this._floorWatchTimer = 90;
-      const floors = sim.dynamicFloors;
-      if (floors) for (const k in floors) {
-        const short = floors[k] - sim.getSpeciesCount(k);
-        if (short > 0) this._spawnFreeplaySpecies(k, short);
-      }
-    }
-
-    // Soft growth goals: reward when met. There is deliberately NO win path.
-    for (const goal of this.goals) {
-      if (!goal.achieved && goal.condition && goal.condition()) {
-        goal.achieved = true;
-        this._goalsCompleted = (this._goalsCompleted || 0) + 1;
-        if (this._curYearRec) {   // stats export: tally this year's met goals
-          this._curYearRec.goalsCompleted++;
-          this._curYearRec.goalsMet.push(goal.name);
+    // Population-dependent checks are HELD while a year's area transition runs: the new area's
+    // cast isn't spawned until the pan settles (spawnAreaEntities), so until then
+    // getSpeciesCount() still returns LAST year's carried population. Evaluating goals here
+    // would spuriously complete a focus goal against last year's numbers (e.g. the kākā goal
+    // ticking off at year start because last year's flock is still counted). The loss checks in
+    // update() are held by the same _yearTransition flag.
+    if (!this._yearTransition) {
+      // Floor watch: keep every protected (NON-FOCUS) species at its floor so the background
+      // cast never silently vanishes mid-year. dynamicFloors holds only non-focus species (focus
+      // species are unprotected and may go extinct — a loss), so this quietly respawns a hunted
+      // or thinned non-focus species back to its floor. Every ~1.5s; nothing is conjured anew.
+      this._floorWatchTimer = (this._floorWatchTimer || 0) - 1;
+      if (this._floorWatchTimer <= 0) {
+        this._floorWatchTimer = 90;
+        const floors = sim.dynamicFloors;
+        if (floors) for (const k in floors) {
+          const short = floors[k] - sim.getSpeciesCount(k);
+          if (short > 0) this._spawnFreeplaySpecies(k, short);
         }
-        if (goal.reward) this.mauri.earn(goal.reward, halfWidth, 80, 'goal');
-        this.addNotification(`Recovered: ${goal.name}!${goal.reward ? ' +' + goal.reward + ' mauri' : ''}`, 'success');
+      }
+
+      // Soft growth goals: reward when met. There is deliberately NO win path.
+      for (const goal of this.goals) {
+        if (!goal.achieved && goal.condition && goal.condition()) {
+          goal.achieved = true;
+          this._goalsCompleted = (this._goalsCompleted || 0) + 1;
+          if (this._curYearRec) {   // stats export: tally this year's met goals
+            this._curYearRec.goalsCompleted++;
+            this._curYearRec.goalsMet.push(goal.name);
+          }
+          if (goal.reward) this.mauri.earn(goal.reward, halfWidth, 80, 'goal');
+          this.addNotification(`Recovered: ${goal.name}!${goal.reward ? ' +' + goal.reward + ' mauri' : ''}`, 'success');
+        }
       }
     }
 

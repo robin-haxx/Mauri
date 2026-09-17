@@ -445,7 +445,7 @@ const KEA_SPECIES = {
 
   // Survival; hardy in the high country; a deep glacial still thins the flock.
   maxHunger:        100,
-  hungerRatePerSec: 1.1,
+  hungerRatePerSec: 0.9,
   feedRelief:       68,
   starveSec:        20,
 

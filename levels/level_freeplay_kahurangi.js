@@ -38,7 +38,10 @@ const LEVEL_FREEPLAY_KAHURANGI = {
     openLandScale: 0.58,     // opening: scale land elevation (lower = gentler alps, broader forest)
     glacialPerLoop: 0.22,    // each 4-year loop releases the scale toward full height…
     glacialCap: 0.6,         // …up to here
-    glacialAdvance: 0        // year-1 advance (the mild opening)
+    glacialAdvance: 0,       // year-1 advance (the mild opening)
+    // Pull the sea back off the western (shore) windows (years 2 & 3): a smaller coast range
+    // means less ocean on the left and a touch more lowland (so the podo forest reaches lower).
+    coastBase: 0.015, coastRange: 0.26
   },
 
   // Glacial biome bands (identical to Level 2).
@@ -52,10 +55,10 @@ const LEVEL_FREEPLAY_KAHURANGI = {
     glacialFlats: { key: 'glacialFlats', name: "Glacial Flats", minElevation: 0.15, maxElevation: 0.28,
       colors: ['#9aa878', '#a6b484', '#b2c090'], contourColor: '#6f7d52',
       walkable: true, canHavePlants: true, plantTypes: ['tussock', 'coprosma', 'flax'], canPlace: true },// 'pohuehue'
-    shrubland: { key: 'shrubland', name: "Frost Shrubland", minElevation: 0.28, maxElevation: 0.36,
+    shrubland: { key: 'shrubland', name: "Frost Shrubland", minElevation: 0.28, maxElevation: 0.33,
       colors: ['#7c8858', '#889464', '#94a070'], contourColor: '#5a6640',
       walkable: true, canHavePlants: true, plantTypes: ['coprosma', 'patotara', 'tussock', 'dracophyllum'], canPlace: true },// 'pohuehue', 'toatoa'
-    forestRefuge: { key: 'forestRefuge', name: "Forest Refuge", minElevation: 0.36, maxElevation: 0.48,
+    forestRefuge: { key: 'forestRefuge', name: "Forest Refuge", minElevation: 0.33, maxElevation: 0.48,
       colors: ['#2d5240', '#345e48', '#3b6a50'], contourColor: '#1e3a2c',
       walkable: true, canHavePlants: true, plantTypes: ['beech', 'rimu', 'fern'], canPlace: true },
     subalpine: { key: 'subalpine', name: "Subalpine Tussock", minElevation: 0.48, maxElevation: 0.66,
@@ -286,8 +289,8 @@ const LEVEL_FREEPLAY_KAHURANGI = {
       forestCount: 2,           // seeded downslope in the podocarp forest refuge
       openCount: 3,             // seeded across open moa country
       radius: 46,               // egg-clustering + raid radius of a site
-      forestBand: { min: 0.36, max: 0.48 },
-      openBand: { min: 0.18, max: 0.34 },
+      forestBand: { min: 0.33, max: 0.48 },
+      openBand: { min: 0.18, max: 0.33 },
       laySnapRadius: 170,       // a laying moa snaps its egg to a site within this range
       drawRadius: 520           // a ready-to-lay moa is drawn to a site within this range
     },
@@ -344,10 +347,12 @@ const LEVEL_FREEPLAY_KAHURANGI = {
       startingEagleEggHatchTime: 1800, eagleMateRadius: 250, eagleOverhuntRestraint: 30, eagleRestraintCap: 45,
 
     // ---- Forest contraction (deepened further by climateDrift, in mauri_seasons.js) ----
-    forestContraction: true, forestBand: { min: 0.36, max: 0.48 },
+    // Band min matches the lowered forestRefuge biome floor (0.33) so the podo forest reaches
+    // downslope; winter still contracts it from the top.
+    forestContraction: true, forestBand: { min: 0.33, max: 0.48 },
     forestBandBySeason: {
-      spring: { min: 0.36, max: 0.48 }, summer: { min: 0.36, max: 0.48 },
-      autumn: { min: 0.36, max: 0.45 }, winter: { min: 0.36, max: 0.42 }
+      spring: { min: 0.33, max: 0.48 }, summer: { min: 0.33, max: 0.48 },
+      autumn: { min: 0.33, max: 0.45 }, winter: { min: 0.33, max: 0.42 }
     }
   },
 

@@ -14,7 +14,7 @@ class Simulation {
     // Render-only partition of `plants` by draw layer, so render() walks each layer
     // directly. Kept in sync by addPlant().
     this.groundPlants = [];   // drawn under entities
-    this.treePlants = [];     // rimu / beech / fern — drawn above entities
+    this.treePlants = [];     // rimu / beech / fern; drawn above entities
     this.eggs = [];
     this.placeables = [];
 
@@ -200,7 +200,7 @@ class Simulation {
     this.treePlants.length = 0;
     for (const type in this.otherEntities) this.otherEntities[type].length = 0;
     if (this.nestingSites) this.nestingSites.length = 0;
-    // Placed items don't travel with the flock — each new area is a fresh country, so
+    // Placed items don't travel with the flock; each new area is a fresh country, so
     // the player's placements (caches, shelters, storms …) are cleared too. The placeable
     // grid is a per-frame "moving" grid, so it rebuilds empty on its own next frame.
     this.placeables.length = 0;
@@ -234,7 +234,7 @@ class Simulation {
     this._areaSnapshot = null;
   }
 
-  // Count live podocarp forest trees (rimu/beech/fern) — used for the forest legacy.
+  // Count live podocarp forest trees (rimu/beech/fern); used for the forest legacy.
   countForestTrees() {
     if (typeof FOREST_TREES === 'undefined') return 0;
     let n = 0;
@@ -262,7 +262,7 @@ class Simulation {
   }
 
   // ============================================
-  // NESTING SITES (Kea Raid v2) — see mauri_nesting.js
+  // NESTING SITES (Kea Raid v2); see mauri_nesting.js
   // ============================================
 
   // Seed the established moa nests: some in the downslope forest, the rest across open moa
@@ -316,7 +316,7 @@ class Simulation {
   }
 
   // Nearest ALIVE nesting site within radius (optionally only those whose habitat a
-  // species favours — forest sites for the forest-dwelling little bush moa).
+  // species favours; forest sites for the forest-dwelling little bush moa).
   getNearestNestingSite(x, y, radius = Infinity, speciesKey = null) {
     const forestSpecies = speciesKey === 'little_bush_moa';
     const rSq = radius === Infinity ? Infinity : radius * radius;
@@ -368,7 +368,7 @@ class Simulation {
     return eaten;
   }
 
-  // Refresh each site's egg tally (for the raid indicator) — throttled, cheap.
+  // Refresh each site's egg tally (for the raid indicator); throttled, cheap.
   _updateNestingSites(dt) {
     if (this.nestingSites.length === 0) return;
     this._nestingRecomputeTimer += dt;
@@ -430,7 +430,7 @@ class Simulation {
       const list = bySpecies[key];
       if (list.length < 2) continue;
 
-      // Closest pair — founder counts are tiny, O(n²) is fine here.
+      // Closest pair; founder counts are tiny, O(n²) is fine here.
       let a = null, b = null, bestD2 = Infinity;
       for (let i = 0; i < list.length; i++) {
         for (let j = i + 1; j < list.length; j++) {
@@ -640,7 +640,7 @@ class Simulation {
     let bx = x, by = y, bestE = this.terrain.getElevationAt(x, y);
     for (let i = 0; i < 12; i++) {
       const p = this.findWalkablePositionNear(x, y, radius);
-      if (!p) continue;   // no walkable spot this sample (e.g. over water/ice) — skip
+      if (!p) continue;   // no walkable spot this sample (e.g. over water/ice); skip
       const e = this.terrain.getElevationAt(p.x, p.y);
       if (e > bestE) { bestE = e; bx = p.x; by = p.y; }
     }
@@ -657,7 +657,7 @@ class Simulation {
     egg.offspringType = 'eagle';
     egg.parentSpecies = founder.speciesKey || null;
     egg.forcedSex = !founder.isFemale;            // opposite sex to the founder
-    egg.isFounderEgg = true;                      // completes the starting pair — not a "new predator"
+    egg.isFounderEgg = true;                      // completes the starting pair; not a "new predator"
     const M = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS) ? LEVEL_MECHANICS : {};
     egg.incubationTime = M.startingEagleEggHatchTime ?? 1800;   // ~30s at 60fps
   }
@@ -718,7 +718,7 @@ class Simulation {
 
     // With emergent eagles there is no milestone spawner, so bred hatches are
     // what fire the "A New Predator Arrives" tutorial beat. The founder egg is
-    // excluded — it completes the starting pair rather than growing the threat.
+    // excluded; it completes the starting pair rather than growing the threat.
     if (!egg.isFounderEgg && this.game && this.game.tutorial) {
       this.game.tutorial.fireEvent(TUTORIAL_EVENTS.EAGLE_SPAWNED, { eagle: eaglet });
     }
@@ -822,7 +822,7 @@ class Simulation {
   }
 
   handleEagleCatch(eagle, moa, mauri) {
-    // Protected floor species (e.g. the last Dinornis) can't be taken — the
+    // Protected floor species (e.g. the last Dinornis) can't be taken; the
     // eagle's strike fails and it breaks off.
     if (this.isSpeciesProtected(moa.speciesKey)) {
       eagle.hunting = false;
@@ -934,7 +934,7 @@ class Simulation {
   }
 
   // Summed disturbance at a point (each source falls off linearly to its radius).
-  // 0 when the mechanic is off or nothing is near — moa scoring subtracts this.
+  // 0 when the mechanic is off or nothing is near; moa scoring subtracts this.
   disturbanceAt(x, y) {
     const list = this._disturbances;
     if (!list || list.length === 0) return 0;
@@ -1020,7 +1020,7 @@ class Simulation {
     return (this._speciesCountCache && this._speciesCountCache[speciesKey]) || 0;
   }
 
-  // A species is "protected" once it has fallen to its configured population floor —
+  // A species is "protected" once it has fallen to its configured population floor;
   // its remaining members can't be hunted or starved.
   isSpeciesProtected(speciesKey) {
     const staticFloors = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.populationFloors) || null;
@@ -1168,7 +1168,7 @@ class Simulation {
     return false;
   }
 
-  // "Does this spot read as podocarp forest?" — enough live forest trees within
+  // "Does this spot read as podocarp forest?"; enough live forest trees within
   // radius. Used for kea perch selection (Slice C) and forest-site formation.
   isForestPatch(x, y, radius = 70, minTrees = 3) {
     if (typeof FOREST_TREES === 'undefined') return false;
@@ -1204,7 +1204,7 @@ class Simulation {
 
     const type = forestHere[(Math.random() * forestHere.length) | 0];
     const seedling = new Plant(x, y, type, this.terrain, biome.key);
-    seedling.growth = 0.25;                              // a young recruit — handleGrowth() grows it in
+    seedling.growth = 0.25;                              // a young recruit; handleGrowth() grows it in
     this.addPlant(seedling);
     return true;
   }
@@ -1437,7 +1437,7 @@ class Simulation {
         this._speciesLastAlive[key] = false;
         if (wasAlive) anyExtinct = true;
       } else {
-        // Only 1 — not stable but not extinct
+        // Only 1; not stable but not extinct
         this._speciesLastAlive[key] = true;
         // Don't increment stability timer
       }
@@ -1522,7 +1522,7 @@ class Simulation {
           const offspringSpecies = egg.getOffspringSpecies();
           const _perSpeciesCap = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.maxPerSpecies) || Infinity;
           if (this.getSpeciesCount(offspringSpecies) >= _perSpeciesCap) {
-            eggs[writeIdx++] = egg;   // species at its hard cap — hold this egg until there's room
+            eggs[writeIdx++] = egg;   // species at its hard cap; hold this egg until there's room
             continue;
           }
           const newMoa = this._createFromRegistry('moa', offspringSpecies, egg.pos.x, egg.pos.y, Moa);
@@ -1612,7 +1612,7 @@ class Simulation {
       this._invalidateCache();
     }
 
-    // Emergent eagles can starve — compact the list just like the moa list so
+    // Emergent eagles can starve; compact the list just like the moa list so
     // dead birds stop being drawn, queried, and counted.
     const eagles = this.eagles;
     let eWrite = 0;
@@ -1756,7 +1756,7 @@ class Simulation {
     // Layer 0: Nesting sites (ground scrapes, under everything else).
     if (this.nestingSites.length) this._renderFiltered(this.nestingSites, 0, null, true, inView);
 
-    // Layer 1: Ground plants (pre-partitioned — no per-plant type filter)
+    // Layer 1: Ground plants (pre-partitioned; no per-plant type filter)
     this._renderFiltered(this.groundPlants, 0, null, true, inView);
 
     // Layer 2: Placeables (not Storms)
@@ -1774,14 +1774,14 @@ class Simulation {
       this._renderFiltered(list, 0, e => !e.isFlyer, true, inView, 'render');
     }
 
-    // Layer 5: Trees (rimu, beech, fern — pre-partitioned)
+    // Layer 5: Trees (rimu, beech, fern; pre-partitioned)
     this._renderFiltered(this.treePlants, 30, null, true, inView);
 
     // Layer 6: Eagles (aliveCheck true so a just-starved bird stops drawing
     // immediately instead of lingering until the next cleanup pass)
     this._renderFiltered(eagles, 30, null, true, inView);
 
-    // Layer 6b: Flighted other entities (kererū, kōkako) — above the trees like the
+    // Layer 6b: Flighted other entities (kererū, kōkako); above the trees like the
     // eagles, since they fly over and perch in the canopy.
     for (const [type, list] of Object.entries(this.otherEntities)) {
       this._renderFiltered(list, 30, e => e.isFlyer, true, inView, 'render');
@@ -1791,7 +1791,7 @@ class Simulation {
     this._renderFiltered(placeables, 80, p => p.type === 'Storm', true, inView);
 
     // GL_PORT.md Phase 2: every sprite pass above enqueued GPU quads. Composite the
-    // WebGL entity layer HERE — after all sprites, before the indicator over-pass —
+    // WebGL entity layer HERE; after all sprites, before the indicator over-pass;
     // so hearts/rings (and the HUD, later) stay on top. No-op when GL is off; when
     // on it also drew the shadow/halo discs underneath during the passes above.
     if (typeof GLBatch !== 'undefined' && GLBatch.enabled && GLBatch._open) {
@@ -1801,7 +1801,7 @@ class Simulation {
     // Layer 8: Moa indicators
     this._renderFiltered(moas, 0, null, true, inView, 'renderIndicators');
 
-    // Layer 9: Nest-raid hover overlay (tint + success%) — on TOP so foliage never hides it.
+    // Layer 9: Nest-raid hover overlay (tint + success%); on TOP so foliage never hides it.
     this._renderFiltered(this.nestingSites, 100, s => s._raidHover, true, inView, 'renderRaidOverlay');
 
     if (CONFIG.debugMode && CONFIG.showGridStats) this.renderGridStats();
@@ -1824,7 +1824,7 @@ class Simulation {
   // FIXED-3D RENDER
   // ============================================
   // Each entity draws relative to its own pos, so wrapping its render in translate(0, dy)
-  // lifts its feet onto the relief — an upright sprite pinned to the projected ground point.
+  // lifts its feet onto the relief; an upright sprite pinned to the projected ground point.
   // The cast is painted back-to-front by projected ground y so nearer things overlap farther.
 
   _render3D(inView) {

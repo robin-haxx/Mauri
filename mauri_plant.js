@@ -501,7 +501,7 @@ class Plant {
       if (fadeT >= 1) { this._fadeSprite = null; fadeT = 1; }
     }
 
-    // Shadow — sprite-shaped on GL (bake-free silhouette), ellipse blob on 2D.
+    // Shadow; sprite-shaped on GL (bake-free silhouette), ellipse blob on 2D.
     EntitySprites.drawSpriteShadow(sprite, px + 1, py + 1, displaySize, displaySize,
       { alpha: dormant ? 0.05 : 0.10, squash: 0.5, wide: 0.82,
         fbW: displaySize * 1.2, fbH: displaySize * 0.6 });
@@ -552,7 +552,7 @@ class Plant {
       return;
     }
 
-    // Shadow at the base — sprite-shaped on GL, ellipse on 2D.
+    // Shadow at the base; sprite-shaped on GL, ellipse on 2D.
     EntitySprites.drawSpriteShadow(sprite, px + 1, py + 1, displaySize, displaySize,
       { alpha: dormant ? 0.05 : 0.10, squash: 0.5, wide: 0.82,
         fbW: displaySize * 1.2, fbH: displaySize * 0.6 });
@@ -566,7 +566,7 @@ class Plant {
     const spriteH = spriteW * aspect;
     const halfW = spriteW * 0.5;
 
-    // Cheap sub-pixel sway offset (see _renderSprite) — no per-plant matrix ops.
+    // Cheap sub-pixel sway offset (see _renderSprite); no per-plant matrix ops.
     let drawX = px - halfW;
     if (!dormant && this.seasonalModifier > 0.1) {
       drawX += PlantStatics.getSway(frameCount, this.swayPhase, this.seasonalModifier) * halfW;
@@ -587,14 +587,14 @@ class Plant {
   _renderKawakawa(px, py, displaySize, dormant) {
     const buffer = dormant ? PlantStatics.kawakawaBufferDormant : PlantStatics.kawakawaBuffer;
     
-    // Shadow — kawakawa's pre-rendered buffer works as the silhouette source on GL.
+    // Shadow; kawakawa's pre-rendered buffer works as the silhouette source on GL.
     EntitySprites.drawSpriteShadow(buffer, px + 1, py + 1, displaySize, displaySize,
       { alpha: dormant ? 0.05 : 0.10, squash: 0.5, wide: 0.82,
         fbW: displaySize * 1.2, fbH: displaySize * 0.6 });
 
     const halfSize = displaySize * 0.5;
 
-    // Cheap sub-pixel sway offset (see _renderSprite) — no per-plant matrix ops.
+    // Cheap sub-pixel sway offset (see _renderSprite); no per-plant matrix ops.
     let drawX = px - halfSize;
     if (!dormant && this.seasonalModifier > 0.1) {
       drawX += PlantStatics.getSway(frameCount, this.swayPhase, this.seasonalModifier) * halfSize;

@@ -1,5 +1,5 @@
 // ============================================================
-// KEA — the alpine parrot  (extends Kereru)
+// KEA; the alpine parrot  (extends Kereru)
 // Nestor notabilis, the world's only alpine parrot and kākā's sister. A strong,
 // wide-ranging generalist that forages the high country rather than podocarp fruit.
 // Mechanically a flyer (same FLYING → FEEDING → PERCHED → lay loop) with three kea
@@ -56,7 +56,7 @@ class Kea extends Kereru {
     // toward a nearby cache-bound flockmate, so the cache's draw chains outward through the flock.
     this._mateSeekRadius = sp.mateRadius ?? 220;
     this._mateSeekBoost  = sp.mateSeekBoost ?? 2.4;   // cache-bound leaders draw from this× farther
-    this._mateSeekWeight = sp.mateSeekWeight ?? 0.5;  // gentle — below the direct cache pull
+    this._mateSeekWeight = sp.mateSeekWeight ?? 0.5;  // gentle; below the direct cache pull
   }
 
   // Stash the season manager so _preferredElevBand can read winterness/coldIndex. After
@@ -201,7 +201,7 @@ class Kea extends Kereru {
     if (best) this._perchTree = best;
   }
 
-  // Is the committed cache still a valid target — alive, a cache, and within pull range?
+  // Is the committed cache still a valid target; alive, a cache, and within pull range?
   _lureValid() {
     const c = this._lureChoice;
     if (!c || !c.alive || c.type !== 'keaLure') return false;
@@ -226,7 +226,7 @@ class Kea extends Kereru {
       if (d2 <= r * r) caches.push({ c: p, d: Math.sqrt(d2), r });
     }
     if (!caches.length) return null;
-    if (caches.length === 1) return caches[0].c;   // one cache in reach — no balancing to do
+    if (caches.length === 1) return caches[0].c;   // one cache in reach; no balancing to do
 
     // Crowd = kea committed to each cache (a kea en route already counts).
     const flock = (sim.otherEntities && sim.otherEntities.kea) || [];
@@ -288,7 +288,7 @@ class Kea extends Kereru {
         return;
       }
     }
-    // Auto-raid (Link 1) — OFF in Free Play (keaRaidsEggs:false), kept for other configs.
+    // Auto-raid (Link 1); OFF in Free Play (keaRaidsEggs:false), kept for other configs.
     if (this._raidEnabled && this._raidCooldown <= 0 && this.state === KERERU_STATE.FLYING) {
       const egg = this._findMoaEgg(sim);
       if (egg) { this._raidStep(sim, egg, dt); return; }
@@ -329,7 +329,7 @@ class Kea extends Kereru {
     this.applyForce(this.seek(this._target, 1.2, 20));
   }
 
-  // The nearest walkable step (of 8) whose elevation is closer to the band centre — one
+  // The nearest walkable step (of 8) whose elevation is closer to the band centre; one
   // pace uphill in the warm, downhill in the cold. null when in-band or nowhere better.
   _bandwardPoint() {
     const t = this.terrain;
@@ -411,18 +411,18 @@ class Kea extends Kereru {
 }
 
 // ------------------------------------------------------------
-// SPECIES DATA — Nestor notabilis. Registered in initializeRegistry.
+// SPECIES DATA; Nestor notabilis. Registered in initializeRegistry.
 // ------------------------------------------------------------
 const KEA_SPECIES = {
   displayName:    'Kea',
   scientificName: 'Nestor notabilis',
   label:          'kea',
   class:          (typeof Kea !== 'undefined') ? Kea : undefined,
-  description:    'The bold alpine parrot — a strong, wide-ranging generalist that drops to the forest in the cold.',
+  description:    'The bold alpine parrot; a strong, wide-ranging generalist that drops to the forest in the cold.',
   rarity:         'uncommon',
   highlightColor: [235, 222, 90],   // olive-gold; player highlight
 
-  // Movement / render — a strong flier, wider-ranging than the kererū, but below eagle
+  // Movement / render; a strong flier, wider-ranging than the kererū, but below eagle
   // hunt speed so a chase resolves.
   baseSpeed:        0.40,
   maxForce:         0.06,
@@ -441,15 +441,15 @@ const KEA_SPECIES = {
   feedSec:          4,
   disperseEverySec: 18,
   restSec:          6,
-  disperseChance:   0,      // kea plant no forest — not a large-seed disperser
+  disperseChance:   0,      // kea plant no forest; not a large-seed disperser
 
-  // Survival — hardy in the high country; a deep glacial still thins the flock.
+  // Survival; hardy in the high country; a deep glacial still thins the flock.
   maxHunger:        100,
   hungerRatePerSec: 1.1,
   feedRelief:       68,
   starveSec:        20,
 
-  // Reproduction — sexual, emergent (the Kereru loop).
+  // Reproduction; sexual, emergent (the Kereru loop).
   maturitySec:      22,
   eggCooldownSec:   40,
   mateRadius:       220,
@@ -464,7 +464,7 @@ const KEA_SPECIES = {
   descendFromWinter: 0.7,               // how much seasonal winter pulls it down
   descendFromCold:   0.6,               //   ... and how much the glacial coldIndex does
 
-  // Berry Cache choice — how the flock spreads across multiple caches (see _chooseLure).
+  // Berry Cache choice; how the flock spreads across multiple caches (see _chooseLure).
   lureChoiceSec:     2.5,               // re-pick a cache at most this often (jittered per bird)
   lureBaseNutrition: 6,                 // a freshly placed cache draws kea even before its berries grow
   lureCrowdWeight:   1.0                // ↑ = the flock balances harder off a crowded cache

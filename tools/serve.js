@@ -1,5 +1,5 @@
 // ============================================================
-// MAURI — local static server
+// MAURI; local static server
 //   node tools/serve.js        then open http://127.0.0.1:8081
 //
 // Serves the project folder so p5's asset loading works (file:// is

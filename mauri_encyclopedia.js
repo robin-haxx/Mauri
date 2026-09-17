@@ -1,5 +1,5 @@
 // ============================================
-// MAURI — FIELD GUIDE / ENCYCLOPEDIA
+// MAURI; FIELD GUIDE / ENCYCLOPEDIA
 // Browsable docked panel of game ecology (species, plants, biomes, climate,
 // concepts). Content is the ENCYCLOPEDIA data array; entries cross-link via
 // seeAlso. Open/close with E, Esc to close. Available on every level.
@@ -50,7 +50,7 @@ const ENCYCLOPEDIA = [
 
   { id: 'heavy_footed_moa', category: 'Moa', title: 'Heavy-footed Moa', subtitle: 'Pachyornis elephantopus',
     body: [
-      "Massive-legged and robust, a moa of forest margins and the top of the flats — a",
+      "Massive-legged and robust, a moa of forest margins and the top of the flats; a",
       "competitor at the edge of the forest refuge."
     ], seeAlso: ['beech_refuge'] },
 
@@ -68,13 +68,13 @@ const ENCYCLOPEDIA = [
 
   { id: 'kokako', category: 'Fauna', title: 'Kōkako', subtitle: 'South Island kōkako · Callaeas cinereus',
     body: [
-      "A wattlebird of the deep forest — a poor flier that bounds between the branches on",
+      "A wattlebird of the deep forest; a poor flier that bounds between the branches on",
       "long legs, and carries a slow, organ-like song across the canopy. The South Island",
       "bird wore orange wattles at the throat.",
       "",
       "In the glacial ages the kōkako were elusive; without a dense forest mosaic, foraging",
       "and nesting became very difficult for them. Even after the last glacial their numbers",
-      "kept shrinking, and today the South Island bird is all but gone — a grey ghost no one",
+      "kept shrinking, and today the South Island bird is all but gone; a grey ghost no one",
       "can quite confirm.",
       "",
       "You are doing very well if you can bring the forest back and make the rimu mast early",
@@ -83,7 +83,7 @@ const ENCYCLOPEDIA = [
 
   { id: 'kea', category: 'Fauna', title: 'Kea', subtitle: 'Nestor notabilis',
     body: [
-      "The world's only alpine parrot — a bold, restless generalist of the subalpine",
+      "The world's only alpine parrot; a bold, restless generalist of the subalpine",
       "tussock and scrub, and by repute the cleverest bird in these mountains.",
       "",
       "Kea split from the kākā close to two million years ago, as the Southern Alps rose",
@@ -100,37 +100,37 @@ const ENCYCLOPEDIA = [
 
   { id: 'kaka', category: 'Fauna', title: 'Kākā', subtitle: 'Nestor meridionalis',
     body: [
-      "The forest parrot — kea's gregarious, forest-dwelling sister, and its mirror image.",
+      "The forest parrot; kea's gregarious, forest-dwelling sister, and its mirror image.",
       "Where the kea took to the alps, the kākā kept to the trees, working the podocarp and",
       "beech canopy for fruit, seed, nectar and sap and prising grubs from under the bark.",
       "It gathers into noisy foraging parties, and is a seed predator more than a disperser.",
       "",
       "Kākā are a warm-forest bird: their bones are common in the deposits of the Holocene,",
       "laid down when tall wet forest reached its greatest extent. As the glacial deepens",
-      "they are squeezed into the shrinking forest refuge alongside the bush moa — so the",
+      "they are squeezed into the shrinking forest refuge alongside the bush moa; so the",
       "podocarp forest you grow is their lifeline."
     ], seeAlso: ['kea', 'beech_refuge', 'winter_food'] },
 
   { id: 'kakapo', category: 'Fauna', title: 'Kākāpō', subtitle: 'Strigops habroptilus',
     body: [
-      "The heaviest parrot in the world, and the only one that cannot fly — a nocturnal,",
+      "The heaviest parrot in the world, and the only one that cannot fly; a nocturnal,",
       "moss-green bird with an owl-like face and a sweet, musty scent. With the kea and the",
       "kākā it belongs to the most ancient lineage of parrots on Earth. It browses the",
       "forest floor for leaves, stems and fruit and, rather than flee, freezes and trusts",
       "its camouflage.",
       "",
       "Its oddest habit is its breeding: the males gather on high ground and boom through",
-      "the night from shallow bowls to call the females in — and they are fiercely",
+      "the night from shallow bowls to call the females in; and they are fiercely",
       "territorial about it, attacking any rival whose court is dug too close.",
       "",
-      "In the warm interglacials kākāpō were everywhere — dense forest ran the length of",
+      "In the warm interglacials kākāpō were everywhere; dense forest ran the length of",
       "the land, the rimu thronged and fruited, and the birds far outnumbered the eagles.",
       "In this glacial age most of the South Island is stripped to scrub and herbfield;",
       "Kahurangi is a refuge where the beech holds on, with rimu clinging to the most",
       "sheltered pockets.",
       "",
       "It breeds only in a rimu MAST year, so its numbers hold or slowly fall until a mast",
-      "lets the flock surge. Fern shelters draw un-settled birds — use them to spread the",
+      "lets the flock surge. Fern shelters draw un-settled birds; use them to spread the",
       "flock out."
     ], seeAlso: ['rimu', 'beech_refuge', 'glacial_cycles'] },
 
@@ -167,7 +167,7 @@ const ENCYCLOPEDIA = [
   // ---- Biomes ----------------------------------------------------------------
   { id: 'beech_refuge', category: 'Land', title: 'The Forest Refuge', subtitle: 'A glacial-age haven',
     body: [
-      "During the last glacial, tall forest collapsed across most of the South Island —",
+      "During the last glacial, tall forest collapsed across most of the South Island;",
       "but northwest Nelson and the Karamea coast kept small pockets of beech alive.",
       "These 'micro-refugia' are why forest could spread again when the ice retreated.",
       "",
@@ -177,14 +177,14 @@ const ENCYCLOPEDIA = [
 
   { id: 'glacial_flats', category: 'Land', title: 'Glacial Flats & Shrubland', subtitle: 'Outwash country',
     body: [
-      "Open, frost-prone lowland — outwash gravels, tussock and hardy divaricating",
+      "Open, frost-prone lowland; outwash gravels, tussock and hardy divaricating",
       "shrubs (coprosma, matagouri). Rich enough in the warm seasons, it freezes hard",
       "in winter and greens late in spring."
     ], seeAlso: ['stout_legged_moa', 'winter_food'] },
 
   { id: 'subalpine', category: 'Land', title: 'Subalpine Tussock', subtitle: 'Above the forest',
     body: [
-      "Snow tussock, dracophyllum (inaka) and cushion herbs above the treeline — the",
+      "Snow tussock, dracophyllum (inaka) and cushion herbs above the treeline; the",
       "upland moa's summer country. The snow line drops into it in winter, and drops",
       "further in every deepening glacial."
     ], seeAlso: ['upland_moa', 'tussock'] },

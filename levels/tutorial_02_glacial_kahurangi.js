@@ -1,8 +1,8 @@
 // ============================================================================
-// LEVEL 2 (Taihekenga Huka / Glacial Kahurangi) — TUTORIAL SCRIPT
+// LEVEL 2 (Taihekenga Huka / Glacial Kahurangi); TUTORIAL SCRIPT
 // See levels/tutorial_01_kahurangi.js for the tip-format authoring guide.
 // NOTE: tip conditions may reference level helpers (gkCount, GK_EMEID, ...)
-// defined in the level file — resolved at call time, so load order is free.
+// defined in the level file; resolved at call time, so load order is free.
 // ============================================================================
 (function () {
 
@@ -87,7 +87,7 @@ const TIPS = {
     title: "Your Goals",
     content: [
       "You need to grow the populations of both vulnerable moa to get full marks for this level!","",
-      "Total moa count isn't our focus here — but if you grow all populations in balance, the Mauri will come pouring in!"
+      "Total moa count isn't our focus here; but if you grow all populations in balance, the Mauri will come pouring in!"
     ],
     guidePosition: 'left', highlight: { type: 'element', target: 'goalsPanel' },
     nextTip: null, pauseGame: true, showOnce: true, priority: 2

@@ -1,5 +1,5 @@
 // ============================================
-// FREE PLAY: Kahurangi — the deepening glacials (endless)
+// FREE PLAY: Kahurangi; the deepening glacials (endless)
 // An endless survival mode: glacial Kahurangi as Level 2 but with no win. The climate
 // oscillates between glacial and interglacial years and deepens across the run. Each
 // year sets soft goals on the two most-endangered species; every species present holds
@@ -71,10 +71,10 @@ const LEVEL_FREEPLAY_KAHURANGI = {
 
   species: {
     moa: [
-      'upland_moa',             // cold-adapted Megalapteryx — the deep-glacial backbone
+      'upland_moa',             // cold-adapted Megalapteryx; the deep-glacial backbone
       'little_bush_moa',        // closed-forest emeid (favoured: lancewood)
       'stout_legged_moa',       // open glacial-flats emeid
-      'south_island_giant_moa', // lowland browser — fades first as it cools
+      'south_island_giant_moa', // lowland browser; fades first as it cools
       'heavy_footed_moa'        // forest-edge Pachyornis
     ],
     eagle: ['haasts_eagle'],
@@ -103,8 +103,8 @@ const LEVEL_FREEPLAY_KAHURANGI = {
   },
 
   availablePlaceables: {
-    lancewood: { cost: 25 },   // slot 1 — bush moa
-    speargrass: { cost: 25 },  // slot 2 — upland moa
+    lancewood: { cost: 25 },   // slot 1; bush moa
+    speargrass: { cost: 25 },  // slot 2; upland moa
     shelter:   { cost: 35 },
     nest:      { cost: 50 },
     forestBoost: { cost: 35 }, // Year-2 forest cultivator
@@ -149,57 +149,57 @@ const LEVEL_FREEPLAY_KAHURANGI = {
   //   kokakoStretch: the kōkako goal here is a bonus stretch
   //   introduce:    newcomers to seed this year ([{type, count}])
   //   note:         a line shown at the year's start
-  //   branch:       { reached, missed } — years 3 & 4 pick a variant by the mast outcome
+  //   branch:       { reached, missed }; years 3 & 4 pick a variant by the mast outcome
   // moaFromLoop withholds the pos-0/pos-1 moa pairing on the first loop.
   freeplaySchedule: {
     loopYears: 4,
     moaFromLoop: 1,   // pos-0/pos-1 moaFocus starts from this 0-based loop index
     years: [
-      { // pos 0 — Year of the Kea (east / alps). Nest raid; kākā introduced.
+      { // pos 0; Year of the Kea (east / alps). Nest raid; kākā introduced.
         focus: ['kea'],
         introduce: [{ type: 'kaka', count: 3 }],
         moaFocus: 'upland_moa', nestingGoal: true,
         // Kea year: fewer moa nests (3), all on the left/downslope half in the podocarp forest.
         nesting: { forestCount: 2, openCount: 1, region: 'left' },
-        note: "Year of the Kea — the alpine parrots come down to nest in the podocarp forest below. Kākā are introduced to that forest. Plant kawakawa now while the forest is still warm — it will not survive the first winter.",
+        note: "Year of the Kea; the alpine parrots come down to nest in the podocarp forest below. Kākā are introduced to that forest. Plant kawakawa now while the forest is still warm; it will not survive the first winter.",
         // Kawakawa is frost-tender: plantable this year only, stripped at the first winter.
         availablePlaceables: { kawakawa: { cost: 25, duration: 3600 }, keaLure: {}, nestRaid: {}, lancewood: {}, speargrass: {}, Storm: {}, shelter: {} }
       },
-      { // pos 1 — Year of the Kākā (west / shore). The mast goal runs here (takes the
+      { // pos 1; Year of the Kākā (west / shore). The mast goal runs here (takes the
         // Nest-Raid slot).
         focus: ['kaka'],
         moaFocus: 'little_bush_moa', nestingGoal: true,
         mastGoalYear: true,
-        note: "Year of the Kākā — grow the flock in the sheltered lowland forest. Use the Forest Seed to spread podocarp forest into the lowland near existing groves — new rimu and beech to feed the kākā through winter. Gain enough mauri this year to invoke the Mast: reach it and the rimu mast comes early next year (the milder downslope), so the kākāpō breed there and a kōkako stretch opens after; miss it and the mast falls late, in the cold upslope.",
+        note: "Year of the Kākā; grow the flock in the sheltered lowland forest. Use the Forest Seed to spread podocarp forest into the lowland near existing groves; new rimu and beech to feed the kākā through winter. Gain enough mauri this year to invoke the Mast: reach it and the rimu mast comes early next year (the milder downslope), so the kākāpō breed there and a kōkako stretch opens after; miss it and the mast falls late, in the cold upslope.",
         availablePlaceables: { lancewood: {}, shelter: {}, nest: {}, forestBoost: {}, Storm: {} }
       },
-      { // pos 2 — Year 3 (across / downslope). Branches on the mast-goal outcome.
+      { // pos 2; Year 3 (across / downslope). Branches on the mast-goal outcome.
         branch: {
-          reached: { // the mast came early — breed the kākāpō in the milder downslope forest
+          reached: { // the mast came early; breed the kākāpō in the milder downslope forest
             focus: ['kakapo'], mast: true,
             introduce: [{ type: 'kakapo', count: 4 }],
-            note: "The Mast came early! The downslope forest blooms with rimu fruit — the kākāpō breed at last. Grow them while the masting holds. Loose the Rimu Berry Scramble to shake a berry glut from the rimu — food and cover for the kākāpō.",
+            note: "The Mast came early! The downslope forest blooms with rimu fruit; the kākāpō breed at last. Grow them while the masting holds. Loose the Rimu Berry Scramble to shake a berry glut from the rimu; food and cover for the kākāpō.",
             availablePlaceables: { lancewood: {}, rimuScramble: {}, shelter: {}, nest: {}, waterhole: {}, Storm: {} }
           },
-          missed: { // no mast yet — consolidate the bush moa and grow new nesting sites
+          missed: { // no mast yet; consolidate the bush moa and grow new nesting sites
             focus: ['little_bush_moa'], moaFocus: 'little_bush_moa', nestingGoal: true,
-            note: "No mast this year. Hold the little bush moa — plant lancewood downslope to draw them into new forest groves and settle fresh nesting sites before the cold upslope year.",
+            note: "No mast this year. Hold the little bush moa; plant lancewood downslope to draw them into new forest groves and settle fresh nesting sites before the cold upslope year.",
             availablePlaceables: { lancewood: {}, nestRaid: {}, shelter: {}, nest: {}, waterhole: {}, Storm: {} }
           }
         }
       },
-      { // pos 3 — Year 4 (back upslope / cold). Branches on the mast-goal outcome.
+      { // pos 3; Year 4 (back upslope / cold). Branches on the mast-goal outcome.
         branch: {
-          reached: { // kākāpō already secured downslope — a South Island kōkako STRETCH opens
+          reached: { // kākāpō already secured downslope; a South Island kōkako STRETCH opens
             focus: ['kokako'], moaFocus: 'little_bush_moa', nestingGoal: true, kokakoStretch: true,
             introduce: [{ type: 'kokako', count: 3 }, { type: 'upland_moa', count: 8 }],
             note: "With the kākāpō secured downslope, a stretch: grow the South Island kōkako in the forest refuge, and settle the little bush moa in new groves. The upland moa return in numbers to the high country.",
             availablePlaceables: { lancewood: {}, nestRaid: {}, shelter: {}, nest: {}, waterhole: {}, Storm: {} }
           },
-          missed: { // the rimu mast falls late, in the COLD upslope — the hard kākāpō year
+          missed: { // the rimu mast falls late, in the COLD upslope; the hard kākāpō year
             focus: ['kakapo'], mast: true, moaFocus: 'upland_moa', nestingGoal: true,
             introduce: [{ type: 'kakapo', count: 4 }, { type: 'upland_moa', count: 8 }],
-            note: "The rimu mast falls late — here, in the cold upslope. The kākāpō must breed in harsher country. Loose the Rimu Berry Scramble for a berry glut to feed and secure them. Hold the upland moa alongside them; no kōkako can be spared this loop.",
+            note: "The rimu mast falls late; here, in the cold upslope. The kākāpō must breed in harsher country. Loose the Rimu Berry Scramble for a berry glut to feed and secure them. Hold the upland moa alongside them; no kōkako can be spared this loop.",
             availablePlaceables: { speargrass: {}, keaLure: {}, rimuScramble: {}, shelter: {}, nest: {}, waterhole: {}, Storm: {} }
           }
         }
@@ -317,7 +317,7 @@ const LEVEL_FREEPLAY_KAHURANGI = {
     focalSpecies: ['upland_moa', 'little_bush_moa'],   // STABLE balance set, distinct from the dynamic yearly focus
     maxPerSpecies: 20,
 
-    // No static populationFloors — Free Play protects only the current year's focus species.
+    // No static populationFloors; Free Play protects only the current year's focus species.
 
     // ---- Emergent eagles. In Free Play their extinction is not a loss: it unleashes a
     // dominant-moa boom and they re-immigrate next year. eagleTargetRatioPerLoop climbs
@@ -344,7 +344,7 @@ const LEVEL_FREEPLAY_KAHURANGI = {
   scoreFormula: (ctx) => Math.round((ctx.cyclesSurvived || 0) * 100 + ctx.moaCount * 5),
 
   menu: {
-    title: "Free Play — Kahurangi",
+    title: "Free Play; Kahurangi",
     subtitle: "",
     areaLabel: "NW Nelson, Te Waipounamu",
     areaSubtitle: "Upper West Coast, South Island",

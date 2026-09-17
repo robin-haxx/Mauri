@@ -1,5 +1,5 @@
 // ============================================
-// GL BATCH — DOM-stacked WebGL entity layer  (opt-in: ?render=gl)
+// GL BATCH; DOM-stacked WebGL entity layer  (opt-in: ?render=gl)
 // ============================================
 // The world is drawn on p5's 2D canvas, which is fill-rate bound at 4K. This module
 // draws the entity sprites (and their shadow/halo ellipses) as batched textured quads
@@ -106,7 +106,7 @@ const GLBatch = {
       this.domStack = true;
       this._wrapShapes();
       console.log(`[glbatch] DOM-stacked ${this._gl2 ? 'WebGL2' : 'WebGL'} entity layer active ` +
-                  `(${width}x${height})${this._gl2 ? ' — sprite mipmaps on' : ''}`);
+                  `(${width}x${height})${this._gl2 ? '; sprite mipmaps on' : ''}`);
       return true;
     } catch (e) {
       console.warn('[glbatch] init failed, staying on 2D:', e && e.message);
@@ -213,7 +213,7 @@ const GLBatch = {
     this._uColdTint = gl.getUniformLocation(p, 'uColdTint');
   },
 
-  // A white filled disc with a 1px-soft edge — the stand-in for a p5 ellipse().
+  // A white filled disc with a 1px-soft edge; the stand-in for a p5 ellipse().
   // Tinted per-quad by the captured fill, it reproduces the soft shadow / halo look.
   _buildDiscTexture() {
     const S = 128, c = document.createElement('canvas'); c.width = c.height = S;
@@ -245,7 +245,7 @@ const GLBatch = {
     const upload = (this._gl2 && src._glMipSource) ? src._glMipSource : src;
     try { gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, upload); }
     catch (err) { console.warn('[glbatch] texImage2D failed:', err && err.message); return null; }
-    // Sprite sources are static, so build a mip chain once and sample trilinearly — the
+    // Sprite sources are static, so build a mip chain once and sample trilinearly; the
     // anti-aliasing that keeps a downscaled sprite crisp. WebGL1 can't do NPOT, so LINEAR only.
     if (this._gl2) {
       gl.generateMipmap(gl.TEXTURE_2D);
@@ -357,7 +357,7 @@ const GLBatch = {
   },
 
   // Map a local rect through the CTM to clip space and push two triangles (sil: 1 =
-  // silhouette, 0 = textured). Fully inlined — runs hundreds of times a frame, so no allocation.
+  // silhouette, 0 = textured). Fully inlined; runs hundreds of times a frame, so no allocation.
   _emit(te, m, lx0, ly0, lx1, ly1, u0, v0, u1, v1, r, g, b, a, sil) {
     if (te.tex !== this._curTex) { this._flush(); this._curTex = te.tex; }
     if (this._n + 6 > this._cap) this._flush();
@@ -404,7 +404,7 @@ const GLBatch = {
     this._n = 0;
   },
 
-  // End the capture span (flush the batch to the GL canvas — no drawImage in DOM-stack
+  // End the capture span (flush the batch to the GL canvas; no drawImage in DOM-stack
   // mode). Named composite() for the shared call site; ctx2d is ignored here.
   composite(/* ctx2d */) {
     if (!this.enabled || !this._open) return;

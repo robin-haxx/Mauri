@@ -2,7 +2,7 @@
 // TUTORIAL SYSTEM 
 // ============================================
 
-// Uniform scale for the guide's dialog panels — box, text, buttons, and the
+// Uniform scale for the guide's dialog panels; box, text, buttons, and the
 // mantis sprite all grow together from this one knob. 1.0 = original size.
 const TIP_PANEL_SCALE = 1.25;
 
@@ -121,7 +121,7 @@ class TutorialUIMapper {
         if (fs) return { x: fs.fsBtnX, y: fs.btnY, w: fs.btnSize, h: fs.btnSize };
         return { x: layout.fsBtnX, y: layout.pauseBtnY, w: layout.pauseBtnSize, h: layout.pauseBtnSize };
       case 'migrationHint':
-        // Not shown in fullscreen — anchor to the HUD strip instead
+        // Not shown in fullscreen; anchor to the HUD strip instead
         if (fs) return { x: fs.mauriX, y: fs.stripY, w: 590, h: 70 };
         return { x: layout.migrationHintX, y: 110, w: layout.migrationHintWidth, h: 50 };
       case 'toolbar':
@@ -316,7 +316,7 @@ class TutorialManager {
     // A guided "place this" window only lives while its tip is on screen.
     // The drain above has just judged any placements made DURING the tip
     // (queued while it was up), so anything placed from here on is ordinary
-    // play — not going off-script. Clearing here is what keeps a storm
+    // play; not going off-script. Clearing here is what keeps a storm
     // placed minutes later from triggering "Doing It Your Way".
     if (this.scratch.guidedPlaceable && !this.active) {
       delete this.scratch.guidedPlaceable;
@@ -347,7 +347,7 @@ class TutorialManager {
     }
     
     // Show next queued tip if enough time has passed. Urgent tips (like the
-    // eagle attack warning) skip the spacing delay — the simulation keeps
+    // eagle attack warning) skip the spacing delay; the simulation keeps
     // running while a tip waits in the queue, so making an urgent one sit out
     // the gap lets the very thing it warns about resolve unseen.
     if (this.pendingTips.length > 0) {
@@ -406,7 +406,7 @@ class TutorialManager {
 
     // "Place this" tips open a guided window that lasts only while this tip
     // is on screen (cleared in update() right after the tip's queued
-    // placements are processed — see the drain there). Placing the guided
+    // placements are processed; see the drain there). Placing the guided
     // type fulfils it; placing anything ELSE while the tip is up triggers
     // off_script_placement. `until` is just a failsafe upper bound.
     if (tip.guidedPlaceable) {
@@ -416,7 +416,7 @@ class TutorialManager {
       };
     }
 
-    // Optional per-tip hook — lets a tip adjust game state as it appears
+    // Optional per-tip hook; lets a tip adjust game state as it appears
     // (e.g. eagle_hunting arms a grace window on hunting eagles).
     if (typeof tip.onShow === 'function') {
       try {
@@ -436,7 +436,7 @@ class TutorialManager {
 
     const tip = this.currentTip;
 
-    // Optional per-tip hook, mirroring onShow — runs on every dismissal path
+    // Optional per-tip hook, mirroring onShow; runs on every dismissal path
     // (close or chain). E.g. goal_intro turns the species highlight back off.
     if (typeof tip.onDismiss === 'function') {
       try {
@@ -493,7 +493,7 @@ class TutorialManager {
       return true;
     }
 
-    // Only consume clicks on the tip panel itself — everything else
+    // Only consume clicks on the tip panel itself; everything else
     // (palette, game area) passes through so items can be placed
     // while a tip is up.
     return this._hitTest(this.panelBounds, mx, my);

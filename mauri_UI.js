@@ -152,7 +152,7 @@ class GameUI {
       sidebarPanelWidth: this.sidebar.width - 30
     };
 
-    // Unified season/year RING — one element in place of the old season panel +
+    // Unified season/year RING; one element in place of the old season panel +
     // TIME panel + level-countdown dial. Centred over the span those three occupied.
     const _clockSpan = LEVEL_CLOCK.enabled ? (LEVEL_CLOCK.gap + LEVEL_CLOCK.size) : 0;
     this.layout.ringR = 78;
@@ -514,11 +514,11 @@ class GameUI {
   renderTopBar() {
     const contentY = 20;
 
-    // Mauri counter — a large circular dial just left of the season ring.
+    // Mauri counter; a large circular dial just left of the season ring.
     this.renderMauriRing(this.layout.mauriRingCX, this.layout.mauriRingCY, this.layout.mauriRingR);
 
     // Unified season/year/time ring (replaces the season panel, TIME panel and
-    // level-countdown dial — one element for season progress, the year and the level).
+    // level-countdown dial; one element for season progress, the year and the level).
     this.renderSeasonRing(this.layout.ringCX, this.layout.ringCY, this.layout.ringR);
 
     // Ecosystem dial (endless): avg population + balance + mauri/sec, right of the ring.
@@ -531,7 +531,7 @@ class GameUI {
     this.renderFullscreenButton(this.layout.fsBtnX, this.layout.pauseBtnY);
     this.renderPauseButton(this.layout.pauseBtnX, this.layout.pauseBtnY);
 
-    // (The seasonal message/subtitle info bar was removed — important one-off events go
+    // (The seasonal message/subtitle info bar was removed; important one-off events go
     // to the event log via notifications instead of a persistent bar.)
   }
 
@@ -623,7 +623,7 @@ class GameUI {
     }
 
     if ((!focal || !focal.length) && !survival.length) {
-      // No focus row — the guide (if open) docks straight below the goals panel.
+      // No focus row; the guide (if open) docks straight below the goals panel.
       const goalsH0 = 30 + this.game.goals.length * 26;
       this._fsFocusBottomY = this.layout.fs.goalsY + goalsH0 + 24;
       return;
@@ -673,7 +673,7 @@ class GameUI {
       text(name.length > 12 ? name.slice(0, 11) + '…' : name, x + size / 2, y + 4);
 
       if (isMoa) {
-        // Idle sprite — the species' own art; generic art gets the species tint.
+        // Idle sprite; the species' own art; generic art gets the species tint.
         const set = (cfg.spriteSet && EntitySprites.moaVariants[cfg.spriteSet]) || EntitySprites.moa;
         const sprite = EntitySprites.isValid(set.idle) ? set.idle : EntitySprites.moa.idle;
         if (EntitySprites.isValid(sprite)) {
@@ -685,7 +685,7 @@ class GameUI {
           pop();
         }
       } else {
-        // Bird focus species — its own sprite (keyed like EntitySprites.flyers), else the
+        // Bird focus species; its own sprite (keyed like EntitySprites.flyers), else the
         // coloured marker fallback.
         const birdSprite = (typeof EntitySprites !== 'undefined' && EntitySprites.flyers)
           ? EntitySprites.flyers[key] : null;
@@ -717,7 +717,7 @@ class GameUI {
       text(count, x + size / 2, y + size - 2);
       pop();
 
-      // Keystone badge — a small amber "!" disc so the survival group reads at a glance
+      // Keystone badge; a small amber "!" disc so the survival group reads at a glance
       // as "lose all of these and the run ends", distinct from the year's focus tiles.
       if (isSurvival) {
         push();
@@ -797,7 +797,7 @@ class GameUI {
     smallTextSize(11);
     text('MAURI', cx, cy - r * 0.44);
 
-    // Value — scaled down for longer numbers so it never spills the disc.
+    // Value; scaled down for longer numbers so it never spills the disc.
     const str = String(val);
     // Nudge the value up a touch (endless) to make room for the gain/sec line below.
     const g = this.game;
@@ -828,7 +828,7 @@ class GameUI {
   // Ecosystem dial (endless): a ring whose arc fills with BALANCE (how even the
   // populations are, 0→1) and whose colour runs red (uneven) → green (even), like the
   // hunger bar. AVG POP sits big in the centre; below it the EQUALITY COEFFICIENT (the
-  // applied balance term) — the mauri/sec readout now lives under the MAURI counter.
+  // applied balance term); the mauri/sec readout now lives under the MAURI counter.
   renderPopDial(cx, cy, r) {
     const g = this.game;
     if (!g.ecosystemStats) return;
@@ -1607,7 +1607,7 @@ class GameUI {
   }
 
   // ==========================================
-  // RIGHT SIDEBAR — Responsive width
+  // RIGHT SIDEBAR; Responsive width
   // Panel widths and content adapt to this.sidebar.width
   // ==========================================
 
@@ -1619,7 +1619,7 @@ class GameUI {
     // Section 1: Goals (top)
     y = this.renderGoalsPanel(x + padding, y);
 
-    // Section 1b: Nest Raid — a non-modal panel below goals, present while the tool toggled
+    // Section 1b: Nest Raid; a non-modal panel below goals, present while the tool toggled
     // it open. In the kākā mast-goal year the Mast Year progress bar takes this slot instead.
     if (this.game._mastGoalPanelActive && this.game._mastGoalPanelActive()) {
       const rh = Math.round(this.layout.eventLogHeight / 2);
@@ -1631,10 +1631,10 @@ class GameUI {
       y = y + 12 + rh;
     }
 
-    // Section 2: Species Info (population) — swapped ABOVE the event log.
+    // Section 2: Species Info (population); swapped ABOVE the event log.
     y = this.renderSpeciesInfo(x + padding, y + 12);
 
-    // Section 3: Event Log — swapped BELOW the population panel.
+    // Section 3: Event Log; swapped BELOW the population panel.
     y = this.renderEventLog(x + padding, y + 12);
 
     // Section 4: Mini Map
@@ -1694,7 +1694,7 @@ class GameUI {
         text("✓", x + 19, goalY + 10);
       }
 
-      // Goal text — truncate if panel is narrow
+      // Goal text; truncate if panel is narrow
       fill(goal.achieved ? 120 : 180, goal.achieved ? 150 : 210, goal.achieved ? 130 : 190);
       noStroke();
       textSize(16);
@@ -1842,10 +1842,10 @@ class GameUI {
     const stats = this.getStats();
     const aliveMoas = this.simulation.moas.filter(m => m.alive);
 
-    // Per-species counts — data-driven from the level's OWN species list so no
+    // Per-species counts; data-driven from the level's OWN species list so no
     // species is ever silently uncounted. (The old hardcoded genus buckets had no
     // slot for stout_legged_moa, so its whole population was invisible while still
-    // counting toward the total — the source of the "counts look low" mismatch.)
+    // counting toward the total; the source of the "counts look low" mismatch.)
     const _speciesKeys = (this.simulation.activeSpecies && this.simulation.activeSpecies.moa) || [];
     const _counts = {};
     for (let i = 0; i < _speciesKeys.length; i++) _counts[_speciesKeys[i]] = 0;
@@ -1904,7 +1904,7 @@ class GameUI {
       });
     }
 
-    // Population stats — 5 rows × 2 columns, row-major. Row height grows with the text bump.
+    // Population stats; 5 rows × 2 columns, row-major. Row height grows with the text bump.
     let statY = y + 42;
     const rowH = 28 + SMALL_TEXT_BUMP * 2;
     const col1X = x + 15;
@@ -2025,7 +2025,7 @@ class GameUI {
     if (typeof SPECIES_HIGHLIGHT === 'undefined') return;
     if (SPECIES_HIGHLIGHT.has(key)) SPECIES_HIGHLIGHT.delete(key);
     else SPECIES_HIGHLIGHT.add(key);
-    // The species answers when named — its own call on every toggle
+    // The species answers when named; its own call on every toggle
     // (dedicated recording if present, else moa/eagle generic).
     if (audioManager) audioManager.playSpeciesCall(key);
   }
@@ -2058,7 +2058,7 @@ class GameUI {
     textAlign(LEFT, TOP);
     text(label, x + 26, y);
 
-    // Value — sits below the label, so its offset grows with the small-text
+    // Value; sits below the label, so its offset grows with the small-text
     // bump to keep the label from descending into it.
     fill(230, 245, 235);
     textSize(20);

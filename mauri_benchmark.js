@@ -23,7 +23,7 @@ const BENCHMARK = {
   _restartAtFrame: null,
   _game: null,
 
-  SAMPLE_INTERVAL: 600,   // frames — 10 seconds of game time at 60fps
+  SAMPLE_INTERVAL: 600,   // frames; 10 seconds of game time at 60fps
 
   // Endless mode has no win: record this many in-game years, then finish + save.
   endlessYears: 1,
@@ -69,8 +69,8 @@ const BENCHMARK = {
     const label = this.batchTotal > 1
       ? `Benchmark run ${this.batchIndex}/${this.batchTotal} recording…`
       : (endless
-          ? `Benchmark recording — 10s samples, CSV after ${yrs} year${yrs > 1 ? 's' : ''}`
-          : 'Benchmark recording — 10s samples, CSV on win/loss');
+          ? `Benchmark recording; 10s samples, CSV after ${yrs} year${yrs > 1 ? 's' : ''}`
+          : 'Benchmark recording; 10s samples, CSV on win/loss');
     game.addNotification(label, 'info');
   },
 
@@ -157,9 +157,9 @@ const BENCHMARK = {
     this._save();
 
     if (this.batchIndex < this.batchTotal) {
-      // More runs queued — auto-restart after a short delay.
+      // More runs queued; auto-restart after a short delay.
       this._restartAtFrame = frameCount + 90;
-      game.addNotification(`Benchmark ${this.batchIndex}/${this.batchTotal} done — next run starting…`, 'success');
+      game.addNotification(`Benchmark ${this.batchIndex}/${this.batchTotal} done; next run starting…`, 'success');
     } else {
       const n = this.batchTotal;
       this.batchTotal = 0;

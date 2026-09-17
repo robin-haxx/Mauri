@@ -82,7 +82,7 @@ class HaastsEagle extends Boid {
     this._separationForce = createVector();
     this._relocateTargetVec = createVector();
 
-    // Alive flag — emergent eagles can die of starvation and be cleaned up like moa.
+    // Alive flag; emergent eagles can die of starvation and be cleaned up like moa.
     this.alive = true;
 
     // Sex. Emergent reproduction is sexual: a female lays only with a mature male near,
@@ -99,7 +99,7 @@ class HaastsEagle extends Boid {
     // simulation; defaults to the spawn point until then.
     this.nest = createVector(x, y);
 
-    // Age & maturity — hatchlings must mature before they can breed.
+    // Age & maturity; hatchlings must mature before they can breed.
     this.age = 0;
     this.mature = true;                 // spawned founders are already adults
     this.maturityAge = M.eagleMaturityAge ?? 1500;
@@ -161,7 +161,7 @@ class HaastsEagle extends Boid {
         this.starveTimer = Math.max(0, this.starveTimer - dt * 2);
       }
 
-      // Reproduction check (throttled). Only when calm — never mid-hunt.
+      // Reproduction check (throttled). Only when calm; never mid-hunt.
       this.reproCooldown = Math.max(0, this.reproCooldown - dt);
       this.reproCheckTimer -= dt;
       if (this.reproCheckTimer <= 0) {
@@ -493,7 +493,7 @@ class HaastsEagle extends Boid {
         this._runChaseLoop(target, dt);
         if (this.huntWindupTimer > 0) this.huntWindupTimer -= dt;
       } else {
-        // Normal pursuit — close in with lead prediction and strike in range.
+        // Normal pursuit; close in with lead prediction and strike in range.
         this._targetVec.set(
           target.pos.x + target.vel.x * 12,
           target.pos.y + target.vel.y * 12
@@ -797,7 +797,7 @@ class HaastsEagle extends Boid {
       egg.incubationTime *= 1.6; // eagles brood a little longer than moa
       egg.forcedSex = null;      // hatchling sex is auto-balanced in _hatchEagleEgg
       this.reproCooldown = M.eagleReproCooldown ?? 2600;
-      // Laying is costly — the parent must hunt again soon.
+      // Laying is costly; the parent must hunt again soon.
       this.hunger = Math.min(this.maxHunger, this.hunger + 25);
       if (simulation.game) {
         simulation.game.addNotification('A Pouākai pair nests. +egg', 'info');
@@ -874,7 +874,7 @@ class HaastsEagle extends Boid {
       textAlign(CENTER, CENTER);
       text("?", this.pos.x, this.pos.y - this.wingspan - 5);
     } else if (this.tutorialGraceTimer > 0 && this.hunting) {
-      // Telegraphed strike during the tutorial grace window — the bird to drop the storm on.
+      // Telegraphed strike during the tutorial grace window; the bird to drop the storm on.
       fill(255, 120, 80);
       noStroke();
       textSize(8);

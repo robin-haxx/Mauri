@@ -110,7 +110,7 @@ class MenuArtManager {
           this._renderEdgeFade(0, coreY, drawX, drawH, 'left');
         }
       } else {
-        // No wing image — fade from bg colour into core edge
+        // No wing image; fade from bg colour into core edge
         this._renderEdgeFade(0, coreY, coreX, coreH, 'left');
       }
     }

@@ -98,7 +98,7 @@ class TerrainGenerator {
 
     // Island Y-pad: on a classic (single-window) level the island falloff spans
     // mapHeight + 2·worldPadY so the window is the centre of a larger island (the 3D over-scan
-    // reveals the rest). A world grid needs no pad — the neighbouring areas are the "beyond".
+    // reveals the rest). A world grid needs no pad; the neighbouring areas are the "beyond".
     this.worldPadY = this.hasWorldGrid ? 0
       : Math.max(0, (config.view3DWorldPad != null ? config.view3DWorldPad : 0)) * this.mapHeight;
 
@@ -206,7 +206,7 @@ class TerrainGenerator {
       this._waterBiome = this.biomeList[0];
     }
     // If no snow biome, disable snow features
-    // _snowBiome can stay null — we'll check before using
+    // _snowBiome can stay null; we'll check before using
     // If no fallback, use the middle biome
     if (!this._fallbackBiome) {
       this._fallbackBiome = this.biomeList[Math.floor(this.biomeList.length / 2)];
@@ -525,7 +525,7 @@ class TerrainGenerator {
   // ============================================
   
   generate() {
-    // A fresh terrain invalidates any cached relief bake — it must re-project
+    // A fresh terrain invalidates any cached relief bake; it must re-project
     // the new land the next time the 3D view is used.
     this._disposeReliefBuffers();
 
@@ -669,13 +669,13 @@ class TerrainGenerator {
     // Half-width of a contour band, in elevation units. The band spans
     // 2 x this out of every contourInterval, so it covers
     // (2 * contourWidth / contourInterval) of the map. At the old hardcoded
-    // 0.008 against an interval of 0.045 that was ~36% — bands, not lines.
+    // 0.008 against an interval of 0.045 that was ~36%; bands, not lines.
     const contourWidth = (this.config.contourWidth != null)
       ? this.config.contourWidth : 0.008;
 
     // PERF: precompute each biome's colour stops as raw [r,g,b] (once), then lerp in
-    // plain numbers straight into the Uint8Array. The old path called getColor() —
-    // which allocates a fresh p5.Color via lerpColor() — then red()/green()/blue() on
+    // plain numbers straight into the Uint8Array. The old path called getColor();
+    // which allocates a fresh p5.Color via lerpColor(); then red()/green()/blue() on
     // every one of ~600K render cells (~5.7s). Numeric lerp is ~20× faster and pixel-
     // identical. (See MISTAKES.md.)
     const stops = this.biomeArray.map(b =>
@@ -737,7 +737,7 @@ class TerrainGenerator {
   
   /**
    * Bake a single season's terrain buffer using direct pixel manipulation.
-   * Sized to the FULL world (worldW×worldH) — on a classic level that equals the
+   * Sized to the FULL world (worldW×worldH); on a classic level that equals the
    * window; on a world grid it is the whole continuous land, which render() then
    * pans across. The px→render-cell mapping (invScale) is unchanged, so widening
    * the buffer simply covers more render cells.
@@ -999,7 +999,7 @@ class TerrainGenerator {
     const nearMostRw = inRows - 1 + marginNear;
 
     const K = P.K;
-    // Relief height in render-row units, over ONE window's depth — matches the
+    // Relief height in render-row units, over ONE window's depth; matches the
     // window-based Projection.LIFT (billboards use liftFrac·viewH) and fills the frame.
     const LIFT = P.liftFrac * inRows;
     const P0 = marginFar * K;            // index offset so the far over-scan sits at buffer top
@@ -1008,7 +1008,7 @@ class TerrainGenerator {
     const bufH = Math.ceil(nearMostRw * K + LIFT + P0) + 1;
     // World-unit draw height. bufH is in projected RENDER-ROW px; one render row is
     // renderScale world units, so scale by renderScale (= scale/detail). The old
-    // `bufH/detail` assumed pixelScale 1 (renderScale = 1/detail) — true for classic
+    // `bufH/detail` assumed pixelScale 1 (renderScale = 1/detail); true for classic
     // levels but half-height on a world grid (pixelScaleMult raises scale), which left
     // a black gap under the relief. reliefDrawY already uses renderScale.
     this._reliefWorldH = bufH * this.scale / detail;   // = bufH * renderScale
@@ -1016,7 +1016,7 @@ class TerrainGenerator {
 
     const buf = createGraphics(cols, bufH);
     // Full-world grid buffers are large and always drawn scaled, so bake them at device
-    // density 1 (¼ the pixels) — a big win, invisible once scaled to the viewport.
+    // density 1 (¼ the pixels); a big win, invisible once scaled to the viewport.
     if (this.hasWorldGrid && buf.pixelDensity) buf.pixelDensity(1);
     buf.loadPixels();
     const d = buf.pixelDensity();
@@ -1031,7 +1031,7 @@ class TerrainGenerator {
     const waterIdx = this._waterBiome ? this.biomeIndexByKey[this._waterBiome.key] : -1;
 
     // Look constants (device-pixel scaled). FACEMIN gates the dark cliff face so
-    // only genuinely tall rises get it — gentle and moderate slopes stay lit,
+    // only genuinely tall rises get it; gentle and moderate slopes stay lit,
     // which stops steep cel-faces (bright snow especially) from reading as
     // vertical streaks. TOPBAND is the lit cap above a real face.
     const SHADE = 6.0;                 // directional NW slope-shading strength (more defined relief)
@@ -1075,7 +1075,7 @@ class TerrainGenerator {
         const ci = i * 3;
         let cr = cellColors[ci], cg = cellColors[ci + 1], cb = cellColors[ci + 2];
 
-        // Directional (NW-lit) slope shade — north = the farther row (er-1).
+        // Directional (NW-lit) slope shade; north = the farther row (er-1).
         const eN = (er > 0) ? heightMap[i - cols] : e;
         const eW = (scol > 0) ? heightMap[i - 1] : e;
         let sh = 1 - ((e - eN) + (e - eW)) * 0.5 * SHADE;
@@ -1134,7 +1134,7 @@ class TerrainGenerator {
   }
 
   // Bake all four relief buffers on demand (first 3D switch, or after a regen).
-  // A one-time hitch of a few hundred ms — the same cost class as the flat bake.
+  // A one-time hitch of a few hundred ms; the same cost class as the flat bake.
   _ensureReliefBuffers() {
     if (typeof Projection === 'undefined') return;
     // Re-bake if any bake-time 3D knob changed since the cached bake; else reuse the cache
@@ -1152,7 +1152,7 @@ class TerrainGenerator {
     if (this.reliefBuffers.summer && (knobChanged || rowChanged)) {
       // An N–S year move re-bakes the relief for the new row (it's baked one window's
       // depth at a time). During the pan, KEEP the old row's buffers as _reliefPrev so
-      // render() can CROSSFADE old→new — a clean row transition, since a literal vertical
+      // render() can CROSSFADE old→new; a clean row transition, since a literal vertical
       // pan can't be geometrically clean in per-row plan-oblique relief. Any other re-bake
       // (a knob change, or a row set with no pan) just disposes as before.
       if (rowChanged && !knobChanged && this._pan) {
@@ -1208,7 +1208,7 @@ class TerrainGenerator {
   }
   
   /**
-   * Render terrain — draw the pre-baked FULL-WORLD buffer offset by the camera scroll,
+   * Render terrain; draw the pre-baked FULL-WORLD buffer offset by the camera scroll,
    * so the active area's window fills the play area. On a classic level the buffer is
    * one window and scroll is 0, so this is the old behaviour. On a world grid the year
    * pan animates the scroll across the continuous land. Season crossfade preserved.
@@ -1233,7 +1233,7 @@ class TerrainGenerator {
     const cur = set[curKey] || set.summer;
     if (!cur) return;
 
-    // A world grid bakes the continuous land, but only the window is visible — so blit
+    // A world grid bakes the continuous land, but only the window is visible; so blit
     // just the scrolled window sub-rect (source crop) rather than the whole buffer every
     // frame. Classic levels (scroll 0, buffer == window) draw whole, exactly as before.
     // The relief is baked PER-ROW (one window's depth → fills the frame), full width, so
@@ -1300,7 +1300,7 @@ class TerrainGenerator {
   // Whether a year pan is currently animating.
   isPanning() { return !!this._pan; }
 
-  // Pan the camera to a new area of the SAME continuous world (no regeneration — the
+  // Pan the camera to a new area of the SAME continuous world (no regeneration; the
   // land is generated once). Sets the active area immediately (so terrain lookups for
   // the freshly-spawned cast read the new ground) and animates the camera there.
   panToArea(col, row, opts = {}) {
@@ -1331,14 +1331,14 @@ class TerrainGenerator {
     this.scrollY = this._lerp(p.fromY, p.toY, e);
     if (p.t >= 1) {
       this.scrollX = p.toX; this.scrollY = p.toY; this._pan = null;
-      this._disposeReliefPrev();   // pan done — drop the crossfade's old-row buffers
+      this._disposeReliefPrev();   // pan done; drop the crossfade's old-row buffers
       return false;
     }
     return true;
   }
 
   // Deepen the glacial share. Regenerates the same land (seed kept) at the new advance +
-  // re-bakes — heavy, so used sparingly (e.g. once per grid loop).
+  // re-bakes; heavy, so used sparingly (e.g. once per grid loop).
   setGlacialAdvance(adv) {
     if (Math.abs((this.glacialAdvance || 0) - adv) < 1e-4) return;
     this.glacialAdvance = adv;

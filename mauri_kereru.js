@@ -1,5 +1,5 @@
 // ============================================================
-// KERERŪ — the large-seed disperser  (flighted-bird base class)
+// KERERŪ; the large-seed disperser  (flighted-bird base class)
 // Hemiphaga novaeseelandiae, the only bird large enough to pass big podocarp fruit,
 // so the forest recruits where kererū go. Base class for Mauri's flighted birds
 // (kōkako/kea/kākā/kākāpō extend it; see FLYER_TYPES). A flyer with short flights
@@ -18,9 +18,9 @@
 const FLYER_TYPES = new Set(['kereru']);
 
 const KERERU_STATE = {
-  FLYING:  'flying',      // in the air — hopping to a tree (hungry) or dispersing (full)
+  FLYING:  'flying',      // in the air; hopping to a tree (hungry) or dispersing (full)
   FEEDING: 'feeding',     // perched at a fruiting tree, filling the crop
-  PERCHED: 'perched',     // perched — digesting, resting between hops, or laying
+  PERCHED: 'perched',     // perched; digesting, resting between hops, or laying
   SHELTER: 'sheltering'   // storm-grounded: hunkered low, no feeding/dispersal/laying
 };
 
@@ -28,11 +28,11 @@ const KERERU_SPECIES = {
   displayName:    'Kererū',
   scientificName: 'Hemiphaga novaeseelandiae',
   label:          'kererū',   // lower-case, for the notification strip
-  description:    'The forest pigeon — the only bird that disperses large podocarp fruit.',
+  description:    'The forest pigeon; the only bird that disperses large podocarp fruit.',
   rarity:         'common',
   highlightColor: [150, 235, 150],  // green; player highlight
 
-  // Movement / render — an unhurried flap, kept below the eagle's hunt speed so a chase resolves.
+  // Movement / render; an unhurried flap, kept below the eagle's hunt speed so a chase resolves.
   baseSpeed:        0.32,
   maxForce:         0.055,
   size:             6,
@@ -40,7 +40,7 @@ const KERERU_SPECIES = {
   cruiseAlt:        24,     // flight height above the ground, px (shadow sells the height)
   perchAlt:         8,      // sits low on the canopy when perched
 
-  // Flight character — short legs; the kererū only hops.
+  // Flight character; short legs; the kererū only hops.
   hopRadius:        50,
   feedRadius:       100,
 
@@ -50,13 +50,13 @@ const KERERU_SPECIES = {
   disperseEverySec: 20,     // cadence of seed drops while carrying
   restSec:          8,      // perched digest/rest between hops (why it perches so much)
 
-  // Survival — abundant in the forested interglacial, thin in the glacial.
+  // Survival; abundant in the forested interglacial, thin in the glacial.
   maxHunger:        100,
   hungerRatePerSec: 1.2,    // ≈ per second of the sim clock (feeding pays it back)
   feedRelief:       70,     // hunger removed by a full feed
   starveSec:        18,     // sustained max-hunger before death
 
-  // Reproduction — sexual, emergent (see _tryReproduce).
+  // Reproduction; sexual, emergent (see _tryReproduce).
   maturitySec:      20,
   eggCooldownSec:   35,
   mateRadius:       200,
@@ -95,7 +95,7 @@ class Kereru extends Boid {
     this._perchDX = 0;
     this._perchDY = 0;
     this._wasPerched = false;
-    // Last walkable ground stood over — its bolt-hole if it strays over water.
+    // Last walkable ground stood over; its bolt-hole if it strays over water.
     this._lastLand = { x, y };
 
     // Flight legs
@@ -150,7 +150,7 @@ class Kereru extends Boid {
   }
 
   // ============================================================
-  // LIFE / MOTION CLOCK — called by Simulation._updateOtherEntities.
+  // LIFE / MOTION CLOCK; called by Simulation._updateOtherEntities.
   // ============================================================
   behave(sim, mauri, seasonManager, dt) {
     // Storms flush a flyer off its tree (see _fleeStorm) rather than grounding it.
@@ -167,7 +167,7 @@ class Kereru extends Boid {
     // A placed Storm scares the bird off its tree to seek a new one (a displacement tool).
     if (this._fleeStorm(sim, dt)) return;
 
-    // Flush from a hunting eagle next — a raptor on the hunt scatters the flock.
+    // Flush from a hunting eagle next; a raptor on the hunt scatters the flock.
     if (this._fleeHarrier(sim, dt)) return;
 
     this._runState(sim, dt);
@@ -185,7 +185,7 @@ class Kereru extends Boid {
           if (sim.game) sim.game.addNotification(`A ${this._label} is lost as the forest thins.`, 'info');
           return;
         }
-        this.hunger = this.maxHunger * 0.85;         // protected floor bird — clings on
+        this.hunger = this.maxHunger * 0.85;         // protected floor bird; clings on
         this._starveTimer = 0;
       }
     } else if (this._starveTimer > 0) {
@@ -220,7 +220,7 @@ class Kereru extends Boid {
     this._fleeingStorm = true;
     this.state = KERERU_STATE.FLYING;
     this._targetTree = null;                         // drop the tree it was heading to / feeding at
-    this._perchTree = null;                          // and any home perch (kea) — re-chosen once clear
+    this._perchTree = null;                          // and any home perch (kea); re-chosen once clear
     const base = this.speciesData?.config?.baseSpeed || 0.42;
     this.maxSpeed = base * 1.2;                      // hurry off, a shade above cruise
     let dx = this.pos.x - storm.pos.x, dy = this.pos.y - storm.pos.y;
@@ -321,7 +321,7 @@ class Kereru extends Boid {
     p.x = bx; p.y = by; return p;                            // nowhere passable → hold
   }
 
-  // State dispatch — split out so a subclass can add a state (kōkako SINGING).
+  // State dispatch; split out so a subclass can add a state (kōkako SINGING).
   _runState(sim, dt) {
     switch (this.state) {
       case KERERU_STATE.FLYING:  this._flying(sim, dt); break;
@@ -331,7 +331,7 @@ class Kereru extends Boid {
     }
   }
 
-  // Flock cap / floor — from the species config, else the kererū LEVEL_MECHANICS knobs.
+  // Flock cap / floor; from the species config, else the kererū LEVEL_MECHANICS knobs.
   _maxPopulation() {
     const c = this.speciesData && this.speciesData.config;
     if (c && c.maxPopulation != null) return c.maxPopulation;
@@ -343,7 +343,7 @@ class Kereru extends Boid {
     return (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.kereruPopulationFloor) ?? 2;
   }
 
-  // FLYING — hungry (crop == 0): find a fruiting tree, hop to it. Full (crop > 0):
+  // FLYING; hungry (crop == 0): find a fruiting tree, hop to it. Full (crop > 0):
   // hop away from the source, dropping a seed each leg.
   _flying(sim, dt) {
     this.maxSpeed = this.speciesData?.config?.baseSpeed || 1.4;
@@ -387,7 +387,7 @@ class Kereru extends Boid {
     }
   }
 
-  // FEEDING — perched at the tree, filling the crop. The plant is not consumed.
+  // FEEDING; perched at the tree, filling the crop. The plant is not consumed.
   _feeding(sim, dt) {
     this.maxSpeed = 0.15;
     this.vel.mult(Math.pow(0.8, dt));                // settle onto the perch
@@ -407,7 +407,7 @@ class Kereru extends Boid {
     }
   }
 
-  // PERCHED — digesting / resting between hops, and where a ready female lays.
+  // PERCHED; digesting / resting between hops, and where a ready female lays.
   _perched(sim, dt) {
     this.maxSpeed = 0.15;
     this.vel.mult(Math.pow(0.8, dt));

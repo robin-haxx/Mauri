@@ -1,9 +1,9 @@
 // ============================================
-// SPRITE ATLAS — runtime texture consolidation
+// SPRITE ATLAS; runtime texture consolidation
 // ============================================
 // Sprite PNGs are loaded individually in preload(), giving ~150 GPU textures at
 // draw time. This packs all loaded frames into a few large pages once, at setup(),
-// so the cast draws from one or a few shared textures — cutting texture binds, the
+// so the cast draws from one or a few shared textures; cutting texture binds, the
 // texture count, and VRAM fragmentation (not fill rate, so not a frame-rate fix).
 //
 // build() replaces each loaded p5.Image (in place, aliases and all) with a
@@ -14,7 +14,7 @@
 // no-op: an unloadable or oversized image is left as its original reference.
 
 const SpriteAtlas = {
-  MAX_PAGE: 4096,   // page dimension cap — Chrome guarantees >= 4096; kiosk-safe
+  MAX_PAGE: 4096,   // page dimension cap; Chrome guarantees >= 4096; kiosk-safe
   // Transparent px between frames, sized for mipmapping (GLBatch WebGL2): the gutter
   // must exceed the mip footprint or a small sprite pulls in a neighbour. 16 = clean to ~1/16.
   GUTTER: 16,
@@ -93,10 +93,10 @@ const SpriteAtlas = {
     }
     for (const p of placements) {
       const pg = this.pages[p.page];
-      if (pg && pg.image) pg.image(p.img, p.x, p.y);   // graphics-method draw of a REAL image — 1:1, crisp
+      if (pg && pg.image) pg.image(p.img, p.x, p.y);   // graphics-method draw of a REAL image; 1:1, crisp
     }
 
-    // 3b. ALPHA BLEED — only when pages will be mipmapped (GLBatch WebGL2). Extend each
+    // 3b. ALPHA BLEED; only when pages will be mipmapped (GLBatch WebGL2). Extend each
     //     sprite's edge colour into surrounding transparent px (alpha stays 0) so a mip
     //     level doesn't average the edge toward black (a dark fringe on downscaled sprites).
     if (typeof GLBatch !== 'undefined' && GLBatch._gl2) {
@@ -183,7 +183,7 @@ const SpriteAtlas = {
       }
     };
 
-    // Fauna — EntitySprites: moa, moaVariants[key], eagle, flyers.
+    // Fauna; EntitySprites: moa, moaVariants[key], eagle, flyers.
     if (typeof EntitySprites !== 'undefined' && EntitySprites) {
       const E = EntitySprites;
       eachIn(E.moa);
@@ -192,7 +192,7 @@ const SpriteAtlas = {
       eachIn(E.flyers);
     }
 
-    // Flora — PLANT_SPRITES[type] = { state:img } and PORTRAIT_PLANT_SPRITES[type] = [img, img].
+    // Flora; PLANT_SPRITES[type] = { state:img } and PORTRAIT_PLANT_SPRITES[type] = [img, img].
     const collectPlants = (PS) => {
       if (!PS) return;
       for (const key in PS) eachIn(PS[key]);
@@ -202,7 +202,7 @@ const SpriteAtlas = {
     collectPlants((typeof PORTRAIT_PLANT_SPRITES !== 'undefined' && PORTRAIT_PLANT_SPRITES)
       ? PORTRAIT_PLANT_SPRITES : (typeof portraitPlantSprites !== 'undefined' ? portraitPlantSprites : null));
 
-    // Weather — placeableSprites (clouds, bolt). 'loaded' is a boolean, skipped by _packable.
+    // Weather; placeableSprites (clouds, bolt). 'loaded' is a boolean, skipped by _packable.
     if (typeof placeableSprites !== 'undefined' && placeableSprites) {
       for (const k in placeableSprites) consider(placeableSprites, k);
     }

@@ -1,5 +1,5 @@
 // ============================================
-// LEVEL 1: Kahurangi — Upper West Coast
+// LEVEL 1: Kahurangi; Upper West Coast
 // The introductory level, single moa species
 // ============================================
 
@@ -120,13 +120,13 @@ const LEVEL_KAHURANGI = {
   availablePlaceables: {
     // Plants
     kawakawa:  { cost: 25 },   // slot 1
-    harakeke:  { cost: 30 },   // slot 2 — flax
+    harakeke:  { cost: 30 },   // slot 2; flax
     // Habitat items
-    shelter:   { cost: 40 },   // slot 3 — fern shelter
+    shelter:   { cost: 40 },   // slot 3; fern shelter
     nest:      { cost: 50 },   // slot 4
     waterhole: { cost: 45 },   // slot 5
     // Storm
-    Storm:     { cost: 35 }    // slot 6 — storm
+    Storm:     { cost: 35 }    // slot 6; storm
   },
 
   // Runs to a fixed 4:00 end (timeLimit); goals are rewards along the way, not the win.
@@ -180,7 +180,7 @@ const LEVEL_KAHURANGI = {
       // Background colour to fade into at illustration edges
       bgColor: [25, 35, 30],
 
-      // Asset paths — uncomment and set when artwork is ready
+      // Asset paths; uncomment and set when artwork is ready
       // paths: {
       //   core:        'assets/art/kahurangi_core.png',       // 1600×1080, full detail
       //   leftWing:    'assets/art/kahurangi_left.png',       // ~580×1080, atmospheric extension

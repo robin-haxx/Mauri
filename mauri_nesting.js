@@ -1,5 +1,5 @@
 // ============================================================
-// NESTING SITE — an established moa nest
+// NESTING SITE; an established moa nest
 // A fixed patch of ground where moa gather to lay, so eggs cluster into legible
 // nests that eagles patrol and kea raid. Seeded at level start (some in forest)
 // and can form where the player grows forest. A raid consumes the eggs in range,

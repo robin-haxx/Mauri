@@ -1,5 +1,5 @@
 // ============================================
-// GL TERRAIN — height-field relief on the GPU  (opt-in: ?terrain=gl, needs ?render=gl)
+// GL TERRAIN; height-field relief on the GPU  (opt-in: ?terrain=gl, needs ?render=gl)
 // ============================================
 // Renders the terrain as a lit, displaced height-field mesh in the same WebGL canvas as
 // the sprite batch, replacing the CPU-baked relief buffer. Wins over the bake:
@@ -48,11 +48,11 @@ const GLTerrain = {
       '  vDown=clamp(0.5 - 0.5*gl_Position.y, 0.0, 1.0);' +             // SCREEN Y: 0 at top (far), 1 at bottom (near)
       '  vWater=aWorld.w; vWorld=aWorld.xy; vPaint=vec2(paintX,paintY); vElev=aWorld.z;' +
       '}';
-    // Lighting: two-tone daylight — a warm sun key + a cool sky fill for the ambient.
+    // Lighting: two-tone daylight; a warm sun key + a cool sky fill for the ambient.
     // Water (vWater=1) rides the same light with a ripple normal. Then, in order:
     //   • CLIMATE SNOW above uSnowLine, which drops with the glacial (flatter ground holds more).
     //   • aerial haze on the far ridge, • seasonal frost tint,
-    //   • GLACIAL GRADE — desaturate + cool + darken by uCold (0..1 severity).
+    //   • GLACIAL GRADE; desaturate + cool + darken by uCold (0..1 severity).
     const fs =
       'precision mediump float;' +
       'varying vec3 vN;varying vec3 vCol;varying float vHaze;varying float vWater;varying vec2 vWorld;varying vec2 vPaint;varying float vElev;varying float vDown;' +
@@ -72,7 +72,7 @@ const GLTerrain = {
       '    uvw.x+=uTime*0.030;' +
       '    vec2 p=mod(uvw*6.28318530718,6.28318530718)-250.0;' +
       '    vec2 iq=p; float c=1.0; float inten=0.005;' +
-      // PERF: this loop runs per water fragment every frame — the most expensive thing on the
+      // PERF: this loop runs per water fragment every frame; the most expensive thing on the
       // terrain. Each step trades against water fill cost; 3 keeps the long-wave character.
       '    const int WATER_STEPS=3;' +
       '    for(int n=0;n<WATER_STEPS;n++){' +
@@ -143,7 +143,7 @@ const GLTerrain = {
 
     if (!this._prog) this._buildProgram(gl);
 
-    // FAR/NEAR over-scan skirt — real receding terrain past the world's edges, so the tilted
+    // FAR/NEAR over-scan skirt; real receding terrain past the world's edges, so the tilted
     // plane fills the frame. Sample fresh terrain for a band of rows above (worldY<0) and
     // below (worldY>worldH) the world, sized off the visible window depth.
     const _cfg = (typeof CONFIG !== 'undefined') ? CONFIG : {};
@@ -246,7 +246,7 @@ const GLTerrain = {
     // 32-bit indices are core in WebGL2; only WebGL1 needs OES_element_index_uint.
     const uintOK = (typeof GLBatch !== 'undefined' && GLBatch._gl2) || gl.getExtension('OES_element_index_uint');
     if (this._idxType === gl.UNSIGNED_INT && !uintOK) {
-      // No 32-bit indices available — fall back so we never draw garbage.
+      // No 32-bit indices available; fall back so we never draw garbage.
       console.warn('[glterrain] mesh too large for 16-bit indices and no uint index ext; disabling');
       this.enabled = false; return false;
     }
@@ -400,7 +400,7 @@ const GLTerrain = {
     // Water: scroll the ripples in real time; deep blue-green sea tint.
     gl.uniform1f(L.uTime, ((typeof millis === 'function') ? millis() : (Date.now())) * 0.001);
     gl.uniform3f(L.uWaterCol, 24 / 255, 64 / 255, 92 / 255);
-    // Two-tone daylight — a warm sun key + a cool sky fill for the ambient.
+    // Two-tone daylight; a warm sun key + a cool sky fill for the ambient.
     gl.uniform3f(L.uSunCol, 1.15, 1.06, 0.90);
     gl.uniform3f(L.uSkyCol, 0.74, 0.82, 0.98);
     // Glacial grade + creeping snow line (both eased above; snow line matches where the sim snows).
@@ -497,7 +497,7 @@ const GLTerrain = {
   },
 
   // Copy the offscreen terrain onto the GL canvas, scissored to the game area (canvas px),
-  // as an opaque blit (blend off) — the offscreen game area is fully painted (sky + mesh).
+  // as an opaque blit (blend off); the offscreen game area is fully painted (sky + mesh).
   _blit(gl, clipX, clipY, clipW, clipH, ss) {
     gl.useProgram(this._blitProg);
     gl.enable(gl.SCISSOR_TEST);

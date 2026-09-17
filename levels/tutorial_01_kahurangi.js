@@ -1,20 +1,20 @@
 // ============================================================================
-// LEVEL 1 (Kahurangi) — TUTORIAL SCRIPT
+// LEVEL 1 (Kahurangi); TUTORIAL SCRIPT
 // Registered with TUTORIAL_REGISTRY under the level id (and as 'default', the
 // fallback for any level without its own script). The engine stays content-free.
 //
-// AUTHORING GUIDE — each tip supports:
+// AUTHORING GUIDE; each tip supports:
 //   trigger: { type: TRIGGER_TYPE.EVENT | TIME | CONDITION | IMMEDIATE,
 //              event: TUTORIAL_EVENTS.*          (EVENT tips),
 //              delay: frames                     (TIME tips, from level start),
 //              condition: (game, data) => bool   (CONDITION tips / EVENT gate),
 //              minGameTime: frames, cooldown: frames }
-//   title, content: ["short line", ...]  (lines don't reflow — keep them short)
+//   title, content: ["short line", ...]  (lines don't reflow; keep them short)
 //   guidePosition: center|left|right|top|bottom|topLeft|topRight|bottomLeft|bottomRight
 //   highlight / highlightAlt: { type: 'element', target: <TutorialUIMapper target> }
-//   guidedPlaceable: '<type>'  — a "place this" beat: placing anything else fires off_script_placement
-//   onShow: (game, data) => {} — side effects when the tip appears
-//   nextTip: '<id>'            — chain; the next tip must be TRIGGER_TYPE.IMMEDIATE
+//   guidedPlaceable: '<type>' ; a "place this" beat: placing anything else fires off_script_placement
+//   onShow: (game, data) => {}; side effects when the tip appears
+//   nextTip: '<id>'           ; chain; the next tip must be TRIGGER_TYPE.IMMEDIATE
 //   pauseGame, showOnce, priority (lower first), urgency: 'high' (skips spacing)
 // Shared helpers: tutorialGuidedWindowActive(game)
 // ============================================================================
@@ -371,7 +371,7 @@ const TIPS = {
   //   trigger: {
   //     type: TRIGGER_TYPE.EVENT,
   //     event: TUTORIAL_EVENTS.SEASON_CHANGE,
-  //     // Hold this tip until autumn itself arrives — its Pātōtara fruiting
+  //     // Hold this tip until autumn itself arrives; its Pātōtara fruiting
   //     // line only makes sense then. (Level 1 starts in spring, so the
   //     // spring→summer turn passes silently.)
   //     condition: (game, data) => !!(data && data.seasonKey === 'autumn')

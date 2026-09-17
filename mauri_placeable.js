@@ -329,7 +329,7 @@ class PlaceableObject {
     if (this.def.favouredSpecies && moa.speciesKey !== this.def.favouredSpecies) {
       sel = (typeof LEVEL_MECHANICS !== 'undefined' ? (LEVEL_MECHANICS.unfavouredBrowsePenalty ?? 0.25) : 0.25);
     }
-    if (sel <= 0) return 0;   // fully exclusive — no food, and not counted as feeding
+    if (sel <= 0) return 0;   // fully exclusive; no food, and not counted as feeding
 
     this.feedingMoaCount++;
 
@@ -483,12 +483,12 @@ class PlaceableObject {
     noFill();
     stroke(col[0], col[1], col[2], lineAlpha * lifeRatio);
     strokeWeight(weight);
-    ellipse(0, 0, R * 2, R * 2);   // FIXED — the real effective radius
+    ellipse(0, 0, R * 2, R * 2);   // FIXED; the real effective radius
     if (dc) { dc.shadowBlur = 0; dc.shadowColor = 'rgba(0,0,0,0)'; }
   }
 
   _renderStorm(lifeRatio) {
-    // Filled storm body (a real disc — captured fine by the GL layer)...
+    // Filled storm body (a real disc; captured fine by the GL layer)...
     fill(40, 40, 50, 30 * lifeRatio);
     noStroke();
     ellipse(0, 0, this.radius * 1.8, this.radius * 1.8);
@@ -505,17 +505,19 @@ class PlaceableObject {
     const _plantPlaceable = this.type === 'kawakawa' || this.type === 'harakeke' || this.type === 'lancewood' || this.type === 'speargrass';
     const _showRing = !_plantPlaceable || (typeof CONFIG !== 'undefined' && CONFIG.debugMode);
 
-    // Ring color — reused for the icon border so both read as one object.
-    // Base is the placeable's own identity color, lifted toward white so it stays
-    // visible on terrain (fern shelter reads green, not white). Seasonal state still
-    // tints it: green when boosted, warm when suppressed.
+    // Ring color; reused for the icon border so both read as one object.
+    // Base is the placeable's own identity color, brightened (its brightest channel
+    // scaled up to a fixed target) so it keeps its hue instead of washing out to white:
+    // the fern shelter reads clearly green on green terrain. Seasonal state still tints
+    // it: green when boosted, warm when suppressed.
     let rc;
     if (this.seasonalMultiplier > 1.2) rc = [100, 255, 150];
     else if (this.seasonalMultiplier < 0.7) rc = [255, 150, 100];
     else {
       const _c = this.def._parsedColor;
-      const _lift = (v) => Math.round(v + (255 - v) * 0.45);
-      rc = [_lift(red(_c)), _lift(green(_c)), _lift(blue(_c))];
+      const _r = red(_c), _g = green(_c), _b = blue(_c);
+      const _k = 205 / Math.max(_r, _g, _b, 1);
+      rc = [Math.min(255, Math.round(_r * _k)), Math.min(255, Math.round(_g * _k)), Math.min(255, Math.round(_b * _k))];
     }
 
     if (_showRing) {
@@ -529,7 +531,7 @@ class PlaceableObject {
         this._drawRadiusRing(rc, isFeeding ? 150 : 95, isFeeding ? 2 : 1.25, isFeeding ? 0.7 : 0.45, lifeRatio);
       }
 
-      // Inner glow when feeding (a filled disc — fine on the GL layer).
+      // Inner glow when feeding (a filled disc; fine on the GL layer).
       if (isFeeding) {
         const col = this.def._parsedColor;
         fill(red(col), green(col), blue(col), (sin(frameCount * 0.1) * 0.3 + 0.5) * 80);
@@ -538,10 +540,13 @@ class PlaceableObject {
       }
     }
 
-    // Types with spawned plants skip the central icon dot
+    // Types that render their own sprite (spawned plants, or the fern canopy) skip the
+    // generic central icon dot+border; otherwise it reads as a second, smaller "range"
+    // ring inside the effective-radius ring and muddies where the real range is.
     const hasSpawnedPlants = this.type === 'kawakawa' || this.type === 'harakeke' || this.type === 'lancewood' || this.type === 'speargrass';
-    
-    if (!hasSpawnedPlants) {
+    const hasOwnVisual = hasSpawnedPlants || this.type === 'shelter';
+
+    if (!hasOwnVisual) {
       // Main icon background
       const col = this.def._parsedColor;
       let bgAlpha = 180 * lifeRatio;
@@ -551,7 +556,7 @@ class PlaceableObject {
       fill(red(col), green(col), blue(col), bgAlpha);
       ellipse(0, 0, 20, 20);
       
-      // Border — a soft, low-opacity line in the ring color rather than a hard white outline.
+      // Border; a soft, low-opacity line in the ring color rather than a hard white outline.
       stroke(rc[0], rc[1], rc[2], 60 * lifeRatio);
       strokeWeight(2);
       noFill();

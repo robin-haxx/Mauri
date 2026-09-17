@@ -1,9 +1,9 @@
 // ============================================================
-// KĀKĀPŌ — the flightless mast-breeder  (extends Kereru)
+// KĀKĀPŌ; the flightless mast-breeder  (extends Kereru)
 // Strigops habroptilus, the heavy, nocturnal, flightless ground parrot. Two things
 // define it, both built here:
 //   · FLIGHTLESS. Reuses the Kereru forage → feed → rest loop but never leaves the
-//     ground (isFlyer false, altitude pinned to 0). It does NOT flee a raptor —
+//     ground (isFlyer false, altitude pinned to 0). It does NOT flee a raptor;
 //     kākāpō freeze and rely on camouflage.
 //   · MAST BREEDING. Breeds only in a rimu/podocarp MAST YEAR (the payoff for the
 //     player's Mast Year item). _tryReproduce gates on sim.mastYear, then defers to
@@ -42,7 +42,7 @@ class Kakapo extends Kereru {
 
   // Territorial lek behaviour, after the base ground loop steers:
   //   · A MALE settles a court (at a nearby shelter if one's in reach, else where it
-  //     stands), then holds it and drives rival males off — a chase that burns hunger,
+  //     stands), then holds it and drives rival males off; a chase that burns hunger,
   //     so males can't pack tight.
   //   · A FEMALE drifts to the nearest court in a mast to pair, else to a shelter.
   // Skipped while storm-sheltered or not walking.
@@ -145,7 +145,7 @@ class Kakapo extends Kereru {
     this._contesting = contesting;   // audio: several contesting males → territorial call
   }
 
-  // Kākāpō don't flee a raptor — they freeze and rely on camouflage. Returning false
+  // Kākāpō don't flee a raptor; they freeze and rely on camouflage. Returning false
   // keeps the ordinary ground loop.
   _fleeHarrier(sim, dt) { return false; }
 
@@ -177,18 +177,18 @@ class Kakapo extends Kereru {
 }
 
 // ------------------------------------------------------------
-// SPECIES DATA — Strigops habroptilus. Registered in initializeRegistry.
+// SPECIES DATA; Strigops habroptilus. Registered in initializeRegistry.
 // ------------------------------------------------------------
 const KAKAPO_SPECIES = {
   displayName:    'Kākāpō',
   scientificName: 'Strigops habroptilus',
   label:          'kākāpō',
   class:          (typeof Kakapo !== 'undefined') ? Kakapo : undefined,
-  description:    'The flightless, nocturnal ground parrot — the heaviest parrot alive, and a rimu-mast breeder.',
+  description:    'The flightless, nocturnal ground parrot; the heaviest parrot alive, and a rimu-mast breeder.',
   rarity:         'rare',
   highlightColor: [190, 240, 115],  // moss green; player highlight
 
-  // Movement / render — a slow, heavy WALKER pinned to the ground (no flight).
+  // Movement / render; a slow, heavy WALKER pinned to the ground (no flight).
   baseSpeed:        0.12,
   maxForce:         0.04,
   size:             8,
@@ -207,13 +207,13 @@ const KAKAPO_SPECIES = {
   restSec:          10,
   disperseChance:   0.15,
 
-  // Survival — long-lived, so it holds between masts: low hunger, slow to starve, a floor.
+  // Survival; long-lived, so it holds between masts: low hunger, slow to starve, a floor.
   maxHunger:        100,
   hungerRatePerSec: 0.9,
   feedRelief:       72,
   starveSec:        24,
 
-  // Reproduction — the base loop, but GATED to mast years by _tryReproduce.
+  // Reproduction; the base loop, but GATED to mast years by _tryReproduce.
   maturitySec:      30,    // slow to mature
   eggCooldownSec:   50,
   mateRadius:       180,
@@ -221,7 +221,7 @@ const KAKAPO_SPECIES = {
   maxPopulation:    10,
   populationFloor:  2,
 
-  // Territorial lek (kākāpō-specific) — see Kakapo.behave. Males hold spaced courts and
+  // Territorial lek (kākāpō-specific); see Kakapo.behave. Males hold spaced courts and
   // chase rivals off, so a mast can't hand a runaway boom.
   lekRadius:      140,     // males keep ~this far apart (contest rival males within it)
   territoryPush:  0.06,    // how hard a male charges an intruder / drives off a neighbour

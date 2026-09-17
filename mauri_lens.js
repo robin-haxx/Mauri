@@ -1,5 +1,5 @@
 // ============================================
-// LENS — debug visualisation overlays (toggle: key L in debug mode)
+// LENS; debug visualisation overlays (toggle: key L in debug mode)
 // ============================================
 // A lens draws otherwise-invisible simulation state in world space so balance can
 // be tuned by eye. Each lens is { id, label, drawWorld(game, z), drawScreen? }
@@ -115,7 +115,7 @@ Lens.register({
       }
     }
 
-    // Context — moa nesting sites (rings) and un-hatched moa eggs (pips).
+    // Context; moa nesting sites (rings) and un-hatched moa eggs (pips).
     if (sim.nestingSites) {
       noFill(); stroke(235, 238, 248, 140); strokeWeight(lw * 0.8);
       for (const s of sim.nestingSites) if (s && s.pos) circle(s.pos.x, s.pos.y, 40 + rMark(6));
@@ -129,7 +129,7 @@ Lens.register({
       }
     }
 
-    // Caches — attract reach (faint), effect radius (solid), a core sized by current draw.
+    // Caches; attract reach (faint), effect radius (solid), a core sized by current draw.
     caches.forEach((c, i) => {
       const col = Lens.colOf(i);
       const rEff = (c.def && (c.def.coverRadius || c.def.radius)) || 70;
@@ -151,7 +151,7 @@ Lens.register({
       textStyle(NORMAL);
     });
 
-    // The pull itself — a line from each kea to its committed cache; grey pip if idle.
+    // The pull itself; a line from each kea to its committed cache; grey pip if idle.
     for (const k of kea) {
       const c = k._lureChoice;
       const kx = k.pos.x, ky = k.pos.y;

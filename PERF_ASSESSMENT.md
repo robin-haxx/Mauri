@@ -1,8 +1,8 @@
-# Performance Assessment — framerate drops
+# Performance Assessment; framerate drops
 
 A read-through of the per-frame hot paths (`draw` → `Game.update`/`render` →
 `Simulation.update`/`render`, the spatial grid, and the moa/plant render code).
-The engine is already well-optimized in the low-level places — the boid steering
+The engine is already well-optimized in the low-level places; the boid steering
 reuses pooled vectors, the grid uses flat arrays and bitwise floor, queries use
 squared distances, and terrain is a baked image blit. So the remaining wins are
 structural, not micro. Ordered by impact × ease.
@@ -12,14 +12,14 @@ structural, not micro. Ordered by impact × ease.
 Before changing anything, set `CONFIG.debugMode = true`. `draw()` already prints
 **Update: X ms** and **Render: Y ms** separately. That single number tells you
 whether to spend effort on the simulation (items 1, 4, 6) or the render (items
-2, 3). `CONFIG.showGridStats` adds grid occupancy. Do this per level — level 3
+2, 3). `CONFIG.showGridStats` adds grid occupancy. Do this per level; level 3
 (weka/kea) and a large flock stress different paths.
 
-## 1. Static grids are rebuilt every frame — likely the biggest CPU win
+## 1. Static grids are rebuilt every frame; likely the biggest CPU win
 
 `Simulation.updateSpatialGrids()` clears and re-inserts **every** grid in
 `_gridEntityPairs` each frame, including `plantGrid` and `eggGrid`. But plants
-never move — they're only added on spawn and removed on cleanup — and eggs
+never move; they're only added on spawn and removed on cleanup; and eggs
 incubate in place. Plants are typically the **largest** entity list (`spawnPlants`
 seeds the whole map on a scale-2 grid), so this is an O(plants) rebuild of a grid
 whose contents didn't change.
@@ -34,7 +34,7 @@ same. Low risk, high payoff.
 Moa are drawn by tinting a shared sprite: `tint(...)` immediately before each
 `image()` in `Moa.render()` (~line 1153). p5's `tint()` takes a per-draw
 tinted-copy path that's much slower than a plain `image()` and defeats the fast
-blit — the plant sprite code even notes "No tint - fast!" for exactly this reason.
+blit; the plant sprite code even notes "No tint - fast!" for exactly this reason.
 With a full flock this is a real per-frame render cost.
 
 **Fix:** pre-bake one tinted sprite set per species once at load into an
@@ -43,22 +43,22 @@ no per-draw `tint()`. Same visual result, no per-moa tint cost.
 
 ## 3. Render scans the full plant array twice with fresh closures
 
-`Simulation.render()` calls `_renderFiltered(plants, …)` twice per frame — once
+`Simulation.render()` calls `_renderFiltered(plants, …)` twice per frame; once
 for ground plants (`p => p.type !== 'rimu' && p.type !== 'beech' && p.type !==
-'fern'`) and again for trees — and allocates the `inView` arrow plus both filter
+'fern'`) and again for trees; and allocates the `inView` arrow plus both filter
 closures every frame. So each plant is visited twice, each visit paying a closure
 call plus a viewport test.
 
 **Fix:** partition plants into two stable lists (ground vs. tree) at spawn/cleanup
 so each render pass walks only its own list with no filter. Hoist `inView` and the
 filters out of `render()` (define once, not per frame). Optional follow-on: the
-hot `render`/`renderIndicators` passes use `e[method]()` string dispatch — direct
+hot `render`/`renderIndicators` passes use `e[method]()` string dispatch; direct
 calls are a touch faster.
 
 ## 4. Redundant / over-wide per-moa spatial queries
 
-Each moa runs ~3–4 grid queries per frame: placeables (r80), eagles, moas, and —
-while foraging — a plants query at r100–150 inside `findPlant`, on top of the
+Each moa runs ~3–4 grid queries per frame: placeables (r80), eagles, moas, and;
+while foraging; a plants query at r100–150 inside `findPlant`, on top of the
 throttled food-check scan at r60. Two easy trims:
 
 - **Throttle plant re-selection.** `findPlant` re-scans every foraging frame.
@@ -88,7 +88,7 @@ types changes.
 
 - Moa array is walked twice in render (body pass + indicator pass). Fine as-is;
   could merge for on-screen moa if item 2/3 don't get you there.
-- `updateFPS()` / `fpsHistory` bookkeeping — negligible, leave it.
+- `updateFPS()` / `fpsHistory` bookkeeping; negligible, leave it.
 
 ## Suggested order
 

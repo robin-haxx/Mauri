@@ -248,7 +248,7 @@ class Moa extends Boid {
     if (simulation.boomSpecies && simulation.boomSpecies === this.speciesKey) return 1;
     const M = (typeof LEVEL_MECHANICS !== 'undefined') ? LEVEL_MECHANICS : null;
     const soft = M ? M.breedingSoftCap : undefined;
-    if (soft == null) return 1;                       // feature off — no change
+    if (soft == null) return 1;                       // feature off; no change
     const carry = M.breedingCarryingCap ?? (soft * 3);
     const floor = M.breedingSuppressFloor ?? 0.15;
     const P = simulation.getMoaPopulation();
@@ -594,7 +594,7 @@ class Moa extends Boid {
     }
 
     if (best) return best;              // prefer own kind whenever one is available
-    if (this._noSpeciation) return null; // level forbids hybridising — pause instead
+    if (this._noSpeciation) return null; // level forbids hybridising; pause instead
     return bestCross;                   // otherwise cross-species is a last resort
   }
 
@@ -910,7 +910,7 @@ class Moa extends Boid {
           this._tempForce.set(this.vel.x * s, this.vel.y * s);
           this.applyForce(this._tempForce);
         } else {
-          // Stalled inside a patch — nudge it back into motion.
+          // Stalled inside a patch; nudge it back into motion.
           this.applyForce(this.seek(best.pos, 0.5));
         }
       }
@@ -961,7 +961,7 @@ class Moa extends Boid {
           if (this.targetPlant.favouredSpecies !== this.speciesKey) {
             gain *= (typeof LEVEL_MECHANICS !== 'undefined' ? (LEVEL_MECHANICS.unfavouredBrowsePenalty ?? 0.25) : 0.25);
           }
-          // else: browsing its own favoured plant — full gain.
+          // else: browsing its own favoured plant; full gain.
         } else if (!this.isFocal && typeof LEVEL_MECHANICS !== 'undefined') {
           gain *= (LEVEL_MECHANICS.nonFocalGeneralistBonus ?? 1); // wild plant + generalist
         }
@@ -987,7 +987,7 @@ class Moa extends Boid {
     for (let i = 0; i < plants.length; i++) {
       const p = plants[i];
       if (!p.alive || p.growth < 0.5) continue;
-      // Free Play: a winter-inedible plant still stands (frosted) but has no food value —
+      // Free Play: a winter-inedible plant still stands (frosted) but has no food value;
       // skip it as forage, so the flock must seek the evergreen refuge.
       if (p.winterInedible) continue;
       if (p.seasonalModifier < 0.3 && this.hunger < 70) continue;
@@ -1153,7 +1153,7 @@ class Moa extends Boid {
     // Species highlight + field-guide selection share one sprite-shaped outline, emitted
     // below at the sprite draw so it lines up. The low-pop warning ring stays separate.
 
-    // Shadow — sprite-shaped on GL (bake-free silhouette), ellipse blob on 2D.
+    // Shadow; sprite-shaped on GL (bake-free silhouette), ellipse blob on 2D.
     const _shW = this.size * 2.5 * (this.speciesConfig.spriteScale || 1);
     EntitySprites.drawSpriteShadow(sprite, 1.5, 1.5, _shW, _shW,
       { alpha: 0.11, squash: 0.34, wide: 0.72, fbW: this.size * 1.0, fbH: this.size * 0.5 });

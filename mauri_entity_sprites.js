@@ -106,7 +106,7 @@ const EntitySprites = {
       () => {}
     );
     
-    // Bush moa (Anomalopteryx) — its own art, 5-frame walk + idle
+    // Bush moa (Anomalopteryx); its own art, 5-frame walk + idle
     for (let i = 1; i <= 5; i++) {
       const n = String(i).padStart(2, '0');
       this.moaVariants.bush.walk.push(loadImage(
@@ -142,7 +142,7 @@ const EntitySprites = {
       () => console.warn('Could not load eagle_glide.png')
     );
 
-    // Flighted-bird sprites — one static image each.
+    // Flighted-bird sprites; one static image each.
     const flyerFiles = { kea: 'kea.png', kaka: 'kaka.png', kakapo: 'kakapo.png', kokako: 'kokako.png' };
     for (const name in flyerFiles) {
       const file = flyerFiles[name];
@@ -302,7 +302,7 @@ const EntitySprites = {
     const ky = drawH / baseSprite.height;
     const dc = (typeof drawingContext !== 'undefined') ? drawingContext : null;
     const prev = dc ? dc.globalAlpha : 1;
-    if (dc) dc.globalAlpha = a;                 // cheap per-draw fade — never tint()
+    if (dc) dc.globalAlpha = a;                 // cheap per-draw fade; never tint()
     image(halo, 0, 0, halo.width * kx, halo.height * ky);
     if (dc) dc.globalAlpha = prev;
   },

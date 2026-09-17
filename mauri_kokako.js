@@ -1,5 +1,5 @@
 // ============================================================
-// KŌKAKO — the singing forest wattlebird  (extends Kereru)
+// KŌKAKO; the singing forest wattlebird  (extends Kereru)
 // South Island kōkako, Callaeas cinereus, the orange-wattled "grey ghost". A poor
 // flier of tall native forest, so it is a kererū mechanically (short-flight
 // frugivore loop, own base type + list). Disperses forest seed far less than the
@@ -63,7 +63,7 @@ class Kokako extends Kereru {
     super._flying(sim, dt);
   }
 
-  // PERCHED — break into a song when secure and answering or due; else kererū perch.
+  // PERCHED; break into a song when secure and answering or due; else kererū perch.
   _perched(sim, dt) {
     if (this._singCooldown > 0) this._singCooldown = Math.max(0, this._singCooldown - dt);
     if (this._songTimer > 0)    this._songTimer    = Math.max(0, this._songTimer - dt);
@@ -168,14 +168,14 @@ class Kokako extends Kereru {
 }
 
 // ------------------------------------------------------------
-// SPECIES DATA — South Island kōkako. Registered in initializeRegistry.
+// SPECIES DATA; South Island kōkako. Registered in initializeRegistry.
 // ------------------------------------------------------------
 const KOKAKO_SPECIES = {
   displayName:    'South Island Kōkako',
   scientificName: 'Callaeas cinereus',
   label:          'kōkako',
   class:          (typeof Kokako !== 'undefined') ? Kokako : undefined,
-  description:    'An orange-wattled forest songbird — a weak flier that holds and sings a forest territory.',
+  description:    'An orange-wattled forest songbird; a weak flier that holds and sings a forest territory.',
   rarity:         'uncommon',
   highlightColor: [250, 165, 80],   // orange; player highlight
 

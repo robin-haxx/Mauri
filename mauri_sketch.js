@@ -635,7 +635,7 @@ const PLACEABLES = {
   // that feeds the kākā rather than founding forest anywhere.
   forestBoost: {
     name: "Forest Seed",
-    description: "Cultivates new podocarp forest — plant on lowland near an existing grove to spread rimu and beech",
+    description: "Cultivates new podocarp forest; plant on lowland near an existing grove to spread rimu and beech",
     cost: 35,
     icon: '🌱',
     color: '#3b6a50',
@@ -1722,9 +1722,9 @@ class Game {
     // Worst per-species balance ratio (c / top), with a FOCUS species' shortfall biting
     // fW× harder. The focus weight is applied as an EXPONENT on the ratio (ratio^w) rather
     // than by clamping a linear w×shortfall: every counted species has ≥ 1 member (the
-    // Math.max(1,…) above), so ratio ∈ (0,1] and ratio^w ∈ (0,1] — always strictly > 0.
+    // Math.max(1,…) above), so ratio ∈ (0,1] and ratio^w ∈ (0,1]; always strictly > 0.
     // Inequality therefore shrinks the coefficient (focus inequality bites w× harder), but
-    // a lopsided species — even the focus one — can never zero out all passive income.
+    // a lopsided species; even the focus one; can never zero out all passive income.
     let worstBalance = 1, rawImbalance = 0;
     for (const [k, c] of items) {
       const ratio = mx > 0 ? c / mx : 1;              // (0,1]; 1 = at the top, →0 = far below
@@ -1825,7 +1825,7 @@ class Game {
     };
   }
 
-  // "+3", "-2", "+0.05" — signed, fixed decimals (a negative value already carries its sign).
+  // "+3", "-2", "+0.05"; signed, fixed decimals (a negative value already carries its sign).
   _sgnNum(v, dp) {
     const n = (typeof v === 'number' && isFinite(v)) ? v : 0;
     return (n >= 0 ? '+' : '') + n.toFixed(dp);
@@ -1861,7 +1861,7 @@ class Game {
     });
 
     return {
-      game: 'Avian Age: Mauri',
+      game: 'Avian Age',
       mode: 'freeplay',
       levelId: this.currentLevel ? this.currentLevel.id : null,
       levelName: this.currentLevel ? this.currentLevel.name : null,
@@ -1892,10 +1892,10 @@ class Game {
   _buildFreeplayStatsText(data) {
     const s = data.summary;
     const L = [];
-    L.push('AVIAN AGE: MAURI — Free Play stats');
+    L.push('AVIAN AGE: Free Play stats');
     if (data.levelName) L.push(data.levelName);
     L.push(`Exported ${data.exportedAt}`);
-    if (data.ended === 'extinction') L.push(`Ended: extinction${data.endReason ? ' — ' + data.endReason : ''}`);
+    if (data.ended === 'extinction') L.push(`Ended: extinction${data.endReason ? '; ' + data.endReason : ''}`);
     L.push('');
     L.push(`Years survived: ${s.yearsSurvived}`);
     L.push(`Final score: ${s.finalScore}`);
@@ -1955,7 +1955,7 @@ class Game {
     } catch (e) {
       console.error('Stats export failed:', e);
       console.log(lines.join('\n'));   // fallback: at least surface it
-      this.addNotification('Export failed — stats logged to the console.', 'error');
+      this.addNotification('Export failed; stats logged to the console.', 'error');
     }
   }
 
@@ -1979,7 +1979,7 @@ class Game {
         if (this._curYearRec && this._curYearRec.mastGoalYear) this._curYearRec.mastGoalResult = 'reached';
         const rew = (this.currentLevel.mastGoal && this.currentLevel.mastGoal.reward) || 0;
         if (rew) this.mauri.earn(rew, halfWidth, 80, 'goal');
-        this.addNotification(`Mast goal reached! The rimu will mast early — the kākāpō breed downslope next year.${rew ? ' +' + rew + ' mauri' : ''}`, 'success');
+        this.addNotification(`Mast goal reached! The rimu will mast early; the kākāpō breed downslope next year.${rew ? ' +' + rew + ' mauri' : ''}`, 'success');
         if (audioManager && audioManager.playMoaMilestone) audioManager.playMoaMilestone();
       }
     }
@@ -2270,13 +2270,13 @@ class Game {
     const stage = (typeof ClimateDrift !== 'undefined' && this._climateCfg)
       ? ClimateDrift.stageName(this.coldIndex) : '';
     const names = this.freeplayFocus.map(k => this._freeplaySpeciesName(k)).join(' & ');
-    this.addNotification(`Year ${this.cycle + 1}${stage ? ' — ' + stage : ''}: protect ${names}`, 'info');
+    this.addNotification(`Year ${this.cycle + 1}${stage ? '; ' + stage : ''}: protect ${names}`, 'info');
     if (note) this.addNotification(note, 'info');
 
     // 10) Mast year onset: announce the boom and seed a few extra fruit-birds to the
     // feast so it reads at once (forest growth + faster breeding do the rest all year).
     if (this._isMastYear()) {
-      this.addNotification('Mast year! The podocarp forest blooms — the fruit-birds will boom.', 'success');
+      this.addNotification('Mast year! The podocarp forest blooms; the fruit-birds will boom.', 'success');
       // Seed a few extra forest fruit-birds to the feast (kererū is retired from Free Play,
       // so the boom is carried by the kākā and kōkako). Only species active this level.
       if (sim._spawnOtherEntities) {
@@ -2320,7 +2320,7 @@ class Game {
     const dir = q[0] < fromCol ? 'downslope to the west (toward the shore)'
               : q[0] > fromCol ? 'back upslope to the east (the high alps)'
               : 'across the range';
-    this.addNotification(`The kāhui moves ${dir} — a new country for the year.`, 'info');
+    this.addNotification(`The kāhui moves ${dir}; a new country for the year.`, 'info');
   }
 
   // Glacial deepening: once per full loop (returning to the tour's start), reshape the
@@ -2519,7 +2519,7 @@ class Game {
     const cfg = this._keaRaidCfg();
     if (!cfg || !site || !site.alive) return;
     if ((site.eggCount || 0) <= 0) {   // nothing to raid; an empty site can't be claimed
-      this.addNotification(`No clutch to raid here — the kea need a nest with eggs. Draw the moa onto a site, then thin them.`, 'error');
+      this.addNotification(`No clutch to raid here; the kea need a nest with eggs. Draw the moa onto a site, then thin them.`, 'error');
       return;
     }
     if (this.keaStationedCount(site) < (cfg.stationCount ?? 3)) return;   // not enough kea
@@ -2532,10 +2532,10 @@ class Game {
     const chance = this._raidSuccessChance(site);
     if (Math.random() < chance) {
       const eaten = this.simulation.destroyNestingSite(site);
-      this.addNotification(`The kea raid the nest — ${eaten} egg${eaten === 1 ? '' : 's'} taken; the moa flee to another site.`, 'success');
+      this.addNotification(`The kea raid the nest; ${eaten} egg${eaten === 1 ? '' : 's'} taken; the moa flee to another site.`, 'success');
       if (audioManager && audioManager.playEagleCatch) audioManager.playEagleCatch();
     } else {
-      this.addNotification(`The moa drove the kea off — the raid failed. Thin their numbers here first.`, 'error');
+      this.addNotification(`The moa drove the kea off; the raid failed. Thin their numbers here first.`, 'error');
     }
   }
 
@@ -2615,7 +2615,7 @@ class Game {
     if (h > barY + barH + 40) {
       fill(168, 184, 168); textSize(10); textAlign(LEFT, TOP);
       const hint = p.reached
-        ? 'The rimu will mast early — kākāpō breed downslope next year.'
+        ? 'The rimu will mast early; kākāpō breed downslope next year.'
         : 'Reach it by year end to mast early (year 3), else the mast falls late in the cold upslope.';
       text(hint, barX, barY + barH + 26, barW);
     }
@@ -2816,7 +2816,7 @@ class Game {
         if (p.type === 'kawakawa' && p.frostKill) p.frostKill();
       }
     }
-    this.addNotification("The first true winter closes in — the kawakawa cannot hold, and no more will take root.", 'info');
+    this.addNotification("The first true winter closes in; the kawakawa cannot hold, and no more will take root.", 'info');
   }
 
   // Leave the current level and return to the habitat-select menu (from the pause
@@ -2894,7 +2894,7 @@ class Game {
     }
     this.cancelPlacement();
     this.movingPlaceable = p;
-    this.addNotification(`Moving ${def.name} — click to set it down (${cost} mauri), ESC to cancel`, 'info');
+    this.addNotification(`Moving ${def.name}; click to set it down (${cost} mauri), ESC to cancel`, 'info');
     if (audioManager) audioManager.playPlantRustle();
   }
 
@@ -3133,7 +3133,7 @@ class Game {
       fed++;
     }
 
-    this.addNotification(`Rimu berry scramble! ${berries} rimu drop berries — the kākāpō gorge${fed ? ` (${fed} fed)` : ''}.`, 'success');
+    this.addNotification(`Rimu berry scramble! ${berries} rimu drop berries; the kākāpō gorge${fed ? ` (${fed} fed)` : ''}.`, 'success');
     if (audioManager && audioManager.playPlantRustle) audioManager.playPlantRustle();
     return true;
   }
@@ -3144,7 +3144,7 @@ class Game {
   // hard. The onset is announced in _beginFreeplayYear.
   triggerMastYear() {
     this._mastYearTargetCycle = this.cycle + 1;
-    this.addNotification('Mast year invoked — next year the podocarp forest will bloom.', 'success');
+    this.addNotification('Mast year invoked; next year the podocarp forest will bloom.', 'success');
   }
 
   // Is the current game year the booked mast year?
@@ -3650,7 +3650,7 @@ class Game {
     fill(CACHED_COLORS.menuTitle);
     textSize(52);
     push(); textFont(FreckleFace);
-    text("Avian Age: Mauri", centerX, 100);
+    text("Avian Age", centerX, 100);
     pop();
 
     fill(CACHED_COLORS.menuSubtitle);

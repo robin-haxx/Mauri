@@ -1,5 +1,5 @@
 // ============================================================
-// MAURI — FREE PLAY CLIMATE DRIFT
+// MAURI; FREE PLAY CLIMATE DRIFT
 // One pure function of a game-time clock. No state, no p5, no dependencies.
 //
 //     ClimateDrift.indexAt(years, cfg) -> coldIndex in [warmFloor, coldCap]

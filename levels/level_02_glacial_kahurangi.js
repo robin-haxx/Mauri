@@ -1,5 +1,5 @@
 // ============================================
-// LEVEL 2: Kahurangi — Glacial Maximum (LGM)
+// LEVEL 2: Kahurangi; Glacial Maximum (LGM)
 // Species variation across habitats + a scarce, contested forest. No speciation.
 // Four 2-season phases: grow two founders (bush moa + upland moa) on their favoured
 // browse-resistant plants, then endure two glacial winters without losing either.
@@ -124,9 +124,9 @@ const LEVEL_GLACIAL_KAHURANGI = {
     moa: [
       'little_bush_moa',       // FOUNDER: closed-forest emeid (favoured: lancewood)
       'upland_moa',            // FOUNDER: subalpine Megalapteryx (favoured: speargrass)
-      'stout_legged_moa',      // open glacial-flats emeid — a competitor
-      'south_island_giant_moa',// lowland browser — a rival for the forest
-      'heavy_footed_moa'       // forest-edge Pachyornis — competes at the margin
+      'stout_legged_moa',      // open glacial-flats emeid; a competitor
+      'south_island_giant_moa',// lowland browser; a rival for the forest
+      'heavy_footed_moa'       // forest-edge Pachyornis; competes at the margin
     ],
     eagle: ['haasts_eagle'],
     // Flighted forest birds: ambient population via the otherEntities path, feeding on
@@ -166,8 +166,8 @@ const LEVEL_GLACIAL_KAHURANGI = {
   // Favoured, browse-resistant plants occupy the first two palette slots.
   availablePlaceables: {
     // Plants
-    lancewood: { cost: 30 },   // slot 1 — bush moa (emeid)
-    speargrass: { cost: 30 },  // slot 2 — upland moa (Megalapteryx)
+    lancewood: { cost: 30 },   // slot 1; bush moa (emeid)
+    speargrass: { cost: 30 },  // slot 2; upland moa (Megalapteryx)
     // Habitat items
     shelter:   { cost: 35 },   // slot 3
     nest:      { cost: 55 },   // slot 4
@@ -178,13 +178,13 @@ const LEVEL_GLACIAL_KAHURANGI = {
 
   // Opt-in gameplay mechanics. Absent on other levels.
   mechanics: {
-    // Moa foraging far outside their species niche burn extra energy — worse in winter.
+    // Moa foraging far outside their species niche burn extra energy; worse in winter.
     habitatStress: true,
     habitatStressMargin: 0.10,
     habitatStressPenalty: 0.45,
     winterStressMult: 1.4,
 
-    // The forest refuge is a limited, contested larder — competition bites hardest in winter.
+    // The forest refuge is a limited, contested larder; competition bites hardest in winter.
     forestCompetition: true,
     forestBiomes: ['forestRefuge'],
     forestCompetitionRadius: 45,
@@ -326,7 +326,7 @@ const LEVEL_GLACIAL_KAHURANGI = {
       displayName: 'Little Bush Moa',
       localName: 'Anomalopteryx didiformis',
       spriteKey: 'LB_moa_walk_01',
-      spriteScale: 2           // dedicated bush moa art — no tint needed
+      spriteScale: 2           // dedicated bush moa art; no tint needed
     },
     flavorText: [
       "Glaciation advances...","",

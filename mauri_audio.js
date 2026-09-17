@@ -11,7 +11,7 @@ const SPECIES_CALL_FILES = {
 
 // Haast's-eagle hunt cries. The eagle draws a RANDOM cry from this pool each time it
 // starts a hunt (and for the eagle highlight button), so repeated hunts have variety.
-// eagle_hunt.mp3 is the original and is loaded separately; the rest are optional extras —
+// eagle_hunt.mp3 is the original and is loaded separately; the rest are optional extras;
 // a file that isn't present is simply dropped from the pool, so you can add or remove
 // eagle_cry_N.mp3 files here freely.
 const EAGLE_HUNT_CRY_FILES = [
@@ -20,7 +20,7 @@ const EAGLE_HUNT_CRY_FILES = [
   'eagle_cry_3.mp3'
 ];
 
-// Extended "voice" tracks — long field recordings that play when a species is HIGHLIGHTED
+// Extended "voice" tracks; long field recordings that play when a species is HIGHLIGHTED
 // (the sidebar toggle; a level's focus species start highlighted). Instead of a short
 // one-shot, a highlighted species fades its recording in at a RANDOM point and lets it
 // breathe for a few seconds:
@@ -32,11 +32,11 @@ const EAGLE_HUNT_CRY_FILES = [
 //
 // A species with no entry here (or whose files are all missing) falls back to the short
 // playSpeciesCall() one-shot. To turn any species back into a discrete sound effect, delete
-// its entry below (or remove its files) — nothing else needs to change.
+// its entry below (or remove its files); nothing else needs to change.
 const SPECIES_VOICE_TRACKS = {
   kea:    { states: { song: 'kea_song.mp3' } },
   kaka:   { states: { song: 'kaka_south_island.mp3' } },
-  moa:    { states: { song: 'moa_extended.mp3' } },   // baseType — covers every moa species
+  moa:    { states: { song: 'moa_extended.mp3' } },   // baseType; covers every moa species
   kokako: { states: { song: 'kokako_song.mp3', alarmed: 'kokako_alarmed.mp3' } },
   kakapo: {
     sustain: true,
@@ -44,7 +44,7 @@ const SPECIES_VOICE_TRACKS = {
       idle:        'kakapo_female.mp3',        // the consistent base ambience
       boom:        'kakapo_male_boom.mp3',     // males booming in a mast (mating) year
       territorial: 'kakapo_male_territorial.mp3'  // when several males are contesting courts
-      // kakapo_male_ching.mp3 is also present — add a state here and a rule in
+      // kakapo_male_ching.mp3 is also present; add a state here and a rule in
       // _kakapoBehaviourState() to fold it in.
     }
   }
@@ -80,7 +80,7 @@ class AudioManager {
     // Extended-voice runtime (driven each frame by update()).
     //   _voices: voiceKey -> { active, sustain, current(stateName), sound, snippetTimer, _vol }
     //   _prevVoiceDesired: voiceKeys highlighted last frame, for rising/falling edges
-    //   _fadingVoices: loops mid fade-out awaiting a stop — {sound, frames}
+    //   _fadingVoices: loops mid fade-out awaiting a stop; {sound, frames}
     this._voices = {};
     this._prevVoiceDesired = new Set();
     this._fadingVoices = [];
@@ -188,7 +188,7 @@ class AudioManager {
       (err) => console.warn('Could not load loss:', err)
     );
 
-    // Dedicated species calls — optional files. NOT loadSound(): a missing file would
+    // Dedicated species calls; optional files. NOT loadSound(): a missing file would
     // hang preload(). Constructing p5.SoundFile directly skips the preload counter.
     for (const [key, file] of Object.entries(SPECIES_CALL_FILES)) {
       try {
@@ -196,7 +196,7 @@ class AudioManager {
           () => {},
           () => {
             this.sounds.speciesCalls[key] = null;
-            console.info(`No dedicated call for ${key} (${file}) — using generic call`);
+            console.info(`No dedicated call for ${key} (${file}); using generic call`);
           }
         );
       } catch (e) {
@@ -204,7 +204,7 @@ class AudioManager {
       }
     }
 
-    // Extra eagle hunt cries — optional (constructed directly so a missing file can't hang
+    // Extra eagle hunt cries; optional (constructed directly so a missing file can't hang
     // preload). eagle_hunt loaded above stays the pool's anchor; these join it at play time.
     for (const file of EAGLE_HUNT_CRY_FILES) {
       try {
@@ -213,14 +213,14 @@ class AudioManager {
           () => {
             const i = this.sounds.eagleHuntCries.indexOf(cry);
             if (i >= 0) this.sounds.eagleHuntCries.splice(i, 1);
-            console.info(`No eagle cry ${file} — skipping (using the rest of the pool)`);
+            console.info(`No eagle cry ${file}; skipping (using the rest of the pool)`);
           }
         );
         this.sounds.eagleHuntCries.push(cry);
       } catch (e) { /* pool stays as-is */ }
     }
 
-    // Extended species voice tracks — all optional (see SPECIES_VOICE_TRACKS). Same
+    // Extended species voice tracks; all optional (see SPECIES_VOICE_TRACKS). Same
     // direct-construct pattern: a missing state file nulls out and the species falls back.
     for (const [voiceKey, cfg] of Object.entries(SPECIES_VOICE_TRACKS)) {
       const bank = {};
@@ -231,7 +231,7 @@ class AudioManager {
             () => {},
             () => {
               bank[stateName] = null;
-              console.info(`No voice track ${file} for ${voiceKey}/${stateName} — falling back`);
+              console.info(`No voice track ${file} for ${voiceKey}/${stateName}; falling back`);
             }
           );
           bank[stateName] = sf;
@@ -410,7 +410,7 @@ class AudioManager {
 
   // Play the call for a species (highlight-button click): a dedicated recording if
   // loaded, else a random eagle hunt cry for eagles, else the generic moa call.
-  // Species with an extended voice track (SPECIES_VOICE_TRACKS) are NOT handled here —
+  // Species with an extended voice track (SPECIES_VOICE_TRACKS) are NOT handled here;
   // the highlight update() loop owns them, fading their recording in and out.
   playSpeciesCall(speciesKey = null) {
     if (this._hasVoice(speciesKey)) return;
@@ -433,7 +433,7 @@ class AudioManager {
     this.playSpeciesCall(null);
   }
 
-  // Eagle call — the hunt cry at button volume.
+  // Eagle call; the hunt cry at button volume.
   playEagleCall() {
     this.playSpeciesCall('haasts_eagle');
   }
@@ -480,7 +480,7 @@ class AudioManager {
   // fades its recording in at a random point; kākāpō sustain a loop and crossfade sub-calls.
 
   // The voice-config key a highlighted species resolves to (moa species share the 'moa'
-  // track). Eagles are deliberately excluded — they keep their short cries. null = no voice.
+  // track). Eagles are deliberately excluded; they keep their short cries. null = no voice.
   _voiceKeyFor(key) {
     if (!key) return null;
     if (SPECIES_VOICE_TRACKS[key]) return key;
@@ -506,7 +506,7 @@ class AudioManager {
     return null;
   }
 
-  // True while a raptor is actively hunting — kōkako switch to their alarm call.
+  // True while a raptor is actively hunting; kōkako switch to their alarm call.
   _predatorActive(sim) {
     const eagles = (sim && sim.eagles) || [];
     for (let i = 0; i < eagles.length; i++) {
@@ -516,9 +516,9 @@ class AudioManager {
   }
 
   // Which kākāpō sub-call fits the flock right now:
-  //   territorial — several males contesting courts with each other
-  //   boom        — a mast (mating) year with males present, booming for females
-  //   idle        — the calm base ambience otherwise
+  //   territorial; several males contesting courts with each other
+  //   boom       ; a mast (mating) year with males present, booming for females
+  //   idle       ; the calm base ambience otherwise
   _kakapoBehaviourState(sim) {
     const list = (sim && sim.otherEntities && sim.otherEntities.kakapo) || [];
     let contesting = 0, males = 0;
@@ -636,7 +636,7 @@ class AudioManager {
     this._prevVoiceDesired = new Set();
   }
 
-  // Per-frame voice driver — call from the game update while PLAYING, passing the
+  // Per-frame voice driver; call from the game update while PLAYING, passing the
   // simulation. Reconciles SPECIES_HIGHLIGHT with the voice tracks: fades new highlights
   // in at a random point, fades removed ones out, crossfades the kākāpō ambience, and
   // times out one-shot snippets. Cheap when nothing is highlighted.
@@ -654,7 +654,7 @@ class AudioManager {
     const baseVol = this._getVolume() * VOICE_VOLUME;
 
     // Audio/SFX fully off: silence everything and forget "desired" so voices re-trigger
-    // cleanly when re-enabled. (A tab-blur mute is different — it keeps voices alive at
+    // cleanly when re-enabled. (A tab-blur mute is different; it keeps voices alive at
     // volume 0 so they resume in place on unmute.)
     if (baseVol <= 0) {
       for (const vk of Object.keys(this._voices)) {
@@ -753,7 +753,7 @@ class AudioManager {
   
   // Mute all audio temporarily (e.g. when the tab loses focus). The per-frame voice
   // update() is throttled while the tab is hidden, so silence the voices directly here
-  // rather than waiting for the loop — keeping them consistent with the background music.
+  // rather than waiting for the loop; keeping them consistent with the background music.
   mute() {
     this._muted = true;
     if (this.sounds.background && this.sounds.background.isPlaying()) {
@@ -771,7 +771,7 @@ class AudioManager {
     }
   }
 
-  // Unmute audio — restore the background and every active voice to the live level.
+  // Unmute audio; restore the background and every active voice to the live level.
   unmute() {
     this._muted = false;
     this.updateBackgroundVolume();

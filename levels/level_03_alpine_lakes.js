@@ -1,5 +1,5 @@
 // // ============================================
-// // LEVEL 3: Alpine Lakes — Inland Canterbury
+// // LEVEL 3: Alpine Lakes; Inland Canterbury
 // // Multi-species balance challenge
 // // ============================================
 
@@ -183,7 +183,7 @@
 //     flavorText: [
 //       "Balance five bird species in the glacial highlands;",
 //       "Giant moa roam the valleys while kea rule the peaks.",
-//       "Watch out — kea are clever enough to raid nests!"
+//       "Watch out; kea are clever enough to raid nests!"
 //     ],
 //     displayPlants: ['tussock', 'flax', 'fern', 'beech', 'patotara', 'kawakawa']
 //   },

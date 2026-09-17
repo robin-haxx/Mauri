@@ -1,5 +1,5 @@
 // ============================================================
-// KĀKĀ — the forest parrot  (extends Kereru)
+// KĀKĀ; the forest parrot  (extends Kereru)
 // Nestor meridionalis, kea's forest-dwelling sister. A strong flier of podocarp-
 // beech forest. Mechanically a Kereru (same FLYING → FEEDING → PERCHED → lay loop,
 // feeding at FOREST_TREES), so the contracting glacial forest refuge squeezes the
@@ -52,14 +52,14 @@ class Kaka extends Kereru {
 }
 
 // ------------------------------------------------------------
-// SPECIES DATA — Nestor meridionalis. Registered in initializeRegistry.
+// SPECIES DATA; Nestor meridionalis. Registered in initializeRegistry.
 // ------------------------------------------------------------
 const KAKA_SPECIES = {
   displayName:    'Kākā',
   scientificName: 'Nestor meridionalis',
   label:          'kākā',
   class:          (typeof Kaka !== 'undefined') ? Kaka : undefined,
-  description:    'The forest parrot — a gregarious podocarp-forest bird, the kea\'s forest-dwelling sister.',
+  description:    'The forest parrot; a gregarious podocarp-forest bird, the kea\'s forest-dwelling sister.',
   rarity:         'uncommon',
   highlightColor: [250, 150, 90],   // warm orange; player highlight
 
@@ -82,7 +82,7 @@ const KAKA_SPECIES = {
   restSec:          7,
   disperseChance:   0.25,   // seed predator > disperser (kererū is 1.0)
 
-  // Survival — tuned so a flock with forest to feed in holds through winter.
+  // Survival; tuned so a flock with forest to feed in holds through winter.
   maxHunger:        100,
   hungerRatePerSec: 0.95,
   feedRelief:       78,

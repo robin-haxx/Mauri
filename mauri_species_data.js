@@ -11,7 +11,7 @@ const MOA_SPECIES = {
   upland_moa: {
     displayName: "Upland Moa",
     scientificName: "Megalapteryx didinus",
-    tint: null,                // Megalapteryx — rendered as-is
+    tint: null,                // Megalapteryx; rendered as-is
     highlightColor: [235, 238, 242],  // white; player highlight
     description: "Small, hardy moa adapted to high-altitude forests",
     rarity: 'common',
@@ -61,7 +61,7 @@ const MOA_SPECIES = {
   south_island_giant_moa: {
     displayName: "South Island Giant Moa",
     scientificName: "Dinornis robustus",
-    tint: [170, 150, 130],     // Dinornis — desaturated brown
+    tint: [170, 150, 130],     // Dinornis; desaturated brown
     highlightColor: [190, 140, 90],   // brown; player highlight
     description: "Massive moa of the lowland plains, up to 3.6m tall",
     rarity: 'uncommon',
@@ -106,7 +106,7 @@ const MOA_SPECIES = {
   north_island_giant_moa: {
     displayName: "North Island Giant Moa",
     scientificName: "Dinornis novaezealandiae",
-    tint: [170, 150, 130],     // Dinornis — desaturated brown
+    tint: [170, 150, 130],     // Dinornis; desaturated brown
     highlightColor: [190, 140, 90],   // brown; player highlight
     description: "Large moa of northern forests",
     rarity: 'uncommon',
@@ -147,7 +147,7 @@ const MOA_SPECIES = {
   eastern_moa: {
     displayName: "Eastern Moa",
     scientificName: "Emeus crassus",
-    tint: [190, 120, 60],      // emeid — saturated brown
+    tint: [190, 120, 60],      // emeid; saturated brown
     highlightColor: [205, 195, 120],  // wheat; player highlight
     description: "Adaptable medium-sized moa of varied habitats",
     rarity: 'common',
@@ -188,7 +188,7 @@ const MOA_SPECIES = {
   stout_legged_moa: {
     displayName: "Stout-legged Moa",
     scientificName: "Euryapteryx curtus",
-    tint: [205, 170, 80],      // yellow-brown — distinct from the rust bush moa
+    tint: [205, 170, 80],      // yellow-brown; distinct from the rust bush moa
     highlightColor: [235, 165, 70],   // orange; player highlight
     description: "Stocky moa with powerful legs, coastal to lowland",
     rarity: 'common',
@@ -226,7 +226,7 @@ const MOA_SPECIES = {
   heavy_footed_moa: {
     displayName: "Heavy-footed Moa",
     scientificName: "Pachyornis elephantopus",
-    tint: [165, 168, 172],     // Pachyornis — grey
+    tint: [165, 168, 172],     // Pachyornis; grey
     highlightColor: [178, 184, 194],  // grey; player highlight
     description: "Robust moa with massive legs, lowland specialist",
     rarity: 'uncommon',
@@ -266,7 +266,7 @@ const MOA_SPECIES = {
   crested_moa: {
     displayName: "Crested Moa",
     scientificName: "Pachyornis australis",
-    tint: [165, 168, 172],     // Pachyornis — grey
+    tint: [165, 168, 172],     // Pachyornis; grey
     highlightColor: [178, 184, 194],  // grey; player highlight
     description: "Southern moa with distinctive head crest",
     rarity: 'rare',
@@ -306,7 +306,7 @@ const MOA_SPECIES = {
   mantells_moa: {
     displayName: "Mantell's Moa",
     scientificName: "Pachyornis geranoides",
-    tint: [165, 168, 172],     // Pachyornis — grey
+    tint: [165, 168, 172],     // Pachyornis; grey
     highlightColor: [178, 184, 194],  // grey; player highlight
     description: "North Island relative of the heavy-footed moa",
     rarity: 'uncommon',
@@ -344,9 +344,9 @@ const MOA_SPECIES = {
   little_bush_moa: {
     displayName: "Little Bush Moa",
     scientificName: "Anomalopteryx didiformis",
-    spriteSet: 'bush',         // dedicated LB_moa art — renders untinted
-    spriteScale: 1.5,          // LB art drawn small — render at 1.5x
-    tint: [190, 120, 60],      // emeid — saturated brown (unused while spriteSet is set)
+    spriteSet: 'bush',         // dedicated LB_moa art; renders untinted
+    spriteScale: 1.5,          // LB art drawn small; render at 1.5x
+    tint: [190, 120, 60],      // emeid; saturated brown (unused while spriteSet is set)
     highlightColor: [255, 215, 70],   // yellow; player highlight
     description: "Smallest moa, nimble forest dweller",
     rarity: 'common',

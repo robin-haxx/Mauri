@@ -228,7 +228,7 @@ class SeasonManager {
   // SEASONAL BLEND (inlined, allocation-free)
   // ============================================
   // Each getter inlines the current->next transition blend directly. Do NOT extract a
-  // closure-taking helper — it allocated per call on a per-entity, per-frame path.
+  // closure-taking helper; it allocated per call on a per-entity, per-frame path.
 
   // ============================================
   // SNOW & WEATHER

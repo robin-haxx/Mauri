@@ -1,0 +1,108 @@
+AVIAN AGE: Free Play stats
+ENDLESS: Mutunga kore
+Exported 2026-09-19T05:31:55.137Z
+Ended: extinction; Upland Moa disappeared from Kahurangi..
+
+Years survived: 8
+Final score: 845
+Goals completed: 9/19
+Moa hatched: 200
+Eagle strikes: 66
+Placeables used: 146 (Lancewood Stand 75, Berry Cache 6, Speargrass Patch 20, Storm 4, Forest Seed 12, Fern Shelter 22, Nesting Site 2, Rimu Berry Scramble 4, Waterhole 1)
+
+Year 1 (Focus: Kea):
+  Deepening: interglacial (cold index 0.00)
+  Goals completed: 1/1
+    met: Kea ≥ 8
+  Placeables used: 19 (Lancewood Stand 9, Berry Cache 4, Speargrass Patch 5, Storm 1)
+  Summer: Mauri +122, average population +0.8, species equality -0.04, Kea +2
+  Autumn: Mauri +142, average population +0.3, species equality -0.08, Kea +0
+  Winter: Mauri +126, average population -0.3, species equality +0.03, Kea +2
+  Spring: Mauri +130, average population +0.8, species equality -0.05, Kea +0
+
+Year 2 (Focus: Kākā):
+  Deepening: interglacial (cold index 0.03)
+  Mast goal: reached
+  Goals completed: 1/1
+    met: Kākā ≥ 10
+  Placeables used: 19 (Forest Seed 4, Lancewood Stand 8, Fern Shelter 6, Nesting Site 1)
+  Summer: Mauri +167, average population -0.6, species equality +0.07, Kākā -8
+  Autumn: Mauri +183, average population +1.6, species equality -0.07, Kākā +2
+  Winter: Mauri +148, average population -1.4, species equality +0.04, Kākā +3
+  Spring: Mauri +144, average population +0.3, species equality -0.02, Kākā +1
+
+Year 3 (Focus: Kākāpō):
+  Deepening: interglacial (cold index 0.10)
+  Mast year: the rimu bloom
+  Goals completed: 1/1
+    met: Kākāpō ≥ 10
+  Placeables used: 20 (Rimu Berry Scramble 4, Lancewood Stand 12, Waterhole 1, Fern Shelter 3)
+  Summer: Mauri +139, average population -1.4, species equality +0.06, Kākāpō +4
+  Autumn: Mauri +150, average population +0.4, species equality -0.05, Kākāpō +2
+  Winter: Mauri +165, average population +1.6, species equality -0.02, Kākāpō +5
+  Spring: Mauri +151, average population +2.1, species equality -0.04, Kākāpō +5
+
+Year 4 (Focus: South Island Kōkako, Little Bush Moa):
+  Deepening: interglacial (cold index 0.04)
+  Goals completed: 0/3
+    missed: Stretch: South Island Kōkako ≥ 6; Little Bush Moa ≥ 8; Settle 2 new Little Bush Moa nests
+  Placeables used: 14 (Fern Shelter 5, Lancewood Stand 6, Speargrass Patch 1, Forest Seed 2)
+  Summer: Mauri +106, average population -4.1, species equality +0.03, South Island Kōkako -7, Little Bush Moa -3
+  Autumn: Mauri +117, average population -0.4, species equality -0.04, South Island Kōkako -1, Little Bush Moa +0
+  Winter: Mauri +72, average population -0.9, species equality +0.12, South Island Kōkako +0, Little Bush Moa -1
+  Spring: Mauri +76, average population -0.3, species equality -0.07, South Island Kōkako +0, Little Bush Moa +2
+
+Year 5 (Focus: Kea, Upland Moa):
+  Deepening: cooling (cold index 0.33)
+  Goals completed: 2/3
+    met: Kea ≥ 10; Settle 2 new Upland Moa nests
+    missed: Upland Moa ≥ 10
+  Placeables used: 16 (Lancewood Stand 8, Berry Cache 1, Speargrass Patch 7)
+  Summer: Mauri +128, average population +2.3, species equality +0.15, Kea +4, Upland Moa +7
+  Autumn: Mauri +145, average population +0.1, species equality -0.04, Kea +1, Upland Moa +0
+  Winter: Mauri +99, average population +0.0, species equality -0.11, Kea +4, Upland Moa -5
+  Spring: Mauri +79, average population +0.4, species equality +0.01, Kea +3, Upland Moa +2
+
+Year 6 (Focus: Kākā, Little Bush Moa):
+  Deepening: glacial (cold index 0.47)
+  Mast goal: reached
+  Goals completed: 2/3
+    met: Little Bush Moa ≥ 8; Kākā ≥ 12
+    missed: Settle 2 new Little Bush Moa nests
+  Placeables used: 12 (Fern Shelter 1, Forest Seed 3, Nesting Site 1, Lancewood Stand 6, Storm 1)
+  Summer: Mauri +157, average population -0.9, species equality +0.19, Kākā -6, Little Bush Moa +3
+  Autumn: Mauri +168, average population +1.0, species equality -0.08, Kākā +4, Little Bush Moa +4
+  Winter: Mauri +113, average population -0.8, species equality -0.04, Kākā +3, Little Bush Moa -3
+  Spring: Mauri +80, average population -0.1, species equality -0.05, Kākā +0, Little Bush Moa -2
+
+Year 7 (Focus: Kākāpō):
+  Deepening: interglacial (cold index 0.13)
+  Mast year: the rimu bloom
+  Goals completed: 1/1
+    met: Kākāpō ≥ 10
+  Placeables used: 15 (Fern Shelter 5, Lancewood Stand 10)
+  Summer: Mauri +119, average population +0.4, species equality +0.05, Kākāpō +8
+  Autumn: Mauri +131, average population +0.9, species equality -0.03, Kākāpō +5
+  Winter: Mauri +144, average population +1.1, species equality -0.02, Kākāpō +3
+  Spring: Mauri +141, average population -0.4, species equality -0.00, Kākāpō +0
+
+Year 8 (Focus: South Island Kōkako, Little Bush Moa):
+  Deepening: glacial (cold index 0.74)
+  Goals completed: 0/3
+    missed: Stretch: South Island Kōkako ≥ 8; Little Bush Moa ≥ 8; Settle 2 new Little Bush Moa nests
+  Placeables used: 17 (Lancewood Stand 9, Forest Seed 3, Speargrass Patch 3, Storm 1, Fern Shelter 1)
+  Summer: Mauri +80, average population -3.0, species equality +0.05, South Island Kōkako +1, Little Bush Moa -7
+  Autumn: Mauri +84, average population -0.3, species equality +0.02, South Island Kōkako +0, Little Bush Moa -1
+  Winter: Mauri +77, average population -0.7, species equality +0.01, South Island Kōkako -1, Little Bush Moa +0
+  Spring: Mauri +55, average population +0.0, species equality -0.05, South Island Kōkako +0, Little Bush Moa +0
+
+Year 9 (Focus: Kea, Upland Moa):
+  Deepening: full glacial (cold index 0.85)
+  Goals completed: 1/3
+    met: Settle 2 new Upland Moa nests
+    missed: Kea ≥ 12; Upland Moa ≥ 10
+  Placeables used: 14 (Speargrass Patch 4, Lancewood Stand 7, Fern Shelter 1, Storm 1, Berry Cache 1)
+  Summer: Mauri +106, average population +1.6, species equality +0.05, Kea +8, Upland Moa -3
+  Autumn: Mauri +81, average population -0.3, species equality -0.05, Kea +0, Upland Moa -1
+  Winter: Mauri +64, average population -0.1, species equality -0.03, Kea -2, Upland Moa -2
+

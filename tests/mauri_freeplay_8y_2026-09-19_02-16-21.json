@@ -1,0 +1,648 @@
+{
+  "game": "Avian Age",
+  "mode": "freeplay",
+  "levelId": "freeplay_kahurangi",
+  "levelName": "ENDLESS: Mutunga kore",
+  "exportedAt": "2026-09-19T02:16:21.522Z",
+  "ended": "extinction",
+  "endReason": "Little Bush Moa disappeared from Kahurangi..",
+  "summary": {
+    "yearsSurvived": 8,
+    "currentYear": 9,
+    "finalScore": 855,
+    "goalsCompleted": 11,
+    "goalsOffered": 19,
+    "moaHatched": 251,
+    "moaHatchedBySpecies": {
+      "upland_moa": 81,
+      "little_bush_moa": 130,
+      "stout_legged_moa": 12,
+      "south_island_giant_moa": 17,
+      "heavy_footed_moa": 11
+    },
+    "eagleStrikes": 74,
+    "placeablesUsedTotal": 149,
+    "placeablesUsed": {
+      "keaLure": 4,
+      "lancewood": 63,
+      "speargrass": 15,
+      "Storm": 13,
+      "shelter": 31,
+      "forestBoost": 15,
+      "nest": 1,
+      "rimuScramble": 6,
+      "waterhole": 1
+    },
+    "finalMoaPopulation": 11,
+    "totalMauriEarned": 4471,
+    "playTimeSeconds": 2046,
+    "finalColdIndex": 0.849
+  },
+  "years": [
+    {
+      "year": 0,
+      "focus": [
+        "kea"
+      ],
+      "focusNames": [
+        "Kea"
+      ],
+      "goalNames": [
+        "Kea ≥ 8"
+      ],
+      "goalsOffered": 1,
+      "goalsCompleted": 1,
+      "goalsMet": [
+        "Kea ≥ 8"
+      ],
+      "coldIndex": 0,
+      "coldStage": "interglacial",
+      "mastYear": false,
+      "mastGoalYear": false,
+      "mastGoalResult": null,
+      "placeables": {
+        "keaLure": 2,
+        "lancewood": 6,
+        "speargrass": 3,
+        "Storm": 4,
+        "shelter": 2
+      },
+      "seasons": {
+        "summer": {
+          "mauri": 124.70412698412699,
+          "avgPop": 0.875,
+          "equality": -0.03809523809523807,
+          "focus": {
+            "kea": 2
+          }
+        },
+        "autumn": {
+          "mauri": 138.8990630110629,
+          "avgPop": 0.5,
+          "equality": -0.050793650793650835,
+          "focus": {
+            "kea": 1
+          }
+        },
+        "winter": {
+          "mauri": 143.250074074074,
+          "avgPop": -0.5,
+          "equality": -0.017777777777777726,
+          "focus": {
+            "kea": 3
+          }
+        },
+        "spring": {
+          "mauri": 115.23929581529626,
+          "avgPop": 1.25,
+          "equality": -0.10720678502654485,
+          "focus": {
+            "kea": 4
+          }
+        }
+      },
+      "goalsMissed": []
+    },
+    {
+      "year": 1,
+      "focus": [
+        "kaka"
+      ],
+      "focusNames": [
+        "Kākā"
+      ],
+      "goalNames": [
+        "Kākā ≥ 10"
+      ],
+      "goalsOffered": 1,
+      "goalsCompleted": 0,
+      "goalsMet": [],
+      "coldIndex": 0.027,
+      "coldStage": "interglacial",
+      "mastYear": false,
+      "mastGoalYear": true,
+      "mastGoalResult": "reached",
+      "placeables": {
+        "shelter": 5,
+        "forestBoost": 3,
+        "lancewood": 5,
+        "nest": 1
+      },
+      "seasons": {
+        "summer": {
+          "mauri": 105.15795188084724,
+          "avgPop": -2.125,
+          "equality": 0.0868622095399626,
+          "focus": {
+            "kaka": -11
+          }
+        },
+        "autumn": {
+          "mauri": 131.0383352244247,
+          "avgPop": 0.75,
+          "equality": -0.07267316836192889,
+          "focus": {
+            "kaka": 0
+          }
+        },
+        "winter": {
+          "mauri": 107.1301301073363,
+          "avgPop": -1.5,
+          "equality": 0.07267316836192889,
+          "focus": {
+            "kaka": 0
+          }
+        },
+        "spring": {
+          "mauri": 101.11747974092805,
+          "avgPop": 0,
+          "equality": -0.0069223353182616965,
+          "focus": {
+            "kaka": 0
+          }
+        }
+      },
+      "goalsMissed": [
+        "Kākā ≥ 10"
+      ]
+    },
+    {
+      "year": 2,
+      "focus": [
+        "kakapo"
+      ],
+      "focusNames": [
+        "Kākāpō"
+      ],
+      "goalNames": [
+        "Kākāpō ≥ 10"
+      ],
+      "goalsOffered": 1,
+      "goalsCompleted": 1,
+      "goalsMet": [
+        "Kākāpō ≥ 10"
+      ],
+      "coldIndex": 0.099,
+      "coldStage": "interglacial",
+      "mastYear": true,
+      "mastGoalYear": false,
+      "mastGoalResult": null,
+      "placeables": {
+        "lancewood": 5,
+        "rimuScramble": 3,
+        "Storm": 1,
+        "shelter": 5,
+        "waterhole": 1
+      },
+      "seasons": {
+        "summer": {
+          "mauri": 110.97942617681258,
+          "avgPop": 0.75,
+          "equality": -0.027982972621237112,
+          "focus": {
+            "kakapo": 5
+          }
+        },
+        "autumn": {
+          "mauri": 135.03940150584026,
+          "avgPop": 0.875,
+          "equality": -0.052725191469860766,
+          "focus": {
+            "kakapo": 3
+          }
+        },
+        "winter": {
+          "mauri": 155.04658187290306,
+          "avgPop": 1,
+          "equality": -0.021310022651152727,
+          "focus": {
+            "kakapo": 5
+          }
+        },
+        "spring": {
+          "mauri": 122.39610140029413,
+          "avgPop": 0.875,
+          "equality": -0.027070361422517397,
+          "focus": {
+            "kakapo": 3
+          }
+        }
+      },
+      "goalsMissed": []
+    },
+    {
+      "year": 3,
+      "focus": [
+        "kokako",
+        "little_bush_moa"
+      ],
+      "focusNames": [
+        "South Island Kōkako",
+        "Little Bush Moa"
+      ],
+      "goalNames": [
+        "Stretch: South Island Kōkako ≥ 6",
+        "Little Bush Moa ≥ 8",
+        "Settle 2 new Little Bush Moa nests"
+      ],
+      "goalsOffered": 3,
+      "goalsCompleted": 2,
+      "goalsMet": [
+        "Little Bush Moa ≥ 8",
+        "Settle 2 new Little Bush Moa nests"
+      ],
+      "coldIndex": 0.043,
+      "coldStage": "interglacial",
+      "mastYear": false,
+      "mastGoalYear": false,
+      "mastGoalResult": null,
+      "placeables": {
+        "lancewood": 10,
+        "Storm": 2,
+        "forestBoost": 3,
+        "speargrass": 4,
+        "shelter": 3
+      },
+      "seasons": {
+        "summer": {
+          "mauri": 142.31702898083086,
+          "avgPop": -2.196428571428571,
+          "equality": 0.19560290167447747,
+          "focus": {
+            "kokako": 2,
+            "little_bush_moa": -12
+          }
+        },
+        "autumn": {
+          "mauri": 188.70021447133718,
+          "avgPop": 1.1428571428571423,
+          "equality": -0.02765943877971988,
+          "focus": {
+            "kokako": 1,
+            "little_bush_moa": 4
+          }
+        },
+        "winter": {
+          "mauri": 134.0714436750925,
+          "avgPop": -1.428571428571428,
+          "equality": 0,
+          "focus": {
+            "kokako": -1,
+            "little_bush_moa": -4
+          }
+        },
+        "spring": {
+          "mauri": 139.9614290323093,
+          "avgPop": 0.8571428571428568,
+          "equality": -0.12260921126388441,
+          "focus": {
+            "kokako": -1,
+            "little_bush_moa": 2
+          }
+        }
+      },
+      "goalsMissed": [
+        "Stretch: South Island Kōkako ≥ 6"
+      ]
+    },
+    {
+      "year": 4,
+      "focus": [
+        "kea",
+        "upland_moa"
+      ],
+      "focusNames": [
+        "Kea",
+        "Upland Moa"
+      ],
+      "goalNames": [
+        "Kea ≥ 10",
+        "Upland Moa ≥ 10",
+        "Settle 2 new Upland Moa nests"
+      ],
+      "goalsOffered": 3,
+      "goalsCompleted": 3,
+      "goalsMet": [
+        "Kea ≥ 10",
+        "Upland Moa ≥ 10",
+        "Settle 2 new Upland Moa nests"
+      ],
+      "coldIndex": 0.334,
+      "coldStage": "cooling",
+      "mastYear": false,
+      "mastGoalYear": false,
+      "mastGoalResult": null,
+      "placeables": {
+        "shelter": 1,
+        "keaLure": 1,
+        "lancewood": 8,
+        "speargrass": 5,
+        "Storm": 3
+      },
+      "seasons": {
+        "summer": {
+          "mauri": 130.47460263357107,
+          "avgPop": -0.25,
+          "equality": -0.01335448577820697,
+          "focus": {
+            "kea": 1,
+            "upland_moa": -2
+          }
+        },
+        "autumn": {
+          "mauri": 144.69474153226793,
+          "avgPop": 0.5,
+          "equality": -0.028059397417043774,
+          "focus": {
+            "kea": 3,
+            "upland_moa": 3
+          }
+        },
+        "winter": {
+          "mauri": 105.77431146725485,
+          "avgPop": -0.875,
+          "equality": -0.01078617488129674,
+          "focus": {
+            "kea": 0,
+            "upland_moa": -6
+          }
+        },
+        "spring": {
+          "mauri": 116.51694176817,
+          "avgPop": -0.875,
+          "equality": 0.10971427852661297,
+          "focus": {
+            "kea": -10,
+            "upland_moa": 2
+          }
+        }
+      },
+      "goalsMissed": []
+    },
+    {
+      "year": 5,
+      "focus": [
+        "kaka",
+        "little_bush_moa"
+      ],
+      "focusNames": [
+        "Kākā",
+        "Little Bush Moa"
+      ],
+      "goalNames": [
+        "Kākā ≥ 12",
+        "Little Bush Moa ≥ 8",
+        "Settle 2 new Little Bush Moa nests"
+      ],
+      "goalsOffered": 3,
+      "goalsCompleted": 2,
+      "goalsMet": [
+        "Little Bush Moa ≥ 8",
+        "Kākā ≥ 12"
+      ],
+      "coldIndex": 0.474,
+      "coldStage": "glacial",
+      "mastYear": false,
+      "mastGoalYear": true,
+      "mastGoalResult": "reached",
+      "placeables": {
+        "lancewood": 8,
+        "shelter": 7,
+        "forestBoost": 6
+      },
+      "seasons": {
+        "summer": {
+          "mauri": 141.80014378556643,
+          "avgPop": 0.875,
+          "equality": 0.14456684279836024,
+          "focus": {
+            "kaka": 2,
+            "little_bush_moa": -1
+          }
+        },
+        "autumn": {
+          "mauri": 176.7775009218426,
+          "avgPop": 1.75,
+          "equality": -0.1254829102955391,
+          "focus": {
+            "kaka": 1,
+            "little_bush_moa": 9
+          }
+        },
+        "winter": {
+          "mauri": 160.04136609180978,
+          "avgPop": -0.875,
+          "equality": 0.03797888178316311,
+          "focus": {
+            "kaka": 4,
+            "little_bush_moa": -9
+          }
+        },
+        "spring": {
+          "mauri": 147.20417987856035,
+          "avgPop": 0.25,
+          "equality": -0.014037476424286655,
+          "focus": {
+            "kaka": 1,
+            "little_bush_moa": 1
+          }
+        }
+      },
+      "goalsMissed": [
+        "Settle 2 new Little Bush Moa nests"
+      ]
+    },
+    {
+      "year": 6,
+      "focus": [
+        "kakapo"
+      ],
+      "focusNames": [
+        "Kākāpō"
+      ],
+      "goalNames": [
+        "Kākāpō ≥ 10"
+      ],
+      "goalsOffered": 1,
+      "goalsCompleted": 1,
+      "goalsMet": [
+        "Kākāpō ≥ 10"
+      ],
+      "coldIndex": 0.13,
+      "coldStage": "interglacial",
+      "mastYear": true,
+      "mastGoalYear": false,
+      "mastGoalResult": null,
+      "placeables": {
+        "lancewood": 8,
+        "rimuScramble": 3,
+        "shelter": 3
+      },
+      "seasons": {
+        "summer": {
+          "mauri": 162.46482366984355,
+          "avgPop": -0.875,
+          "equality": 0.04773999642375054,
+          "focus": {
+            "kakapo": 7
+          }
+        },
+        "autumn": {
+          "mauri": 174.41975707062693,
+          "avgPop": 2.25,
+          "equality": -0.0550978064267606,
+          "focus": {
+            "kakapo": 7
+          }
+        },
+        "winter": {
+          "mauri": 175.73671096071848,
+          "avgPop": 1.25,
+          "equality": -0.020661826053077426,
+          "focus": {
+            "kakapo": 2
+          }
+        },
+        "spring": {
+          "mauri": 156.67514764629686,
+          "avgPop": 1.375,
+          "equality": -0.018199776741655904,
+          "focus": {
+            "kakapo": 0
+          }
+        }
+      },
+      "goalsMissed": []
+    },
+    {
+      "year": 7,
+      "focus": [
+        "kokako",
+        "little_bush_moa"
+      ],
+      "focusNames": [
+        "South Island Kōkako",
+        "Little Bush Moa"
+      ],
+      "goalNames": [
+        "Stretch: South Island Kōkako ≥ 8",
+        "Little Bush Moa ≥ 8",
+        "Settle 2 new Little Bush Moa nests"
+      ],
+      "goalsOffered": 3,
+      "goalsCompleted": 1,
+      "goalsMet": [
+        "Settle 2 new Little Bush Moa nests"
+      ],
+      "coldIndex": 0.743,
+      "coldStage": "glacial",
+      "mastYear": false,
+      "mastGoalYear": false,
+      "mastGoalResult": null,
+      "placeables": {
+        "lancewood": 11,
+        "forestBoost": 3,
+        "shelter": 4,
+        "Storm": 1,
+        "speargrass": 3
+      },
+      "seasons": {
+        "summer": {
+          "mauri": 86.18143582931589,
+          "avgPop": -5.160714285714286,
+          "equality": 0.0017704256384170058,
+          "focus": {
+            "kokako": -10,
+            "little_bush_moa": -7
+          }
+        },
+        "autumn": {
+          "mauri": 105.89031251184088,
+          "avgPop": 1.1428571428571423,
+          "equality": -0.015491181376621421,
+          "focus": {
+            "kokako": 0,
+            "little_bush_moa": 0
+          }
+        },
+        "winter": {
+          "mauri": 89.78792684976543,
+          "avgPop": -1.428571428571428,
+          "equality": -0.020721888491086582,
+          "focus": {
+            "kokako": -1,
+            "little_bush_moa": 1
+          }
+        },
+        "spring": {
+          "mauri": 85.49244445566637,
+          "avgPop": 0.14285714285714235,
+          "equality": -0.0007945486008486824,
+          "focus": {
+            "kokako": 0,
+            "little_bush_moa": 1
+          }
+        }
+      },
+      "goalsMissed": [
+        "Stretch: South Island Kōkako ≥ 8",
+        "Little Bush Moa ≥ 8"
+      ]
+    },
+    {
+      "year": 8,
+      "focus": [
+        "kea",
+        "upland_moa"
+      ],
+      "focusNames": [
+        "Kea",
+        "Upland Moa"
+      ],
+      "goalNames": [
+        "Kea ≥ 12",
+        "Upland Moa ≥ 10",
+        "Settle 2 new Upland Moa nests"
+      ],
+      "goalsOffered": 3,
+      "goalsCompleted": 0,
+      "goalsMet": [],
+      "coldIndex": 0.849,
+      "coldStage": "full glacial",
+      "mastYear": false,
+      "mastGoalYear": false,
+      "mastGoalResult": null,
+      "placeables": {
+        "keaLure": 1,
+        "lancewood": 2,
+        "Storm": 2,
+        "shelter": 1
+      },
+      "seasons": {
+        "summer": {
+          "mauri": 103.62100757834287,
+          "avgPop": -1.5714285714285712,
+          "equality": 0.15168071756574297,
+          "focus": {
+            "kea": -10,
+            "upland_moa": 4
+          }
+        },
+        "autumn": {
+          "mauri": 93.9707536113392,
+          "avgPop": -0.625,
+          "equality": -0.06048317659021024,
+          "focus": {
+            "kea": -1,
+            "upland_moa": -2
+          }
+        }
+      },
+      "goalsMissed": [
+        "Kea ≥ 12",
+        "Upland Moa ≥ 10",
+        "Settle 2 new Upland Moa nests"
+      ]
+    }
+  ]
+}

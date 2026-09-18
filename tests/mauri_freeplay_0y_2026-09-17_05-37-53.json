@@ -1,0 +1,75 @@
+{
+  "game": "Avian Age",
+  "mode": "freeplay",
+  "levelId": "freeplay_kahurangi",
+  "levelName": "ENDLESS: Mutunga kore",
+  "exportedAt": "2026-09-17T05:37:53.532Z",
+  "ended": "extinction",
+  "endReason": "The Little Bush Moa disappeared from Kahurangi..",
+  "summary": {
+    "yearsSurvived": 0,
+    "currentYear": 1,
+    "finalScore": 75,
+    "goalsCompleted": 1,
+    "goalsOffered": 1,
+    "moaHatched": 31,
+    "moaHatchedBySpecies": {
+      "upland_moa": 5,
+      "little_bush_moa": 5,
+      "stout_legged_moa": 18,
+      "south_island_giant_moa": 3,
+      "heavy_footed_moa": 0
+    },
+    "eagleStrikes": 8,
+    "placeablesUsedTotal": 0,
+    "placeablesUsed": {},
+    "finalMoaPopulation": 15,
+    "totalMauriEarned": 353,
+    "playTimeSeconds": 152,
+    "finalColdIndex": 0
+  },
+  "years": [
+    {
+      "year": 0,
+      "focus": [
+        "kea"
+      ],
+      "focusNames": [
+        "Kea"
+      ],
+      "goalNames": [
+        "Kea ≥ 8"
+      ],
+      "goalsOffered": 1,
+      "goalsCompleted": 1,
+      "goalsMet": [
+        "Kea ≥ 8"
+      ],
+      "coldIndex": 0,
+      "coldStage": "interglacial",
+      "mastYear": false,
+      "mastGoalYear": false,
+      "mastGoalResult": null,
+      "placeables": {},
+      "seasons": {
+        "summer": {
+          "mauri": 132.33333333333334,
+          "avgPop": 0.625,
+          "equality": 0,
+          "focus": {
+            "kea": 1
+          }
+        },
+        "autumn": {
+          "mauri": 156.88198408998406,
+          "avgPop": 1.75,
+          "equality": -0.16666666666666663,
+          "focus": {
+            "kea": 3
+          }
+        }
+      },
+      "goalsMissed": []
+    }
+  ]
+}

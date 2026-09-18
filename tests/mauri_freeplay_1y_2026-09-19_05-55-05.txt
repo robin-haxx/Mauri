@@ -1,0 +1,30 @@
+AVIAN AGE: Free Play stats
+ENDLESS: Mutunga kore
+Exported 2026-09-19T05:55:05.597Z
+Ended: extinction; Upland Moa disappeared from Kahurangi..
+
+Years survived: 1
+Final score: 135
+Goals completed: 0/2
+Moa hatched: 44
+Eagle strikes: 6
+Placeables used: 9 (Lancewood Stand 6, Speargrass Patch 1, Berry Cache 1, Fern Shelter 1)
+
+Year 1 (Focus: Kea):
+  Deepening: interglacial (cold index 0.00)
+  Goals completed: 0/1
+    missed: Kea ≥ 8
+  Placeables used: 9 (Lancewood Stand 6, Speargrass Patch 1, Berry Cache 1, Fern Shelter 1)
+  Summer: Mauri +136, average population +0.6, species equality +0.00, Kea +0
+  Autumn: Mauri +109, average population +0.6, species equality -0.22, Kea -1
+  Winter: Mauri +76, average population -1.6, species equality -0.01, Kea -1
+  Spring: Mauri +76, average population +0.5, species equality +0.09, Kea +2
+
+Year 2 (Focus: Kākā):
+  Deepening: interglacial (cold index 0.03)
+  Mast goal: pending
+  Goals completed: 0/1
+    missed: Kākā ≥ 10
+  Placeables used: 0
+  Summer: Mauri +109, average population -0.9, species equality +0.36, Kākā +2
+

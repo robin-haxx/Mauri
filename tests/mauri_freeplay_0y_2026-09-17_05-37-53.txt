@@ -1,0 +1,20 @@
+AVIAN AGE: Free Play stats
+ENDLESS: Mutunga kore
+Exported 2026-09-17T05:37:53.532Z
+Ended: extinction; The Little Bush Moa disappeared from Kahurangi..
+
+Years survived: 0
+Final score: 75
+Goals completed: 1/1
+Moa hatched: 31
+Eagle strikes: 8
+Placeables used: 0
+
+Year 1 (Focus: Kea):
+  Deepening: interglacial (cold index 0.00)
+  Goals completed: 1/1
+    met: Kea ≥ 8
+  Placeables used: 0
+  Summer: Mauri +132, average population +0.6, species equality +0.00, Kea +1
+  Autumn: Mauri +157, average population +1.8, species equality -0.17, Kea +3
+

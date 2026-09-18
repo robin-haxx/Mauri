@@ -23,9 +23,13 @@ class Kaka extends Kereru {
     this._rejoinBoost = sp.flockRejoinBoost ?? 1.6;
   }
 
-  // Gregarious: a flying kākā drifts toward the centroid of nearby kākā. Weak (below
-  // forage-seek) so a bird still peels off to feed; skipped while storm-grounded.
+  // Gregarious: the flock's centre of mass is the kākā's "home", so the base loop's post-feed
+  // hops (_pickHop) and drift (_driftHome) pull it back to the party after every feed — cohesion
+  // that persists through the perch/feed cycle, not just during flight. On top of that, a flying
+  // kākā also steers toward the flock (or the nearest bird if none is in cohesion range). This is
+  // why they flock TIGHT: without the anchor, feeding at scattered trees kept them spread out.
   behave(sim, mauri, seasonManager, dt) {
+    this._flockHome = this._allFlockCentroid(sim);   // read by _anchorPoint (before super steers)
     super.behave(sim, mauri, seasonManager, dt);
     if (!this._grounded && !this._fleeingStorm && this.state === KERERU_STATE.FLYING) {
       const c = this._flockCentroid(sim);
@@ -39,6 +43,22 @@ class Kaka extends Kereru {
       }
     }
   }
+
+  // Flock centre of mass (all living kākā, excluding self), or null when alone. The home anchor.
+  _allFlockCentroid(sim) {
+    const list = sim.otherEntities && sim.otherEntities[this.speciesKey];
+    if (!list) return null;
+    let sx = 0, sy = 0, n = 0;
+    for (let i = 0; i < list.length; i++) {
+      const o = list[i];
+      if (o === this || !o.alive) continue;
+      sx += o.pos.x; sy += o.pos.y; n++;
+    }
+    return n ? { x: sx / n, y: sy / n } : null;
+  }
+
+  // Home = the flock's centre, so the base flight loop keeps regrouping onto it (tight flocking).
+  _anchorPoint() { return this._flockHome || null; }
 
   // Centroid of living flockmates within _flockRadius (excluding self), or null.
   _flockCentroid(sim) {
@@ -99,16 +119,21 @@ const KAKA_SPECIES = {
   feedRelief:       78,
   starveSec:        26,
 
-  maturitySec:      22,
-  eggCooldownSec:   32,     // breeds a little more readily than the kererū base
+  maturitySec:      27,
+  eggCooldownSec:   35,     // breeds a little more readily than the kererū base
   mateRadius:       200,
   reproCheckSec:    2.2,    // sample the short crop>0 perch window more often so a near mate isn't missed
   maxPopulation:    14,
   populationFloor:  2,
+  sexAgnosticBelow: 4,      // under this population, mate-seeking ignores sex (rescue a tiny flock)
 
-  // Gregarious flocking (kākā-specific).
-  flockRadius:      160,
-  flockPull:        0.35,
+  // Gregarious flocking (kākā-specific). flockRadius MUST exceed mateRadius (200): the cohesion
+  // pull has to engage while birds are still within breeding distance, or the flock plateaus just
+  // outside mate range and never pairs (the "kākā won't mate" bug). flockPull is strong enough to
+  // gather a foraging party tight within that range, but stays below the forage seek (1.0) so a
+  // hungry bird still peels off to feed.
+  flockRadius:      240,
+  flockPull:        0.7,    // stronger in-flight cohesion; the flock-centre anchor does the rest
   flockRejoinBoost: 1.6     // a lone bird pulls this × harder toward the nearest flockmate to rejoin
 };
 

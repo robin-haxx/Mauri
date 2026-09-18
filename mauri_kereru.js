@@ -139,6 +139,11 @@ class Kereru extends Boid {
     this._companyRadius = sp.companyRadius ?? this._mateRadius;
     this._companyRadiusSq = this._companyRadius * this._companyRadius;
     this._lonelyRestRate = sp.lonelyRestRate ?? 2.5;   // perch drains this× faster when alone
+    // Tiny-flock rescue (opt-in via sexAgnosticBelow > 0, e.g. kea & kākā): under that population,
+    // mate-seeking ignores sex so the last few can pair up and recover instead of stalling on a
+    // sex split. Recomputed each behave tick; 0 = disabled (kererū / kōkako keep opposite-sex).
+    this._sexAgnosticBelow = sp.sexAgnosticBelow ?? 0;
+    this._smallFlock = false;
 
     // State machine
     this.state = KERERU_STATE.FLYING;
@@ -163,6 +168,9 @@ class Kereru extends Boid {
     // _fleeingStorm tells subclasses to hold their extra steering while fleeing.
     this._grounded = false;
     this._fleeingStorm = false;
+    // Whether the flock is small enough for sex-agnostic mate-seeking this tick (see _isViableMate).
+    this._smallFlock = this._sexAgnosticBelow > 0 &&
+      !!(sim.getSpeciesCount && sim.getSpeciesCount(this.speciesKey) < this._sexAgnosticBelow);
 
     // Age → maturity, and hunger (feeding pays it back below).
     this.age += dt;
@@ -521,6 +529,8 @@ class Kereru extends Boid {
   // Hook: called right after this bird lays an egg. Base no-op; the kōkako sings a post-lay song.
   _onLaid() {}
 
+  // A viable mate within mate range? Routes through _isViableMate, so it inherits the sex-agnostic
+  // rule for a small flock. (A female still lays; sex-agnostic seeking lets her pair with anyone.)
   _hasMateNear(sim) {
     const list = sim.otherEntities && sim.otherEntities[this.speciesKey];
     if (!list) return false;
@@ -528,7 +538,7 @@ class Kereru extends Boid {
     const px = this.pos.x, py = this.pos.y;
     for (let i = 0; i < list.length; i++) {
       const o = list[i];
-      if (o === this || !o.alive || !o.mature || o.isFemale === this.isFemale) continue;
+      if (o === this || !o.alive || !this._isViableMate(o)) continue;
       const dx = o.pos.x - px, dy = o.pos.y - py;
       if (dx * dx + dy * dy <= rSq) return true;
     }
@@ -550,10 +560,12 @@ class Kereru extends Boid {
     return false;
   }
 
-  // A mature bird of the opposite sex — a potential mate. Used to spare a pair from the spacing
-  // behaviours (territory / separation) so they can settle together and breed.
+  // A potential mate: a mature conspecific of the opposite sex — or, while the flock is small
+  // enough for sex-agnostic mating (_smallFlock, opt-in per species), any mature conspecific.
+  // Drives mate-seeking (_hasMateNear) and the spacing exemptions (kea separation, kōkako territory).
   _isViableMate(o) {
-    return !!(o && o.mature && o.isFemale !== this.isFemale);
+    if (!o || !o.mature) return false;
+    return this._smallFlock ? true : (o.isFemale !== this.isFemale);
   }
 
   // Nearest living conspecific at any distance (excluding self), or null. Lets a lone bird home

@@ -73,17 +73,19 @@ const GLTerrain = {
       '    vec2 p=mod(uvw*6.28318530718,6.28318530718)-250.0;' +
       '    vec2 iq=p; float c=1.0; float inten=0.005;' +
       // PERF: this loop runs per water fragment every frame; the most expensive thing on the
-      // terrain. Each step trades against water fill cost; 3 keeps the long-wave character.
-      '    const int WATER_STEPS=3;' +
+      // terrain. Each step trades against water fill cost; 2 keeps the long-wave character
+      // (the output is banded to 4 levels below, so a 3rd step is barely visible).
+      '    const int WATER_STEPS=2;' +
       '    for(int n=0;n<WATER_STEPS;n++){' +
       '      float t=time*(1.0-(3.5/float(n+1)));' +
       '      iq=p+vec2(cos(t-iq.x)+sin(t+iq.y), sin(t-iq.y)+cos(t+iq.x));' +
       '      c+=1.0/length(vec2(p.x/(sin(iq.x+t)/inten), p.y/(cos(iq.y+t)/inten)));' +
       '    }' +
       '    c/=float(WATER_STEPS); c=1.17-pow(c,1.4);' +
-      '    float h=pow(abs(c),8.0);' +
+      '    float c2=c*c; float h=c2*c2*c2*c2;' +   // c^8 without an exp/log pow
+
       // Posterize the highlight into a few bands so the foam reads stepped.
-      '    h=floor(h*4.0+0.5)/4.0;' +
+      '    h=floor(h*16.0+0.5)/16.0;' +
       '    vec3 caustic=clamp(vec3(h)+vec3(0.0,0.42,0.5),0.0,1.0);' +
       // Deep cells stay darker & bluer (toward uWaterCol); shallows lift to the bright ripples.
       '    float depth=clamp(vElev*6.0,0.0,1.0);' +

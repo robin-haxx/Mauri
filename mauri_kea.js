@@ -70,10 +70,8 @@ class Kea extends Kereru {
     this._starveShieldCount = sp.starveShieldCount ?? 4;
     this._shielded = false;   // recomputed each behave tick; drives the security bar
 
-    // Tiny-flock rescue: under this population, mate-seeking (and the pair-spacing exemption)
-    // ignore sex, so the last few kea can pair up and recover instead of stalling on a sex split.
-    this._sexAgnosticBelow = sp.sexAgnosticBelow ?? 4;
-    this._smallFlock = false;   // recomputed each behave tick (population < _sexAgnosticBelow)
+    // Tiny-flock sex-agnostic mate-seeking is handled by the base (Kereru), keyed off the
+    // sexAgnosticBelow knob in KEA_SPECIES; see _isViableMate / _hasMateNear there.
 
     // Berry Cache passive feed: standing in a cache's ring cancels the hunger tick AND drains a
     // little more, so net hunger falls while the kea is in the ring (the flock fattens and breeds
@@ -87,7 +85,6 @@ class Kea extends Kereru {
   behave(sim, mauri, seasonManager, dt) {
     this._sm = seasonManager;
     this._shielded = this._starveImmune(sim);   // for the security bar (see _renderExtra)
-    this._smallFlock = !!(sim.getSpeciesCount && sim.getSpeciesCount(this.speciesKey) < this._sexAgnosticBelow);
     if (this._raidCooldown > 0) this._raidCooldown -= dt;
 
     // Perch tree: each kea holds a fruiting forest tree (chosen by nearby food) as its home
@@ -188,29 +185,6 @@ class Kea extends Kereru {
     const m = Math.hypot(ax, ay);
     if (m < 0.0001) return null;
     return { x: px + (ax / m) * 60, y: py + (ay / m) * 60 };
-  }
-
-  // A potential mate. Under the tiny-flock threshold any mature kea counts (sex-agnostic), so the
-  // last few can pair up and breed; at/above it, only the opposite sex (base rule). Drives both
-  // mate-seeking (_hasMateNear) and the spacing exemptions (_separateAway / _choosePerchTree).
-  _isViableMate(o) {
-    if (!o || !o.mature) return false;
-    return this._smallFlock ? true : (o.isFemale !== this.isFemale);
-  }
-
-  // A viable mate within mate range? Uses _isViableMate, so it inherits the sex-agnostic rule for
-  // a tiny flock. (A female still lays; sex-agnostic seeking lets her pair with any mature kea.)
-  _hasMateNear(sim) {
-    const list = sim.otherEntities && sim.otherEntities.kea;
-    if (!list) return false;
-    const rSq = this._mateRadius * this._mateRadius, px = this.pos.x, py = this.pos.y;
-    for (let i = 0; i < list.length; i++) {
-      const o = list[i];
-      if (o === this || !o.alive || !this._isViableMate(o)) continue;
-      const dx = o.pos.x - px, dy = o.pos.y - py;
-      if (dx * dx + dy * dy <= rSq) return true;
-    }
-    return false;
   }
 
   _perchValid() {
@@ -619,8 +593,8 @@ const KEA_SPECIES = {
   cacheNetFeedPerSec: 1.2, // net hunger DROP per second while inside a Berry Cache's ring
 
   // Reproduction; sexual, emergent (the Kereru loop).
-  maturitySec:      28,
-  eggCooldownSec:   40,
+  maturitySec:      30,
+  eggCooldownSec:   45,
   mateRadius:       220,
   reproCheckSec:    3.5,
   maxPopulation:    14,

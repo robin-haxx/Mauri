@@ -965,6 +965,9 @@ class Game {
     this._freeplayYear = -1;      // which year's goals are currently built
     this.freeplayFocus = [];      // the two species this year's goals protect
     this._yearsSurvived = 0;
+    // Flighted-bird goal ramp: the last population target set for each flighted focus species,
+    // so each time one returns as focus its goal climbs at least +2 (see _beginFreeplayYear).
+    this._flyerFocusTargets = {};
     // World-grid year transition (endless): a phased fade-out → camera pan → fade-in
     // when the year moves to a new area. Null when no transition is running. See
     // _scrollWorldGrid / _updateWorldGridPan / _transitionEntityAlpha.
@@ -1142,6 +1145,7 @@ class Game {
     this._freeplayYear = -1;
     this.freeplayFocus = [];
     this._yearsSurvived = 0;
+    this._flyerFocusTargets = {};     // reset the flighted-bird goal ramp for a fresh run
     this._runEndedByChoice = false;   // fresh run: not a player-ended run
     this._resetRunStats();            // Free Play stats-export accumulator (see exportFreeplayStats)
     this._yearTransition = null;      // clear any in-flight area transition on (re)load
@@ -1629,6 +1633,15 @@ class Game {
       if (sp && sp.config && sp.config.displayName) return sp.config.displayName;
     }
     return key;
+  }
+
+  // A flighted bird's breeding cap (maxPopulation), used to cap the per-loop goal ramp so it
+  // never asks for more than the flock can reach. null if unknown (then the ramp isn't capped).
+  _flyerGoalCap(key) {
+    if (typeof REGISTRY === 'undefined') return null;
+    const sp = REGISTRY.getSpecies(key);
+    const c = sp && (sp.config || sp);
+    return (c && c.maxPopulation != null) ? c.maxPopulation : null;
   }
 
   // The authored schedule entry for a given year (0-based cycle), fully resolved, or null.
@@ -2329,7 +2342,17 @@ class Game {
     const nestTarget = this.currentLevel.freeplayNestingGoal ?? M.freeplayNestingGoal ?? 2;
     const goals = [];
     for (const k of this.freeplayFocus) {
-      const target = targets[k] || defaultTarget;
+      let target = targets[k] || defaultTarget;
+      // Flighted-bird ramp: each time a flighted focus species returns, its goal climbs at least
+      // +2 over the last time it was focus (capped at the species' breeding cap so it stays
+      // reachable). Kākāpō is flightless — in FLYER_TYPES only for egg routing — so it's excluded.
+      if (typeof FLYER_TYPES !== 'undefined' && FLYER_TYPES.has(k) && k !== 'kakapo') {
+        const last = this._flyerFocusTargets[k];
+        if (last != null && target < last + 2) target = last + 2;
+        const cap = this._flyerGoalCap(k);
+        if (cap != null) target = Math.min(target, cap);
+        this._flyerFocusTargets[k] = target;
+      }
       const stretch = kokakoStretch && k === 'kokako';
       goals.push({
         name: `${stretch ? 'Stretch: ' : ''}${this._freeplaySpeciesName(k)} ≥ ${target}`,

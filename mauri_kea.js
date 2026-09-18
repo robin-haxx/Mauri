@@ -46,6 +46,7 @@ class Kea extends Kereru {
     // Perch-tree spread: kea penalise a tree already crowded with kea and favour trees near
     // a moa nesting site, so the flock fans out and stations where a raid can happen.
     this._perchCrowdWeight = sp.perchCrowdWeight ?? 4.0; // ↑ = spread harder off a crowded tree
+    this._perchCrowdRadius = sp.perchCrowdRadius ?? 90;  // a tree this close to another kea's perch is "crowded"
     this._perchSiteBonus   = sp.perchSiteBonus ?? 6;     // score bonus for a tree near a nesting site
     this._perchLureBonus   = sp.perchLureBonus ?? 8;     // score bonus for a tree inside a berry cache's patch
     // A tree counts as "near a site" out to the raid station radius, so a preferred perch
@@ -58,11 +59,21 @@ class Kea extends Kereru {
     this._mateSeekBoost  = sp.mateSeekBoost ?? 2.4;   // cache-bound leaders draw from this× farther
     this._mateSeekWeight = sp.mateSeekWeight ?? 0.5;  // gentle; below the direct cache pull
 
+    // Spacing: an unpartnered kea pushes off other kea (not its mate) while airborne, so the flock
+    // spreads across trees instead of stacking on one. A mate is exempt — a pair settles together.
+    this._separateRadius = sp.separateRadius ?? 70;
+    this._separateWeight = sp.separateWeight ?? 0.8;  // below forage-seek, so it still reaches food
+
     // Focus-year survival shield (Year of the Kea): a starving kea clings on instead of dying
     // while the flock is at/below this count, so the player can grow it past the danger zone
     // (see _starveImmune). Above the count, hunger is mortal again.
     this._starveShieldCount = sp.starveShieldCount ?? 4;
     this._shielded = false;   // recomputed each behave tick; drives the security bar
+
+    // Tiny-flock rescue: under this population, mate-seeking (and the pair-spacing exemption)
+    // ignore sex, so the last few kea can pair up and recover instead of stalling on a sex split.
+    this._sexAgnosticBelow = sp.sexAgnosticBelow ?? 4;
+    this._smallFlock = false;   // recomputed each behave tick (population < _sexAgnosticBelow)
 
     // Berry Cache passive feed: standing in a cache's ring cancels the hunger tick AND drains a
     // little more, so net hunger falls while the kea is in the ring (the flock fattens and breeds
@@ -76,6 +87,7 @@ class Kea extends Kereru {
   behave(sim, mauri, seasonManager, dt) {
     this._sm = seasonManager;
     this._shielded = this._starveImmune(sim);   // for the security bar (see _renderExtra)
+    this._smallFlock = !!(sim.getSpeciesCount && sim.getSpeciesCount(this.speciesKey) < this._sexAgnosticBelow);
     if (this._raidCooldown > 0) this._raidCooldown -= dt;
 
     // Perch tree: each kea holds a fruiting forest tree (chosen by nearby food) as its home
@@ -97,6 +109,11 @@ class Kea extends Kereru {
     }
 
     if (!this._grounded && !this._fleeingStorm && this.state === KERERU_STATE.FLYING) {
+      // Spacing: push off nearby non-mate kea so unpartnered birds spread across trees instead of
+      // stacking on one. A mate is exempt (they may pair and breed). Below the forage/cache pulls.
+      const away = this._separateAway(sim);
+      if (away) this.applyForce(this.seekPoint(away.x, away.y, this._separateWeight));
+
       // A Berry Cache pulls the flock onto the forest patch. The bird holds a committed cache
       // choice (re-picked on a jittered timer), so the flock spreads across caches rather than
       // all chasing the nearest. With no cache and no perch, drift toward the elevation band.
@@ -152,6 +169,50 @@ class Kea extends Kereru {
     return best;
   }
 
+  // A point in the direction away from nearby non-mate kea (closer birds weigh more), or null when
+  // none is in range. Seeking it spreads unpartnered kea apart; a viable mate is skipped so a pair
+  // stays together to breed.
+  _separateAway(sim) {
+    const list = sim.otherEntities && sim.otherEntities.kea;
+    if (!list || list.length < 2) return null;
+    const px = this.pos.x, py = this.pos.y, rSq = this._separateRadius * this._separateRadius;
+    let ax = 0, ay = 0, n = 0;
+    for (let i = 0; i < list.length; i++) {
+      const o = list[i];
+      if (o === this || !o.alive) continue;
+      if (this._isViableMate(o)) continue;
+      const dx = px - o.pos.x, dy = py - o.pos.y, dSq = dx * dx + dy * dy;
+      if (dSq < rSq && dSq > 0.0001) { const inv = 1 / Math.sqrt(dSq); ax += dx * inv; ay += dy * inv; n++; }
+    }
+    if (!n) return null;
+    const m = Math.hypot(ax, ay);
+    if (m < 0.0001) return null;
+    return { x: px + (ax / m) * 60, y: py + (ay / m) * 60 };
+  }
+
+  // A potential mate. Under the tiny-flock threshold any mature kea counts (sex-agnostic), so the
+  // last few can pair up and breed; at/above it, only the opposite sex (base rule). Drives both
+  // mate-seeking (_hasMateNear) and the spacing exemptions (_separateAway / _choosePerchTree).
+  _isViableMate(o) {
+    if (!o || !o.mature) return false;
+    return this._smallFlock ? true : (o.isFemale !== this.isFemale);
+  }
+
+  // A viable mate within mate range? Uses _isViableMate, so it inherits the sex-agnostic rule for
+  // a tiny flock. (A female still lays; sex-agnostic seeking lets her pair with any mature kea.)
+  _hasMateNear(sim) {
+    const list = sim.otherEntities && sim.otherEntities.kea;
+    if (!list) return false;
+    const rSq = this._mateRadius * this._mateRadius, px = this.pos.x, py = this.pos.y;
+    for (let i = 0; i < list.length; i++) {
+      const o = list[i];
+      if (o === this || !o.alive || !this._isViableMate(o)) continue;
+      const dx = o.pos.x - px, dy = o.pos.y - py;
+      if (dx * dx + dy * dy <= rSq) return true;
+    }
+    return false;
+  }
+
   _perchValid() {
     const p = this._perchTree;
     return !!(p && p.alive && !p._consumed);
@@ -196,7 +257,7 @@ class Kea extends Kereru {
     const trees = sim.getNearbyPlants(this.pos.x, this.pos.y, this._feedRadius * 2.0);
     const flock = (sim.otherEntities && sim.otherEntities.kea) || [];
     const sites = sim.nestingSites || [];
-    const crowdR2 = 55 * 55, siteR2 = this._perchSiteRadius * this._perchSiteRadius;
+    const crowdR2 = this._perchCrowdRadius * this._perchCrowdRadius, siteR2 = this._perchSiteRadius * this._perchSiteRadius;
 
     // If committed to a cache, prefer perches near it so the flock re-homes onto the patch.
     const lure = this._lureValid() ? this._lureChoice : null;
@@ -216,6 +277,7 @@ class Kea extends Kereru {
       for (let k = 0; k < flock.length; k++) {
         const o = flock[k];
         if (o === this || !o.alive || !o._perchTree) continue;
+        if (this._isViableMate(o)) continue;   // a mate may share/adjoin its tree; don't repel
         const dx = o._perchTree.pos.x - p.pos.x, dy = o._perchTree.pos.y - p.pos.y;
         if (dx * dx + dy * dy < crowdR2) crowd++;
       }
@@ -232,7 +294,8 @@ class Kea extends Kereru {
         const dx = lure.pos.x - p.pos.x, dy = lure.pos.y - p.pos.y;
         if (dx * dx + dy * dy < lureR2) lureBonus = this._perchLureBonus;
       }
-      const score = food + siteBonus + lureBonus - crowd * this._perchCrowdWeight;
+      // Small jitter breaks ties so kea choosing at the same moment don't all land on one tree.
+      const score = food + siteBonus + lureBonus - crowd * this._perchCrowdWeight + Math.random() * 0.5;
       if (score > bestScore) { bestScore = score; best = p; }
     }
     if (best) this._perchTree = best;
@@ -552,10 +615,11 @@ const KEA_SPECIES = {
   feedRelief:       68,
   starveSec:        20,
   starveShieldCount: 4,   // Year of the Kea: no starvation death while the flock is at/below this
+  sexAgnosticBelow:  4,   // under this population, mate-seeking ignores sex (rescue a tiny flock)
   cacheNetFeedPerSec: 1.2, // net hunger DROP per second while inside a Berry Cache's ring
 
   // Reproduction; sexual, emergent (the Kereru loop).
-  maturitySec:      22,
+  maturitySec:      28,
   eggCooldownSec:   40,
   mateRadius:       220,
   reproCheckSec:    3.5,
@@ -572,7 +636,13 @@ const KEA_SPECIES = {
   // Berry Cache choice; how the flock spreads across multiple caches (see _chooseLure).
   lureChoiceSec:     2.5,               // re-pick a cache at most this often (jittered per bird)
   lureBaseNutrition: 6,                 // a freshly placed cache draws kea even before its berries grow
-  lureCrowdWeight:   1.0                // ↑ = the flock balances harder off a crowded cache
+  lureCrowdWeight:   1.0,               // ↑ = the flock balances harder off a crowded cache
+
+  // Spacing; unpartnered kea spread across trees instead of stacking (see _separateAway / _choosePerchTree).
+  perchCrowdWeight:  7,                 // ↑ = avoid a tree near another kea's perch harder
+  perchCrowdRadius:  90,                // a tree this close to another kea's perch counts as crowded
+  separateRadius:    70,                // push off a non-mate kea within this range while airborne
+  separateWeight:    0.8                // strength of that push (below forage/cache pulls)
 };
 
 // Register the kea as a flighted-bird type.

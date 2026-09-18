@@ -133,6 +133,12 @@ class Kereru extends Boid {
     this._mateRadius = sp.mateRadius ?? 200;
     this._reproCheckFrames = (sp.reproCheckSec ?? 3.5) * F;
     this._reproCheckTimer = random(0, this._reproCheckFrames);
+    // "In a flock" if a conspecific is within this radius. A bird with none nearby is restless:
+    // it rests less and takes off to roam sooner, so solitary birds keep moving (and wandering)
+    // until they find company / a mate instead of camping alone.
+    this._companyRadius = sp.companyRadius ?? this._mateRadius;
+    this._companyRadiusSq = this._companyRadius * this._companyRadius;
+    this._lonelyRestRate = sp.lonelyRestRate ?? 2.5;   // perch drains this× faster when alone
 
     // State machine
     this.state = KERERU_STATE.FLYING;
@@ -425,7 +431,9 @@ class Kereru extends Boid {
       this._tryReproduce(sim);
     }
 
-    this._restTimer -= dt;
+    // Restless when alone: cut the perch short and take off to roam sooner, so a bird with no
+    // flockmate nearby keeps moving (and wandering) until it finds company / a mate.
+    this._restTimer -= dt * (this._companyNear(sim) ? 1 : this._lonelyRestRate);
     if (this._restTimer <= 0) {
       if (this.crop > 0) {
         this._pickHop();                             // take off to disperse elsewhere
@@ -506,8 +514,12 @@ class Kereru extends Boid {
     egg.parentSpecies = this.speciesKey;
     this._eggCooldown = this._eggCooldownFrames * (mast ? 0.45 : 1);
     this.crop = Math.max(0, this.crop - 1);                 // laying spends a fruit's energy
+    this._onLaid();
     if (sim.game) sim.game.addNotification(`A ${this._label} nests. +egg`, 'info');
   }
+
+  // Hook: called right after this bird lays an egg. Base no-op; the kōkako sings a post-lay song.
+  _onLaid() {}
 
   _hasMateNear(sim) {
     const list = sim.otherEntities && sim.otherEntities[this.speciesKey];
@@ -521,6 +533,43 @@ class Kereru extends Boid {
       if (dx * dx + dy * dy <= rSq) return true;
     }
     return false;
+  }
+
+  // Any living conspecific within `radius` (default _companyRadius)? A cheap "am I in a flock" test.
+  _companyNear(sim, radius) {
+    const list = sim.otherEntities && sim.otherEntities[this.speciesKey];
+    if (!list) return false;
+    const r = radius || this._companyRadius, rSq = r * r;
+    const px = this.pos.x, py = this.pos.y;
+    for (let i = 0; i < list.length; i++) {
+      const o = list[i];
+      if (o === this || !o.alive) continue;
+      const dx = o.pos.x - px, dy = o.pos.y - py;
+      if (dx * dx + dy * dy <= rSq) return true;
+    }
+    return false;
+  }
+
+  // A mature bird of the opposite sex — a potential mate. Used to spare a pair from the spacing
+  // behaviours (territory / separation) so they can settle together and breed.
+  _isViableMate(o) {
+    return !!(o && o.mature && o.isFemale !== this.isFemale);
+  }
+
+  // Nearest living conspecific at any distance (excluding self), or null. Lets a lone bird home
+  // onto the flock to regroup and pair.
+  _nearestConspecific(sim) {
+    const list = sim.otherEntities && sim.otherEntities[this.speciesKey];
+    if (!list) return null;
+    const px = this.pos.x, py = this.pos.y;
+    let best = null, bestSq = Infinity;
+    for (let i = 0; i < list.length; i++) {
+      const o = list[i];
+      if (o === this || !o.alive) continue;
+      const dx = o.pos.x - px, dy = o.pos.y - py, dSq = dx * dx + dy * dy;
+      if (dSq < bestSq) { bestSq = dSq; best = o; }
+    }
+    return best;
   }
 
   // ============================================================

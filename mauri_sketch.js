@@ -639,7 +639,7 @@ const PLACEABLES = {
   // that feeds the kākā rather than founding forest anywhere.
   forestBoost: {
     name: "Forest Seed",
-    description: "Cultivates new podocarp forest; plant on lowland near an existing grove to spread rimu and beech",
+    description: "Sprouts trees for Kākā!",
     cost: 35,
     icon: '🌱',
     color: '#3b6a50',

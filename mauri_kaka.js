@@ -17,6 +17,10 @@ class Kaka extends Kereru {
     this._flockRadius = sp.flockRadius ?? 160;
     this._flockRadiusSq = this._flockRadius * this._flockRadius;
     this._flockPull = sp.flockPull ?? 0.35;
+    // A lone kākā (no flockmate in cohesion range) pulls toward the NEAREST one at this × the
+    // flock pull, so isolated birds rejoin the party — and come into mate range — instead of
+    // drifting alone forever (the slow-to-mate case).
+    this._rejoinBoost = sp.flockRejoinBoost ?? 1.6;
   }
 
   // Gregarious: a flying kākā drifts toward the centroid of nearby kākā. Weak (below
@@ -25,7 +29,14 @@ class Kaka extends Kereru {
     super.behave(sim, mauri, seasonManager, dt);
     if (!this._grounded && !this._fleeingStorm && this.state === KERERU_STATE.FLYING) {
       const c = this._flockCentroid(sim);
-      if (c) this.applyForce(this.seekPoint(c.x, c.y, this._flockPull));
+      if (c) {
+        this.applyForce(this.seekPoint(c.x, c.y, this._flockPull));
+      } else {
+        // Isolated: no flockmate in cohesion range → head for the nearest one so the flock
+        // coalesces and mates come together. Weak enough that a hungry bird still peels to feed.
+        const m = this._nearestConspecific(sim);
+        if (m) this.applyForce(this.seekPoint(m.pos.x, m.pos.y, this._flockPull * this._rejoinBoost));
+      }
     }
   }
 
@@ -91,13 +102,14 @@ const KAKA_SPECIES = {
   maturitySec:      22,
   eggCooldownSec:   32,     // breeds a little more readily than the kererū base
   mateRadius:       200,
-  reproCheckSec:    3.5,
+  reproCheckSec:    2.2,    // sample the short crop>0 perch window more often so a near mate isn't missed
   maxPopulation:    14,
   populationFloor:  2,
 
   // Gregarious flocking (kākā-specific).
   flockRadius:      160,
-  flockPull:        0.35
+  flockPull:        0.35,
+  flockRejoinBoost: 1.6     // a lone bird pulls this × harder toward the nearest flockmate to rejoin
 };
 
 // Register the kākā as a flighted-bird type.

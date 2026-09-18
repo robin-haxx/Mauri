@@ -38,6 +38,29 @@ class Kokako extends Kereru {
     this._relocateFrames  = (sp.relocateSec ?? 6) * F;
     this._relocateTimer   = 0;
     this._territory = createVector(x, y);
+    this._loneAnchor = null;   // when alone, home onto the nearest kōkako (see behave/_anchorPoint)
+    this._wasLone = false;
+    this._justLaid = false;    // set on laying, consumed by the next song (a post-lay song)
+  }
+
+  // A fresh lay earns a song, even alone (see _perched's sing gate).
+  _onLaid() { this._justLaid = true; }
+
+  // When alone, treat the nearest kōkako as home so the anchor machinery (hop orbit, drift, leash)
+  // carries this bird toward company to pair up, instead of orbiting an empty territory. On
+  // rejoining the flock it claims a fresh territory where it arrived (so a stale one can't pull it
+  // straight back apart).
+  behave(sim, mauri, seasonManager, dt) {
+    const company = this._companyNear(sim);
+    if (!company) {
+      const m = this._nearestConspecific(sim);
+      this._loneAnchor = m ? m.pos : null;
+    } else {
+      this._loneAnchor = null;
+      if (this._wasLone) this._territory.set(this.pos.x, this.pos.y);
+    }
+    this._wasLone = !company;
+    super.behave(sim, mauri, seasonManager, dt);
   }
 
   _isPerched() {
@@ -49,7 +72,7 @@ class Kokako extends Kereru {
     super._runState(sim, dt);
   }
 
-  _anchorPoint() { return this._territory; }
+  _anchorPoint() { return this._loneAnchor || this._territory; }
 
   // While relocating, travel to the new territory ignoring trees — but stop and forage normally
   // on arrival, if the move drags on (couldn't reach), or if hunger bites, so it never gets stuck
@@ -78,7 +101,14 @@ class Kokako extends Kereru {
     if (this._songTimer > 0)    this._songTimer    = Math.max(0, this._songTimer - dt);
 
     const secure = this.hunger < this.maxHunger * this._secureHunger;
-    if (secure && this._singCooldown <= 0 && (this._respondSing || this._songTimer <= 0)) {
+    // Sing when it does something: answering a song, having just laid, courting (a ready single
+    // advertising for a mate), or a territorial song with company within earshot. A bird that is
+    // none of these (e.g. paired and on cooldown, or a lone bird between courtship songs) stays
+    // restless and roams (see behave) instead of singing to no one.
+    const seekingMate = this.mature && this._eggCooldown <= 0 && !this._hasMateNear(sim);
+    const wantSing = this._respondSing || this._justLaid ||
+      (this._songTimer <= 0 && (seekingMate || this._companyNear(sim, this._singHearRadius)));
+    if (secure && this._singCooldown <= 0 && wantSing) {
       // Breed before you sing: a secure, well-fed bird is exactly a ready breeder, so lay first
       // if a mate is near — otherwise song would starve out the very birds able to reproduce.
       this._tryReproduce(sim);
@@ -92,6 +122,7 @@ class Kokako extends Kereru {
     this.state = KOKAKO_STATE.SINGING;
     this._singTimer = this._singFrames;
     this._respondSing = false;
+    this._justLaid = false;                        // the post-lay song (if any) is now spent
     this._territory.set(this.pos.x, this.pos.y);   // claim this perch as the territory centre
     this._provokeNeighbours(sim);
   }
@@ -132,12 +163,6 @@ class Kokako extends Kereru {
       const dx = o.pos.x - px, dy = o.pos.y - py;
       if (dx * dx + dy * dy <= terrSq && typeof o._displaceFrom === 'function') o._displaceFrom(px, py);
     }
-  }
-
-  // A mature bird of the opposite sex: territoriality spaces rivals but leaves these be, so a pair
-  // can settle close enough (within mateRadius) to breed.
-  _isViableMate(o) {
-    return !!(o && o.mature && o.isFemale !== this.isFemale);
   }
 
   _answerSong() { this._respondSing = true; }

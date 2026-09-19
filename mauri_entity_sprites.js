@@ -309,33 +309,59 @@ const EntitySprites = {
 
   // Sprite-shaped ground shadow, reusing the bake-free silhouette path. GL stamps the
   // sprite's alpha shape once as a dark flattened pool; 2D falls back to an ellipse.
-  //   (cx,cy)      shadow centre in the CURRENT transform
+  // Positional args (not an options object) so the per-entity, per-frame hot path allocates
+  // nothing — see the fast path below.
+  //   (cx,cy)   shadow centre in the CURRENT transform
   //   drawW,drawH  the sprite's on-screen draw size
-  //   opts.alpha   darkness 0..1                       (default 0.12)
-  //   opts.squash  vertical flatten of the silhouette  (default 0.42)
-  //   opts.wide    horizontal scale of the silhouette  (default 0.9)
-  //   opts.mirror  <0 flips it (match a mirrored sprite)
-  //   opts.fbW/fbH ellipse size for the 2D fallback    (default the sprite box × squash)
-  drawSpriteShadow(sprite, cx, cy, drawW, drawH, opts) {
-    const o = opts || {};
-    const alpha = (o.alpha != null) ? o.alpha : 0.12;
-    const squash = (o.squash != null) ? o.squash : 0.42;
+  //   alpha     darkness 0..1                       (default 0.12)
+  //   squash    vertical flatten of the silhouette  (default 0.42)
+  //   wide      horizontal scale of the silhouette  (default 0.9)
+  //   mirror    <0 flips it (match a mirrored sprite)
+  //   fbW/fbH   ellipse size for the 2D fallback    (default the sprite box × squash)
+  drawSpriteShadow(sprite, cx, cy, drawW, drawH, alpha, squash, wide, mirror, fbW, fbH) {
+    const _alpha = (alpha != null) ? alpha : 0.12;
+    const _squash = (squash != null) ? squash : 0.42;
+    const _wide = (wide != null) ? wide : 0.9;
     if (sprite && typeof GLBatch !== 'undefined' && GLBatch.enabled && GLBatch._open) {
-      push();
-      imageMode(CENTER);
-      if (o.mirror < 0) { translate(cx, cy); scale(-1, 1); translate(-cx, -cy); }
-      tint(0, 0, 0, 255 * alpha);
-      GLBatch._silhouette = true;
-      image(sprite, cx, cy, drawW * (o.wide != null ? o.wide : 0.9), drawH * squash);
-      GLBatch._silhouette = false;
-      noTint();
-      pop();
+      const _mir = (mirror != null && mirror < 0);
+      const R = (typeof _renderer !== 'undefined') ? _renderer : null;
+      if (R) {
+        // Hot path (once per plant + animal every frame): p5's push()/pop() allocates two
+        // objects per call and tint() allocates a p5.Color + array — this loop was a top GC
+        // churn source. We touch only _tint + _imageMode, so snapshot just those and write a
+        // reused scratch tint directly. GLBatch reads both synchronously in image(), so the
+        // scratch array is fully consumed before the next call reuses it.
+        const prevTint = R._tint, prevImageMode = R._imageMode;
+        if (_mir) { translate(cx, cy); scale(-1, 1); translate(-cx, -cy); }
+        const st = this._shadowTint || (this._shadowTint = [0, 0, 0, 0]);
+        st[3] = 255 * _alpha;
+        R._tint = st;
+        R._imageMode = (typeof CENTER !== 'undefined') ? CENTER : 'center';
+        GLBatch._silhouette = true;
+        image(sprite, cx, cy, drawW * _wide, drawH * _squash);
+        GLBatch._silhouette = false;
+        R._tint = prevTint;
+        R._imageMode = prevImageMode;
+        // A reflection is its own inverse; undo the mirror so the caller's frame is unchanged.
+        if (_mir) { translate(cx, cy); scale(-1, 1); translate(-cx, -cy); }
+      } else {
+        // Fallback (no reachable renderer): the original push/pop path.
+        push();
+        imageMode(CENTER);
+        if (_mir) { translate(cx, cy); scale(-1, 1); translate(-cx, -cy); }
+        tint(0, 0, 0, 255 * _alpha);
+        GLBatch._silhouette = true;
+        image(sprite, cx, cy, drawW * _wide, drawH * _squash);
+        GLBatch._silhouette = false;
+        noTint();
+        pop();
+      }
       return;
     }
     // 2D fallback: the original soft ellipse blob.
     noStroke();
-    fill(0, 0, 0, 255 * alpha);
-    ellipse(cx, cy, (o.fbW != null ? o.fbW : drawW), (o.fbH != null ? o.fbH : drawH * squash));
+    fill(0, 0, 0, 255 * _alpha);
+    ellipse(cx, cy, (fbW != null ? fbW : drawW), (fbH != null ? fbH : drawH * _squash));
   }
 };
 

@@ -21,6 +21,14 @@ const MOA_AGE = {
   SIZE_ADULT: 1.0
 };
 
+// Reused indicator-bar colours (were per-moa, per-frame array literals in renderIndicators —
+// _drawBar reads r/g/b synchronously, so shared constants + one scratch are safe).
+const MOA_BAR_AGE     = [150, 200, 255];
+const MOA_BAR_PREG    = [220, 200, 100];
+const MOA_BAR_MATE    = [255, 150, 180];
+const MOA_BAR_SECURE  = [220, 180, 200];
+const _moaHungerBarCol = [0, 0, 120];   // scratch: r/g track hunger, filled at draw time
+
 class Moa extends Boid {
   static DEFAULTS = {
     size: { min: 8, max: 11 },
@@ -1158,7 +1166,7 @@ class Moa extends Boid {
     // Shadow; sprite-shaped on GL (bake-free silhouette), ellipse blob on 2D.
     const _shW = this.size * 2.5 * (this.speciesConfig.spriteScale || 1);
     EntitySprites.drawSpriteShadow(sprite, 1.5, 1.5, _shW, _shW,
-      { alpha: 0.11, squash: 0.34, wide: 0.72, fbW: this.size * 1.0, fbH: this.size * 0.5 });
+      0.11, 0.34, 0.72, null, this.size * 1.0, this.size * 0.5);
     
     // Only update facing while moving: heading() of a near-zero velocity is noise and made
     // stationary moa spin. Below the gate, keep the last facing.
@@ -1229,20 +1237,22 @@ class Moa extends Boid {
     
     noStroke();
     
-    // Hunger bar
-    this._drawBar(px, py + yOff, 14, 2, 1 - this.hunger / this.maxHunger, 
-      [120 + (this.hunger / this.maxHunger) * 120, 260 - (this.hunger / this.maxHunger) * 120, 120]);
-    
+    // Hunger bar (colour tracks hunger; reused scratch array, no per-frame allocation)
+    const _hf = this.hunger / this.maxHunger;
+    _moaHungerBarCol[0] = 120 + _hf * 120;
+    _moaHungerBarCol[1] = 260 - _hf * 120;
+    this._drawBar(px, py + yOff, 14, 2, 1 - _hf, _moaHungerBarCol);
+
     // Secondary bar (age/mating/pregnancy)
     if (!this.canMateByAge()) {
-      this._drawBar(px, py + yOff - 3, 14, 2, this.age / MOA_AGE.MATING_AGE, [150, 200, 255]);
+      this._drawBar(px, py + yOff - 3, 14, 2, this.age / MOA_AGE.MATING_AGE, MOA_BAR_AGE);
     } else if (this.isPregnant) {
-      this._drawBar(px, py + yOff - 3, 14, 2, 1 - this.pregnancyTimer / this.pregnancyDuration, [220, 200, 100]);
+      this._drawBar(px, py + yOff - 3, 14, 2, 1 - this.pregnancyTimer / this.pregnancyDuration, MOA_BAR_PREG);
     } else if (this.isReadyToMate()) {
-      this._drawBar(px, py + yOff - 3, 14, 2, 1, [255, 150, 180]);
+      this._drawBar(px, py + yOff - 3, 14, 2, 1, MOA_BAR_MATE);
     } else if (this.canMate && this.mateCooldown <= 0) {
       const prog = this.securityTime / (this.securityTimeRequired * 0.5);
-      if (prog > 0.1) this._drawBar(px, py + yOff - 3, 14, 2, Math.min(prog, 1), [220, 180, 200]);
+      if (prog > 0.1) this._drawBar(px, py + yOff - 3, 14, 2, Math.min(prog, 1), MOA_BAR_SECURE);
     }
     
     // State icon

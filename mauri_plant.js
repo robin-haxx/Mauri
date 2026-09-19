@@ -507,9 +507,9 @@ class Plant {
     }
 
     // Shadow; sprite-shaped on GL (bake-free silhouette), ellipse blob on 2D.
+    // Positional args (alpha, squash, wide, mirror, fbW, fbH) — no per-frame options object.
     EntitySprites.drawSpriteShadow(sprite, px + 1, py + 1, displaySize, displaySize,
-      { alpha: dormant ? 0.05 : 0.10, squash: 0.5, wide: 0.82,
-        fbW: displaySize * 1.2, fbH: displaySize * 0.6 });
+      dormant ? 0.05 : 0.10, 0.5, 0.82, null, displaySize * 1.2, displaySize * 0.6);
 
     // Calculate sprite size for growing plants
     let spriteSize = displaySize;
@@ -559,8 +559,7 @@ class Plant {
 
     // Shadow at the base; sprite-shaped on GL, ellipse on 2D.
     EntitySprites.drawSpriteShadow(sprite, px + 1, py + 1, displaySize, displaySize,
-      { alpha: dormant ? 0.05 : 0.10, squash: 0.5, wide: 0.82,
-        fbW: displaySize * 1.2, fbH: displaySize * 0.6 });
+      dormant ? 0.05 : 0.10, 0.5, 0.82, null, displaySize * 1.2, displaySize * 0.6);
 
     // Width follows displaySize; height follows the sprite's aspect ratio.
     let spriteW = displaySize;
@@ -594,8 +593,7 @@ class Plant {
     
     // Shadow; kawakawa's pre-rendered buffer works as the silhouette source on GL.
     EntitySprites.drawSpriteShadow(buffer, px + 1, py + 1, displaySize, displaySize,
-      { alpha: dormant ? 0.05 : 0.10, squash: 0.5, wide: 0.82,
-        fbW: displaySize * 1.2, fbH: displaySize * 0.6 });
+      dormant ? 0.05 : 0.10, 0.5, 0.82, null, displaySize * 1.2, displaySize * 0.6);
 
     const halfSize = displaySize * 0.5;
 

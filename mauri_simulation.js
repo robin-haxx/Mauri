@@ -1737,17 +1737,15 @@ class Simulation {
 
   render() {
     this.updateViewport();
-    
-    const vl = this._viewLeft;
-    const vt = this._viewTop;
-    const vr = this._viewRight;
-    const vb = this._viewBottom;
-    const m = this._viewMargin;
-    
-    const inView = (px, py, extra) => 
-      px >= vl - m - extra && px <= vr + m + extra &&
-      py >= vt - m - extra && py <= vb + m + extra;
-    
+
+    // Reused viewport-cull test (created once, not per frame — it was a per-frame closure
+    // allocation). Reads the _view* bounds updateViewport() just refreshed on `this`.
+    const inView = this._inView || (this._inView = (px, py, extra) => {
+      const m = this._viewMargin;
+      return px >= this._viewLeft - m - extra && px <= this._viewRight + m + extra &&
+             py >= this._viewTop - m - extra && py <= this._viewBottom + m + extra;
+    });
+
     const placeables = this.placeables;
     const eggs = this.eggs;
     const moas = this.moas;

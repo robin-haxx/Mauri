@@ -75,7 +75,7 @@ function preload(){
 // ============================================
 const CONFIG = {
   // ===== ENGINE CONSTANTS (never change between levels) =====
-  version: 'alpha 2.1.3',
+  version: 'alpha 2.1.4',
 
   // The SHORT edge of the canvas is always 1080 (referenceHeight is kept as the name for
   // backwards compatibility). In landscape the short edge is the height; in portrait it is the

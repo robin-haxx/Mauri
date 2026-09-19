@@ -236,34 +236,27 @@ class GameUI {
     };
 
     const fs = this.layout.fs;
-    // Per-toggle Y (guide/fullscreen/pause): a horizontal row at btnY by default; portrait
-    // restacks them into a left-corner column below.
-    fs.guideBtnY = fs.fsBtnY = fs.pauseBtnY = fs.btnY;
-    // HUD click-swallow rects so clicks on chrome don't drop items on the map beneath.
-    // Landscape: one top strip spanning the dial readouts + the toggle row.
-    fs.hudSwallow = [
-      { x: fs.mauriX, y: fs.stripY, w: (fs.pauseBtnX + fs.btnSize) - fs.mauriX, h: 70 }
-    ];
+    const bs = fs.btnSize;
 
-    // Portrait fullscreen: the dial cluster + goals panel already fill most of the narrow
-    // width, so the three toggles drop into a compact vertical column in the top-LEFT corner
-    // and the circular readouts (with the mast bar under them) STAY CENTRED — recentred in the
-    // canvas, clamped only so they clear the toggle column on the left and the goals panel on
-    // the right. Landscape is untouched (its wide game area centres the horizontal row fine).
+    // Control toggles (guide / focus[fullscreen] / pause / fast-forward) ALWAYS live as a
+    // vertical column in the top-LEFT corner, in every aspect ratio, so their spot is
+    // predictable. Fast-forward sits under pause. (The docked full-UI keeps its own separate
+    // top-bar buttons; this only lays out the fullscreen overlay.)
+    const margin = 14, btnGap = 10;
+    fs.guideBtnX = fs.fsBtnX = fs.pauseBtnX = fs.ffBtnX = margin;
+    fs.guideBtnY = fs.btnY;
+    fs.fsBtnY    = fs.btnY + (bs + btnGap);
+    fs.pauseBtnY = fs.btnY + 2 * (bs + btnGap);
+    fs.ffBtnY    = fs.btnY + 3 * (bs + btnGap);
+    const colRight = margin + bs;
+    const colBottom = fs.ffBtnY + bs;
+
+    // Portrait: the dial cluster + goals panel fill most of the narrow width, so the circular
+    // readouts (with the mast bar under them) are recentred in the canvas, clamped to clear the
+    // toggle column (left) and the goals panel (right). Landscape leaves the dials game-area-
+    // centred (ample room), now that the toggles no longer sit on the right.
     if (this.config.portrait) {
-      const bs = fs.btnSize;
-      const margin = 14, btnGap = 10, pad = 14;
-      // Toggles: vertical column, top-left corner.
-      fs.guideBtnX = fs.fsBtnX = fs.pauseBtnX = margin;
-      fs.guideBtnY = fs.btnY;
-      fs.fsBtnY = fs.btnY + bs + btnGap;
-      fs.pauseBtnY = fs.btnY + 2 * (bs + btnGap);
-      const colRight = margin + bs;
-      const colBottom = fs.pauseBtnY + bs;
-
-      // Recentre the (game-area-centred) dial cluster in the canvas, clamped to clear the
-      // toggle column (left) and the goals panel (right). The mast bar follows automatically
-      // (renderFullscreenOverlay centres it under this same cluster).
+      const pad = 14;
       const endless = !!(this.game && this.game.currentLevel && this.game.currentLevel.endless);
       const cLeft0 = fs.mauriRingCX - fs.mauriRingR;
       const cRight0 = endless ? (fs.popDialCX + fs.popDialR) : (fs.ringCX + fs.ringR);
@@ -275,18 +268,20 @@ class GameUI {
       fs.mauriRingCX += shift;
       fs.ringCX += shift;
       if (endless) fs.popDialCX += shift;
-
-      // Rebuild swallow rects: the toggle column + the recentred dial/mast strip.
-      const cLeft = fs.mauriRingCX - fs.mauriRingR;
-      const cRight = endless ? (fs.popDialCX + fs.popDialR) : (fs.ringCX + fs.ringR);
-      const dialsBottom = Math.max(fs.ringCY + fs.ringR, fs.mauriRingCY + fs.mauriRingR,
-                                   endless ? (fs.popDialCY + fs.popDialR) : 0);
-      fs.hudSwallow = [
-        { x: 0, y: fs.stripY, w: colRight + 6, h: (colBottom - fs.stripY) + 6 },
-        { x: cLeft - 6, y: fs.stripY, w: (cRight - cLeft) + 12, h: (dialsBottom + 74) - fs.stripY }
-      ];
-      fs.mauriX = 0;   // vestigial after the relayout; kept defined for any old readers
     }
+
+    // HUD click-swallow rects: the toggle column + the dial/mast strip, so taps on chrome
+    // don't drop items on the map beneath.
+    const endlessSw = !!(this.game && this.game.currentLevel && this.game.currentLevel.endless);
+    const cLeft = fs.mauriRingCX - fs.mauriRingR;
+    const cRight = endlessSw ? (fs.popDialCX + fs.popDialR) : (fs.ringCX + fs.ringR);
+    const dialsBottom = Math.max(fs.ringCY + fs.ringR, fs.mauriRingCY + fs.mauriRingR,
+                                 endlessSw ? (fs.popDialCY + fs.popDialR) : 0);
+    fs.hudSwallow = [
+      { x: 0, y: fs.stripY, w: colRight + 6, h: (colBottom - fs.stripY) + 6 },
+      { x: cLeft - 6, y: fs.stripY, w: (cRight - cLeft) + 12, h: (dialsBottom + 74) - fs.stripY }
+    ];
+    fs.mauriX = 0;   // vestigial after the relayout; kept defined for any old readers
   }
 
   // Safe color getters
@@ -370,6 +365,10 @@ class GameUI {
     }
     if (this._inRect(mx, my, fs.pauseBtnX, fs.pauseBtnY, bs, bs)) {
       this._togglePause();
+      return true;
+    }
+    if (this._inRect(mx, my, fs.ffBtnX, fs.ffBtnY, bs, bs)) {
+      this.game.fastForward = !this.game.fastForward;
       return true;
     }
 
@@ -608,6 +607,7 @@ class GameUI {
     this.renderGuideButton(fs.guideBtnX, fs.guideBtnY);
     this.renderFullscreenButton(fs.fsBtnX, fs.fsBtnY);
     this.renderPauseButton(fs.pauseBtnX, fs.pauseBtnY);
+    this.renderFastForwardButton(fs.ffBtnX, fs.ffBtnY);
 
     // Extend the goals panel's own green backing 12px past the content on
     // every side (same colour as the panel body, so it reads as one panel).
@@ -1256,6 +1256,43 @@ class GameUI {
       fill(180, 200, 190);
       rect(centerX - 12, centerY - 12, 8, 24, 2);
       rect(centerX + 4, centerY - 12, 8, 24, 2);
+    }
+  }
+
+  // Fast-forward toggle: a double-chevron. Framed + tinted while 2× speed is active.
+  renderFastForwardButton(x, y) {
+    const size = this.layout.pauseBtnSize;
+    const isHovered = mouseX > x && mouseX < x + size &&
+                      mouseY > y && mouseY < y + size;
+    const isOn = !!(this.game && this.game.fastForward);
+
+    if (isOn) {
+      fill(46, 78, 56);
+      stroke(120, 180, 140);
+      strokeWeight(2);
+    } else if (isHovered) {
+      fill(50, 85, 60);
+      stroke(100, 160, 120);
+      strokeWeight(2);
+    } else {
+      fill(35, 55, 40, 200);
+      stroke(70, 110, 80);
+      strokeWeight(1);
+    }
+    rect(x, y, size, size, 10);
+
+    // Two right-pointing triangles (⏩). Brightens when active.
+    noStroke();
+    fill(isOn ? [120, 220, 140] : [180, 200, 190]);
+    const cx = x + size / 2;
+    const cy = y + size / 2;
+    const tw = 11, th = 12;   // triangle half-width / half-height
+    for (const dx of [-tw, 1]) {
+      beginShape();
+      vertex(cx + dx, cy - th);
+      vertex(cx + dx, cy + th);
+      vertex(cx + dx + tw, cy);
+      endShape(CLOSE);
     }
   }
 

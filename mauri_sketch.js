@@ -948,6 +948,9 @@ class Game {
   constructor() {
     this.state = GAME_STATE.LEVEL_SELECT;
 
+    // Fast-forward toggle: when true, draw() advances the sim twice per frame (2× progression).
+    this.fastForward = false;
+
     // now we allow biome, placeable, species redef. per level
     this.currentLevel = null;
     this.activeBiomes = null;
@@ -1155,6 +1158,7 @@ class Game {
     this.ui = new GameUI(CONFIG, this.terrain, this.simulation, this.mauri, this, this.seasonManager);
     
     this.playTime = 0;
+    this.fastForward = false;   // each level starts at normal speed
     // Free Play: build the climate-drift config for this level (null = mode off).
     this._climateCfg = (typeof ClimateDrift !== 'undefined' && LEVEL_MECHANICS && LEVEL_MECHANICS.climateDrift)
       ? ClimateDrift.cfgFrom(LEVEL_MECHANICS) : null;
@@ -5010,6 +5014,10 @@ function draw() {
   const _dbg = CONFIG.debugMode;
   const t0 = _dbg ? performance.now() : 0;
   game.update(deltaMultiplier);
+  // Fast-forward: advance the sim a second time this frame (2× progression). A second normal
+  // step keeps each tick the usual size — steadier for the stochastic behaviours than one
+  // double-length step. Only while actually playing, so it never fights pause.
+  if (game.fastForward && game.state === GAME_STATE.PLAYING) game.update(deltaMultiplier);
   const t1 = _dbg ? performance.now() : 0;
 
   // Split-resolution: a single scale(SS) lets every drawer keep authoring in 1080-space

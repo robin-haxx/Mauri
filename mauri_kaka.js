@@ -3,10 +3,16 @@
 // Nestor meridionalis, kea's forest-dwelling sister. A strong flier of podocarp-
 // beech forest. Mechanically a Kereru (same FLYING → FEEDING → PERCHED → lay loop,
 // feeding at FOREST_TREES), so the contracting glacial forest refuge squeezes the
-// kākā in with the bush moa. Two differences from the kererū:
+// kākā in with the bush moa. Three differences from the kererū:
 //   · DISPERSAL. A seed predator more than disperser, so _disperseChance is low
 //     (0.25 vs the kererū's 1.0).
 //   · GREGARIOUS. A gentle cohesion pulls flying kākā together into foraging parties.
+//   · FOREST-HOMING. The flock's "home" is the forest it feeds in, not just its own centre:
+//     it relocates onto the nearest podocarp grove — and, above all, onto a placed Forest
+//     Seed (forestBoost) from right across the map — so dropping one visibly draws the flock,
+//     and keeping the birds on feedable trees is what lets the population actually grow. This
+//     replaces the old pure-centroid home, under which a flock that drifted off the fruit had
+//     nothing pulling it back and quietly starved to the floor instead of breeding.
 // Class declared before its species object so KAKA_SPECIES's typeof guard is safe.
 // ============================================================
 
@@ -21,6 +27,17 @@ class Kaka extends Kereru {
     // flock pull, so isolated birds rejoin the party — and come into mate range — instead of
     // drifting alone forever (the slow-to-mate case).
     this._rejoinBoost = sp.flockRejoinBoost ?? 1.6;
+
+    // Forest-homing: the flock relocates onto the forest it feeds in, not just its own centre.
+    // A shared target (chosen off the flock's centroid so the party moves together) is refreshed
+    // on a timer: a placed Forest Seed wins from far off (the clear response to new seed), else
+    // the nearest podocarp grove within _forageRange. Fed into _anchorPoint below, so the base
+    // loop's drift, dispersal hops and land-return all pull the flock onto feedable trees.
+    this._forageRange       = sp.forageRange ?? 620;        // how far the flock senses a grove to relocate toward
+    this._seedAttractRange  = sp.seedAttractRange ?? 900;   // a Forest Seed draws the flock from this far (≈ whole view)
+    this._forageTarget      = null;                          // {x,y} shared flock home (grove / Forest Seed), or null
+    this._forageSearchFrames = (sp.forageSearchSec ?? 1.5) * 60;
+    this._forageTimer       = Math.random() * this._forageSearchFrames; // stagger the first search across the flock
   }
 
   // Gregarious: the flock's centre of mass is the kākā's "home", so the base loop's post-feed
@@ -29,7 +46,17 @@ class Kaka extends Kereru {
   // kākā also steers toward the flock (or the nearest bird if none is in cohesion range). This is
   // why they flock TIGHT: without the anchor, feeding at scattered trees kept them spread out.
   behave(sim, mauri, seasonManager, dt) {
-    this._flockHome = this._allFlockCentroid(sim);   // read by _anchorPoint (before super steers)
+    const centroid = this._allFlockCentroid(sim);    // flock centre (null when this bird is alone)
+    // Refresh the shared forest target off the flock's centre (so the whole party agrees on one
+    // grove and stays cohesive while relocating). Throttled + staggered per bird.
+    this._forageTimer -= dt;
+    if (this._forageTimer <= 0) {
+      this._forageTimer = this._forageSearchFrames;
+      this._forageTarget = this._findForest(sim, centroid || this.pos);
+    }
+    // Home = the forest when one is in reach (the flock migrates onto it and feeds), else the
+    // flock's own centroid (tight cohesion when no forest is near). read by _anchorPoint below.
+    this._flockHome = this._forageTarget || centroid;
     super.behave(sim, mauri, seasonManager, dt);
     if (!this._grounded && !this._fleeingStorm && this.state === KERERU_STATE.FLYING) {
       const c = this._flockCentroid(sim);
@@ -57,8 +84,48 @@ class Kaka extends Kereru {
     return n ? { x: sx / n, y: sy / n } : null;
   }
 
-  // Home = the flock's centre, so the base flight loop keeps regrouping onto it (tight flocking).
+  // Home = the forest target when one is in reach (grove / placed Forest Seed), else the flock's
+  // centre — so the base flight loop keeps regrouping the flock onto feedable trees, or, with no
+  // forest near, onto itself (tight flocking). Set in behave() before super steers.
   _anchorPoint() { return this._flockHome || null; }
+
+  // The forest the flock should home on, measured from `center` (the flock's centre so the choice
+  // is shared): a live Forest Seed cultivator within _seedAttractRange wins — dropping one visibly
+  // draws the whole flock — else the nearest live forest tree within _forageRange, else null.
+  // Growth isn't required for the grove target, so the flock heads for a maturing Forest Seed
+  // patch and arrives as it ripens (the base _findFruitTree still gates actual feeding on growth).
+  _findForest(sim, center) {
+    const cx = center.x, cy = center.y;
+    const seed = this._nearestForestSeed(sim, cx, cy);      // read placeables first (own array; no grid buffer)
+    if (seed) return { x: seed.pos.x, y: seed.pos.y };
+    if (!sim.getNearbyPlants) return null;
+    const isForest = (typeof FOREST_TREES !== 'undefined') ? FOREST_TREES : null;
+    if (!isForest) return null;
+    const near = sim.getNearbyPlants(cx, cy, this._forageRange);
+    let best = null, bestSq = Infinity;
+    for (let i = 0; i < near.length; i++) {
+      const p = near[i];
+      if (!p.alive || p._consumed || !isForest.has(p.type)) continue;
+      const dx = p.pos.x - cx, dy = p.pos.y - cy, dSq = dx * dx + dy * dy;
+      if (dSq < bestSq) { bestSq = dSq; best = p; }
+    }
+    return best ? { x: best.pos.x, y: best.pos.y } : null;   // plain {x,y}; don't retain the grid buffer
+  }
+
+  // Nearest live Forest Seed (forestBoost) cultivator within _seedAttractRange of (cx,cy), or null.
+  // Once it expires the grove it grew takes over as the target (via _findForest), so the flock stays.
+  _nearestForestSeed(sim, cx, cy) {
+    const list = sim.placeables;
+    if (!list) return null;
+    let best = null, bestSq = this._seedAttractRange * this._seedAttractRange;
+    for (let i = 0; i < list.length; i++) {
+      const p = list[i];
+      if (!p.alive || p.type !== 'forestBoost') continue;
+      const dx = p.pos.x - cx, dy = p.pos.y - cy, dSq = dx * dx + dy * dy;
+      if (dSq < bestSq) { bestSq = dSq; best = p; }
+    }
+    return best;
+  }
 
   // Centroid of living flockmates within _flockRadius (excluding self), or null.
   _flockCentroid(sim) {
@@ -120,7 +187,7 @@ const KAKA_SPECIES = {
   starveSec:        26,
 
   maturitySec:      27,
-  eggCooldownSec:   35,     // breeds a little more readily than the kererū base
+  eggCooldownSec:   48,     // grows fast, not many offspring
   mateRadius:       200,
   reproCheckSec:    2.2,    // sample the short crop>0 perch window more often so a near mate isn't missed
   maxPopulation:    14,
@@ -134,7 +201,16 @@ const KAKA_SPECIES = {
   // hungry bird still peels off to feed.
   flockRadius:      240,
   flockPull:        0.7,    // stronger in-flight cohesion; the flock-centre anchor does the rest
-  flockRejoinBoost: 1.6     // a lone bird pulls this × harder toward the nearest flockmate to rejoin
+  flockRejoinBoost: 1.6,    // a lone bird pulls this × harder toward the nearest flockmate to rejoin
+
+  // Forest-homing (kākā-specific; see _findForest). The flock relocates onto the forest it feeds
+  // in — new podocarp groves and, above all, a placed Forest Seed — so the flock responds to seed
+  // and stays on the fruit that lets it breed. seedAttractRange spans ≈ the whole view so dropping
+  // a Forest Seed anywhere on screen draws the flock; forageRange is the shorter reach to an
+  // already-grown grove.
+  forageRange:      620,
+  seedAttractRange: 900,
+  forageSearchSec:  1.5
 };
 
 // Register the kākā as a flighted-bird type.

@@ -234,6 +234,59 @@ class GameUI {
       toolbarStartX: (this.config.canvasWidth - toolbarTotalWidth) / 2,
       toolbarY: this.config.canvasHeight - this.layout.toolbarBtnSize - 35
     };
+
+    const fs = this.layout.fs;
+    // Per-toggle Y (guide/fullscreen/pause): a horizontal row at btnY by default; portrait
+    // restacks them into a left-corner column below.
+    fs.guideBtnY = fs.fsBtnY = fs.pauseBtnY = fs.btnY;
+    // HUD click-swallow rects so clicks on chrome don't drop items on the map beneath.
+    // Landscape: one top strip spanning the dial readouts + the toggle row.
+    fs.hudSwallow = [
+      { x: fs.mauriX, y: fs.stripY, w: (fs.pauseBtnX + fs.btnSize) - fs.mauriX, h: 70 }
+    ];
+
+    // Portrait fullscreen: the dial cluster + goals panel already fill most of the narrow
+    // width, so the three toggles drop into a compact vertical column in the top-LEFT corner
+    // and the circular readouts (with the mast bar under them) STAY CENTRED — recentred in the
+    // canvas, clamped only so they clear the toggle column on the left and the goals panel on
+    // the right. Landscape is untouched (its wide game area centres the horizontal row fine).
+    if (this.config.portrait) {
+      const bs = fs.btnSize;
+      const margin = 14, btnGap = 10, pad = 14;
+      // Toggles: vertical column, top-left corner.
+      fs.guideBtnX = fs.fsBtnX = fs.pauseBtnX = margin;
+      fs.guideBtnY = fs.btnY;
+      fs.fsBtnY = fs.btnY + bs + btnGap;
+      fs.pauseBtnY = fs.btnY + 2 * (bs + btnGap);
+      const colRight = margin + bs;
+      const colBottom = fs.pauseBtnY + bs;
+
+      // Recentre the (game-area-centred) dial cluster in the canvas, clamped to clear the
+      // toggle column (left) and the goals panel (right). The mast bar follows automatically
+      // (renderFullscreenOverlay centres it under this same cluster).
+      const endless = !!(this.game && this.game.currentLevel && this.game.currentLevel.endless);
+      const cLeft0 = fs.mauriRingCX - fs.mauriRingR;
+      const cRight0 = endless ? (fs.popDialCX + fs.popDialR) : (fs.ringCX + fs.ringR);
+      const half = (cRight0 - cLeft0) / 2;
+      const minC = colRight + pad + half;
+      const maxC = fs.goalsX - pad - half;
+      const center = Math.min(Math.max(this.config.canvasWidth / 2, minC), maxC);
+      const shift = Math.round(center - (cLeft0 + cRight0) / 2);
+      fs.mauriRingCX += shift;
+      fs.ringCX += shift;
+      if (endless) fs.popDialCX += shift;
+
+      // Rebuild swallow rects: the toggle column + the recentred dial/mast strip.
+      const cLeft = fs.mauriRingCX - fs.mauriRingR;
+      const cRight = endless ? (fs.popDialCX + fs.popDialR) : (fs.ringCX + fs.ringR);
+      const dialsBottom = Math.max(fs.ringCY + fs.ringR, fs.mauriRingCY + fs.mauriRingR,
+                                   endless ? (fs.popDialCY + fs.popDialR) : 0);
+      fs.hudSwallow = [
+        { x: 0, y: fs.stripY, w: colRight + 6, h: (colBottom - fs.stripY) + 6 },
+        { x: cLeft - 6, y: fs.stripY, w: (cRight - cLeft) + 12, h: (dialsBottom + 74) - fs.stripY }
+      ];
+      fs.mauriX = 0;   // vestigial after the relayout; kept defined for any old readers
+    }
   }
 
   // Safe color getters
@@ -307,15 +360,15 @@ class GameUI {
     const fs = this.layout.fs;
     const bs = fs.btnSize;
 
-    if (this._inRect(mx, my, fs.guideBtnX, fs.btnY, bs, bs)) {
+    if (this._inRect(mx, my, fs.guideBtnX, fs.guideBtnY, bs, bs)) {
       if (this.game.encyclopedia) this.game.encyclopedia.toggle(this.game);
       return true;
     }
-    if (this._inRect(mx, my, fs.fsBtnX, fs.btnY, bs, bs)) {
+    if (this._inRect(mx, my, fs.fsBtnX, fs.fsBtnY, bs, bs)) {
       this.game.toggleFullscreen();
       return true;
     }
-    if (this._inRect(mx, my, fs.pauseBtnX, fs.btnY, bs, bs)) {
+    if (this._inRect(mx, my, fs.pauseBtnX, fs.pauseBtnY, bs, bs)) {
       this._togglePause();
       return true;
     }
@@ -344,10 +397,13 @@ class GameUI {
       return true;
     }
 
-    // Consume clicks landing on the HUD strip / goals panel so they don't
+    // Consume clicks landing on the HUD chrome / goals panel so they don't
     // fall through and place items on the map underneath.
-    if (this._inRect(mx, my, fs.mauriX, fs.stripY,
-                     (fs.pauseBtnX + bs) - fs.mauriX, 70)) return true;
+    if (fs.hudSwallow) {
+      for (const r of fs.hudSwallow) {
+        if (this._inRect(mx, my, r.x, r.y, r.w, r.h)) return true;
+      }
+    }
     const goalsH = 30 + this.game.goals.length * 26;
     if (this._inRect(mx, my, fs.goalsX, fs.goalsY,
                      this.layout.sidebarPanelWidth, goalsH)) return true;
@@ -549,9 +605,9 @@ class GameUI {
     if (this.game.currentLevel && this.game.currentLevel.endless) {
       this.renderPopDial(fs.popDialCX, fs.popDialCY, fs.popDialR);
     }
-    this.renderGuideButton(fs.guideBtnX, fs.btnY);
-    this.renderFullscreenButton(fs.fsBtnX, fs.btnY);
-    this.renderPauseButton(fs.pauseBtnX, fs.btnY);
+    this.renderGuideButton(fs.guideBtnX, fs.guideBtnY);
+    this.renderFullscreenButton(fs.fsBtnX, fs.fsBtnY);
+    this.renderPauseButton(fs.pauseBtnX, fs.pauseBtnY);
 
     // Extend the goals panel's own green backing 12px past the content on
     // every side (same colour as the panel body, so it reads as one panel).
@@ -570,13 +626,17 @@ class GameUI {
     // stack under it in order.
     let colBottom = this._fsFocusBottomY || (fs.goalsY + goalsH + 24);
 
-    // Nest Raid (or, in the kākā mast-goal year, the Mast Year progress bar in its
-    // place): a NON-MODAL panel below the focus row, above the field guide.
+    // Mast Year: a bare progress bar centred UNDER the circular dial cluster (not in the
+    // right column). It replaces the nest-raid slot that year, so the two never both apply.
     if (this.game._mastGoalPanelActive && this.game._mastGoalPanelActive()) {
-      const rh = Math.round(this.layout.eventLogHeight / 2);
-      const ry = colBottom + 12;
-      this.game._renderMastGoalPanel(fs.goalsX, ry, this.layout.sidebarPanelWidth, rh);
-      colBottom = ry + rh;
+      const endless = !!(this.game.currentLevel && this.game.currentLevel.endless);
+      const clusterLeft = fs.mauriRingCX - fs.mauriRingR;
+      const clusterRight = endless ? (fs.popDialCX + fs.popDialR) : (fs.ringCX + fs.ringR);
+      const barW = Math.max(240, clusterRight - clusterLeft);
+      const barX = Math.round((clusterLeft + clusterRight) / 2 - barW / 2);
+      const dialsBottom = Math.max(fs.ringCY + fs.ringR, fs.mauriRingCY + fs.mauriRingR,
+                                   endless ? (fs.popDialCY + fs.popDialR) : 0);
+      this.game._renderMastGoalPanel(barX, Math.round(dialsBottom + 16), barW, 58);
     } else if (this.game._raidPanelActive && this.game._raidPanelActive()) {
       const rh = Math.round(this.layout.eventLogHeight / 2);
       const ry = colBottom + 12;

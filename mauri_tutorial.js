@@ -608,10 +608,23 @@ class TutorialManager {
     const pos = this._getTipPanelPosition(tip.guidePosition, panelWidth, panelHeight);
     this.panelBounds = { x: pos.x, y: pos.y, w: panelWidth, h: panelHeight };
 
-    // Guide sprite
+    // Guide sprite (mantis). Landscape: to the LEFT of the panel, vertically centred.
+    // Portrait: ABOVE the panel, horizontally centred — there's no room to its left on a
+    // narrow screen (it would hang off the canvas). Falls back to below the panel if the
+    // panel sits too high to fit the sprite above it.
     const spriteSize = 200 * S;
-    const spriteX = pos.x - spriteSize * 0.3;
-    const spriteY = pos.y + panelHeight * 0.5 - spriteSize * 0.5;
+    let guideCX, guideCY;
+    if (CONFIG.portrait) {
+      const gap = 10 * S;
+      guideCX = pos.x + panelWidth * 0.5;
+      const aboveCY = pos.y - gap - spriteSize * 0.5;
+      guideCY = (aboveCY - spriteSize * 0.5 >= 8)
+        ? aboveCY
+        : pos.y + panelHeight + gap + spriteSize * 0.5;   // no room above → below the panel
+    } else {
+      guideCX = pos.x - 110 * S;                           // matches the previous left placement
+      guideCY = pos.y + panelHeight * 0.5;
+    }
 
     push();
 
@@ -650,23 +663,24 @@ class TutorialManager {
 
     pop();
 
-    // Guide sprite (outside push/pop)
-    this._renderGuide(spriteX, spriteY, alpha, spriteSize);
+    // Guide sprite (outside push/pop). (guideCX, guideCY) is the sprite's centre.
+    this._renderGuide(guideCX, guideCY, alpha, spriteSize);
   }
 
-  _renderGuide(x, y, alpha, size) {
+  // Draws the guide sprite centred on (cx, cy).
+  _renderGuide(cx, cy, alpha, size) {
     push();
     imageMode(CENTER);
 
     if (this.guideSprite) {
       tint(255, alpha);
-      image(this.guideSprite, (x + size * 0.5) - 150 * TIP_PANEL_SCALE, y + size * 0.5, size, size);
+      image(this.guideSprite, cx, cy, size, size);
     } else {
       // Minimal fallback
       fill(80, 150, 80, alpha);
       stroke(60, 120, 60, alpha);
       strokeWeight(2);
-      ellipse(x + size * 0.5, y + size * 0.5, size * 0.7, size * 0.8);
+      ellipse(cx, cy, size * 0.7, size * 0.8);
     }
 
     pop();

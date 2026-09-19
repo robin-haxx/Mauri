@@ -77,12 +77,17 @@ const CONFIG = {
   // ===== ENGINE CONSTANTS (never change between levels) =====
   version: 'alpha 2.1.3',
 
-  // Reference height is always 1080; width is computed from window aspect ratio
+  // The SHORT edge of the canvas is always 1080 (referenceHeight is kept as the name for
+  // backwards compatibility). In landscape the short edge is the height; in portrait it is the
+  // width. The long edge is derived from the window aspect ratio. See recalculateLayout.
   referenceHeight: 1080,
 
   // Canvas dimensions (set by recalculateLayout, defaults to 16:9)
   canvasWidth: 1920,
   canvasHeight: 1080,
+
+  // True when the window is taller than wide (aspect < 1). Set by recalculateLayout.
+  portrait: false,
 
   // Game area (set by recalculateLayout)
   gameAreaX: 0,
@@ -103,8 +108,9 @@ const CONFIG = {
   maxSidebarWidth: 600,
   sidebarWidthRatio: 0.2917,   // ≈560/1920, the 16:9 baseline proportion
 
-  // Supported aspect ratio range
-  minAspectRatio: 4 / 3,       // 1.333  (e.g. 1440×1080)
+  // Supported aspect ratio range. Below 1.0 the layout is portrait (short edge = width);
+  // 9:16 (0.5625) is the narrowest supported phone-portrait shape.
+  minAspectRatio: 9 / 16,      // 0.5625 (e.g. 1080×1920 portrait)
   maxAspectRatio: 21 / 9,      // 2.333  (e.g. 2520×1080)
 
   // Convenience getters (used throughout simulation code)
@@ -205,27 +211,40 @@ const CONFIG = {
 
   // ===== RESPONSIVE LAYOUT =====
   /**
+   * Canvas dimensions for a given window size, using the fixed short-edge model:
+   * the short edge is always referenceHeight (1080); the long edge follows the window's
+   * aspect ratio, clamped to [minAspectRatio, maxAspectRatio]. Landscape (aspect >= 1) keeps
+   * height = 1080 and grows width; portrait (aspect < 1) keeps width = 1080 and grows height.
+   * Pure — used by both recalculateLayout and the draw() first-frame resize guard so the two
+   * never disagree. Returns { width, height, portrait }.
+   */
+  expectedCanvas(windowW, windowH) {
+    const s = this.referenceHeight;
+    let aspect = windowW / windowH;
+    aspect = Math.max(this.minAspectRatio, Math.min(this.maxAspectRatio, aspect));
+    const portrait = aspect < 1;
+    return portrait
+      ? { width: s, height: Math.round(s / aspect), portrait: true }
+      : { width: Math.round(s * aspect), height: s, portrait: false };
+  },
+
+  /**
    * Recomputes all layout dimensions from the current window size.
-   * Canvas height is always referenceHeight (1080).
-   * Canvas width varies with the window's aspect ratio, clamped to supported range.
-   * Sidebar width is proportional to canvas width, clamped to min/max.
-   * Game area fills the remaining horizontal space.
+   * The short edge is always referenceHeight (1080); the long edge follows the clamped
+   * window aspect ratio (see expectedCanvas). Sidebar width is proportional to canvas width,
+   * clamped to min/max. Game area fills the remaining horizontal space.
    *
    * Call once in setup() and again whenever the window dimensions change
    * (though during gameplay the canvas dimensions are locked and CSS-scaled).
    */
   recalculateLayout(windowW, windowH) {
-    const h = this.referenceHeight;
-
-    // Determine aspect ratio from window, clamped to supported range
-    let aspect = windowW / windowH;
-    aspect = Math.max(this.minAspectRatio, Math.min(this.maxAspectRatio, aspect));
-
-    // Canvas width derived from clamped aspect ratio
-    const w = Math.round(h * aspect);
+    const dims = this.expectedCanvas(windowW, windowH);
+    const w = dims.width;
+    const h = dims.height;
 
     this.canvasWidth = w;
     this.canvasHeight = h;
+    this.portrait = dims.portrait;
 
     // Sidebar width: proportional to canvas width, clamped
     let sidebarW = Math.round(w * this.sidebarWidthRatio);
@@ -1279,11 +1298,17 @@ class Game {
   }
 
   // Recomputes the active render transform. Normal mode: the classic
-  // game-area placement. Fullscreen: the map scaled to the largest size that
-  // fits the whole canvas, centred, with the HUD drawn as an overlay.
+  // game-area placement. Fullscreen: the map scaled to COVER the whole canvas
+  // (no letterbox), centred, with the HUD drawn as an overlay. Because the map
+  // aspect (sized to the docked game area) rarely matches the canvas — most
+  // visibly in portrait, where the map is much narrower — a fit-to-contain
+  // (min) would leave bars on the constraining axis. Using COVER (max) fills
+  // the canvas edge-to-edge and crops the map's longer axis instead (in
+  // portrait: the top/bottom alps + shore fringe, which the cast rarely uses).
+  // In landscape the two are near-identical, so this is imperceptible there.
   _updateViewTransform() {
     if (CONFIG.fullscreen && this.terrain) {
-      const z = Math.min(CONFIG.canvasWidth / this.terrain.mapWidth,
+      const z = Math.max(CONFIG.canvasWidth / this.terrain.mapWidth,
                          CONFIG.canvasHeight / this.terrain.mapHeight);
       CONFIG.viewZoom = z;
       CONFIG.viewX = Math.round((CONFIG.canvasWidth - this.terrain.mapWidth * z) / 2);
@@ -2694,48 +2719,35 @@ class Game {
   // year. They never both apply; that year carries no nest-raid tool.
   _mastGoalPanelActive() { return !!this._mastGoalActive; }
 
-  // Draw the mast objective as a progress bar (non-modal, no clicks): a title, the fill
-  // toward the target, the running total, and a one-line hint of what's at stake.
+  // Draw the mast objective as a bare progress bar (non-modal, no clicks, no panel backing):
+  // a centred "MAST YEAR" title, the fill toward the target, and the current/target below.
+  // (x, y) is the bar's top-left, w its width; the title sits above and the count below, all
+  // centred on the bar. h is unused now the box is gone but kept for the call signature.
   _renderMastGoalPanel(x, y, w, h) {
     const p = this._mastGoalProgress();
+    const cx = x + w / 2;
     push();
-    fill(28, 36, 30, 238); stroke(120, 92, 70); strokeWeight(1.5);
-    rect(x, y, w, h, 10); noStroke();
 
-    const headH = 22;
-    fill(232, 208, 150); textAlign(LEFT, CENTER); textStyle(BOLD); textSize(14);
+    // Title: MAST YEAR, centred caps.
+    fill(232, 208, 150); textAlign(CENTER, TOP); textStyle(BOLD); textSize(14);
     push(); if (typeof FreckleFace !== 'undefined') textFont(FreckleFace);
-    text('Mast Year', x + 12, y + headH / 2 + 3); pop();
+    text('MAST YEAR', cx, y); pop();
     textStyle(NORMAL);
 
-    // Status chip, right-aligned in the header.
-    const chip = p.reached ? 'REACHED' : 'in progress';
-    textAlign(RIGHT, CENTER); textSize(10); textStyle(BOLD);
-    fill(p.reached ? 242 : 200, p.reached ? 224 : 180, p.reached ? 140 : 130);
-    text(chip, x + w - 12, y + headH / 2 + 3);
-    textStyle(NORMAL);
-
-    // Progress bar.
-    const barX = x + 12, barW = w - 24, barH = 12;
-    const barY = y + headH + 8;
-    fill(20, 26, 22); rect(barX, barY, barW, barH, 6);
+    // Progress bar (no backing box).
+    const barH = 12;
+    const barY = y + 24;
+    noStroke();
+    fill(20, 26, 22); rect(x, barY, w, barH, 6);
     const col = p.reached ? [120, 210, 130] : [214, 176, 96];
     fill(col[0], col[1], col[2]);
-    rect(barX, barY, Math.max(barH, barW * p.frac), barH, 6);
+    rect(x, barY, Math.max(barH, w * p.frac), barH, 6);
 
-    // Running total under the bar.
-    fill(228, 236, 224); textAlign(LEFT, CENTER); textSize(12); textStyle(BOLD);
-    text(`${p.gained} / ${p.target} mauri gained`, barX, barY + barH + 14);
+    // Current / target, centred below the bar.
+    fill(p.reached ? 210 : 228, p.reached ? 232 : 236, p.reached ? 200 : 224);
+    textAlign(CENTER, TOP); textSize(12); textStyle(BOLD);
+    text(`${p.gained} / ${p.target}`, cx, barY + barH + 6);
     textStyle(NORMAL);
-
-    // Hint line (wraps within the panel if there's room).
-    if (h > barY + barH + 40) {
-      fill(168, 184, 168); textSize(10); textAlign(LEFT, TOP);
-      const hint = p.reached
-        ? 'The rimu will mast early; kākāpō breed downslope next year.'
-        : 'Reach it by year end to mast early (year 3), else the mast falls late in the cold upslope.';
-      text(hint, barX, barY + barH + 26, barW);
-    }
     pop();
   }
 
@@ -2942,6 +2954,9 @@ class Game {
     if (this.encyclopedia) this.encyclopedia.close();
     this.selectedPlaceable = null;
     this.movingPlaceable = null;
+    // Unlike a natural win/loss (playWin/playLoss stop the audio for us), this manual
+    // exit has no sound call, so silence the gameplay track and voices ourselves.
+    if (audioManager) { audioManager.stopBackground(); audioManager.stopAllVoices(); }
     this.state = GAME_STATE.LEVEL_SELECT;
   }
 
@@ -2954,6 +2969,9 @@ class Game {
     this.movingPlaceable = null;
     this._runEndedByChoice = true;
     this.gameOverReason = `You ended the run after ${this._yearsSurvived || 0} year${(this._yearsSurvived === 1) ? '' : 's'}.`;
+    // Neutral "RUN ENDED", so no defeat fanfare (we skip playLoss on purpose) — but that
+    // also means nothing stops the gameplay audio, so quiet it here instead.
+    if (audioManager) { audioManager.stopBackground(); audioManager.stopAllVoices(); }
     this.state = GAME_STATE.LOST;
   }
 
@@ -4953,12 +4971,9 @@ function draw() {
   // On first frame, re-check dimensions in case setup() got stale values
   if (_needsInitialResize) {
     _needsInitialResize = false;
-    const expectedW = Math.round(
-      CONFIG.referenceHeight *
-      Math.max(CONFIG.minAspectRatio,
-        Math.min(CONFIG.maxAspectRatio, windowWidth / windowHeight))
-    );
-    if (expectedW !== CONFIG.canvasWidth) {
+    // Short-edge model: compare BOTH dimensions (portrait varies height, landscape varies width).
+    const expected = CONFIG.expectedCanvas(windowWidth, windowHeight);
+    if (expected.width !== CONFIG.canvasWidth || expected.height !== CONFIG.canvasHeight) {
       windowResized(); // forces recalculate + resizeCanvas
     } else {
       scaleCanvasToFit(); // dimensions fine, but CSS scaling may have been reset

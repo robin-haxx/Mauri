@@ -1,0 +1,31 @@
+AVIAN AGE: Free Play stats
+ENDLESS: Mutunga kore
+Exported 2026-09-17T08:47:47.110Z
+Ended: extinction; Little Bush Moa disappeared from Kahurangi..
+
+Years survived: 1
+Final score: 185
+Goals completed: 0/2
+Moa hatched: 51
+Eagle strikes: 19
+Placeables used: 35 (Kawakawa Grove 7, Berry Cache 7, Lancewood Stand 6, Speargrass Patch 2, Storm 4, Fern Shelter 4, Nesting Site 3, Forest Seed 2)
+
+Year 1 (Focus: Kea):
+  Deepening: interglacial (cold index 0.00)
+  Goals completed: 0/1
+    missed: Kea ≥ 8
+  Placeables used: 24 (Kawakawa Grove 7, Berry Cache 7, Lancewood Stand 4, Speargrass Patch 2, Storm 2, Fern Shelter 2)
+  Summer: Mauri +134, average population +0.3, species equality -0.07, Kea -1
+  Autumn: Mauri +132, average population +0.0, species equality -0.17, Kea -1
+  Winter: Mauri +269, average population -0.9, species equality +0.06, Kea +0
+  Spring: Mauri +95, average population +0.6, species equality -0.07, Kea +0
+
+Year 2 (Focus: Kākā):
+  Deepening: interglacial (cold index 0.03)
+  Mast goal: reached
+  Goals completed: 0/1
+    missed: Kākā ≥ 10
+  Placeables used: 11 (Nesting Site 3, Lancewood Stand 2, Forest Seed 2, Storm 2, Fern Shelter 2)
+  Summer: Mauri +128, average population -0.3, species equality +0.08, Kākā +1
+  Autumn: Mauri +133, average population +0.9, species equality -0.06, Kākā +0
+

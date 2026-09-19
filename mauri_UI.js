@@ -132,8 +132,8 @@ class GameUI {
       clockX: topBarStartX + mauriWidth + seasonWidth + (adjustedSpacing * 2) +
               timerWidth + clockGap,
 
-      // Pause button (right edge of game area, before sidebar)
-      pauseBtnX: gameAreaWidth - 90,
+      // Control-button size; the four buttons are positioned below as a 2×2 top-left square.
+      pauseBtnX: 14,
       pauseBtnY: 20,
       pauseBtnSize: 70,
 
@@ -196,10 +196,15 @@ class GameUI {
 
     this.layout.toolbarTotalWidth = toolbarTotalWidth;
 
-    // Fullscreen (max-view) button sits just left of the pause button
-    this.layout.fsBtnX = this.layout.pauseBtnX - 80;
-    // Field-guide (encyclopedia) toggle sits just left of the fullscreen button
-    this.layout.guideBtnX = this.layout.fsBtnX - 80;
+    // Control buttons form a 2×2 square pinned to the top-LEFT corner: guide + focus
+    // (fullscreen) on the top row, pause + fast-forward on the bottom row (paired playback
+    // controls). The SAME square is used by the docked top bar and the fullscreen overlay, so
+    // the controls never move between views.
+    const _btnBs = this.layout.pauseBtnSize, _btnGap = 10, _btnOX = 14, _btnOY = 20;
+    this.layout.guideBtnX = _btnOX;                    this.layout.guideBtnY = _btnOY;
+    this.layout.fsBtnX    = _btnOX + _btnBs + _btnGap; this.layout.fsBtnY    = _btnOY;
+    this.layout.pauseBtnX = _btnOX;                    this.layout.pauseBtnY = _btnOY + _btnBs + _btnGap;
+    this.layout.ffBtnX    = _btnOX + _btnBs + _btnGap; this.layout.ffBtnY    = _btnOY + _btnBs + _btnGap;
 
     // Fullscreen overlay HUD layout: the top-bar essentials, fullscreen/pause buttons and
     // goals panel sit exactly where they do in the docked full UI, so nothing jumps when
@@ -238,30 +243,26 @@ class GameUI {
     const fs = this.layout.fs;
     const bs = fs.btnSize;
 
-    // Control toggles (guide / focus[fullscreen] / pause / fast-forward) ALWAYS live as a
-    // vertical column in the top-LEFT corner, in every aspect ratio, so their spot is
-    // predictable. Fast-forward sits under pause. (The docked full-UI keeps its own separate
-    // top-bar buttons; this only lays out the fullscreen overlay.)
-    const margin = 14, btnGap = 10;
-    fs.guideBtnX = fs.fsBtnX = fs.pauseBtnX = fs.ffBtnX = margin;
-    fs.guideBtnY = fs.btnY;
-    fs.fsBtnY    = fs.btnY + (bs + btnGap);
-    fs.pauseBtnY = fs.btnY + 2 * (bs + btnGap);
-    fs.ffBtnY    = fs.btnY + 3 * (bs + btnGap);
-    const colRight = margin + bs;
-    const colBottom = fs.ffBtnY + bs;
+    // Buttons: the SAME 2×2 top-left square as the docked top bar, so the controls sit in the
+    // identical spot in both views (guide + focus top row, pause + fast-forward bottom row).
+    fs.guideBtnX = this.layout.guideBtnX; fs.guideBtnY = this.layout.guideBtnY;
+    fs.fsBtnX    = this.layout.fsBtnX;    fs.fsBtnY    = this.layout.fsBtnY;
+    fs.pauseBtnX = this.layout.pauseBtnX; fs.pauseBtnY = this.layout.pauseBtnY;
+    fs.ffBtnX    = this.layout.ffBtnX;    fs.ffBtnY    = this.layout.ffBtnY;
+    const sqRight  = fs.fsBtnX + bs;      // right edge of the button square
+    const sqBottom = fs.ffBtnY + bs;      // bottom edge of the button square
 
     // Portrait: the dial cluster + goals panel fill most of the narrow width, so the circular
     // readouts (with the mast bar under them) are recentred in the canvas, clamped to clear the
-    // toggle column (left) and the goals panel (right). Landscape leaves the dials game-area-
-    // centred (ample room), now that the toggles no longer sit on the right.
+    // button square (left) and the goals panel (right). Landscape leaves the dials game-area-
+    // centred (ample room).
     if (this.config.portrait) {
       const pad = 14;
       const endless = !!(this.game && this.game.currentLevel && this.game.currentLevel.endless);
       const cLeft0 = fs.mauriRingCX - fs.mauriRingR;
       const cRight0 = endless ? (fs.popDialCX + fs.popDialR) : (fs.ringCX + fs.ringR);
       const half = (cRight0 - cLeft0) / 2;
-      const minC = colRight + pad + half;
+      const minC = sqRight + pad + half;
       const maxC = fs.goalsX - pad - half;
       const center = Math.min(Math.max(this.config.canvasWidth / 2, minC), maxC);
       const shift = Math.round(center - (cLeft0 + cRight0) / 2);
@@ -270,7 +271,7 @@ class GameUI {
       if (endless) fs.popDialCX += shift;
     }
 
-    // HUD click-swallow rects: the toggle column + the dial/mast strip, so taps on chrome
+    // HUD click-swallow rects: the button square + the dial/mast strip, so taps on chrome
     // don't drop items on the map beneath.
     const endlessSw = !!(this.game && this.game.currentLevel && this.game.currentLevel.endless);
     const cLeft = fs.mauriRingCX - fs.mauriRingR;
@@ -278,7 +279,7 @@ class GameUI {
     const dialsBottom = Math.max(fs.ringCY + fs.ringR, fs.mauriRingCY + fs.mauriRingR,
                                  endlessSw ? (fs.popDialCY + fs.popDialR) : 0);
     fs.hudSwallow = [
-      { x: 0, y: fs.stripY, w: colRight + 6, h: (colBottom - fs.stripY) + 6 },
+      { x: 0, y: fs.stripY, w: sqRight + 6, h: (sqBottom - fs.stripY) + 6 },
       { x: cLeft - 6, y: fs.stripY, w: (cRight - cLeft) + 12, h: (dialsBottom + 74) - fs.stripY }
     ];
     fs.mauriX = 0;   // vestigial after the relayout; kept defined for any old readers
@@ -320,11 +321,12 @@ class GameUI {
       return this.handleFullscreenClick(mx, my);
     }
 
-    // Check guide / pause / fullscreen button clicks first (top bar area)
+    // Check guide / focus / pause / fast-forward button clicks first (top bar area)
     if (my >= this.topBar.y && my < this.topBar.y + this.topBar.height) {
       if (this.handleGuideButtonClick(mx, my)) return true;
       if (this.handlePauseButtonClick(mx, my)) return true;
       if (this.handleFullscreenButtonClick(mx, my)) return true;
+      if (this.handleFastForwardButtonClick(mx, my)) return true;
     }
 
     // Docked field guide, when open, takes clicks that land inside its panel.
@@ -473,11 +475,23 @@ class GameUI {
 
   handleFullscreenButtonClick(mx, my) {
     const x = this.layout.fsBtnX;
-    const y = this.layout.pauseBtnY;
+    const y = this.layout.fsBtnY;
     const size = this.layout.pauseBtnSize;
 
     if (mx > x && mx < x + size && my > y && my < y + size) {
       this.game.toggleFullscreen();
+      return true;
+    }
+    return false;
+  }
+
+  handleFastForwardButtonClick(mx, my) {
+    const x = this.layout.ffBtnX;
+    const y = this.layout.ffBtnY;
+    const size = this.layout.pauseBtnSize;
+
+    if (mx > x && mx < x + size && my > y && my < y + size) {
+      this.game.fastForward = !this.game.fastForward;
       return true;
     }
     return false;
@@ -581,10 +595,11 @@ class GameUI {
       this.renderPopDial(this.layout.popDialCX, this.layout.popDialCY, this.layout.popDialR);
     }
 
-    // Field-guide + fullscreen + pause buttons (right edge, before sidebar)
-    this.renderGuideButton(this.layout.guideBtnX, this.layout.pauseBtnY);
-    this.renderFullscreenButton(this.layout.fsBtnX, this.layout.pauseBtnY);
+    // Control 2×2 square in the top-left corner (guide + focus / pause + fast-forward).
+    this.renderGuideButton(this.layout.guideBtnX, this.layout.guideBtnY);
+    this.renderFullscreenButton(this.layout.fsBtnX, this.layout.fsBtnY);
     this.renderPauseButton(this.layout.pauseBtnX, this.layout.pauseBtnY);
+    this.renderFastForwardButton(this.layout.ffBtnX, this.layout.ffBtnY);
 
     // (The seasonal message/subtitle info bar was removed; important one-off events go
     // to the event log via notifications instead of a persistent bar.)
@@ -1346,7 +1361,7 @@ class GameUI {
 
   handleGuideButtonClick(mx, my) {
     const x = this.layout.guideBtnX;
-    const y = this.layout.pauseBtnY;
+    const y = this.layout.guideBtnY;
     const size = this.layout.pauseBtnSize;
     if (mx > x && mx < x + size && my > y && my < y + size) {
       if (this.game.encyclopedia) this.game.encyclopedia.toggle(this.game);

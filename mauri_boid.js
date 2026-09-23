@@ -25,6 +25,17 @@ class Boid {
     this.wanderTime = random() * 1000; // For delta-time compatible wander
     this._wanderHeading = Math.atan2(this.vel.y, this.vel.x); // last real heading, for relative wander
     this._speedCap = null; // smoothed effective max speed (ramps toward maxSpeed)
+
+    // Lateral-flip facing (for billboard sprite renderers, e.g. the moa): the sprite
+    // stays upright and only mirrors horizontally to face its travel direction, instead
+    // of a top-down rotation that spins it. _faceDir is the committed facing (+1 right,
+    // -1 left); _flip eases toward it and animates the turn-around THROUGH 0 (edge-on).
+    // _flipVx is a low-passed vel.x that DRIVES the decision, so a grazer's micro-
+    // oscillation doesn't flip-flap the sprite. Scalars only — never allocates, so it is
+    // safe in update() and across a soft reset.
+    this._faceDir = (this.vel.x >= 0) ? 1 : -1;
+    this._flip = this._faceDir;
+    this._flipVx = this.vel.x;
     
     // Reusable vectors
     this._steeringVec = createVector();
@@ -330,7 +341,10 @@ class Boid {
     // Apply velocity (scaled by dt)
     this.pos.x += this.vel.x * dt;
     this.pos.y += this.vel.y * dt;
-    
+
+    // Ease the lateral facing toward the direction of travel (billboard renderers).
+    this.updateFacing(dt);
+
     // Reset acceleration
     this.acc.x = 0;
     this.acc.y = 0;
@@ -344,5 +358,31 @@ class Boid {
     
     if (this.pos.y < 5) this.pos.y = 5;
     else if (this.pos.y > h) this.pos.y = h;
+  }
+
+  // Eased horizontal facing for the billboard sprite renderers. A new facing commits only
+  // from SUSTAINED sideways travel: low-pass vel.x, then re-commit only when the smoothed
+  // value clears a hysteresis gate AND the boid is actually moving. So a near-stationary
+  // bird's jitter (below the moving gate) and a grazer's brief back-and-forth at a shore
+  // (averaged out of the smoothed value) HOLD the last facing instead of flapping the
+  // sprite through edge-on; a real turn sustains one direction and commits within a
+  // fraction of a second. _flip then eases toward _faceDir, animating the turn through 0.
+  updateFacing(dt = 1) {
+    const FLIP_VX_EASE = 0.06;   // low-pass rate for the decision velocity (τ ≈ 16 frames)
+    const FACE_GATE_X  = 0.045;  // min |smoothed vel.x| to commit a new direction (hysteresis)
+    const FLIP_SPEED   = 0.14;   // how fast _flip animates toward _faceDir
+    const MOVE_GATE_SQ = 0.0025; // below this speed² the heading is noise → hold facing
+
+    const vx = this.vel.x, vy = this.vel.y;
+    const moving = (vx * vx + vy * vy) > MOVE_GATE_SQ;
+
+    const fvk = FLIP_VX_EASE * dt;
+    this._flipVx += (vx - this._flipVx) * (fvk > 1 ? 1 : fvk);
+    if (moving) {
+      if (this._flipVx > FACE_GATE_X) this._faceDir = 1;
+      else if (this._flipVx < -FACE_GATE_X) this._faceDir = -1;
+    }
+    const fk = FLIP_SPEED * dt;
+    this._flip += (this._faceDir - this._flip) * (fk > 1 ? 1 : fk);
   }
 }

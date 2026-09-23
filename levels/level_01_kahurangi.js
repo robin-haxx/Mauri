@@ -168,8 +168,8 @@ const LEVEL_KAHURANGI = {
       key: 'upland_moa',
       displayName: 'Upland Moa',
       localName: 'Moa Koukou',
-      spriteKey: 'moa_idle',
-      spriteScale: 2
+      spriteKey: 'upland_walk_01',
+      spriteScale: 0.4   // upland art is 360px native (vs the old 72px); 360*0.4 ≈ old 72*2 display
     },
     flavorText: [
       "Guide Upland Moa through the seasons!","",

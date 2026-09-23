@@ -49,14 +49,20 @@ const SpriteAngle = {
 // ============================================
 
 const EntitySprites = {
+  // faceSign encodes the art's native horizontal facing for the billboard renderer:
+  // +1 = drawn facing right (all current moa art), so scaleX = _flip * faceSign makes
+  // +_flip read as "right". A future left-facing set would set faceSign: -1.
   moa: {
     walk: [],
     idle: null,
-    juvenile: null
+    juvenile: null,
+    faceSign: 1
   },
   // Dedicated per-species sprite sets (via a species' spriteSet config).
+  // 'mating' is an optional pose shown while courting; falls back to idle when absent.
   moaVariants: {
-    bush: { walk: [], idle: null }
+    bush: { walk: [], idle: null, faceSign: 1 },
+    upland: { walk: [], idle: null, mating: null, faceSign: 1 }
   },
   eagle: {
     fly: [],
@@ -121,6 +127,19 @@ const EntitySprites = {
       () => console.warn('Could not load LB_moa_idle.png')
     );
 
+    // Upland moa (Megalapteryx); dedicated 4-frame walk art in sprites/Moa/.
+    // No separate idle/mating files: frame 2 doubles as idle, frame 3 as the mating pose.
+    for (let i = 1; i <= 4; i++) {
+      const n = String(i).padStart(2, '0');
+      this.moaVariants.upland.walk.push(loadImage(
+        `${spritePath}Moa/upland_walk_${n}.png`,
+        () => console.log(`Loaded upland_walk_${n}.png`),
+        () => console.warn(`Could not load upland_walk_${n}.png`)
+      ));
+    }
+    this.moaVariants.upland.idle   = this.moaVariants.upland.walk[1]; // frame 2
+    this.moaVariants.upland.mating = this.moaVariants.upland.walk[2]; // frame 3
+
     // Eagle fly cycle
     for (let i = 1; i <= 7; i++) {
       this.eagle.fly.push(loadImage(
@@ -160,8 +179,12 @@ const EntitySprites = {
     return sprite && sprite.width > 0 && sprite.height > 0;
   },
 
-  getMoaSprite(animTime, isMoving, isJuvenile = false, variant = null) {
+  getMoaSprite(animTime, isMoving, isJuvenile = false, variant = null, isMating = false) {
     const set = (variant && this.moaVariants[variant]) || this.moa;
+
+    // A courting moa shows its dedicated mating pose (when the set has one) rather than
+    // the walk cycle; it is normally stationary, so this takes priority over isMoving.
+    if (isMating && this.isValid(set.mating)) return set.mating;
 
     if (isMoving && set.walk.length > 0) {
       const frameIndex = Math.floor(animTime * this.animation.moaWalkSpeed) % set.walk.length;
@@ -171,9 +194,16 @@ const EntitySprites = {
     if (this.isValid(set.idle)) return set.idle;
 
     // Variant art missing/not loaded yet → fall back to the generic moa set.
-    if (set !== this.moa) return this.getMoaSprite(animTime, isMoving, isJuvenile);
+    if (set !== this.moa) return this.getMoaSprite(animTime, isMoving, isJuvenile, null, isMating);
 
     return null;
+  },
+
+  // Native horizontal facing (+1 right, -1 left) of a variant's art, for the billboard
+  // renderer's lateral flip. Resolves the same way getMoaSprite does.
+  getMoaFaceSign(variant = null) {
+    const set = (variant && this.moaVariants[variant]) || this.moa;
+    return set.faceSign || 1;
   },
 
   getEagleSprite(animTime, state) {

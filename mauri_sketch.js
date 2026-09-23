@@ -4209,6 +4209,7 @@ class Game {
     const map = {
       'moa_idle': splashScreenMoa,
       'LB_moa_walk_01': EntitySprites.moaVariants?.bush?.walk?.[0],
+      'upland_walk_01': EntitySprites.moaVariants?.upland?.walk?.[0],
       // Add more as you create them
     };
     return map[spriteKey] || splashScreenMoa;
@@ -5054,6 +5055,14 @@ function draw() {
     fill(255);
     text(`Sprites @${_ss}×  Terrain @${(CONFIG.terrainMaxSS ?? 1).toFixed(2)}×`, 85, 112);
     text(`Canvas: ${CONFIG.canvasWidth}×${CONFIG.canvasHeight}   v${CONFIG.version}`, 85, 126);
+    // Audio health: source-node count (climbs → the late-session drop-out) + context state.
+    // Watch this over a long free-play run; nodes should hover low and ctx stay 'running'.
+    if (audioManager && audioManager.getDiagnostics) {
+      const ad = audioManager.getDiagnostics();
+      const audioBad = ad.nodes > 40 || ad.ctxState !== 'running';
+      fill(audioBad ? [255, 130, 130] : 255);
+      text(`Audio:  ${ad.nodes} nodes  ${ad.ctxState}  (v${ad.voices}/f${ad.fading})`, 85, 140);
+    }
     renderFPSCounter();
   }
   pop();

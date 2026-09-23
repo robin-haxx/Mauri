@@ -57,6 +57,48 @@ const VOICE_FADE_OUT_SEC = 1.3;   // fade-out at a snippet's end or when un-high
 const VOICE_VOLUME       = 0.6;   // voice level, relative to the SFX volume
 const KAKAPO_TERRITORIAL_MIN = 2; // this many males actively contesting → territorial track
 
+// A thin p5.SoundFile-compatible wrapper around a streaming <audio> element, used ONLY
+// for the long background-music track. p5.loadSound() fully decodes a file to PCM in RAM;
+// for the ~4½-minute background loop that's ~90 MB of resident audio that never gets
+// freed, and its looping source node sits in the Web Audio graph for the whole session —
+// the single biggest contributor to the late-session audio drop-out on low-end machines.
+// Streaming holds almost no PCM and adds no source node. Only the method surface that
+// AudioManager actually calls on the background track is implemented, so it's a drop-in.
+class StreamingSound {
+  constructor(src, onLoad, onError) {
+    this._ready = false;        // 'canplay' has fired (enough buffered to start)
+    this._wantPlaying = false;  // intent, so a start requested before load still fires
+    this._loop = false;
+    const el = new Audio();
+    this.el = el;
+    el.preload = 'auto';        // begin buffering during preload() like the other sounds
+    el.addEventListener('canplay', () => {
+      this._ready = true;
+      if (onLoad) { try { onLoad(this); } catch (e) {} onLoad = null; }
+      // Cover the load race: play() was called before we could actually start.
+      if (this._wantPlaying && el.paused) this._start();
+    });
+    el.addEventListener('error', () => {
+      if (onError) { try { onError(el.error); } catch (e) {} onError = null; }
+    });
+    el.src = src;
+  }
+  isLoaded() { return this._ready || this.el.readyState >= 3; }
+  isPlaying() { return !this.el.paused && !this.el.ended; }
+  setLoop(loop) { this._loop = !!loop; this.el.loop = !!loop; }
+  // Mirrors SoundFile.setVolume(v[, rampTime]); background never ramps, so set instantly.
+  // <audio>.volume is a hard [0,1], unlike p5's amplifiable gain — clamp to be safe.
+  setVolume(v) { this.el.volume = Math.max(0, Math.min(1, v)); }
+  _start() {
+    const p = this.el.play();
+    // play() rejects if it beats the autoplay gesture; the next play() call retries.
+    if (p && p.catch) p.catch(() => {});
+  }
+  play() { this._wantPlaying = true; this.el.loop = this._loop; if (this.isLoaded()) this._start(); }
+  pause() { this._wantPlaying = false; try { this.el.pause(); } catch (e) {} }
+  stop() { this._wantPlaying = false; try { this.el.pause(); this.el.currentTime = 0; } catch (e) {} }
+}
+
 class AudioManager {
   constructor() {
     // Sound storage
@@ -119,9 +161,11 @@ class AudioManager {
   loadAll() {
     const audioPath = 'audio/';
     
-    // Background music
-    this.sounds.background = loadSound(audioPath + 'background.mp3', 
-      () => {}, 
+    // Background music — STREAMED (see StreamingSound), not loadSound(): keeps ~90 MB of
+    // decoded PCM out of RAM and its looping source node out of the Web Audio graph. It's
+    // constructed directly, so (like the optional calls below) it never blocks preload().
+    this.sounds.background = new StreamingSound(audioPath + 'background.mp3',
+      () => {},
       (err) => console.warn('Could not load background music:', err)
     );
     
@@ -783,6 +827,45 @@ class AudioManager {
         v._vol = voiceVol;
       }
     }
+  }
+
+  // ============================================
+  // DIAGNOSTICS (perf HUD)
+  // ============================================
+
+  // Every decoded p5.SoundFile we hold. The streamed background track is NOT one of these
+  // (it has no bufferSourceNodes), so it's correctly excluded from the node count.
+  _allSoundFiles() {
+    const out = [];
+    const push = (s) => { if (s && s.bufferSourceNodes) out.push(s); };
+    const s = this.sounds;
+    [s.tutorialTip, s.boltStrike, s.mateCheep, s.moaMilestone,
+     s.eagleHunt, s.eagleCatch, s.win, s.loss].forEach(push);
+    s.plantRustle.forEach(push);
+    Object.values(s.seasonChange).forEach(push);
+    Object.values(s.speciesCalls).forEach(push);
+    s.eagleHuntCries.forEach(push);
+    for (const bank of Object.values(s.speciesVoices)) Object.values(bank).forEach(push);
+    return out;
+  }
+
+  // Snapshot for the 'd' perf HUD. `nodes` is the total live Web Audio source nodes across
+  // every decoded sound — this is the number that climbs and eventually starves the audio
+  // thread if the "ended" cleanup can't keep up. `ctxState` should read 'running'; if it
+  // flips to 'suspended'/'interrupted' when audio dies, that's the browser dropping the
+  // context (a resume() would revive it). `voices`/`fading` track the extended-voice loops.
+  getDiagnostics() {
+    let nodes = 0;
+    for (const sf of this._allSoundFiles()) {
+      nodes += (sf.bufferSourceNodes && sf.bufferSourceNodes.length) || 0;
+    }
+    let ctxState = 'n/a';
+    try {
+      if (typeof getAudioContext === 'function') ctxState = getAudioContext().state;
+    } catch (e) {}
+    let active = 0;
+    for (const k in this._voices) if (this._voices[k] && this._voices[k].active) active++;
+    return { nodes, ctxState, voices: active, fading: this._fadingVoices.length };
   }
 }
 

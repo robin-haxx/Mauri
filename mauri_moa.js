@@ -1154,7 +1154,8 @@ class Moa extends Boid {
     if (!this.alive) return;
 
     const variant = this.speciesConfig.spriteSet;
-    const sprite = EntitySprites.getMoaSprite(this.animTime, this.vel.magSq() > 0.01, this.isJuvenile(), variant);
+    const isMating = this.currentState === MOA_STATE.MATING;
+    const sprite = EntitySprites.getMoaSprite(this.animTime, this.vel.magSq() > 0.01, this.isJuvenile(), variant, isMating);
     if (!sprite) return;
     
     push();
@@ -1168,15 +1169,16 @@ class Moa extends Boid {
     EntitySprites.drawSpriteShadow(sprite, 1.5, 1.5, _shW, _shW,
       0.11, 0.34, 0.72, null, this.size * 1.0, this.size * 0.5);
     
-    // Only update facing while moving: heading() of a near-zero velocity is noise and made
-    // stationary moa spin. Below the gate, keep the last facing.
-    if (this.vel.magSq() > 0.0025) {
-      this._displayAngle = SpriteAngle.snapWithHysteresis(this._displayAngle, this.vel.heading());
-    }
-    if (this._displayAngle === undefined) this._displayAngle = SpriteAngle.snap(this.vel.heading());
-    rotate(this._displayAngle);
-    
-    if (SpriteAngle.shouldMirror(this._displayAngle)) scale(1, -1);
+    // Billboard + lateral flip instead of top-down rotation: the sprite stays upright
+    // (billboarded) and only mirrors horizontally to face its travel direction, so a
+    // walking bird reads as turning around rather than spinning. _flip is the eased
+    // facing (Boid.updateFacing): +1 right, -1 left, animating THROUGH 0 where the
+    // sprite is edge-on (scaleX → 0) and squashes before opening out mirrored. The small
+    // vertical stretch as |flip| → 0 is the turn-around bounce. faceSign corrects for the
+    // set's native facing so +_flip always reads as "right".
+    const flip = (this._flip !== undefined) ? this._flip : 1;
+    const faceSign = EntitySprites.getMoaFaceSign(variant);
+    scale(flip * faceSign, 1 + (1 - Math.abs(flip)) * 0.18);
     
     // Per-species tint (by genus), skipped for species with their own sprite set.
     const _tint = variant ? null : this.speciesConfig.tint;

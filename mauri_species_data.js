@@ -11,7 +11,8 @@ const MOA_SPECIES = {
   upland_moa: {
     displayName: "Upland Moa",
     scientificName: "Megalapteryx didinus",
-    tint: null,                // Megalapteryx; rendered as-is
+    spriteSet: 'upland',       // dedicated Moa/upland_walk art; renders untinted
+    tint: null,                // Megalapteryx; rendered as-is (unused while spriteSet is set)
     highlightColor: [235, 238, 242],  // white; player highlight
     description: "Small, hardy moa adapted to high-altitude forests",
     rarity: 'common',

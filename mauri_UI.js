@@ -145,6 +145,7 @@ class GameUI {
       // catalog (which holds tools from other levels, so its length would misplace the row).
       toolbarBtnSize: 70,
       toolbarSpacing: 85,
+      toolbarGroupGap: 14,   // extra space between fauna groups
       toolbarBtnCount: Object.keys((this.game && this.game.activePlaceables) || PLACEABLES).length,
 
       // Sidebar content padding and panel width
@@ -174,12 +175,13 @@ class GameUI {
     if (gameAreaWidth < 1200) {
       this.layout.toolbarBtnSize = 60;
       this.layout.toolbarSpacing = 72;
+      this.layout.toolbarGroupGap = 12;
     }
 
     // Calculate toolbar start position (centered in game area)
-    const toolbarTotalWidth =
-      (this.layout.toolbarBtnCount - 1) * this.layout.toolbarSpacing +
-      this.layout.toolbarBtnSize;
+    const _slots = this._toolbarSlotOffsets();
+    const toolbarTotalWidth = _slots.length
+      ? _slots[_slots.length - 1] + this.layout.toolbarBtnSize : 0;
     this.layout.toolbarStartX = (gameAreaWidth - toolbarTotalWidth) / 2;
 
     // Selected tool info panel (positioned to the right of toolbar)
@@ -412,16 +414,32 @@ class GameUI {
     return false;
   }
 
+  // Each toolbar button's x offset from the row's start, in palette order: one spacing
+  // step per button plus a group gap wherever the fauna changes (the palette arrives
+  // grouped by fauna; see groupPaletteByFauna).
+  _toolbarSlotOffsets() {
+    const palette = (this.game && this.game.activePlaceables) || PLACEABLES;
+    const out = [];
+    let off = 0, prev = null;
+    for (const type in palette) {
+      const fauna = palette[type].fauna || '';
+      if (out.length && fauna !== prev) off += this.layout.toolbarGroupGap;
+      out.push(off);
+      off += this.layout.toolbarSpacing;
+      prev = fauna;
+    }
+    return out;
+  }
+
   handleToolbarClick(mx, my, startX = this.layout.toolbarStartX, toolbarY = this.toolbarY) {
-    const btnX = startX;
     const btnY = toolbarY;
     const btnSize = this.layout.toolbarBtnSize;
-    const spacing = this.layout.toolbarSpacing;
+    const slots = this._toolbarSlotOffsets();
 
     const palette = this.game.activePlaceables || PLACEABLES;
     let i = 0;
     for (let type in palette) {
-      let x = btnX + i * spacing;
+      let x = startX + slots[i];
       if (mx > x && mx < x + btnSize && my > btnY && my < btnY + btnSize) {
         this.game.selectPlaceable(type);
         return true;
@@ -1533,46 +1551,51 @@ class GameUI {
   }
 
   renderToolbar(startX = this.layout.toolbarStartX, toolbarY = this.toolbarY) {
-    const btnX = startX;
     const btnY = toolbarY;
     const btnSize = this.layout.toolbarBtnSize;
-    const spacing = this.layout.toolbarSpacing;
+    const slots = this._toolbarSlotOffsets();
+    const mix = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+    const base = [22, 34, 28], grey = [70, 70, 70];
 
     const palette = this.game.activePlaceables || PLACEABLES;
     let i = 0;
     for (let type in palette) {
       const def = palette[type];
-      const x = btnX + i * spacing;
+      const x = startX + slots[i];
 
       const isSelected = this.game.selectedPlaceable === type;
       const canAfford = this.mauri.canAfford(def.cost);
       const isHovered = mouseX > x && mouseX < x + btnSize &&
                         mouseY > btnY && mouseY < btnY + btnSize;
 
-      // Button background
-      if (isSelected) {
-        fill(60, 120, 80);
-        stroke(120, 200, 140);
-        strokeWeight(3);
-      } else if (isHovered && canAfford) {
-        fill(50, 85, 60);
-        stroke(90, 140, 110);
-        strokeWeight(2);
+      // Button: framed in the colour of the fauna it's for (SPECIES_UI_COLORS) over a
+      // dark wash of it; both strengthen on hover/selection. Unaffordable tools grey out
+      // but keep a hint of the frame colour so the grouping still reads.
+      const hc = speciesUIColor(def.fauna);
+      let bg, edge, weight;
+      if (!canAfford) {
+        bg = [35, 35, 35]; edge = mix(grey, hc, 0.35); weight = 1.5;
+      } else if (isSelected) {
+        bg = mix(base, hc, 0.38); edge = hc; weight = 3.5;
+      } else if (isHovered) {
+        bg = mix(base, hc, 0.26); edge = hc; weight = 2.5;
       } else {
-        fill(canAfford ? 40 : 35, canAfford ? 60 : 35, canAfford ? 50 : 35);
-        stroke(canAfford ? 60 : 50, canAfford ? 85 : 50, canAfford ? 70 : 50);
-        strokeWeight(1);
+        bg = mix(base, hc, 0.16); edge = mix(base, hc, 0.75); weight = 2;
       }
+      fill(bg[0], bg[1], bg[2]);
+      stroke(edge[0], edge[1], edge[2]);
+      strokeWeight(weight);
       rect(x, btnY, btnSize, btnSize, 10);
 
-      // Icon background circle
+      // Icon backing disc in the fauna colour, darkened so the sprite/glyph reads on it.
       push();
       translate(x + btnSize / 2, btnY + btnSize / 2 - 8);
 
-      let iconCol = color(def.color);
-      fill(canAfford ? red(iconCol) : 60, canAfford ? green(iconCol) : 60, canAfford ? blue(iconCol) : 60);
-      noStroke();
+      const disc = canAfford ? mix([0, 0, 0], hc, 0.6) : [60, 60, 60];
+      fill(disc[0], disc[1], disc[2]);
+      if (canAfford) { stroke(hc[0], hc[1], hc[2]); strokeWeight(1.5); } else noStroke();
       ellipse(0, 0, 36, 36);
+      noStroke();
 
       // Icon (origin is already the centre of the icon circle)
       this.renderPlaceableIcon(def, 0, 0, 30, 20, canAfford ? 240 : 100);
@@ -1641,10 +1664,11 @@ class GameUI {
     x = constrain(x - tw / 2, 10, _maxW - tw - 10);
     y = y - th - 5;
 
-    // Background
+    // Background, edged in the tool's fauna colour
+    const hc = speciesUIColor(def.fauna);
     fill(25, 40, 30, 240);
-    stroke(80, 120, 90);
-    strokeWeight(1);
+    stroke(hc[0], hc[1], hc[2]);
+    strokeWeight(1.5);
     rect(x, y, tw, th, 8);
 
     // Name
@@ -1681,11 +1705,13 @@ class GameUI {
     strokeWeight(1);
     rect(adjustedX, y, panelWidth, 70, 8);
 
-    // Icon
-    const iconCol = color(def.color);
-    fill(red(iconCol), green(iconCol), blue(iconCol));
-    noStroke();
+    // Icon, on the same fauna-coloured backing as its toolbar button
+    const hc = speciesUIColor(def.fauna);
+    fill(hc[0] * 0.6, hc[1] * 0.6, hc[2] * 0.6);
+    stroke(hc[0], hc[1], hc[2]);
+    strokeWeight(1.5);
     ellipse(adjustedX + 35, y + 35, 40, 40);
+    noStroke();
     this.renderPlaceableIcon(def, adjustedX + 35, y + 35, 34, 22);
 
     // Name and cost

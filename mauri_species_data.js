@@ -1,4 +1,28 @@
 // ============================================
+// SPECIES UI COLOURS
+// The identifying UI colour of each focus species: its in-world highlight, its
+// focus-species tile, and the frame + icon backing of every toolbar placeable meant
+// for it (PLACEABLES[*].fauna). Kept mutually distinct because focus species share a
+// year (kea / kākā beside the bush + upland moa). Two group keys cover tools that
+// aren't for one species: `moa` (serves every moa) and `eagle` (acts on the eagle).
+// ============================================
+const SPECIES_UI_COLORS = {
+  upland_moa:      [235, 238, 242],  // white
+  little_bush_moa: [255, 215, 70],   // yellow
+  kea:             [95, 210, 195],   // teal; the kea's blue-green flight feathers
+  kaka:            [230, 85, 110],   // crimson; the kākā's red underwing
+  kakapo:          [190, 240, 115],  // moss green
+  kokako:          [250, 165, 80],   // orange; the South Island kōkako's wattle
+  moa:             [200, 160, 115],  // tan; any moa
+  eagle:           [255, 145, 90]    // ember; Haast's eagle
+};
+
+// A fauna key's UI colour as [r,g,b], or the neutral UI green for an unknown/absent key.
+function speciesUIColor(key) {
+  return (key && SPECIES_UI_COLORS[key]) || [110, 170, 125];
+}
+
+// ============================================
 // SPECIES DATA DEFINITIONS
 // All moa species and their characteristics
 // ============================================
@@ -13,7 +37,7 @@ const MOA_SPECIES = {
     scientificName: "Megalapteryx didinus",
     spriteSet: 'upland',       // dedicated Moa/upland_walk art; renders untinted
     tint: null,                // Megalapteryx; rendered as-is (unused while spriteSet is set)
-    highlightColor: [235, 238, 242],  // white; player highlight
+    highlightColor: SPECIES_UI_COLORS.upland_moa,  // player highlight
     description: "Small, hardy moa adapted to high-altitude forests",
     rarity: 'common',
     
@@ -348,7 +372,7 @@ const MOA_SPECIES = {
     spriteSet: 'bush',         // dedicated LB_moa art; renders untinted
     spriteScale: 1.5,          // LB art drawn small; render at 1.5x
     tint: [190, 120, 60],      // emeid; saturated brown (unused while spriteSet is set)
-    highlightColor: [255, 215, 70],   // yellow; player highlight
+    highlightColor: SPECIES_UI_COLORS.little_bush_moa,  // player highlight
     description: "Smallest moa, nimble forest dweller",
     rarity: 'common',
     
@@ -399,7 +423,7 @@ const EAGLE_SPECIES = {
     scientificName: "Hieraaetus moorei",
     description: "Largest known eagle, apex predator of moa",
     rarity: 'common',
-    highlightColor: [255, 145, 90],   // ember; player highlight
+    highlightColor: SPECIES_UI_COLORS.eagle,  // player highlight
     
     wingspan: { min: 20, max: 26 },
     
@@ -429,7 +453,7 @@ const EAGLE_SPECIES = {
     scientificName: "Hieraaetus moorei (juvenile)",
     description: "Inexperienced but energetic hunter",
     rarity: 'uncommon',
-    highlightColor: [255, 145, 90],   // ember; player highlight
+    highlightColor: SPECIES_UI_COLORS.eagle,  // player highlight
     
     wingspan: { min: 16, max: 20 },
     

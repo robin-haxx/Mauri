@@ -427,6 +427,8 @@ const TERRAIN_DETAIL_OPTIONS = [
 
 // ============================================
 // PLACEABLE ITEMS
+// `fauna` names the species a tool is meant for (a SPECIES_UI_COLORS key): the toolbar
+// frames and backs its button in that colour and groups same-fauna tools together.
 // ============================================
 const PLACEABLES = {
   kawakawa: {
@@ -435,6 +437,7 @@ const PLACEABLES = {
     cost: 25,
     icon: '🌿',
     color: '#2d8a4e',
+    fauna: 'moa',
     effect: 'feeding',
     radius: 40,
     duration: 1200, 
@@ -455,6 +458,7 @@ const PLACEABLES = {
     cost: 40,
     icon: '🌴',
     color: '#1a5c32',
+    fauna: 'moa',
     effect: 'shelter',
     radius: 50,
     duration: 3200,
@@ -473,6 +477,7 @@ const PLACEABLES = {
     cost: 55,
     icon: '🪺',
     color: '#8b7355',
+    fauna: 'moa',
     effect: 'nesting',
     radius: 32,
     duration: 3600,
@@ -491,6 +496,7 @@ const PLACEABLES = {
     cost: 40,
     icon: '🌩️',
     color: '#c4a35a',
+    fauna: 'eagle',
     effect: 'Storm',
     radius: 70,
     duration: 600,
@@ -512,6 +518,7 @@ const PLACEABLES = {
     cost: 200,
     icon: '🌰',
     color: '#c98a3a',
+    fauna: 'kakapo',
     effect: 'mastYear',
     global: true,           // gamewide one-shot, no map placement
     cooldown: 3600,         // recharge (~1 year @ this level's seasonDuration); also gated by "next year"
@@ -527,6 +534,7 @@ const PLACEABLES = {
     cost: 45,
     icon: '💧',
     color: '#4a90a4',
+    fauna: 'moa',
     effect: 'water',
     radius: 35,
     duration: 2400,
@@ -546,6 +554,7 @@ const PLACEABLES = {
     cost: 30,
     icon: '🌾',
     color: '#5a8a3a',
+    fauna: 'moa',
     effect: 'feeding',
     radius: 36,
     duration: 1800,
@@ -568,6 +577,7 @@ const PLACEABLES = {
     icon: '🌲',
     iconSprite: 'Lancewood.png',
     color: '#6a7a3a',
+    fauna: 'little_bush_moa',
     effect: 'feeding',
     radius: 40,
     duration: 2400,
@@ -592,6 +602,7 @@ const PLACEABLES = {
     icon: '🌵',
     iconSprite: 'Speargrass.png',
     color: '#8f9a55',
+    fauna: 'upland_moa',
     effect: 'feeding',
     radius: 40,
     duration: 2400,
@@ -618,6 +629,7 @@ const PLACEABLES = {
     icon: '🫐',
     iconSprite: 'Patotara_Mature.png',   // the cache's signature subalpine berry
     color: '#6a4a7a',
+    fauna: 'kea',
     effect: 'keaLure',
     radius: 70,                // berry + forest cultivation footprint (tight, around the cache)
     // The RENDERED ring is this larger COVERAGE radius: the effective area to lay over the
@@ -662,6 +674,7 @@ const PLACEABLES = {
     cost: 35,
     icon: '🌱',
     color: '#3b6a50',
+    fauna: 'kaka',
     effect: 'forestBoost',
     radius: 95,                // wide grove so the spread reads clearly
     duration: 3600,
@@ -693,6 +706,7 @@ const PLACEABLES = {
     cost: 0,
     icon: '🥚',
     color: '#8a3a3a',
+    fauna: 'kea',
     effect: 'nestRaid',
     opensDialog: true,
     global: true,              // not a spatial placement
@@ -710,6 +724,7 @@ const PLACEABLES = {
     cost: 40,
     icon: '🍒',
     color: '#a23a4a',
+    fauna: 'kakapo',
     effect: 'rimuScramble',
     global: true,              // gamewide one-shot, no map placement
     cooldown: 1800,            // ~half a year at this seasonDuration
@@ -717,6 +732,21 @@ const PLACEABLES = {
     seasonalBonus: { summer: 1.0, autumn: 1.0, winter: 1.0, spring: 1.0 }
   }
 };
+
+// Reorders a resolved palette so tools for the same fauna sit side by side on the
+// toolbar. Groups keep the order their first tool was authored in, and tools keep their
+// authored order within a group. Hotkeys follow the key order, so they match the toolbar.
+function groupPaletteByFauna(palette) {
+  const groups = new Map();
+  for (const key of Object.keys(palette)) {
+    const fauna = palette[key].fauna || '';
+    if (!groups.has(fauna)) groups.set(fauna, []);
+    groups.get(fauna).push(key);
+  }
+  const out = {};
+  for (const keys of groups.values()) for (const key of keys) out[key] = palette[key];
+  return out;
+}
 
 function initPlaceableColors() {
   for (const key in PLACEABLES) {
@@ -1742,7 +1772,7 @@ class Game {
       if (typeof PLACEABLES === 'undefined' || !PLACEABLES[key]) continue;
       out[key] = Object.assign({}, PLACEABLES[key], base[key] || {}, avail[key] || {});
     }
-    return out;
+    return groupPaletteByFauna(out);
   }
 
   // Roster moa species ranked most-endangered first (lowest headcount).

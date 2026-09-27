@@ -151,8 +151,7 @@ class TutorialUIMapper {
       case 'toolbar':
         const _tbX = fs ? fs.toolbarStartX : layout.toolbarStartX;
         const _tbY = fs ? fs.toolbarY : ui.toolbarY;
-        const toolbarW = (layout.toolbarBtnCount - 1) * layout.toolbarSpacing + layout.toolbarBtnSize;
-        return { x: _tbX - 10, y: _tbY - 10, w: toolbarW + 20, h: layout.toolbarBtnSize + 30 };
+        return { x: _tbX - 10, y: _tbY - 10, w: layout.toolbarTotalWidth + 20, h: layout.toolbarBtnSize + 30 };
       // Sidebar panels report their live rect as they render (see mauri_UI.js), so
       // these highlights follow the panels wherever the layout puts them (the
       // POPULATION panel now sits directly under GOALS, above the EVENT LOG). Fall
@@ -182,8 +181,10 @@ class TutorialUIMapper {
   _getToolButtonBounds(index) {
     const layout = this.ui.layout;
     const fs = (this.config.fullscreen && layout.fs) ? layout.fs : null;
+    const slot = this.ui._toolbarSlotOffsets()[index];
     return {
-      x: (fs ? fs.toolbarStartX : layout.toolbarStartX) + index * layout.toolbarSpacing,
+      x: (fs ? fs.toolbarStartX : layout.toolbarStartX) +
+         (slot != null ? slot : index * layout.toolbarSpacing),
       y: fs ? fs.toolbarY : this.ui.toolbarY,
       w: layout.toolbarBtnSize,
       h: layout.toolbarBtnSize

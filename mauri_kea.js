@@ -560,7 +560,7 @@ const KEA_SPECIES = {
   class:          (typeof Kea !== 'undefined') ? Kea : undefined,
   description:    'The bold alpine parrot; a strong, wide-ranging generalist that drops to the forest in the cold.',
   rarity:         'uncommon',
-  highlightColor: [235, 222, 90],   // olive-gold; player highlight
+  highlightColor: SPECIES_UI_COLORS.kea,  // player highlight
 
   // Movement / render; a strong flier, wider-ranging than the kererū, but below eagle
   // hunt speed so a chase resolves.

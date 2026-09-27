@@ -415,18 +415,19 @@ class GameUI {
   }
 
   // Each toolbar button's x offset from the row's start, in palette order: one spacing
-  // step per button plus a group gap wherever the fauna changes (the palette arrives
-  // grouped by fauna; see groupPaletteByFauna).
+  // step per button plus a group gap wherever the group changes (the level's paletteOrder
+  // group when it has one, else the fauna; see arrangePalette).
   _toolbarSlotOffsets() {
     const palette = (this.game && this.game.activePlaceables) || PLACEABLES;
     const out = [];
     let off = 0, prev = null;
     for (const type in palette) {
-      const fauna = palette[type].fauna || '';
-      if (out.length && fauna !== prev) off += this.layout.toolbarGroupGap;
+      const def = palette[type];
+      const group = (def.paletteGroup != null) ? def.paletteGroup : (def.fauna || '');
+      if (out.length && group !== prev) off += this.layout.toolbarGroupGap;
       out.push(off);
       off += this.layout.toolbarSpacing;
-      prev = fauna;
+      prev = group;
     }
     return out;
   }
@@ -705,14 +706,18 @@ class GameUI {
         ((this.simulation.activeSpecies && this.simulation.activeSpecies.moa) || null);
     }
 
-    // Endless keystone moa: a Free Play run ends only when every moa is gone, so always
-    // surface the keystone moa here as a survival group (de-duplicated against the year's focus).
+    // Endless keystone moa: always surface the backbone moa that isn't this year's focus (the
+    // off-focus zone moa) as a second group, so its population stays on show; losing it is not
+    // a loss, it just returns fewer (de-duplicated against the year's focus).
     let survival = [];
     if (this.game && this.game.currentLevel && this.game.currentLevel.endless) {
       const M = (typeof LEVEL_MECHANICS !== 'undefined') ? LEVEL_MECHANICS : {};
-      const keystone = (M.focalSpecies || ['upland_moa', 'little_bush_moa'])
-        .filter(k => typeof MOA_SPECIES !== 'undefined' && !!MOA_SPECIES[k]);
-      survival = keystone.filter(k => !focal || !focal.includes(k));
+      const keystone = (this.game.freeplayOffMoa && this.game.freeplayOffMoa.length)
+        ? this.game.freeplayOffMoa
+        : (M.focalSpecies || ['upland_moa', 'little_bush_moa']);
+      survival = keystone
+        .filter(k => typeof MOA_SPECIES !== 'undefined' && !!MOA_SPECIES[k])
+        .filter(k => !focal || !focal.includes(k));
     }
 
     if ((!focal || !focal.length) && !survival.length) {
@@ -749,7 +754,7 @@ class GameUI {
         stroke(hc[0], hc[1], hc[2]);
         strokeWeight(3);
       } else if (isSurvival) {
-        // Warm amber frame marks the keystone-survival group (lose all and it's game over).
+        // Warm amber frame marks the off-focus keystone group (shown, but not a loss at 0).
         fill(58, 42, 30, 210);
         stroke(220, 138, 74);
         strokeWeight(2);

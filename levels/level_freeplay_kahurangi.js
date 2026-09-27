@@ -106,17 +106,45 @@ const LEVEL_FREEPLAY_KAHURANGI = {
   },
 
   availablePlaceables: {
-    lancewood: { cost: 25 },   // slot 1; bush moa
-    speargrass: { cost: 25 },  // slot 2; upland moa
-    shelter:   { cost: 35 },
-    nest:      { cost: 50 },
+    lancewood: { cost: 25 },   // bush moa's favoured plant (lowland years)
+    speargrass: { cost: 25 },  // upland moa's favoured plant (upland years)
+    // Waterholes draw the birds in too, over a wider pool: a bird within birdDrawRadius sends
+    // birdVisitChance of its dispersal hops to the water, and hungers slower there (Kereru._pickHop).
+    waterhole: { cost: 45, radius: 60, attractsBirds: true, birdDrawRadius: 380,
+                 birdVisitChance: 0.6, birdHungerSlowdown: 0.5 },
+    // Fern cover only half-hides: an eagle spots a sheltered moa within half its hunt radius.
+    shelter:   { cost: 35, eagleSpotFrac: 0.5 },
     forestBoost: { cost: 35 }, // Year-2 forest cultivator
     Storm:     { cost: 40 },
     keaLure:   { cost: 30 },   // Year-1 kea magnet
     nestRaid:  { cost: 0 },    // toolbar interaction → nest-raid dialog (charged per raid)
     rimuScramble: { cost: 40 } // mast-year interaction → 20% of rimu drop berries for the kākāpō
+    // No Nesting Site tool: moa nests are founded by growing the focus moa's favoured plant
+    // (see Simulation._updateMoaNestingFormation).
     // The Mast Year is earned, not bought: Year 2's mast-mauri goal invokes it early
     // (year 3) on success, or lets it fall late (year 4) on a miss.
+  },
+
+  // Toolbar order, every year: the focus moa's plant, the focus bird's tools, then the shared
+  // kit (kawakawa or waterhole, fern shelter, storm). A toolbar gap separates each group; tools
+  // a year doesn't offer are skipped. See arrangePalette.
+  paletteOrder: [
+    ['lancewood', 'speargrass'],
+    ['keaLure', 'nestRaid', 'forestBoost', 'rimuScramble'],
+    ['kawakawa', 'waterhole', 'shelter', 'Storm']
+  ],
+  // Kawakawa is frost-tender: once the first winter strips it, this tool takes its toolbar
+  // slot (for the rest of the run), so the layout keeps its size. See Game._banKawakawa.
+  kawakawaReplacement: 'waterhole',
+
+  // ---- One focus moa per year, set by the terrain (see Game._moaZoneForCycle) ----------
+  // The upland moa in the high (east/right) quadrants, the little bush moa in the ones by the
+  // sea (west/left). Its favoured plant leads that year's toolbar and founds its nests. The
+  // other zone moa is off-focus: still highlighted, but not a loss at 0. It carries its numbers
+  // across years spent in its off zone, and returns to its own zone fewer if it fell while away.
+  moaZones: {
+    upland:  { moa: 'upland_moa',      plant: 'speargrass' },
+    lowland: { moa: 'little_bush_moa', plant: 'lancewood' }
   },
 
   // ---- Year-2 Mast objective (see Game._beginFreeplayYear / _renderMastGoalPanel) -----
@@ -139,71 +167,74 @@ const LEVEL_FREEPLAY_KAHURANGI = {
     kokako: 6
   },
 
-  // New player-grown nesting sites a "moa focus" year asks for.
+  // New player-grown nesting sites a nesting-goal year asks for.
   freeplayNestingGoal: 2,
 
   // ---- Authored year schedule (read by Game._scheduledYearEntry / _beginFreeplayYear) --
-  // A repeating 4-year loop aligned to the 2×2 terrain tour. Each `years[pos]`:
-  //   focus:        species this year's goals + protection + highlight track
-  //   moaFocus:     a keystone moa paired in with population + nesting goals
-  //   nestingGoal:  the moaFocus year also asks for NEW nesting sites
+  // A repeating 4-year loop aligned to the 2×2 terrain tour: pos 0 & 3 are upland (east),
+  // pos 1 & 2 lowland (west). Each year's single focus moa comes from its zone (`moaZones`),
+  // not from here. Each `years[pos]`:
+  //   focus:        the focus BIRD(s): goals + loss + highlight track (the zone moa is added)
+  //   nestingGoal:  the year also asks for NEW nests of the focus moa
   //   mast:         force a mast year (rimu bloom)
   //   mastGoalYear: run the mast-mauri objective this year (see `mastGoal`)
   //   kokakoStretch: the kōkako goal here is a bonus stretch
   //   introduce:    newcomers to seed this year ([{type, count}])
   //   note:         a line shown at the year's start
   //   branch:       { reached, missed }; years 3 & 4 pick a variant by the mast outcome
-  // moaFromLoop withholds the pos-0/pos-1 moa pairing on the first loop.
+  //   availablePlaceables: the focus bird's tools (+ year extras); the focus moa's favoured
+  //                 plant is added automatically, and the toolbar is ordered by paletteOrder.
+  // moaFromLoop withholds the pos-0/pos-1 moa population + nesting goals on the first loop
+  // (the zone moa is still that year's focus).
   freeplaySchedule: {
     loopYears: 4,
-    moaFromLoop: 1,   // pos-0/pos-1 moaFocus starts from this 0-based loop index
+    moaFromLoop: 1,   // pos-0/pos-1 moa goals start from this 0-based loop index
     years: [
-      { // pos 0; Year of the Kea (east / alps). Nest raid; kākā introduced.
+      { // pos 0; Year of the Kea (east / alps; upland moa). Nest raid; kākā introduced.
         focus: ['kea'],
         introduce: [{ type: 'kaka', count: 3 }],
-        moaFocus: 'upland_moa', nestingGoal: true,
-        // Kea year: fewer moa nests (3), all on the left/downslope half in the podocarp forest.
-        nesting: { forestCount: 2, openCount: 1, region: 'left' },
+        nestingGoal: true,
         note: "Year of the Kea; the alpine parrots come down to nest in the podocarp forest below. Kākā are introduced to that forest. Plant kawakawa now while the forest is still warm; it will not survive the first winter.",
-        // Kawakawa is frost-tender: plantable this year only, stripped at the first winter.
-        availablePlaceables: { kawakawa: { cost: 25, duration: 3600 }, keaLure: {}, nestRaid: {}, lancewood: {}, speargrass: {}, Storm: {}, shelter: {} }
+        // Kawakawa is frost-tender: plantable this year only; at the first winter the waterhole
+        // takes its slot (kawakawaReplacement).
+        availablePlaceables: { kawakawa: { cost: 25, duration: 3600 }, keaLure: {}, nestRaid: {}, shelter: {}, Storm: {} }
       },
-      { // pos 1; Year of the Kākā (west / shore). The mast goal runs here (takes the
-        // Nest-Raid slot).
+      { // pos 1; Year of the Kākā (west / shore; bush moa). The mast goal runs here (takes
+        // the Nest-Raid slot).
         focus: ['kaka'],
-        moaFocus: 'little_bush_moa', nestingGoal: true,
+        nestingGoal: true,
         mastGoalYear: true,
         note: "Year of the Kākā; grow the flock in the sheltered lowland forest. Use the Forest Seed to spread podocarp forest into the lowland near existing groves; new rimu and beech to feed the kākā through winter. Gain enough mauri this year to invoke the Mast: reach it and the rimu mast comes early next year (the milder downslope), so the kākāpō breed there and a kōkako stretch opens after; miss it and the mast falls late, in the cold upslope.",
-        availablePlaceables: { lancewood: {}, shelter: {}, nest: {}, forestBoost: {}, Storm: {} }
+        availablePlaceables: { forestBoost: {}, waterhole: {}, shelter: {}, Storm: {} }
       },
-      { // pos 2; Year 3 (across / downslope). Branches on the mast-goal outcome.
+      { // pos 2; Year 3 (across / downslope; bush moa). Branches on the mast-goal outcome.
         branch: {
           reached: { // the mast came early; breed the kākāpō in the milder downslope forest
             focus: ['kakapo'], mast: true,
             introduce: [{ type: 'kakapo', count: 4 }],
             note: "The Mast came early! The downslope forest blooms with rimu fruit; the kākāpō breed at last. Grow them while the masting holds. Loose the Rimu Berry Scramble to shake a berry glut from the rimu; food and cover for the kākāpō.",
-            availablePlaceables: { lancewood: {}, rimuScramble: {}, shelter: {}, nest: {}, waterhole: {}, Storm: {} }
+            availablePlaceables: { rimuScramble: {}, waterhole: {}, shelter: {}, Storm: {} }
           },
-          missed: { // no mast yet; consolidate the bush moa and grow new nesting sites
-            focus: ['little_bush_moa'], moaFocus: 'little_bush_moa', nestingGoal: true,
-            note: "No mast this year. Hold the little bush moa; plant lancewood downslope to draw them into new forest groves and settle fresh nesting sites before the cold upslope year.",
-            availablePlaceables: { lancewood: {}, speargrass: {}, keaLure: {}, shelter: {},  waterhole: {}, Storm: {} }
+          missed: { // no mast yet; consolidate the bush moa and grow new nests
+            focus: [], nestingGoal: true,
+            note: "No mast this year. Hold the little bush moa; plant lancewood downslope to draw them into new forest groves and found fresh nests before the cold upslope year.",
+            availablePlaceables: { waterhole: {}, shelter: {}, Storm: {} }
           }
         }
       },
-      { // pos 3; Year 4 (back upslope / cold). Branches on the mast-goal outcome.
+      { // pos 3; Year 4 (back upslope / cold; upland moa). Branches on the mast-goal outcome.
         branch: {
           reached: { // kākāpō already secured downslope; a South Island kōkako STRETCH opens
-            focus: ['kokako'], moaFocus: 'little_bush_moa', nestingGoal: true, kokakoStretch: true,
-            introduce: [{ type: 'kokako', count: 3 }, { type: 'upland_moa', count: 8 }],
-            note: "With the kākāpō secured downslope, a stretch: grow the South Island kōkako in the forest refuge, and settle the little bush moa in new groves. The upland moa return in numbers to the high country.",
-            availablePlaceables: { lancewood: {}, speargrass: {}, shelter: {}, forestBoost: {}, waterhole: {}, Storm: {} }
+            focus: ['kokako'], nestingGoal: true, kokakoStretch: true,
+            introduce: [{ type: 'kokako', count: 3 }],
+            note: "With the kākāpō secured downslope, a stretch: grow the South Island kōkako in the forest refuge, and plant speargrass to found new upland moa nests in the high country.",
+            availablePlaceables: { forestBoost: {}, waterhole: {}, shelter: {}, Storm: {} }
           },
           missed: { // the rimu mast falls late, in the COLD upslope; the hard kākāpō year
-            focus: ['kakapo'], mast: true, moaFocus: 'upland_moa', nestingGoal: true,
-            introduce: [{ type: 'kakapo', count: 4 }, { type: 'upland_moa', count: 8 }],
+            focus: ['kakapo'], mast: true, nestingGoal: true,
+            introduce: [{ type: 'kakapo', count: 4 }],
             note: "The rimu mast falls late; here, in the cold upslope. The kākāpō must breed in harsher country. Loose the Rimu Berry Scramble for a berry glut to feed and secure them. Hold the upland moa alongside them; no kōkako can be spared this loop.",
-            availablePlaceables: { speargrass: {}, keaLure: {}, rimuScramble: {}, shelter: {}, nest: {}, waterhole: {}, Storm: {} }
+            availablePlaceables: { rimuScramble: {}, waterhole: {}, shelter: {}, Storm: {} }
           }
         }
       }
@@ -246,8 +277,10 @@ const LEVEL_FREEPLAY_KAHURANGI = {
     // ---- Year-to-year reset: fall back to defaults, nudged by past performance ----
     // A new year is a new habitat: each species falls back to its default, nudged up by
     // how much you held here last time (per-area memory), capped at maxNudge. Forest you
-    // grew here partly persists (forestLegacy).
-    freeplayYearReset: { influence: 0.25, maxNudge: 3, birdDefault: 3, forestLegacy: 0.4 },
+    // grew here partly persists (forestLegacy). The off-focus zone moa (see `moaZones`) is the
+    // exception: it carries its count through its off zone, and on returning to its own zone
+    // restarts short by offFocusPenalty × the share it lost while away (0 left → half default).
+    freeplayYearReset: { influence: 0.25, maxNudge: 3, birdDefault: 3, forestLegacy: 0.4, offFocusPenalty: 0.5 },
 
     // Moa laying earns no mauri here (keeps moa from out-earning the flighted birds).
     noEggLaidMauri: true,
@@ -284,15 +317,22 @@ const LEVEL_FREEPLAY_KAHURANGI = {
     disturbanceDecaySec: 22,    // a raid's disturbance fades over this long
     disturbancePerRaid: 1.0,    // strength added per raided egg
 
-    // ---- Kea Raid v2: established moa nesting sites (see mauri_nesting.js) ----------
+    // ---- Moa nests (see mauri_nesting.js). None are seeded: every nest is FOUNDED by the
+    // player placing two patches of the focus moa's favoured plant close together with that
+    // moa drawn in (Simulation._updateMoaNestingFormation). Founded nests are what the kea
+    // raid. ----------
     nestingSites: {
-      forestCount: 2,           // seeded downslope in the podocarp forest refuge
-      openCount: 3,             // seeded across open moa country
+      forestCount: 0,           // no seeded forest nests
+      openCount: 0,             // no seeded open-country nests
+      foundPatches: 2,          // placed favoured-plant patches it takes to found a nest…
+      foundRadius: 110,         // …with their centres within this of each other
       radius: 46,               // egg-clustering + raid radius of a site
       forestBand: { min: 0.33, max: 0.48 },
       openBand: { min: 0.18, max: 0.33 },
       laySnapRadius: 170,       // a laying moa snaps its egg to a site within this range
-      drawRadius: 520           // a ready-to-lay moa is drawn to a site within this range
+      drawRadius: 520,          // a ready-to-lay moa is drawn to a site within this range
+      layBoost: 0.5,            // a pregnant moa at a nest lays this much faster (as the old Nesting Site)
+      eggSpeedBonus: 1.6        // eggs laid at a nest incubate this much faster
     },
 
     // ---- Kea Raid v2: the player-driven raid action ----------------------
@@ -330,8 +370,9 @@ const LEVEL_FREEPLAY_KAHURANGI = {
     focalSpecies: ['upland_moa', 'little_bush_moa'],   // STABLE balance set, distinct from the dynamic yearly focus
     maxPerSpecies: 20,
 
-    // Background species are protected from a total wipe; the year's FOCUS MOA are NOT
-    // (letting them die out is how a run ends — see the focus-moa loss check in update()).
+    // Background species are protected from a total wipe; the year's FOCUS species are NOT
+    // (letting one die out is how a run ends — see the focus loss check in update()). The
+    // off-focus zone moa is neither: unprotected, but reaching 0 just carries forward.
 
     // ---- Emergent eagles. In Free Play their extinction is not a loss: it unleashes a
     // dominant-moa boom and they re-immigrate next year. The eagle target stays proportional

@@ -748,6 +748,22 @@ function groupPaletteByFauna(palette) {
   return out;
 }
 
+// Orders a resolved palette for the toolbar. A level with `paletteOrder` (an array of key
+// groups) gets exactly that order, each tool tagged with its group index (paletteGroup) so the
+// toolbar gaps fall between groups; unlisted tools follow, grouped by fauna. Otherwise the
+// palette is grouped by fauna. Defs are fresh per resolve, so tagging them is safe.
+function arrangePalette(palette, level) {
+  const order = level && level.paletteOrder;
+  if (!order) return groupPaletteByFauna(palette);
+  const out = {};
+  order.forEach((keys, gi) => {
+    for (const key of keys) if (palette[key] && !out[key]) { palette[key].paletteGroup = gi; out[key] = palette[key]; }
+  });
+  const rest = {};
+  for (const key of Object.keys(palette)) if (!out[key]) rest[key] = palette[key];
+  return Object.assign(out, groupPaletteByFauna(rest));
+}
+
 function initPlaceableColors() {
   for (const key in PLACEABLES) {
     PLACEABLES[key]._parsedColor = color(PLACEABLES[key].color);
@@ -1204,6 +1220,8 @@ class Game {
     this._yearTransition = null;      // clear any in-flight area transition on (re)load
     this._areaMoaBest = {};           // per-area species memory for the year-start reset (fresh run)
     this._areaForest = {};            // per-area cultivated-forest memory (forest legacy)
+    this._offMoaRun = {};             // off-focus zone moa's off-zone runs (see _applyZoneMoaCarry)
+    this.freeplayOffMoa = [];         // this year's off-focus zone moa (highlighted, not a loss)
     this._kawakawaBanned = false;     // re-enable kawakawa for a fresh run (see _banKawakawa)
     this._mastYearTargetCycle = -1;   // reset the pending/active mast per level load
     // Year-2 mast-mauri objective (see _beginFreeplayYear / _checkFreeplayYear): reset
@@ -1466,9 +1484,9 @@ class Game {
       if (audioManager) audioManager.playLoss();
     }
 
-    // Free Play loss: the FOCUS species (backbone bush/upland moa + this year's goal species,
-    // moa OR flighted bird) are not death-protected. Losing ANY of them to famine or eagles
-    // ends the run. A focus species counts as lost when it has 0 alive and no egg of its own
+    // Free Play loss: the FOCUS species (this year's one zone moa + its focus birds) are not
+    // death-protected. Losing ANY of them to famine or eagles ends the run (the off-focus zone
+    // moa hitting 0 does not). A focus species counts as lost when it has 0 alive and no egg of its own
     // still incubating. Held during an area transition (a newly-introduced focus species may
     // not be placed until the pan settles).
     if (!_areaTransition && this.state === GAME_STATE.PLAYING &&
@@ -1729,11 +1747,15 @@ class Game {
         if (!entry) return null;
       }
       const resolved = Object.assign({}, entry);
-      // Ease-in: withhold the pos-0/pos-1 moa pairing until moaFromLoop. Branch years
-      // (3 & 4) always keep their own moa focus.
+      // One focus moa per year, from the zone the tour is in (upland / lowland; see
+      // moaZones). Falls back to an authored moaFocus when the level has no zones.
+      const zone = this._moaZoneForCycle(cycle);
+      if (zone) resolved.moaFocus = zone.moa;
+      // Ease-in: withhold the pos-0/pos-1 moa goals (population + nesting) until moaFromLoop.
+      // The zone moa is still the year's focus. Branch years (3 & 4) always keep their goals.
       const moaFromLoop = (sched.moaFromLoop != null) ? sched.moaFromLoop : 0;
       if (!base.branch && loop < moaFromLoop) {
-        resolved.moaFocus = null;
+        resolved.moaGoalsWithheld = true;
         resolved.nestingGoal = false;
       }
       return resolved;
@@ -1745,6 +1767,24 @@ class Game {
     if (cycle < opening.length) return opening[cycle] || null;
     if (cyc.length) return cyc[(cycle - opening.length) % cyc.length] || null;
     return null;
+  }
+
+  // The moa zone a year's area sits in (level.moaZones): 'upland' for the high east/right
+  // column(s) of the world grid, 'lowland' for those by the sea. Returns the zone's
+  // { key, moa, plant }, or null when the level has no zones or no world grid.
+  _moaZoneForCycle(cycle) {
+    const zones = this.currentLevel && this.currentLevel.moaZones;
+    const t = this.terrain;
+    if (!zones || !t || !t.hasWorldGrid || !t.quadrantForCycle) return null;
+    const col = t.quadrantForCycle(cycle)[0];
+    const key = (col >= t.worldGridCols / 2) ? 'upland' : 'lowland';
+    return zones[key] ? Object.assign({ key }, zones[key]) : null;
+  }
+
+  // Every zone moa (the upland + bush backbone), for the off-focus bookkeeping.
+  _zoneMoaKeys() {
+    const zones = (this.currentLevel && this.currentLevel.moaZones) || {};
+    return Object.values(zones).map(z => z.moa).filter(k => this._speciesUsable(k));
   }
 
   // Is this species registered and constructible? Guards schedule entries that name a
@@ -1772,7 +1812,32 @@ class Game {
       if (typeof PLACEABLES === 'undefined' || !PLACEABLES[key]) continue;
       out[key] = Object.assign({}, PLACEABLES[key], base[key] || {}, avail[key] || {});
     }
-    return groupPaletteByFauna(out);
+    return arrangePalette(out, this.currentLevel);
+  }
+
+  // Once the first winter has banned kawakawa, its toolbar slot goes to the level's
+  // kawakawaReplacement (the waterhole), so the layout keeps its size.
+  _kawakawaSwapped(avail) {
+    if (!this._kawakawaBanned || !avail || !avail.kawakawa) return avail;
+    const out = Object.assign({}, avail);
+    delete out.kawakawa;
+    const rep = this.currentLevel && this.currentLevel.kawakawaReplacement;
+    if (rep && !out[rep]) out[rep] = {};
+    return out;
+  }
+
+  // A year's palette with the focus moa's plants: the zone moa's favoured plant is added and
+  // any other zone moa's favoured plant is dropped, so only the focus moa can found nests.
+  _yearPaletteWithMoaPlant(avail, moaFocus) {
+    const zones = (this.currentLevel && this.currentLevel.moaZones) || null;
+    if (!zones) return avail;
+    const out = Object.assign({}, avail);
+    for (const z of Object.values(zones)) {
+      if (!z.plant) continue;
+      if (z.moa === moaFocus) out[z.plant] = out[z.plant] || {};
+      else delete out[z.plant];
+    }
+    return out;
   }
 
   // Roster moa species ranked most-endangered first (lowest headcount).
@@ -2236,16 +2301,54 @@ class Game {
     }
   }
 
-  // The FOCUS species for the current year: the backbone moa (mechanics.focalSpecies: bush +
-  // upland) plus this year's goal species (freeplayFocus, which already folds in the year's
-  // focus birds and moaFocus). These are the species the player must keep alive — they are
-  // excluded from the protection floor, and losing any of them ends the run.
+  // The FOCUS species for the current year: this year's goal species (freeplayFocus: the focus
+  // birds plus the ONE zone moa, moaFocus). These are the species the player must keep alive —
+  // they are excluded from the protection floor, and losing any of them ends the run. The
+  // off-focus zone moa (freeplayOffMoa) is not in here: reaching 0 only carries forward.
   _freeplayFocusSet() {
-    const M = (typeof LEVEL_MECHANICS !== 'undefined') ? LEVEL_MECHANICS : {};
     const set = new Set();
-    for (const k of (M.focalSpecies || [])) if (this._speciesUsable(k)) set.add(k);
     for (const k of (this.freeplayFocus || [])) if (this._speciesUsable(k)) set.add(k);
     return set;
+  }
+
+  // Year-start count for each zone moa (the upland + bush backbone), applied over the default
+  // reset in yearPops. Called before the pan, so live counts are what last year ended on.
+  //   • Off-focus, still in its off zone (e.g. upland moa, lowland year 2 → year 3): carries
+  //     its live count, 0 included. Entering its off zone, it starts its off-run at the reset.
+  //   • Focus, returning to its own zone after an off-run: restarts short by offFocusPenalty ×
+  //     the share it lost while away (never below the focus floor).
+  // Returns a notice for a shortfall (announced after the year's own notes), else null.
+  _applyZoneMoaCarry(yearPops, moaFocus, protectFloor) {
+    const zone = this._moaZoneForCycle(this.cycle);
+    if (!zone) return null;
+    let msg = null;
+    const sim = this.simulation;
+    const M = (typeof LEVEL_MECHANICS !== 'undefined') ? LEVEL_MECHANICS : {};
+    const penalty = (M.freeplayYearReset || {}).offFocusPenalty ?? 0.5;
+    const prev = this.cycle > 0 ? this._moaZoneForCycle(this.cycle - 1) : null;
+    const sameZone = !!(prev && prev.key === zone.key);
+    if (!this._offMoaRun) this._offMoaRun = {};
+
+    for (const k of this._zoneMoaKeys()) {
+      const live = sim.getSpeciesCount(k);
+      if (k === moaFocus) {
+        const run = this._offMoaRun[k];
+        delete this._offMoaRun[k];
+        if (!run || sameZone) continue;
+        const kept = run.start > 0 ? Math.min(1, live / run.start) : 1;
+        const base = yearPops.moa[k] || 0;
+        const start = Math.max(protectFloor, Math.round(base * (1 - penalty * (1 - kept))));
+        if (start < base) {
+          yearPops.moa[k] = start;
+          msg = `Fewer ${this._freeplaySpeciesName(k)} return after the lean years away (${start}).`;
+        }
+      } else if (sameZone && this._offMoaRun[k]) {
+        yearPops.moa[k] = live;   // carried through its off zone, 0 included
+      } else {
+        this._offMoaRun[k] = { start: yearPops.moa[k] || 0 };   // its off-run begins here
+      }
+    }
+    return msg;
   }
 
   _beginFreeplayYear() {
@@ -2300,28 +2403,35 @@ class Game {
     //     (mast in year 3) or a missed goal (late mast in year 4) lands.
     if (entry && entry.mast) this._mastYearTargetCycle = this.cycle;
 
-    // 1c) FOCUS: the schedule's bird/moa focus, plus a paired keystone moa (moaFocus).
-    //     moaFocus is folded into the focus set so it is protected, highlighted, topped
-    //     to its floor, and given a population goal like any focus species.
+    // 1c) FOCUS: the schedule's bird focus, plus the ONE focus moa (moaFocus: the zone moa,
+    //     see _moaZoneForCycle). moaFocus is folded into the focus set so it is a loss
+    //     condition, highlighted, topped to its floor, and given a population goal like any
+    //     focus species. Any other moa named in the schedule's focus is dropped. The other
+    //     zone moa is this year's off-focus moa (freeplayOffMoa).
+    const isMoaKey = (k) => (typeof MOA_SPECIES !== 'undefined' && !!MOA_SPECIES[k]);
     let note = null, introduce = null, focus = null;
-    let moaFocus = null, nestingGoal = false, kokakoStretch = false;
+    let moaFocus = null, nestingGoal = false, kokakoStretch = false, moaGoalsWithheld = false;
     if (entry) {
-      const f = (entry.focus || []).filter(k => this._speciesUsable(k));
       moaFocus = (entry.moaFocus && this._speciesUsable(entry.moaFocus)) ? entry.moaFocus : null;
+      const f = (entry.focus || []).filter(k => this._speciesUsable(k) && !(isMoaKey(k) && moaFocus && k !== moaFocus));
       if (moaFocus && !f.includes(moaFocus)) f.push(moaFocus);
       if (f.length) { focus = f; note = entry.note || null; introduce = entry.introduce || null; }
       nestingGoal = !!entry.nestingGoal && !!moaFocus;
       kokakoStretch = !!entry.kokakoStretch;
+      moaGoalsWithheld = !!entry.moaGoalsWithheld;
     }
     if (!focus) focus = ranked.slice(0, 2).map(s => s.k);   // dynamic fallback
     this.freeplayFocus = focus;
+    this.freeplayOffMoa = this._zoneMoaKeys().filter(k => !focus.includes(k));
 
     // 2–4) YEAR-START POPULATIONS (reset-to-default + per-area nudge). Populations don't
     //   haul across areas: each species falls back to its default, nudged up by how many you
     //   held HERE last visit, then this year's introduces + the focus floor are layered on.
-    //   Computed for the area we're MOVING to (enterIdx).
+    //   Computed for the area we're MOVING to (enterIdx). The zone moa then take their
+    //   off-focus carry / returning shortfall (_applyZoneMoaCarry).
     const enterIdx = (t && t._quadIndexForCycle) ? t._quadIndexForCycle(this.cycle) : 0;
     const yearPops = this._computeYearStartPops(entry, this.freeplayFocus, protectFloor, enterIdx);
+    const zoneMoaNotice = this._applyZoneMoaCarry(yearPops, moaFocus, protectFloor);
 
     // Announce this year's newcomers (species the area didn't already hold).
     const areaHistNow = (this._areaMoaBest && this._areaMoaBest[enterIdx]) || {};
@@ -2349,26 +2459,31 @@ class Game {
     //    below it (handleEagleCatch), and the per-frame floor watch in _checkFreeplayYear
     //    respawns any that are thinned. Only species the area holds this year are floored
     //    (start count > 0), so an absent bird isn't conjured into existence.
-    //    The FOCUS species are NOT floored: the backbone moa (focalSpecies: bush + upland) plus
-    //    this year's goal species (freeplayFocus). They are what you must keep alive — a focus
-    //    species that starves or is hunted to extinction ends the run (see the loss check in
-    //    update()).
+    //    The FOCUS species are NOT floored: this year's goal species (freeplayFocus, with its
+    //    one zone moa). They are what you must keep alive — a focus species that starves or is
+    //    hunted to extinction ends the run (see the loss check in update()). The off-focus zone
+    //    moa isn't floored either: it may die out here, and simply carries that forward.
     const focusSet = this._freeplayFocusSet();
+    const offMoa = new Set(this.freeplayOffMoa);
     const floors = {};
-    for (const k in yearPops.moa)    if (yearPops.moa[k] > 0 && !focusSet.has(k)) floors[k] = protectFloor;
+    for (const k in yearPops.moa)    if (yearPops.moa[k] > 0 && !focusSet.has(k) && !offMoa.has(k)) floors[k] = protectFloor;
     for (const k in yearPops.others) if (yearPops.others[k] > 0 && !focusSet.has(k)) floors[k] = protectFloor;
     sim.dynamicFloors = floors;
 
-    // 6) Highlight the focus species in the UI.
+    // 6) Highlight the focus species in the UI, and the off-focus zone moa alongside (its
+    //    population stays on show, though losing it isn't a loss).
     if (typeof SPECIES_HIGHLIGHT !== 'undefined') {
       SPECIES_HIGHLIGHT.clear();
       for (const k of this.freeplayFocus) SPECIES_HIGHLIGHT.add(k);
+      for (const k of this.freeplayOffMoa) SPECIES_HIGHLIGHT.add(k);
     }
 
     // 6b) Per-year interaction palette: swap the toolbar to this year's tools (a new
-    // set each year), falling back to the level's base palette. Rebuild the toolbar
-    // layout, and drop a selected tool that isn't in the new set.
-    const yearPalette = entry && entry.availablePlaceables;
+    // set each year), falling back to the level's base palette. The focus moa's favoured
+    // plant is added (and the other zone moa's dropped). Rebuild the toolbar layout, and drop
+    // a selected tool that isn't in the new set.
+    const yearPalette = entry && entry.availablePlaceables &&
+      this._kawakawaSwapped(this._yearPaletteWithMoaPlant(entry.availablePlaceables, moaFocus));
     if (yearPalette) this.activePlaceables = this._resolvePalette(yearPalette);
     else if (this.currentLevel._resolvedPlaceables) this.activePlaceables = this.currentLevel._resolvedPlaceables;
     // Once the first winter has banned kawakawa, keep it out of every later year's palette.
@@ -2384,23 +2499,25 @@ class Game {
       sim.boomSpecies = null;
     }
 
-    // 7b) Moa nesting-site formation watch: arm it for a nesting-goal year so growing a
-    //     patch of the moa's favoured plant (lancewood / speargrass) settles NEW nesting
-    //     sites; cleared otherwise. See Simulation._updateMoaNestingFormation.
+    // 7b) Moa nest founding: every year, growing a patch of the focus moa's favoured plant
+    //     (lancewood / speargrass) with that moa drawn in founds a NEW nest; the only way
+    //     nests form (none are seeded). See Simulation._updateMoaNestingFormation.
+    const zone = this._moaZoneForCycle(this.cycle);
     const FAVOURED_PLANT = { little_bush_moa: 'lancewood', upland_moa: 'speargrass' };
     if (sim) {
-      sim.moaNestingWatch = (nestingGoal && moaFocus)
-        ? { speciesKey: moaFocus, plantType: FAVOURED_PLANT[moaFocus] || 'lancewood' }
-        : null;
+      const plantType = (zone && zone.moa === moaFocus && zone.plant) || FAVOURED_PLANT[moaFocus];
+      sim.moaNestingWatch = (moaFocus && plantType) ? { speciesKey: moaFocus, plantType } : null;
     }
 
     // 8) Build this year's goals: a population goal per focus species, plus, for a
     //    nesting-goal year, a "settle N new nesting sites" goal for the paired moa. A
-    //    kōkako goal in the reached branch is a bonus STRETCH (worth more, opt-in).
+    //    kōkako goal in the reached branch is a bonus STRETCH (worth more, opt-in). The
+    //    first loop's opening years withhold the moa's goals (moaGoalsWithheld).
     const goalReward = Math.round((M.freeplayGoalReward ?? 80) * (1 + this.coldIndex));
     const nestTarget = this.currentLevel.freeplayNestingGoal ?? M.freeplayNestingGoal ?? 2;
     const goals = [];
     for (const k of this.freeplayFocus) {
+      if (moaGoalsWithheld && k === moaFocus) continue;
       let target = targets[k] || defaultTarget;
       // Flighted-bird ramp: each time a flighted focus species returns, its goal climbs at least
       // +2 over the last time it was focus (capped at the species' breeding cap so it stays
@@ -2456,6 +2573,7 @@ class Game {
     const names = this.freeplayFocus.map(k => this._freeplaySpeciesName(k)).join(' & ');
     this.addNotification(`Year ${this.cycle + 1}${stage ? '; ' + stage : ''}: protect ${names}`, 'info');
     if (note) this.addNotification(note, 'info');
+    if (zoneMoaNotice) this.addNotification(zoneMoaNotice, 'info');
 
     // 10) Mast year onset: announce the boom and seed a few extra fruit-birds to the
     // feast so it reads at once (forest growth + faster breeding do the rest all year).
@@ -2814,7 +2932,7 @@ class Game {
     const bodyH = Math.max(0, h - headH - 10);
     if (sites.length === 0) {
       fill(180, 160, 120); textAlign(CENTER, CENTER); textSize(12);
-      text('No nesting sites remain.', x + w / 2, bodyTop + bodyH / 2);
+      text('No moa nests to raid yet.', x + w / 2, bodyTop + bodyH / 2);
     } else {
       const rowH = Math.max(18, Math.min(32, bodyH / sites.length));
       const mx = (typeof mouseX !== 'undefined') ? mouseX : -1;
@@ -2970,7 +3088,15 @@ class Game {
   _banKawakawa() {
     this._kawakawaBanned = true;
     if (this.activePlaceables && this.activePlaceables.kawakawa) {
-      delete this.activePlaceables.kawakawa;
+      // Swap the level's kawakawaReplacement (the waterhole) into kawakawa's slot, keeping
+      // every other tool's resolved def (and its year overrides) as is.
+      const rep = this.currentLevel && this.currentLevel.kawakawaReplacement;
+      const next = {};
+      for (const k of Object.keys(this.activePlaceables)) {
+        if (k !== 'kawakawa') next[k] = this.activePlaceables[k];
+        else if (rep && !this.activePlaceables[rep]) Object.assign(next, this._resolvePalette({ [rep]: {} }));
+      }
+      this.activePlaceables = arrangePalette(next, this.currentLevel);
       if (this.selectedPlaceable === 'kawakawa') this.selectedPlaceable = null;
       if (this.ui && this.ui._calculateLayoutPositions) this.ui._calculateLayoutPositions();
     }
@@ -2979,7 +3105,9 @@ class Game {
         if (p.type === 'kawakawa' && p.frostKill) p.frostKill();
       }
     }
-    this.addNotification("The first true winter closes in; the kawakawa cannot hold, and no more will take root.", 'info');
+    const repName = this.activePlaceables && this.currentLevel && this.activePlaceables[this.currentLevel.kawakawaReplacement]
+      ? this.activePlaceables[this.currentLevel.kawakawaReplacement].name : null;
+    this.addNotification(`The first true winter closes in; the kawakawa cannot hold, and no more will take root.${repName ? ` The ${repName} takes its place.` : ''}`, 'info');
   }
 
   // Leave the current level and return to the habitat-select menu (from the pause
@@ -3208,14 +3336,24 @@ class Game {
       return false;
     }
     
-    this.simulation.addPlaceable(x, y, this.selectedPlaceable);
+    const placed = this.simulation.addPlaceable(x, y, this.selectedPlaceable);
     BENCHMARK.recordPlacement(this.selectedPlaceable);
     this._recordPlaceableUse(this.selectedPlaceable);   // stats export tally
     if (this.selectedPlaceable === 'Storm') {
       this._stormCooldownDuration = 600;   // 10s @60fps (UI reads this for the cooldown sweep)
       this._stormCooldownUntil = this.playTime + this._stormCooldownDuration;
     }
-    this.addNotification(`Placed ${def.name}`, 'info');
+    // A lone patch of the focus moa's plant can't found a nest yet: say it needs a partner.
+    let placedMsg = `Placed ${def.name}`;
+    const watch = this.simulation.moaNestingWatch;
+    if (placed && watch && def.plantType === watch.plantType) {
+      const r2 = this.simulation._nestFoundRadius() ** 2;
+      const paired = this.simulation._focusPlantPatches(watch)
+        .some(p => p !== placed && (p.pos.x - x) ** 2 + (p.pos.y - y) ** 2 <= r2);
+      const moaName = this._freeplaySpeciesName(watch.speciesKey);
+      if (!paired) placedMsg += `; plant another close by to found ${/^[aeiou]/i.test(moaName) ? 'an' : 'a'} ${moaName} nest`;
+    }
+    this.addNotification(placedMsg, 'info');
     if (this.tutorial) {
       this.tutorial.fireEvent(TUTORIAL_EVENTS.PLACEMENT, { type: this.selectedPlaceable });
     }

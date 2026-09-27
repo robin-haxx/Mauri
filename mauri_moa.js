@@ -722,10 +722,12 @@ class Moa extends Boid {
     // A ready-to-lay moa is drawn to its nearest nesting site, so the flock gathers there
     // and eggs cluster. Gentle, so feeding/fleeing still win.
     if (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.nestingSites && simulation.getNearestNestingSite) {
-      const draw = LEVEL_MECHANICS.nestingSites.drawRadius ?? 520;
-      const site = simulation.getNearestNestingSite(this.pos.x, this.pos.y, draw, this.speciesKey);
+      const ns = LEVEL_MECHANICS.nestingSites;
+      const site = simulation.getNearestNestingSite(this.pos.x, this.pos.y, ns.drawRadius ?? 520, this.speciesKey);
       if (site && !site.isInRange(this.pos)) {
         this.applyForce(this.seekPoint(site.pos.x, site.pos.y, 0.7));
+      } else if (site && ns.layBoost) {
+        this.pregnancyTimer -= dt * ns.layBoost;   // settled on the nest: lays sooner
       }
     }
 
@@ -748,17 +750,18 @@ class Moa extends Boid {
       e => e.alive && !e.hatched && e.offspringType !== 'eagle');
 
     // Lay at the nearest established nesting site if one is close, so eggs cluster. Else in place.
-    let ex = this.pos.x, ey = this.pos.y;
+    let ex = this.pos.x, ey = this.pos.y, nestBonus = 1;
     if (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.nestingSites && simulation.getNearestNestingSite) {
       const snap = LEVEL_MECHANICS.nestingSites.laySnapRadius ?? 160;
       const site = simulation.getNearestNestingSite(this.pos.x, this.pos.y, snap, this.speciesKey);
       if (site) {
         ex = site.pos.x + random(-site.radius * 0.5, site.radius * 0.5);
         ey = site.pos.y + random(-site.radius * 0.4, site.radius * 0.4);
+        nestBonus = LEVEL_MECHANICS.nestingSites.eggSpeedBonus ?? 1;   // a nest's clutch hatches sooner
       }
     }
     const egg = simulation.addEgg(ex, ey);
-    egg.speedBonus = this.eggSpeedBonus;
+    egg.speedBonus = Math.max(this.eggSpeedBonus, nestBonus);
     if (this.speciesKey) egg.parentSpecies = this.speciesKey;
 
     if (aliveMoaEggs.length === 0 && simulation.game?.tutorial) {
@@ -856,6 +859,7 @@ class Moa extends Boid {
 
   applyPlaceableEffects(placeables, dt) {
     this.inShelter = false;
+    this.shelterSpotFrac = 0;   // 0 = cover hides fully; >0 = an eagle spots it within this × its hunt radius
     this.securityBonus = 1;
     this.eggSpeedBonus = 1;
     this.isFeeding = false;
@@ -867,7 +871,12 @@ class Moa extends Boid {
       if (!p.alive || !p.isInRange(this.pos)) continue;
       
       const d = p.def;
-      if (d.blocksEagleVision) this.inShelter = true;
+      if (d.blocksEagleVision) {
+        // The best cover wins: a full-hiding shelter (no eagleSpotFrac) beats a partial one.
+        const spot = d.eagleSpotFrac || 0;
+        this.shelterSpotFrac = this.inShelter ? Math.min(this.shelterSpotFrac, spot) : spot;
+        this.inShelter = true;
+      }
       if (d.securityBonus) this.securityBonus = Math.max(this.securityBonus, d.securityBonus * p.seasonalMultiplier);
       if (d.eggSpeedBonus) this.eggSpeedBonus = Math.max(this.eggSpeedBonus, d.eggSpeedBonus * p.seasonalMultiplier);
       if (d.hungerSlowdown) hungerMod = Math.min(hungerMod, d.hungerSlowdown);

@@ -413,15 +413,21 @@ class HaastsEagle extends Boid {
       const moa = nearbyMoas[i];
       if (!moa.alive) continue;
       if (simulation.isSpeciesProtected && simulation.isSpeciesProtected(moa.speciesKey)) continue; // never target a protected floor species
-      if (moa.inShelter && this.target !== moa) continue;
+      const dx = moa.pos.x - px;
+      const dy = moa.pos.y - py;
+      const dSq = dx * dx + dy * dy;
+
+      // Fern cover hides a moa from a fresh scan. A partial shelter (shelterSpotFrac > 0) only
+      // hides it beyond that fraction of the hunt radius; up close the eagle still spots it.
+      if (moa.inShelter && this.target !== moa) {
+        const frac = moa.shelterSpotFrac || 0;
+        const spotR = this.huntRadius * frac;
+        if (frac <= 0 || dSq > spotR * spotR) continue;
+      }
       if (moa.eagleResistance > 0 && random() < moa.eagleResistance) continue;
       // Camouflage: chance the eagle doesn't spot this moa during a scan. Once it's the
       // current target camo no longer hides it (harder to find, not harder to chase).
       if (moa.camouflage > 0 && this.target !== moa && random() < moa.camouflage) continue;
-
-      const dx = moa.pos.x - px;
-      const dy = moa.pos.y - py;
-      const dSq = dx * dx + dy * dy;
 
       // Prefer abundant prey: a species at/below the threshold feels much farther away, so
       // eagles crop common species and spare rare ones (breaks the moa death-spiral).

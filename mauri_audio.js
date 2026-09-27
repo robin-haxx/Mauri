@@ -99,6 +99,77 @@ class StreamingSound {
   stop() { this._wantPlaying = false; try { this.el.pause(); this.el.currentTime = 0; } catch (e) {} }
 }
 
+// One playing instance of a decoded p5.SoundFile's buffer, on plain Web Audio: its own
+// AudioBufferSourceNode into its own GainNode, into p5's master input (so the master limiter
+// still applies). p5.SoundFile is kept for LOADING only. Its play()/loop() rebuild, on every
+// call, a sound-length "counter" buffer in a main-thread JS loop plus a new AudioWorkletNode,
+// just to track the playhead; for the long voice tracks that was a 100 MB+ allocation and a
+// ~0.4 s stall per highlight, the GC churn behind the audio drop-outs. Each playback owns its
+// gain, so overlapping plays of one file (a voice crossfading back to itself) never fight
+// over a shared volume. Nodes are disconnected when the sound ends so they can be collected.
+class BufferPlayback {
+  // sf: a loaded p5.SoundFile. opts: { loop, offset (s), fadeIn (s) }.
+  constructor(sf, volume, opts = {}) {
+    const ctx = getAudioContext();
+    const buf = sf.buffer;
+    // p5 routed every SoundFile through a centred StereoPannerNode, which puts a mono file at
+    // −3 dB on each side; match that so mono files keep their old level.
+    this._scale = buf.numberOfChannels === 1 ? Math.SQRT1_2 : 1;
+    this.gain = ctx.createGain();
+    this.src = ctx.createBufferSource();
+    this.src.buffer = buf;
+    this.src.loop = !!opts.loop;   // whole-buffer loop (p5 looped only from the cue to the end)
+    this.src.connect(this.gain);
+    const out = (typeof p5 !== 'undefined' && p5.soundOut && p5.soundOut.input) || ctx.destination;
+    this.gain.connect(out);
+
+    const now = ctx.currentTime;
+    const target = Math.max(0, volume) * this._scale;
+    // gain.value only catches up with scheduled automation at the next render block, so
+    // remember the starting level for a setVolume() in the same instant (see setVolume).
+    this._t0 = now;
+    this._startLevel = opts.fadeIn > 0 ? 0 : target;
+    this.gain.gain.setValueAtTime(this._startLevel, now);
+    if (opts.fadeIn > 0) this.gain.gain.linearRampToValueAtTime(target, now + opts.fadeIn);
+
+    this.playing = true;
+    BufferPlayback.live++;
+    this.src.onended = () => this._release();
+    const offset = Math.max(0, Math.min(opts.offset || 0, Math.max(0, buf.duration - 0.01)));
+    this.src.start(now, offset);
+  }
+
+  isPlaying() { return this.playing; }
+
+  // Mirrors SoundFile.setVolume(v[, rampTime]): ramp from the current level to v.
+  setVolume(v, rampTime = 0) {
+    if (!this.playing) return;
+    const g = this.gain.gain, now = getAudioContext().currentTime;
+    const target = Math.max(0, v) * this._scale;
+    const from = (now <= this._t0) ? this._startLevel : g.value;
+    g.cancelScheduledValues(now);
+    g.setValueAtTime(from, now);
+    if (rampTime > 0) g.linearRampToValueAtTime(target, now + rampTime);
+    else g.setValueAtTime(target, now);
+  }
+
+  stop() {
+    if (!this.playing) return;
+    try { this.src.stop(); } catch (e) {}
+    this._release();
+  }
+
+  // Idempotent: the 'ended' event also fires after an explicit stop().
+  _release() {
+    if (!this.playing) return;
+    this.playing = false;
+    BufferPlayback.live--;
+    try { this.src.disconnect(); } catch (e) {}
+    try { this.gain.disconnect(); } catch (e) {}
+  }
+}
+BufferPlayback.live = 0;   // playbacks still sounding (the perf HUD's audio node count)
+
 class AudioManager {
   constructor() {
     // Sound storage
@@ -316,17 +387,13 @@ class AudioManager {
     return true;
   }
   
-  // Safely play a sound with volume.
+  // Safely play a loaded SoundFile at a volume, on plain Web Audio (see BufferPlayback).
+  // Returns the playback handle, or null.
   _playSound(sound, volume, loop = false) {
     if (!sound || !this.enabled) return null;
-    
+
     try {
-      if (sound.isLoaded()) {
-        sound.setVolume(volume);
-        sound.setLoop(loop);
-        sound.play();
-        return sound;
-      }
+      if (sound.isLoaded() && sound.buffer) return new BufferPlayback(sound, volume, { loop });
     } catch (e) {
       console.warn('Error playing sound:', e);
     }
@@ -592,25 +659,19 @@ class AudioManager {
     return (bank.song && bank.song.isLoaded()) ? 'song' : this._anyLoadedState(bank);
   }
 
-  // Start one state's SoundFile from a random offset, fading up from silence. Returns the
-  // SoundFile (still playing) or null if unavailable.
+  // Start one state's recording from a random offset, fading up from silence. Returns the
+  // playback handle (see BufferPlayback) or null if unavailable. Each start is its own
+  // playback, so a crossfade back to a file still fading out simply overlaps it.
   _startVoiceState(bank, stateName, voiceVol, loop, needSec = 0) {
     const sound = stateName && bank[stateName];
-    if (!sound || !sound.isLoaded()) return null;
-    // If this exact file is queued to be stopped mid-fade (a quick crossfade back), cancel
-    // that stop so reviving it doesn't get cut off.
-    this._fadingVoices = this._fadingVoices.filter(f => f.sound !== sound);
+    if (!sound || !sound.isLoaded() || !sound.buffer) return null;
     const cue = this._randomCue(sound, loop ? 0 : needSec);
     try {
-      sound.setVolume(0);
-      if (loop) sound.loop(0, 1, 0, cue);
-      else sound.play(0, 1, 0, cue);
-      sound.setVolume(voiceVol, VOICE_FADE_IN_SEC);
+      return new BufferPlayback(sound, voiceVol, { loop, offset: cue, fadeIn: VOICE_FADE_IN_SEC });
     } catch (e) {
       console.warn('Voice start failed:', e);
       return null;
     }
-    return sound;
   }
 
   // Begin a species voice on the rising highlight edge.
@@ -833,8 +894,7 @@ class AudioManager {
   // DIAGNOSTICS (perf HUD)
   // ============================================
 
-  // Every decoded p5.SoundFile we hold. The streamed background track is NOT one of these
-  // (it has no bufferSourceNodes), so it's correctly excluded from the node count.
+  // Every decoded p5.SoundFile we hold (the streamed background track is not one).
   _allSoundFiles() {
     const out = [];
     const push = (s) => { if (s && s.bufferSourceNodes) out.push(s); };
@@ -849,13 +909,14 @@ class AudioManager {
     return out;
   }
 
-  // Snapshot for the 'd' perf HUD. `nodes` is the total live Web Audio source nodes across
-  // every decoded sound — this is the number that climbs and eventually starves the audio
-  // thread if the "ended" cleanup can't keep up. `ctxState` should read 'running'; if it
-  // flips to 'suspended'/'interrupted' when audio dies, that's the browser dropping the
-  // context (a resume() would revive it). `voices`/`fading` track the extended-voice loops.
+  // Snapshot for the 'd' perf HUD. `nodes` is the live Web Audio source nodes: our own
+  // playbacks (BufferPlayback) plus any left on p5's SoundFiles (none, now nothing plays
+  // through p5) — the number that would climb and starve the audio thread if 'ended' cleanup
+  // couldn't keep up. `ctxState` should read 'running'; if it flips to 'suspended'/
+  // 'interrupted' when audio dies, that's the browser dropping the context (a resume() would
+  // revive it). `voices`/`fading` track the extended-voice loops.
   getDiagnostics() {
-    let nodes = 0;
+    let nodes = BufferPlayback.live;
     for (const sf of this._allSoundFiles()) {
       nodes += (sf.bufferSourceNodes && sf.bufferSourceNodes.length) || 0;
     }

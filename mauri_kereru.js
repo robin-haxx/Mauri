@@ -172,10 +172,13 @@ class Kereru extends Boid {
     this._smallFlock = this._sexAgnosticBelow > 0 &&
       !!(sim.getSpeciesCount && sim.getSpeciesCount(this.speciesKey) < this._sexAgnosticBelow);
 
-    // Age → maturity, and hunger (feeding pays it back below).
+    // Age → maturity, and hunger (feeding pays it back below). A waterhole in reach draws the
+    // bird's dispersal hops in (see _pickHop), and at the water it gets hungry more slowly.
     this.age += dt;
     if (!this.mature && this.age >= this._maturityFrames) this.mature = true;
-    this.hunger = Math.min(this.hunger + this.hungerRate * dt, this.maxHunger);
+    const pool = this._pool = this._nearestWaterhole(sim);
+    const thirstMod = (pool && pool.isInRange(this.pos)) ? (pool.def.birdHungerSlowdown ?? 1) : 1;
+    this.hunger = Math.min(this.hunger + this.hungerRate * thirstMod * dt, this.maxHunger);
     if (this._eggCooldown > 0) this._eggCooldown = Math.max(0, this._eggCooldown - dt);
 
     // A placed Storm scares the bird off its tree to seek a new one (a displacement tool).
@@ -209,6 +212,22 @@ class Kereru extends Boid {
     }
 
     this.edges();
+  }
+
+  // The nearest live bird-drawing waterhole (def.attractsBirds) within its birdDrawRadius, or null.
+  _nearestWaterhole(sim) {
+    const list = sim.placeables;
+    if (!list || !list.length) return null;
+    const px = this.pos.x, py = this.pos.y;
+    let best = null, bestSq = Infinity;
+    for (let i = 0; i < list.length; i++) {
+      const p = list[i];
+      if (!p.alive || !p.def || !p.def.attractsBirds) continue;
+      const r = p.def.birdDrawRadius ?? 360;
+      const dx = p.pos.x - px, dy = p.pos.y - py, d2 = dx * dx + dy * dy;
+      if (d2 <= r * r && d2 < bestSq) { bestSq = d2; best = p; }
+    }
+    return best;
   }
 
   // The nearest live Storm placeable whose cloud covers the bird (radius + margin), or null.
@@ -453,8 +472,16 @@ class Kereru extends Boid {
     }
   }
 
-  // Choose a short fly-to point for the next dispersal leg. Anchored birds orbit home.
+  // Choose a short fly-to point for the next dispersal leg. Anchored birds orbit home. A
+  // waterhole in reach (this._pool, set in behave) often draws the leg to the water instead.
   _pickHop() {
+    const pool = this._pool;
+    if (pool && pool.alive && random() < (pool.def.birdVisitChance ?? 0.6)) {
+      const a = random(TWO_PI), r = random(0, pool.radius * 0.6);
+      const land = this._clampToLand(pool.pos.x + Math.cos(a) * r, pool.pos.y + Math.sin(a) * r);
+      this._target.set(land.x, land.y);
+      return;
+    }
     const anchor = this._anchorPoint();
     let ox = this.pos.x, oy = this.pos.y;
     if (anchor) { ox = (ox + anchor.x) * 0.5; oy = (oy + anchor.y) * 0.5; }

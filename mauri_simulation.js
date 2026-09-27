@@ -1334,9 +1334,30 @@ class Simulation {
     this._updateMoaNestingFormation(dt);   // grow player nesting sites (moa focus year)
   }
 
-  // Endless "moa focus" year: form a new nesting site where the player has grown a patch
-  // of the focus moa's favoured plant and that moa has been drawn in. One site per tick,
-  // each counting toward the nesting goal. Inert when moaNestingWatch is null.
+  // The live, unspent placed patches of the watched moa's favoured plant (each with at least
+  // one of its plants still standing). A patch that has founded a nest is spent (_nestFounded).
+  _focusPlantPatches(watch = this.moaNestingWatch) {
+    const out = [];
+    if (!watch) return out;
+    for (let i = 0; i < this.placeables.length; i++) {
+      const p = this.placeables[i];
+      if (!p.alive || p._nestFounded || !p.def || p.def.plantType !== watch.plantType) continue;
+      if (!p.spawnedPlants || !p.spawnedPlants.some(q => q.alive)) continue;
+      out.push(p);
+    }
+    return out;
+  }
+
+  // How close placed patches must be to count together toward a nest (see nestingSites).
+  _nestFoundRadius() {
+    const nc = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.nestingSites) || {};
+    return nc.foundRadius ?? 110;
+  }
+
+  // Endless: found a new nest where the player has placed foundPatches (2) patches of the
+  // focus moa's favoured plant close together (centres within foundRadius) and that moa has
+  // been drawn in. The nest sits between the patches, and each patch founds at most one nest.
+  // One site per tick, each counting toward the nesting goal. Inert when moaNestingWatch is null.
   _updateMoaNestingFormation(dt) {
     const watch = this.moaNestingWatch;
     if (!watch || typeof NestingSite === 'undefined') return;
@@ -1348,39 +1369,39 @@ class Simulation {
     const nc = M.nestingSites || {};
     const radius = nc.radius ?? 46;
     const minGap = (nc.minGap != null) ? nc.minGap : radius * 2.6;
-    const patchRadius = watch.patchRadius ?? 70;
-    const patchMinPlants = watch.patchMinPlants ?? 3;
+    const need = nc.foundPatches ?? 2;
+    const foundR2 = this._nestFoundRadius() ** 2;
     const drawRadius = watch.drawRadius ?? 160;
     const forestBand = nc.forestBand || { min: 0.36, max: 0.48 };
 
-    const plants = this.plants;
-    for (let i = 0; i < plants.length; i++) {
-      const p = plants[i];
-      if (!p.alive || p.type !== watch.plantType || (p.growth != null && p.growth < 0.5)) continue;
+    const patches = this._focusPlantPatches(watch);
+    if (patches.length < need) return;
+    const d2 = (a, b) => (a.pos.x - b.pos.x) ** 2 + (a.pos.y - b.pos.y) ** 2;
 
-      // A real patch: enough grown favoured plants clustered here.
-      const near = this.getNearbyPlants(p.pos.x, p.pos.y, patchRadius);
-      let n = 0;
-      for (let j = 0; j < near.length; j++) {
-        const q = near[j];
-        if (q.alive && q.type === watch.plantType && (q.growth == null || q.growth >= 0.5)) n++;
-      }
-      if (n < patchMinPlants) continue;
+    for (let i = 0; i < patches.length; i++) {
+      const a = patches[i];
+      // This patch and its nearest neighbours in reach.
+      const group = patches.filter(b => d2(a, b) <= foundR2).sort((b, c) => d2(a, b) - d2(a, c)).slice(0, need);
+      if (group.length < need) continue;
+      let cx = 0, cy = 0;
+      for (const g of group) { cx += g.pos.x / group.length; cy += g.pos.y / group.length; }
+      if (!this.terrain.isWalkable(cx, cy)) { cx = a.pos.x; cy = a.pos.y; }
 
       // Don't crowd an existing site.
-      if (this.getNearestNestingSite(p.pos.x, p.pos.y, minGap)) continue;
+      if (this.getNearestNestingSite(cx, cy, minGap)) continue;
 
-      // The focus moa must actually be drawn to the patch.
+      // The focus moa must actually be drawn to the patches.
       let moaNear = false;
-      const moas = this.getNearbyMoas(p.pos.x, p.pos.y, drawRadius);
+      const moas = this.getNearbyMoas(cx, cy, drawRadius);
       for (let j = 0; j < moas.length; j++) {
         if (moas[j].alive && moas[j].speciesKey === watch.speciesKey) { moaNear = true; break; }
       }
       if (!moaNear) continue;
 
-      const e = this.terrain.getElevationAt(p.pos.x, p.pos.y);
+      for (const g of group) g._nestFounded = true;
+      const e = this.terrain.getElevationAt(cx, cy);
       const habitat = (e >= forestBand.min && e < forestBand.max) ? 'forest' : 'open';
-      const site = new NestingSite(p.pos.x, p.pos.y, { radius, habitat });
+      const site = new NestingSite(cx, cy, { radius, habitat });
       site.playerMade = true;
       site.forSpecies = watch.speciesKey;
       site.createdCycle = this.game ? this.game.cycle : 0;

@@ -171,7 +171,7 @@ function resolveLevelDef(levelDef) {
         );
       }
     }
-    resolved._resolvedPlaceables = groupPaletteByFauna(resolved._resolvedPlaceables);
+    resolved._resolvedPlaceables = arrangePalette(resolved._resolvedPlaceables, levelDef);
   }
 
   return resolved;

@@ -298,8 +298,12 @@ function applyLevelToConfig(levelDef) {
     LEVEL_MECHANICS.eagleMaxPopulation = LEVEL_MECHANICS._eagleMaxPopulationBase;
   }
 
-  // View & calendar (per-level, with engine defaults for levels that omit them)
-  CONFIG.zoom = (levelDef.zoom != null) ? levelDef.zoom : 2.5;
+  // View & calendar (per-level, with engine defaults for levels that omit them). An endless
+  // world grid can widen its view each 4-year loop (worldGrid.zoomByLoop, see
+  // Game._zoomForLoop); the run opens at the first loop's zoom.
+  const _zoomByLoop = levelDef.worldGrid && levelDef.worldGrid.zoomByLoop;
+  CONFIG.zoom = (_zoomByLoop && _zoomByLoop.length) ? _zoomByLoop[0]
+              : (levelDef.zoom != null) ? levelDef.zoom : 2.5;
   const _seasonOrder = ['summer', 'autumn', 'winter', 'spring'];
   CONFIG.startSeasonIndex = levelDef.startSeason ? Math.max(0, _seasonOrder.indexOf(levelDef.startSeason)) : 0;
 
@@ -1187,6 +1191,8 @@ class Game {
   // Projection/view (needs the generated map dimensions) + the simulation object.
   _initCreateSim() {
     this._configureProjection();   // 3D projection depends on the new map dimensions
+    this._resetCamera();           // each level opens on the classic framing
+    this._introShot = null;
     this._updateViewTransform();
     this.simulation = new Simulation(
       this.terrain, CONFIG, this, this.seasonManager
@@ -1257,14 +1263,14 @@ class Game {
     // Tip-script resolution: an inline levelDef override wins, else the
     // script registered for this level id, else the shared 'default' script.
     // Per-level scripts live in levels/tutorial_*.js (see TUTORIAL_REGISTRY).
+    // Endless levels never fall back to the story's script: without their own, no tips.
+    const _endlessLevel = !!(this.currentLevel && this.currentLevel.endless);
     this.tutorial.setLevelTips(
       this.currentLevel.tutorial?.tips ||
       TUTORIAL_REGISTRY.get(this.currentLevel.id) ||
-      TUTORIAL_REGISTRY.get('default')
+      (_endlessLevel ? null : TUTORIAL_REGISTRY.get('default'))
     );
     if (BENCHMARK.pending) this.tutorial.enabled = false;   // benchmark runs clean
-    // Endless (Free Play) skips the tutorial/intro for now; it opens straight into play.
-    if (this.currentLevel && this.currentLevel.endless) this.tutorial.enabled = false;
     this.tutorial.init();
 
     // Benchmark: start an armed run; a reload mid-run abandons the old one
@@ -1359,17 +1365,220 @@ class Game {
   // portrait: the top/bottom alps + shore fringe, which the cast rarely uses).
   // In landscape the two are near-identical, so this is imperceptible there.
   _updateViewTransform() {
+    const b = this._baseView();
+    CONFIG.viewZoom = b.z;
+    CONFIG.viewX = b.x;
+    CONFIG.viewY = b.y;
+
+    // Camera: magnify about its focus, holding the focus at the viewport anchor. Clamped to
+    // the base framing's footprint, so a zoomed view never shows past the map's edge.
+    const cam = this.camera;
+    if (cam && cam.zoom > 1.0001 && this.terrain) {
+      const mw = this.terrain.mapWidth, mh = this.terrain.mapHeight;
+      const v = this._viewport();
+      const z = b.z * cam.zoom;
+      const x = v.x + v.w * cam.ax - cam.cx * z;
+      const y = v.y + v.h * cam.ay - cam.cy * z;
+      CONFIG.viewZoom = z;
+      CONFIG.viewX = Math.min(b.x, Math.max(b.x + mw * b.z - mw * z, x));
+      CONFIG.viewY = Math.min(b.y, Math.max(b.y + mh * b.z - mh * z, y));
+    }
+  }
+
+  // The camera-free framing (zoom + top-left, canvas px) described above.
+  _baseView() {
     if (CONFIG.fullscreen && this.terrain) {
       const z = Math.max(CONFIG.canvasWidth / this.terrain.mapWidth,
                          CONFIG.canvasHeight / this.terrain.mapHeight);
-      CONFIG.viewZoom = z;
-      CONFIG.viewX = Math.round((CONFIG.canvasWidth - this.terrain.mapWidth * z) / 2);
-      CONFIG.viewY = Math.round((CONFIG.canvasHeight - this.terrain.mapHeight * z) / 2);
-    } else {
-      CONFIG.viewZoom = CONFIG.zoom;
-      CONFIG.viewX = CONFIG.gameAreaX;
-      CONFIG.viewY = CONFIG.gameAreaY;
+      return { z,
+               x: Math.round((CONFIG.canvasWidth - this.terrain.mapWidth * z) / 2),
+               y: Math.round((CONFIG.canvasHeight - this.terrain.mapHeight * z) / 2) };
     }
+    return { z: CONFIG.zoom, x: CONFIG.gameAreaX, y: CONFIG.gameAreaY };
+  }
+
+  // The canvas rect the world pass clips to: the map's on-screen footprint in fullscreen,
+  // else the game area (extendDown: on down under the bottom bar, for windowed 3D's near
+  // over-scan). Not (viewX, viewY): a camera offset moves those off the game area.
+  _worldClip(extendDown = false) {
+    if (CONFIG.fullscreen) {
+      return { x: CONFIG.viewX, y: CONFIG.viewY,
+               w: this.terrain.mapWidth * CONFIG.viewZoom, h: this.terrain.mapHeight * CONFIG.viewZoom };
+    }
+    return { x: CONFIG.gameAreaX, y: CONFIG.gameAreaY, w: CONFIG.gameAreaWidth,
+             h: extendDown ? CONFIG.canvasHeight - CONFIG.gameAreaY : CONFIG.gameAreaHeight };
+  }
+
+  // The canvas rect the play area shows in: the whole canvas in fullscreen, else the game area.
+  _viewport() {
+    return CONFIG.fullscreen
+      ? { x: 0, y: 0, w: CONFIG.canvasWidth, h: CONFIG.canvasHeight }
+      : { x: CONFIG.gameAreaX, y: CONFIG.gameAreaY, w: CONFIG.gameAreaWidth, h: CONFIG.gameAreaHeight };
+  }
+
+  // ---- Camera ----------------------------------------------------------------------------
+  // A render-only zoom/focus over the base framing. zoom 1 is the classic view; above 1 it
+  // magnifies about (cx, cy), a PAINT-space point (world x, relief-lifted y; see
+  // _groundPaintY), held at the anchor (ax, ay), fractions of the play viewport. Groundwork
+  // for a player-driven zoom/pan camera; today it frames the Free Play opening shot and
+  // eases out as a loop widens the country.
+  _resetCamera() {
+    this.camera = { zoom: 1, cx: 0, cy: 0, ax: 0.5, ay: 0.5, tween: null };
+  }
+
+  // Ease the camera to `target` ({ zoom, cx, cy, ax, ay }; omitted keys hold) over `frames`
+  // real frames, so it moves while the sim is paused (e.g. under a tutorial tip).
+  cameraTo(target, frames = 90) {
+    if (!this.camera) this._resetCamera();
+    const c = this.camera, v = this._viewport();
+    const ax = (target.ax != null) ? target.ax : c.ax;
+    const ay = (target.ay != null) ? target.ay : c.ay;
+    // Start from exactly the current view: the paint point now under the target's anchor.
+    const pointUnder = (z, x, y) => ({ cx: (v.x + v.w * ax - x) / z, cy: (v.y + v.h * ay - y) / z });
+    const from = Object.assign({ zoom: c.zoom, ax, ay },
+                               pointUnder(CONFIG.viewZoom, CONFIG.viewX, CONFIG.viewY));
+    const to = Object.assign({}, from, target);
+    // Easing home with no focus given: end on the point the base view holds at the anchor,
+    // so the move lands exactly on the classic framing.
+    if (to.zoom <= 1.0001 && target.cx == null) {
+      const b = this._baseView();
+      Object.assign(to, pointUnder(b.z, b.x, b.y));
+    }
+    Object.assign(c, from);
+    c.tween = { from, to, t: 0, frames: Math.max(1, frames) };
+  }
+
+  // Advance a camera ease by one frame (called from render) and re-fit the view.
+  _updateCamera() {
+    const c = this.camera;
+    if (!c || !c.tween) return;
+    const tw = c.tween;
+    tw.t = Math.min(1, tw.t + 1 / tw.frames);
+    const e = tw.t * tw.t * (3 - 2 * tw.t);   // smoothstep
+    const lerpK = (k) => tw.from[k] + (tw.to[k] - tw.from[k]) * e;
+    // Zoom eases in log space so the scale changes at an even rate.
+    c.zoom = Math.exp(Math.log(tw.from.zoom) + (Math.log(tw.to.zoom) - Math.log(tw.from.zoom)) * e);
+    c.cx = lerpK('cx'); c.cy = lerpK('cy'); c.ax = lerpK('ax'); c.ay = lerpK('ay');
+    if (tw.t >= 1) c.tween = null;
+    this._updateViewTransform();
+  }
+
+  // Whether `type` could go at (x, y) right now: the ground, biome, forest and spacing rules
+  // tryPlace enforces (not its cost or cooldowns).
+  _canPlaceAt(type, x, y) {
+    const def = this.activePlaceables && this.activePlaceables[type];
+    if (!def || def.global || !this.terrain.canPlace(x, y)) return false;
+    if (def.allowedBiomes && !def.allowedBiomes.includes(this.terrain.getBiomeAt(x, y).key)) return false;
+    if (def.requiresNearForest && !this._nearForestOk(def, x, y)) return false;
+    return this.canPlaceWithSpacing(x, y, type).allowed;
+  }
+
+  // Free Play opening shot: zoom in on one `speciesKey` moa beside a spot where `type` can
+  // go, and mark the spot (renderIntroShotAboveUI). Started by the opening tutorial tip;
+  // _endIntroShot eases back out when it closes.
+  _beginIntroShot(speciesKey, type) {
+    const sim = this.simulation, t = this.terrain;
+    if (!sim || !t) return;
+    const def = this.activePlaceables && this.activePlaceables[type];
+    const radius = (def && def.radius) || 40;
+    const mw = t.mapWidth, mh = t.mapHeight, edge = radius;
+    // Each moa's spot: the first valid one on rings at a comfortable planting distance,
+    // trying side-by-side first (a wide pair suits the landscape frame and keeps the pair
+    // clear of the tip panel below).
+    const ANGLES = [0, 180, 30, 150, 330, 210, 60, 120, 300, 240, 90, 270];
+    const spotNear = (m) => {
+      for (const r of [80, 60, 105]) {
+        for (const deg of ANGLES) {
+          const a = deg * Math.PI / 180;
+          const x = m.pos.x + Math.cos(a) * r, y = m.pos.y + Math.sin(a) * r;
+          if (x > edge && y > edge && x < mw - edge && y < mh - edge && this._canPlaceAt(type, x, y)) {
+            return { x, y };
+          }
+        }
+      }
+      return null;
+    };
+    // Rank each moa: one with a spot first, then one standing in the item's own open country
+    // (not lost under forest canopy), then the pair sitting furthest inside the map (so the
+    // edge clamp doesn't push the framing off-centre).
+    const openGround = (m) => !def || !def.allowedBiomes ||
+      def.allowedBiomes.includes(t.getBiomeAt(m.pos.x, m.pos.y).key);
+    let best = null;
+    for (const m of sim.moas) {
+      if (!m.alive || m.speciesKey !== speciesKey) continue;
+      const spot = spotNear(m);
+      const cx = spot ? (m.pos.x + spot.x) / 2 : m.pos.x;
+      const cy = spot ? (m.pos.y + spot.y) / 2 : m.pos.y;
+      const score = (spot ? 2e6 : 0) + (openGround(m) ? 1e6 : 0) + Math.min(cx, cy, mw - cx, mh - cy);
+      if (!best || score > best.score) best = { moa: m, spot, score };
+    }
+    if (!best) return;
+
+    const m = best.moa, s = best.spot;
+    this._introShot = { moa: m, spot: s, type, radius };
+    // Zoom so the moa + the spot's ring span about half the view's width (and under half its
+    // height), framed a little above centre, clear of the tip panel below.
+    const mPaintY = this._groundPaintY(m.pos.x, m.pos.y);
+    const sPaintY = s ? this._groundPaintY(s.x, s.y) : mPaintY;
+    const spanW = (s ? Math.abs(s.x - m.pos.x) : 0) + radius * 2;
+    const spanH = (s ? Math.abs(sPaintY - mPaintY) : 0) + radius * 2;
+    const v = this._viewport(), b = this._baseView();
+    const zoom = constrain(Math.min(v.w * 0.55 / spanW, v.h * 0.42 / spanH) / b.z, 1.4, 2.4);
+    this.cameraTo({ zoom, cx: s ? (m.pos.x + s.x) / 2 : m.pos.x, cy: (mPaintY + sPaintY) / 2,
+                    ax: 0.5, ay: 0.36 }, 75);
+  }
+
+  // Close the opening shot: drop the marker and ease back out to the whole country.
+  _endIntroShot() {
+    if (!this._introShot) return;
+    this._introShot = null;
+    this.cameraTo({ zoom: 1 }, 100);
+  }
+
+  // The opening shot's subject, redrawn between the tutorial's dimming overlay and its panel
+  // (the tip's renderAboveOverlay hook), in the world pass's clip + view transform: the framed
+  // moa, and a pulsing ring with a ghost of the item on the spot to plant it.
+  renderIntroShotAboveUI() {
+    const shot = this._introShot;
+    if (!shot) return;
+    push();
+    drawingContext.save();
+    drawingContext.beginPath();
+    const _clip = this._worldClip();
+    drawingContext.rect(_clip.x, _clip.y, _clip.w, _clip.h);
+    drawingContext.clip();
+    translate(CONFIG.viewX, CONFIG.viewY);
+    scale(CONFIG.viewZoom);
+
+    if (shot.spot) {
+      const def = this.activePlaceables && this.activePlaceables[shot.type];
+      const col = speciesUIColor(def && def.fauna);
+      const pulse = 0.5 + 0.5 * Math.sin(frameCount * 0.08);
+      const px = 1 / CONFIG.viewZoom;   // one screen pixel, in world units
+      push();
+      translate(shot.spot.x, this._groundPaintY(shot.spot.x, shot.spot.y));
+      fill(col[0], col[1], col[2], 40 + 40 * pulse);
+      stroke(col[0], col[1], col[2], 170 + 85 * pulse);
+      strokeWeight(3 * px);
+      drawingContext.setLineDash([10 * px, 7 * px]);
+      const d = shot.radius * 2 * (1 + 0.06 * pulse);
+      ellipse(0, 0, d, d);
+      drawingContext.setLineDash([]);
+      noStroke();
+      if (def && this.ui) this.ui.renderPlaceableIcon(def, 0, 0, shot.radius * 0.6, shot.radius * 0.4, 130 + 60 * pulse);
+      pop();
+    }
+    const m = shot.moa;
+    if (m && m.alive) {
+      // Billboarded like the sim's 3D pass: feet lifted onto the relief.
+      push();
+      translate(0, this._groundPaintY(m.pos.x, m.pos.y) - m.pos.y);
+      m.render();
+      pop();
+    }
+
+    drawingContext.restore();
+    pop();
   }
   
   updateCachedCounts() {
@@ -2315,16 +2524,18 @@ class Game {
   // reset in yearPops. Called before the pan, so live counts are what last year ended on.
   //   • Off-focus, still in its off zone (e.g. upland moa, lowland year 2 → year 3): carries
   //     its live count, 0 included. Entering its off zone, it starts its off-run at the reset.
-  //   • Focus, returning to its own zone after an off-run: restarts short by offFocusPenalty ×
-  //     the share it lost while away (never below the focus floor).
-  // Returns a notice for a shortfall (announced after the year's own notes), else null.
+  //   • Focus, returning to its own zone after an off-run: starts at a tier set by how many
+  //     it had left when the off-run ended (freeplayYearReset.offFocusReturn: 3 if it died
+  //     out, 4 if some survived, 5 if 8+ did), in place of the default reset.
+  // Returns a notice for the return (announced after the year's own notes), else null.
   _applyZoneMoaCarry(yearPops, moaFocus, protectFloor) {
     const zone = this._moaZoneForCycle(this.cycle);
     if (!zone) return null;
     let msg = null;
     const sim = this.simulation;
     const M = (typeof LEVEL_MECHANICS !== 'undefined') ? LEVEL_MECHANICS : {};
-    const penalty = (M.freeplayYearReset || {}).offFocusPenalty ?? 0.5;
+    const tiers = (M.freeplayYearReset || {}).offFocusReturn ||
+      [{ atLeast: 8, start: 5 }, { atLeast: 1, start: 4 }, { atLeast: 0, start: 3 }];
     const prev = this.cycle > 0 ? this._moaZoneForCycle(this.cycle - 1) : null;
     const sameZone = !!(prev && prev.key === zone.key);
     if (!this._offMoaRun) this._offMoaRun = {};
@@ -2332,20 +2543,19 @@ class Game {
     for (const k of this._zoneMoaKeys()) {
       const live = sim.getSpeciesCount(k);
       if (k === moaFocus) {
-        const run = this._offMoaRun[k];
+        const away = this._offMoaRun[k];
         delete this._offMoaRun[k];
-        if (!run || sameZone) continue;
-        const kept = run.start > 0 ? Math.min(1, live / run.start) : 1;
-        const base = yearPops.moa[k] || 0;
-        const start = Math.max(protectFloor, Math.round(base * (1 - penalty * (1 - kept))));
-        if (start < base) {
-          yearPops.moa[k] = start;
-          msg = `Fewer ${this._freeplaySpeciesName(k)} return after the lean years away (${start}).`;
-        }
+        if (!away || sameZone) continue;
+        const tier = tiers.find(t => live >= t.atLeast) || tiers[tiers.length - 1];
+        const start = Math.max(protectFloor, tier.start);
+        yearPops.moa[k] = start;
+        const name = this._freeplaySpeciesName(k);
+        msg = live === 0 ? `The ${name} died out while you were away; ${start} return to begin again.`
+            : `${live} ${name} held on while you were away; ${start} return.`;
       } else if (sameZone && this._offMoaRun[k]) {
         yearPops.moa[k] = live;   // carried through its off zone, 0 included
       } else {
-        this._offMoaRun[k] = { start: yearPops.moa[k] || 0 };   // its off-run begins here
+        this._offMoaRun[k] = true;   // its off-run begins here
       }
     }
     return msg;
@@ -2599,6 +2809,9 @@ class Game {
     // year's area of the continuous land and regenerate the cast there (a no-op on year 1 /
     // classic levels). Snapshots the populations above, so they carry across.
     this._scrollWorldGrid();
+
+    // Tutorial: the year's toolbar, focus and goals now exist for tips to point at.
+    if (this.tutorial) this.tutorial.fireEvent(TUTORIAL_EVENTS.YEAR_START, { cycle: this.cycle });
   }
 
   // World grid (endless years): at each year boundary, move to this year's area of the one
@@ -2626,8 +2839,9 @@ class Game {
   }
 
   // Glacial deepening: once per full loop (returning to the tour's start), reshape the
-  // SAME land colder so glacial habitats climb higher over the run. Heavy (rebakes the
-  // world), so it's run during the faded pan window where the hitch is hidden.
+  // SAME land colder so glacial habitats climb higher over the run, and widen the play
+  // window to the loop's zoom (worldGrid.zoomByLoop). Heavy (rebakes the world), so it's run
+  // during the faded pan window where the hitch is hidden.
   _maybeGlacialDeepen() {
     const t = this.terrain;
     if (!t || !t._quadIndexForCycle || t._quadIndexForCycle(this.cycle) !== 0) return;  // tour start only
@@ -2635,8 +2849,44 @@ class Game {
     const wg = (this.currentLevel && this.currentLevel.worldGrid) || {};
     const perLoop = (wg.glacialPerLoop != null) ? wg.glacialPerLoop : 0;
     const cap = (wg.glacialCap != null) ? wg.glacialCap : 0.6;
-    if (perLoop > 0) t.setGlacialAdvance(Math.min(cap, loops * perLoop));
+    const advance = (perLoop > 0) ? Math.min(cap, loops * perLoop) : t.glacialAdvance;
+    const zoom = this._zoomForLoop(loops);
+    if (zoom != null && Math.abs(zoom - CONFIG.zoom) > 1e-4) {
+      t.glacialAdvance = advance;   // one regeneration covers both changes
+      this._resizePlayWindow(zoom);
+    } else if (perLoop > 0) {
+      t.setGlacialAdvance(advance);
+    }
     // (Eagle & plant pressure now ramps every year in _applyFreeplayYearPressure, not here.)
+  }
+
+  // A loop's view zoom from worldGrid.zoomByLoop (the last entry holds); null when the
+  // level keeps one fixed zoom.
+  _zoomForLoop(loop) {
+    const zl = this.currentLevel && this.currentLevel.worldGrid && this.currentLevel.worldGrid.zoomByLoop;
+    if (!zl || !zl.length) return null;
+    return zl[Math.min(Math.max(0, loop), zl.length - 1)];
+  }
+
+  // Re-size the play window to a new view zoom mid-run: regenerate the land at the new
+  // extent, then re-fit everything sized to the window (projection, spatial grids, view).
+  // Runs inside a year transition with the cast unloaded. The camera starts at the old scale
+  // and eases out to the new one, so the wider country reads as a zoom-out.
+  _resizePlayWindow(zoom) {
+    const fromViewZoom = CONFIG.viewZoom;
+    CONFIG.zoom = zoom;
+    this.terrain.resizeWindow(zoom);
+    this._configureProjection();
+    this.simulation.resizeWorld(this.terrain.mapWidth, this.terrain.mapHeight);
+    this._resetCamera();
+    this._updateViewTransform();
+    const ratio = fromViewZoom / CONFIG.viewZoom;
+    if (ratio > 1.0001) {
+      Object.assign(this.camera, { zoom: ratio, cx: this.terrain.mapWidth / 2,
+                                   cy: this.terrain.mapHeight / 2, ax: 0.5, ay: 0.5 });
+      this._updateViewTransform();
+      this.cameraTo({ zoom: 1 }, 150);
+    }
   }
 
   // Per-frame: drive the year transition. fadeOut → (unload + pan) → fadeIn. The cast's
@@ -3354,6 +3604,8 @@ class Game {
       if (!paired) placedMsg += `; plant another close by to found ${/^[aeiou]/i.test(moaName) ? 'an' : 'a'} ${moaName} nest`;
     }
     this.addNotification(placedMsg, 'info');
+    // The opening shot's marker has done its job once its item goes in.
+    if (this._introShot && this._introShot.type === this.selectedPlaceable) this._introShot.spot = null;
     if (this.tutorial) {
       this.tutorial.fireEvent(TUTORIAL_EVENTS.PLACEMENT, { type: this.selectedPlaceable });
     }
@@ -3505,13 +3757,13 @@ class Game {
   // footprint clip the cast uses, so the blit up (in render) lands pixel-aligned with the
   // entities. Cleared each frame; its letterbox stays transparent, so the canvas background
   // shows through when blitted.
-  _composeTerrainLayer(tg, clipW, clipH) {
+  _composeTerrainLayer(tg, clip) {
     tg.clear();
     tg.push();
     const _dc = tg.drawingContext;
     _dc.save();
     _dc.beginPath();
-    _dc.rect(CONFIG.viewX, CONFIG.viewY, clipW, clipH);
+    _dc.rect(clip.x, clip.y, clip.w, clip.h);
     _dc.clip();
     tg.translate(CONFIG.viewX, CONFIG.viewY);
     tg.scale(CONFIG.viewZoom);
@@ -3556,15 +3808,14 @@ class Game {
       return;
     }
 
+    this._updateCamera();   // advance any camera ease (real frames, so it runs while paused)
     if (!CONFIG.fullscreen) this.ui.renderPanels();
 
     // In 3D (windowed) the terrain is allowed to fill DOWN under the bottom HUD
     // bar so the near over-scan continues off-frame instead of ending in a hard
     // cut at the game-area edge; the bar is redrawn opaque over it after the world.
     const _clip3D = CONFIG.view3D && !CONFIG.fullscreen && this.terrain;
-    const _clipW = CONFIG.fullscreen ? this.terrain.mapWidth * CONFIG.viewZoom : CONFIG.gameAreaWidth;
-    const _clipH = CONFIG.fullscreen ? this.terrain.mapHeight * CONFIG.viewZoom
-                 : (_clip3D ? CONFIG.canvasHeight - CONFIG.viewY : CONFIG.gameAreaHeight);
+    const _clip = this._worldClip(!!_clip3D);
 
     // ---- GROUND TIER (screen res) --------------------------------------------
     // The terrain is composited into a screen-size offscreen buffer and blitted up as one
@@ -3581,7 +3832,7 @@ class Game {
       if (GLBatch._bottomEl && GLBatch._bottomEl.style) GLBatch._bottomEl.style.display = 'none';
     } else {
     const tg = this._ensureTerrainLayer();
-    this._composeTerrainLayer(tg, _clipW, _clipH);
+    this._composeTerrainLayer(tg, _clip);
     if (_domGL) {
       // The terrain buffer IS the bottom DOM layer (it also carries the winter-frost ground
       // overlay in this mode, drawn into it by _composeTerrainLayer); no blit to the main
@@ -3603,7 +3854,7 @@ class Game {
     push();
     drawingContext.save();
     drawingContext.beginPath();
-    drawingContext.rect(CONFIG.viewX, CONFIG.viewY, _clipW, _clipH);
+    drawingContext.rect(_clip.x, _clip.y, _clip.w, _clip.h);
     drawingContext.clip();
 
     translate(CONFIG.viewX, CONFIG.viewY);
@@ -3636,7 +3887,7 @@ class Game {
     // GL_PORT.md Phase 5: draw the GPU height-field terrain into the GL canvas AFTER the
     // clear (in begin) but BEFORE the sprite quads, so sprites composite on top. build()
     // is a no-op once the mesh exists for this land; draw() restores the sprite program.
-    if (_glTerrain) { GLTerrain.build(this.terrain); GLTerrain.draw(this, CONFIG.viewX, CONFIG.viewY, _clipW, _clipH); }
+    if (_glTerrain) { GLTerrain.build(this.terrain); GLTerrain.draw(this, _clip.x, _clip.y, _clip.w, _clip.h); }
     this.simulation.render();
     if (typeof GLBatch !== 'undefined' && GLBatch.enabled && GLBatch._open) GLBatch.composite(drawingContext);
     this.mauri.renderFloatingTexts();
@@ -3780,9 +4031,8 @@ class Game {
     push();
     drawingContext.save();
     drawingContext.beginPath();
-    const _clipW = CONFIG.fullscreen ? this.terrain.mapWidth * CONFIG.viewZoom : CONFIG.gameAreaWidth;
-    const _clipH = CONFIG.fullscreen ? this.terrain.mapHeight * CONFIG.viewZoom : CONFIG.gameAreaHeight;
-    drawingContext.rect(CONFIG.viewX, CONFIG.viewY, _clipW, _clipH);
+    const _clip = this._worldClip();
+    drawingContext.rect(_clip.x, _clip.y, _clip.w, _clip.h);
     drawingContext.clip();
     translate(CONFIG.viewX, CONFIG.viewY);
     scale(CONFIG.viewZoom);
@@ -3803,9 +4053,8 @@ class Game {
     push();
     drawingContext.save();
     drawingContext.beginPath();
-    const _clipW = CONFIG.fullscreen ? this.terrain.mapWidth * CONFIG.viewZoom : CONFIG.gameAreaWidth;
-    const _clipH = CONFIG.fullscreen ? this.terrain.mapHeight * CONFIG.viewZoom : CONFIG.gameAreaHeight;
-    drawingContext.rect(CONFIG.viewX, CONFIG.viewY, _clipW, _clipH);
+    const _clip = this._worldClip();
+    drawingContext.rect(_clip.x, _clip.y, _clip.w, _clip.h);
     drawingContext.clip();
     translate(CONFIG.viewX, CONFIG.viewY);
     scale(CONFIG.viewZoom);
@@ -3833,9 +4082,8 @@ class Game {
     push();
     drawingContext.save();
     drawingContext.beginPath();
-    const _clipW = CONFIG.fullscreen ? this.terrain.mapWidth * CONFIG.viewZoom : CONFIG.gameAreaWidth;
-    const _clipH = CONFIG.fullscreen ? this.terrain.mapHeight * CONFIG.viewZoom : CONFIG.gameAreaHeight;
-    drawingContext.rect(CONFIG.viewX, CONFIG.viewY, _clipW, _clipH);
+    const _clip = this._worldClip();
+    drawingContext.rect(_clip.x, _clip.y, _clip.w, _clip.h);
     drawingContext.clip();
     translate(CONFIG.viewX, CONFIG.viewY);
     scale(CONFIG.viewZoom);

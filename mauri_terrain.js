@@ -48,33 +48,18 @@ class TerrainGenerator {
     // Season manager reference
     this.seasonManager = null;
     
-    // Dimensions
-    const gameWidth = config.gameAreaWidth || config.width;
-    const gameHeight = config.gameAreaHeight || config.height;
-    const zoom = config.zoom || 1;
-    
-    this.mapWidth = Math.ceil(gameWidth / zoom);
-    this.mapHeight = Math.ceil(gameHeight / zoom);
-    this.worldWidth = gameWidth;
-    this.worldHeight = gameHeight;
-    this.zoom = zoom;
-
     // ---- 2×2 (N×M) CONTINUOUS TERRAIN GRID (endless "years") ------------------
     // One continuous landmass spanning worldW×worldH = cols×rows play windows. The island
     // falloff runs the full width, so it's a single alps→shore descent; a window shows only
     // part of it. Each year the camera pans to the next area in a circular tour and that
-    // area's plants/fauna are regenerated (Game._scrollWorldGrid). The play window itself is
-    // unchanged; the world shows up only in the heightmap/buffers and a scroll offset.
-    this.viewW = this.mapWidth;    // one area / play window, world units
-    this.viewH = this.mapHeight;
+    // area's plants/fauna are regenerated (Game._scrollWorldGrid). The window's size comes
+    // from the view zoom (_setWindowSize); an endless run can widen it between loops
+    // (resizeWindow).
     const wg = config.worldGrid || null;
     this.worldGridCols = wg ? Math.max(1, wg.cols || 1) : 1;
     this.worldGridRows = wg ? Math.max(1, wg.rows || 1) : 1;
     this.hasWorldGrid = (this.worldGridCols * this.worldGridRows) > 1;
     this._worldGridCfg = wg || {};
-    // Full continuous world extent (world units). Classic levels: one window.
-    this.worldW = this.viewW * this.worldGridCols;
-    this.worldH = this.viewH * this.worldGridRows;
     // Circular tour order [col,row]. Default (2×2) starts at the east/alps window and
     // loops west → across → east, so year 1 is the alps→podo upper slope.
     this._quadOrder = (wg && wg.order) || this._defaultQuadOrder(this.worldGridCols, this.worldGridRows);
@@ -86,21 +71,9 @@ class TerrainGenerator {
     this.gridGlacialFull = (wg && wg.glacialCap != null) ? wg.glacialCap : 0.6;  // advance at which "fully deep"
     this.glacialAdvance = (wg && wg.glacialAdvance != null) ? wg.glacialAdvance : 0;
 
-    // Active area (the window's quadrant) + its world-space origin.
+    // Active area (the window's quadrant); its world origin is set with the window size.
     this.activeCol = this._quadOrder[0][0];
     this.activeRow = this._quadOrder[0][1];
-    this._updateActiveOrigin();
-    // Camera scroll (world units) = top-left of the visible window. Settled → the
-    // active area's origin; animates between areas during a year's pan.
-    this.scrollX = this._activeOriginX;
-    this.scrollY = this._activeOriginY;
-    this._pan = null;   // { fromX, fromY, toX, toY, t } while a year pan runs
-
-    // Island Y-pad: on a classic (single-window) level the island falloff spans
-    // mapHeight + 2·worldPadY so the window is the centre of a larger island (the 3D over-scan
-    // reveals the rest). A world grid needs no pad; the neighbouring areas are the "beyond".
-    this.worldPadY = this.hasWorldGrid ? 0
-      : Math.max(0, (config.view3DWorldPad != null ? config.view3DWorldPad : 0)) * this.mapHeight;
 
     // Gameplay grid resolution. A world grid scales the pixel size up so the full-world
     // heightmap keeps ~the same cell count (and bake cost) as a single window.
@@ -108,8 +81,8 @@ class TerrainGenerator {
       ? ((wg && wg.pixelScaleMult) || Math.sqrt(this.worldGridCols * this.worldGridRows)) : 1;
     this.scale = config.pixelScale * gridMult;
     this.invScale = 1 / this.scale;
-    this.gridCols = Math.ceil(this.worldW * this.invScale);
-    this.gridRows = Math.ceil(this.worldH * this.invScale);
+
+    this._setWindowSize(config.zoom || 1);
 
     // Render-only detail multiplier: bakes terrain buffers at N× the resolution without
     // touching the gameplay grid. Supports fractions (0.5 = half-res).
@@ -138,6 +111,50 @@ class TerrainGenerator {
     const order = [];
     for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) order.push([c, r]);
     return order;
+  }
+
+  // Window + world extent for a view zoom: the play window is the game area at that zoom,
+  // and a world grid tiles cols×rows of it. Re-homes the camera scroll on the active area.
+  _setWindowSize(zoom) {
+    const config = this.config;
+    const gameWidth = config.gameAreaWidth || config.width;
+    const gameHeight = config.gameAreaHeight || config.height;
+
+    this.mapWidth = Math.ceil(gameWidth / zoom);
+    this.mapHeight = Math.ceil(gameHeight / zoom);
+    this.worldWidth = gameWidth;
+    this.worldHeight = gameHeight;
+    this.zoom = zoom;
+
+    this.viewW = this.mapWidth;    // one area / play window, world units
+    this.viewH = this.mapHeight;
+    // Full continuous world extent (world units). Classic levels: one window.
+    this.worldW = this.viewW * this.worldGridCols;
+    this.worldH = this.viewH * this.worldGridRows;
+
+    // Island Y-pad: on a classic (single-window) level the island falloff spans
+    // mapHeight + 2·worldPadY so the window is the centre of a larger island (the 3D over-scan
+    // reveals the rest). A world grid needs no pad; the neighbouring areas are the "beyond".
+    this.worldPadY = this.hasWorldGrid ? 0
+      : Math.max(0, (config.view3DWorldPad != null ? config.view3DWorldPad : 0)) * this.mapHeight;
+
+    this.gridCols = Math.ceil(this.worldW * this.invScale);
+    this.gridRows = Math.ceil(this.worldH * this.invScale);
+
+    this._updateActiveOrigin();
+    // Camera scroll (world units) = top-left of the visible window. Settled → the
+    // active area's origin; animates between areas during a year's pan.
+    this.scrollX = this._activeOriginX;
+    this.scrollY = this._activeOriginY;
+    this._pan = null;   // { fromX, fromY, toX, toY, t } while a year pan runs
+  }
+
+  // Widen (or narrow) the play window to a new view zoom and regenerate the same land (seed,
+  // tour position and glacial advance kept) at the new extent. Heavy, like setGlacialAdvance;
+  // the caller re-fits whatever is sized to the window (projection, view, spatial grids).
+  resizeWindow(zoom) {
+    this._setWindowSize(zoom);
+    this.generate();
   }
 
   // World-space top-left of the active area (window). Camera settles here.
@@ -734,6 +751,10 @@ class TerrainGenerator {
     const seasons = ['summer', 'autumn', 'winter', 'spring'];
     
     for (const season of seasons) {
+      // A regenerate (glacial deepen / window resize) replaces the buffers; free the old
+      // world-sized canvases rather than leaking a set each loop.
+      const old = this.seasonBuffers[season];
+      if (old && typeof old.remove === 'function') old.remove();
       this.seasonBuffers[season] = this._bakeSeasonBuffer(season);
     }
     

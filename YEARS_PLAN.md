@@ -278,6 +278,27 @@ population *shows the breeding season's result* before you move on. Classic leve
 - Nesting sites + focus/goal continuity across an area change are re-seeded fresh each area; revisit
   if per-area persistence is wanted.
 
+## Widening country, opening shot + camera groundwork (built 2026-09-28)
+
+- **Zoom per loop.** `worldGrid.zoomByLoop` (Free Play: `[1.9, 1.75, 1.6, 1.5]`, last holds) sets
+  the play window's view zoom per 4-year loop; the run opens on the first (a closer patch than
+  Level 2's 1.667). At each loop boundary `_maybeGlacialDeepen` folds the resize into the
+  regeneration it already runs: `Game._resizePlayWindow` → `TerrainGenerator.resizeWindow`
+  (`_setWindowSize` + one `generate()` with the new glacial advance), `_configureProjection`,
+  `Simulation.resizeWorld` (spatial grids), and the camera eases out from the old scale.
+  GLTerrain rebuilds itself (its key includes worldW/H). Populations are counts, not densities,
+  so a wider window reads sparser; plant count grows with area (hence the cap).
+- **Camera** (`Game.camera`, `cameraTo`, `_updateCamera`): a render-only zoom/focus over the base
+  framing, clamped to the map, eased on real frames (moves while paused). The focus is a
+  PAINT-space point, so it frames correctly in 3D. The world clip is `_worldClip()` (the game
+  area when docked), not `(viewX, viewY)`, which a camera offset moves. Groundwork for the
+  planned player-driven zoom/pan camera with touch support.
+- **Free Play tutorial** (`levels/tutorial_freeplay_kahurangi.js`, keyed off the new
+  `TUTORIAL_EVENTS.YEAR_START`). The opening tip's `onShow` runs `_beginIntroShot`: zoom in on an
+  upland moa in open ground beside a valid speargrass spot (marked with a pulsing ring), drawn
+  through the overlay via the tip's `renderAboveOverlay` hook; closing the tip eases back out.
+  Endless levels no longer fall back to the story's 'default' tip script.
+
 ## Benchmark tool; endless "1 year" population tracking (built 2026-09-09)
 
 `mauri_benchmark.js` now closes an ENDLESS run after `BENCHMARK.endlessYears` in-game years

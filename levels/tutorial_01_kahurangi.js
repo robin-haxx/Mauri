@@ -13,7 +13,11 @@
 //   guidePosition: center|left|right|top|bottom|topLeft|topRight|bottomLeft|bottomRight
 //   highlight / highlightAlt: { type: 'element', target: <TutorialUIMapper target> }
 //   guidedPlaceable: '<type>' ; a "place this" beat: placing anything else fires off_script_placement
-//   onShow: (game, data) => {}; side effects when the tip appears
+//   placeable: '<type>'       ; the item a tip teaches. Item tips (this, else guidedPlaceable,
+//                               else a highlighted tool button) only trigger while the player
+//                               can afford that item; a chain skips an unaffordable item link.
+//   onShow: (game, data) => {}; side effects when the tip appears (onDismiss mirrors it)
+//   renderAboveOverlay: (game) => {}; draw a world spotlight over the dimming overlay, under the panel
 //   nextTip: '<id>'           ; chain; the next tip must be TRIGGER_TYPE.IMMEDIATE
 //   pauseGame, showOnce, priority (lower first), urgency: 'high' (skips spacing)
 // Shared helpers: tutorialGuidedWindowActive(game)

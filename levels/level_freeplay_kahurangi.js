@@ -16,7 +16,7 @@ const LEVEL_FREEPLAY_KAHURANGI = {
   // yearly-goal engine.
   endless: true,
 
-  zoom: 1.667,
+  // (The view zoom comes from worldGrid.zoomByLoop below.)
   // Endless years run summer → autumn → winter → spring; the camera pans to the next
   // 2×2 area only at the year boundary (spring→summer), so a whole year plays out in
   // one quadrant. (Classic levels stay spring-start.)
@@ -35,6 +35,10 @@ const LEVEL_FREEPLAY_KAHURANGI = {
   // See TerrainGenerator + Game._scrollWorldGrid.
   worldGrid: {
     cols: 2, rows: 2,
+    // View zoom per 4-year loop (the last entry holds): the run opens on a closer patch of
+    // country and each loop's regeneration widens it to a larger expanse. Higher = closer;
+    // Level 2 plays at 1.667. Wider windows hold more plants (a perf cost), so it's capped.
+    zoomByLoop: [1.9, 1.75, 1.6, 1.5],
     openLandScale: 0.58,     // opening: scale land elevation (lower = gentler alps, broader forest)
     glacialPerLoop: 0.22,    // each 4-year loop releases the scale toward full height…
     glacialCap: 0.6,         // …up to here
@@ -86,7 +90,7 @@ const LEVEL_FREEPLAY_KAHURANGI = {
   startingSpecies: 'upland_moa',
 
   initialSpeciesDistribution: {
-    'upland_moa': 6,
+    'upland_moa': 4,
     'little_bush_moa': 4,
     'stout_legged_moa': 3,
     'south_island_giant_moa': 3,
@@ -279,8 +283,10 @@ const LEVEL_FREEPLAY_KAHURANGI = {
     // how much you held here last time (per-area memory), capped at maxNudge. Forest you
     // grew here partly persists (forestLegacy). The off-focus zone moa (see `moaZones`) is the
     // exception: it carries its count through its off zone, and on returning to its own zone
-    // restarts short by offFocusPenalty × the share it lost while away (0 left → half default).
-    freeplayYearReset: { influence: 0.25, maxNudge: 3, birdDefault: 3, forestLegacy: 0.4, offFocusPenalty: 0.5 },
+    // starts at the first offFocusReturn tier its remaining count reaches (0 left → 3,
+    // some → 4, 8+ → 5).
+    freeplayYearReset: { influence: 0.25, maxNudge: 3, birdDefault: 3, forestLegacy: 0.4,
+      offFocusReturn: [{ atLeast: 8, start: 5 }, { atLeast: 1, start: 4 }, { atLeast: 0, start: 3 }] },
 
     // Moa laying earns no mauri here (keeps moa from out-earning the flighted birds).
     noEggLaidMauri: true,

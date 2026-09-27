@@ -28,7 +28,14 @@ const TUTORIAL_EVENTS = {
   LOW_MAURI: 'low_mauri',
   PLACEABLE_EXPIRED: 'placeable_expired',
   FIRST_EGG: 'first_egg',
-  PLACEMENT: 'placement'   // fired on every successful placement, data: { type }
+  PLACEMENT: 'placement',  // fired on every successful placement, data: { type }
+  YEAR_START: 'year_start' // endless: a year's focus, palette + goals are set, data: { cycle }
+};
+
+// Named toolbar-button highlight targets → the placeable key each one shows.
+const TOOL_BUTTON_KEYS = {
+  kawakawaButton: 'kawakawa', shelterButton: 'shelter', nestButton: 'nest',
+  StormButton: 'Storm', waterholeButton: 'waterhole', harakekeButton: 'harakeke'
 };
 
 // True while a "place this" tip's guided window is open (see
@@ -81,17 +88,13 @@ class TutorialUIMapper {
     // global toolbar order and pointed at the wrong buttons once a level reordered
     // its palette (e.g. StormButton landed on the nest). The classic index is kept
     // only as a fallback for a level whose palette lacks that key.
-    const toolButtonKeys = {
-      kawakawaButton: 'kawakawa', shelterButton: 'shelter', nestButton: 'nest',
-      StormButton: 'Storm', waterholeButton: 'waterhole', harakekeButton: 'harakeke'
-    };
     const classicToolIndex = {
       kawakawaButton: 0, shelterButton: 1, nestButton: 2,
       StormButton: 3, waterholeButton: 4, harakekeButton: 5
     };
-    if (target in toolButtonKeys) {
+    if (target in TOOL_BUTTON_KEYS) {
       const keys = Object.keys((ui.game && ui.game.activePlaceables) || {});
-      const idx = keys.indexOf(toolButtonKeys[target]);
+      const idx = keys.indexOf(TOOL_BUTTON_KEYS[target]);
       return this._getToolButtonBounds(idx >= 0 ? idx : classicToolIndex[target]);
     }
     
@@ -300,7 +303,30 @@ class TutorialManager {
   _shouldSkipTip(tipId, tip) {
     if (tip.showOnce && this.shownTips.has(tipId)) return true;
     if (this.tipCooldowns[tipId] && this.game.playTime < this.tipCooldowns[tipId]) return true;
+    if (!this._tipAffordable(tip)) return true;
     return false;
+  }
+
+  // The toolbar item a tip teaches: an explicit `placeable`, else its guided "place this"
+  // type, else the tool button it highlights. null = not an item tip.
+  _tipPlaceable(tip) {
+    if (tip.placeable) return tip.placeable;
+    if (tip.guidedPlaceable) return tip.guidedPlaceable;
+    for (const h of [tip.highlight, tip.highlightAlt]) {
+      const t = h && h.target;
+      if (typeof t !== 'string') continue;
+      if (t.startsWith('tool:')) return t.slice(5);
+      if (t in TOOL_BUTTON_KEYS) return TOOL_BUTTON_KEYS[t];
+    }
+    return null;
+  }
+
+  // Item tips only run while the player can pay for the item they point at, so the guide
+  // never asks for a tool that's greyed out. Tools outside the level's palette aren't gated.
+  _tipAffordable(tip) {
+    const key = this._tipPlaceable(tip);
+    const def = key && this.game.activePlaceables && this.game.activePlaceables[key];
+    return !def || this.game.mauri.canAfford(def.cost);
   }
   
   _checkEventTriggers(eventType, data) {
@@ -389,7 +415,9 @@ class TutorialManager {
       const isUrgent = head.tip && head.tip.urgency === 'high';
       if (isUrgent || this.game.playTime - this.lastTipTime >= this.minTimeBetweenTips) {
         const queued = this.pendingTips.shift();
-        this._showTip(queued.id, queued.data);
+        // Mauri may have been spent while an item tip waited its turn: drop it unshown,
+        // so its trigger can fire it again once the item is affordable.
+        if (this._tipAffordable(queued.tip)) this._showTip(queued.id, queued.data);
       }
     }
   }
@@ -485,13 +513,21 @@ class TutorialManager {
     }
     this._pausedByTutorial = false;
     
-    // Chain to next tip if still enabled
+    // Chain to next tip if still enabled. Item links the player can't afford (e.g. mauri
+    // spent while the previous tip was up) are passed over; the chain carries on after them.
     if (this.enabled && tip.nextTip) {
-      const nextTip = this.tips[tip.nextTip];
-      if (nextTip && nextTip.trigger.type === TRIGGER_TYPE.IMMEDIATE) {
+      let nextId = tip.nextTip;
+      const seen = new Set();
+      while (nextId && this.tips[nextId] && !seen.has(nextId) &&
+             !this._tipAffordable(this.tips[nextId])) {
+        seen.add(nextId);
+        nextId = this.tips[nextId].nextTip;
+      }
+      const nextTip = nextId && this.tips[nextId];
+      if (nextTip && nextTip.trigger.type === TRIGGER_TYPE.IMMEDIATE && !seen.has(nextId)) {
         this.currentTip = null;
         this.active = false;
-        this._showTip(tip.nextTip);
+        this._showTip(nextId);
         return;
       }
     }
@@ -557,7 +593,10 @@ class TutorialManager {
     const tip = this.currentTip;
     if (tip.highlight) this._renderHighlightBox(tip.highlight, alpha);
     if (tip.highlightAlt) this._renderHighlightBox(tip.highlightAlt, alpha * 0.7);
-    
+
+    // A tip can spotlight part of the world through the overlay, under its panel.
+    if (typeof tip.renderAboveOverlay === 'function') tip.renderAboveOverlay(this.game);
+
     // Tip panel
     this._renderTipPanel(alpha);
   }

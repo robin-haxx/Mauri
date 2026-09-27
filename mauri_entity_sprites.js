@@ -60,9 +60,10 @@ const EntitySprites = {
   },
   // Dedicated per-species sprite sets (via a species' spriteSet config).
   // 'mating' is an optional pose shown while courting; falls back to idle when absent.
+  // 'walkSpeedMul' optionally scales animation.moaWalkSpeed for that set (default 1).
   moaVariants: {
     bush: { walk: [], idle: null, faceSign: 1 },
-    upland: { walk: [], idle: null, mating: null, faceSign: 1 }
+    upland: { walk: [], idle: null, mating: null, faceSign: 1, walkSpeedMul: 0.5 }
   },
   eagle: {
     fly: [],
@@ -187,7 +188,8 @@ const EntitySprites = {
     if (isMating && this.isValid(set.mating)) return set.mating;
 
     if (isMoving && set.walk.length > 0) {
-      const frameIndex = Math.floor(animTime * this.animation.moaWalkSpeed) % set.walk.length;
+      const speed = this.animation.moaWalkSpeed * (set.walkSpeedMul || 1);
+      const frameIndex = Math.floor(animTime * speed) % set.walk.length;
       if (this.isValid(set.walk[frameIndex])) return set.walk[frameIndex];
     }
 

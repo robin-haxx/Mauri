@@ -60,6 +60,9 @@ const TIPS = {
   },
 
   // ---------- SPRING: after ~15s of play ----------
+  // The corridor tip is an item tip, so it waits until lancewood is affordable (the intro's
+  // speargrass + lancewood can spend all the starting mauri). The mauri/goals pair runs on
+  // its own timer rather than chained behind it, so it isn't held up too.
   gk_spring_corridor: {
     id: 'gk_spring_corridor',
     trigger: { type: TRIGGER_TYPE.TIME, delay: 900 },
@@ -69,11 +72,11 @@ const TIPS = {
       "Place a line of lancewood to create a 'corridor' for the bush moa!"
     ],
     guidePosition: 'bottomLeft', highlight: { type: 'element', target: 'tool:lancewood' },
-    nextTip: 'gk_spring_mauri', pauseGame: true, showOnce: true, priority: 2
+    nextTip: null, pauseGame: true, showOnce: true, priority: 2
   },
   gk_spring_mauri: {
     id: 'gk_spring_mauri',
-    trigger: { type: TRIGGER_TYPE.IMMEDIATE },
+    trigger: { type: TRIGGER_TYPE.TIME, delay: 900 },
     title: "Keep an eye on the competition!",
     content: [
       "You'll get more Mauri for having more moa, but keep in mind that some species can out-compete others, and drive them out of this area."

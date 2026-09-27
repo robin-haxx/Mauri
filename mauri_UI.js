@@ -143,9 +143,9 @@ class GameUI {
 
       // Bottom bar toolbar. Count the level's active palette, not the global PLACEABLES
       // catalog (which holds tools from other levels, so its length would misplace the row).
-      toolbarBtnSize: 70,
-      toolbarSpacing: 85,
-      toolbarGroupGap: 14,   // extra space between fauna groups
+      toolbarBtnSize: 84,
+      toolbarSpacing: 100,
+      toolbarGroupGap: 16,   // extra space between fauna groups
       toolbarBtnCount: Object.keys((this.game && this.game.activePlaceables) || PLACEABLES).length,
 
       // Sidebar content padding and panel width
@@ -173,19 +173,38 @@ class GameUI {
     // If sidebar is narrower, shrink toolbar buttons slightly to fit
     // (toolbar is in the game area, not sidebar, but this keeps proportions)
     if (gameAreaWidth < 1200) {
-      this.layout.toolbarBtnSize = 60;
-      this.layout.toolbarSpacing = 72;
-      this.layout.toolbarGroupGap = 12;
+      this.layout.toolbarBtnSize = 76;
+      this.layout.toolbarSpacing = 88;
+      this.layout.toolbarGroupGap = 14;
+    }
+
+    // A long palette (Free Play years) on a narrow game area: shrink the row uniformly
+    // until it fits, rather than running off the edge.
+    let _slots = this._toolbarSlotOffsets();
+    const _rowWidth = (s) => s.length ? s[s.length - 1] + this.layout.toolbarBtnSize : 0;
+    const _rowMax = gameAreaWidth - 40;
+    if (_rowWidth(_slots) > _rowMax) {
+      const k = _rowMax / _rowWidth(_slots);
+      this.layout.toolbarBtnSize = Math.floor(this.layout.toolbarBtnSize * k);
+      this.layout.toolbarSpacing = Math.floor(this.layout.toolbarSpacing * k);
+      this.layout.toolbarGroupGap = Math.floor(this.layout.toolbarGroupGap * k);
+      _slots = this._toolbarSlotOffsets();
     }
 
     // Calculate toolbar start position (centered in game area)
-    const _slots = this._toolbarSlotOffsets();
-    const toolbarTotalWidth = _slots.length
-      ? _slots[_slots.length - 1] + this.layout.toolbarBtnSize : 0;
+    const toolbarTotalWidth = _rowWidth(_slots);
     this.layout.toolbarStartX = (gameAreaWidth - toolbarTotalWidth) / 2;
 
-    // Selected tool info panel (positioned to the right of toolbar)
-    this.layout.selectedToolX = this.layout.toolbarStartX + toolbarTotalWidth + 40;
+    // Selected tool info panel, right of the docked row. When the centred row leaves no
+    // room for it, slide the row left (as far as the margin allows) so the two don't overlap.
+    this.layout.selectedToolW = 300;
+    const _infoGap = 32;
+    const _overflow = this.layout.toolbarStartX + toolbarTotalWidth + _infoGap +
+                      this.layout.selectedToolW - (gameAreaWidth - 20);
+    if (_overflow > 0) {
+      this.layout.toolbarStartX = Math.max(20, this.layout.toolbarStartX - _overflow);
+    }
+    this.layout.selectedToolX = this.layout.toolbarStartX + toolbarTotalWidth + _infoGap;
 
     // Event log and species panel heights scale with sidebar width
     // Wider sidebar = can show more; narrower = show less
@@ -1561,6 +1580,10 @@ class GameUI {
     const slots = this._toolbarSlotOffsets();
     const mix = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
     const base = [22, 34, 28], grey = [70, 70, 70];
+    // Icon disc, glyphs and labels scale with the button (tuned at the 84px default), so a
+    // fit-shrunk row stays in proportion.
+    const k = btnSize / 84;
+    const disc = Math.round(48 * k);
 
     const palette = this.game.activePlaceables || PLACEABLES;
     let i = 0;
@@ -1594,16 +1617,17 @@ class GameUI {
 
       // Icon backing disc in the fauna colour, darkened so the sprite/glyph reads on it.
       push();
-      translate(x + btnSize / 2, btnY + btnSize / 2 - 8);
+      translate(x + btnSize / 2, btnY + btnSize / 2 - 11 * k);
 
-      const disc = canAfford ? mix([0, 0, 0], hc, 0.6) : [60, 60, 60];
-      fill(disc[0], disc[1], disc[2]);
+      const discCol = canAfford ? mix([0, 0, 0], hc, 0.6) : [60, 60, 60];
+      fill(discCol[0], discCol[1], discCol[2]);
       if (canAfford) { stroke(hc[0], hc[1], hc[2]); strokeWeight(1.5); } else noStroke();
-      ellipse(0, 0, 36, 36);
+      ellipse(0, 0, disc, disc);
       noStroke();
 
       // Icon (origin is already the centre of the icon circle)
-      this.renderPlaceableIcon(def, 0, 0, 30, 20, canAfford ? 240 : 100);
+      this.renderPlaceableIcon(def, 0, 0, Math.round(40 * k), Math.round(27 * k),
+                               canAfford ? 240 : 100);
 
       // Storm recharge: a clock-style wedge over the icon covering the remaining cooldown,
       // its edge advancing clockwise until ready.
@@ -1614,7 +1638,7 @@ class GameUI {
           const elapsed = constrain(1 - cdRemaining / cdTotal, 0, 1);
           fill(15, 20, 25, 170);
           noStroke();
-          arc(0, 0, 36, 36, -HALF_PI + elapsed * TWO_PI, -HALF_PI + TWO_PI, PIE);
+          arc(0, 0, disc, disc, -HALF_PI + elapsed * TWO_PI, -HALF_PI + TWO_PI, PIE);
         }
       }
       pop();
@@ -1622,15 +1646,15 @@ class GameUI {
       // Cost
       fill(canAfford ? 180 : 255, canAfford ? 255 : 120, canAfford ? 190 : 120);
       noStroke();
-      smallTextSize(12);
-      textAlign(CENTER, TOP);
-      text(def.cost, x + btnSize / 2, btnY + btnSize - 20);
+      smallTextSize(Math.round(15 * k));
+      textAlign(CENTER, BOTTOM);
+      text(def.cost, x + btnSize / 2, btnY + btnSize - 5 * k);
 
       // Hotkey number
-      fill(100, 130, 110);
-      smallTextSize(10);
+      fill(120, 150, 130);
+      smallTextSize(Math.round(13 * k));
       textAlign(CENTER, TOP);
-      text(i + 1, x + btnSize / 2, btnY + btnSize + 5);
+      text(i + 1, x + btnSize / 2, btnY + btnSize + 4);
 
       // Tooltip on hover
       if (isHovered) {
@@ -1661,9 +1685,45 @@ class GameUI {
     text(def.icon, cx, cy);
   }
 
+  // Hover card above a toolbar button, centred on x with its bottom edge at y. Sized to
+  // its text: as wide as the longest line (so the backing always covers the caption),
+  // with descriptions past maxW word-wrapped onto extra lines.
   renderToolTooltip(x, y, def) {
-    const tw = 180;
-    const th = 80;
+    const padX = 14, padY = 12, lineGap = 5, maxW = 360;
+    const nameSize = 15, descSize = 12, statSize = 11;   // smallTextSize bases
+
+    // Global interactions (Mast Year, Nest Raid, ...) have no footprint or lifetime, so
+    // only list the stats a tool actually has.
+    const stats = [];
+    if (def.duration) stats.push(`Duration: ${(def.duration / 60).toFixed(0)}s`);
+    if (def.radius) stats.push(`Radius: ${def.radius}px`);
+
+    // Measure every line at the size it's drawn at.
+    textAlign(LEFT, TOP);
+    smallTextSize(nameSize);
+    const nameH = textAscent() + textDescent();
+    let contentW = textWidth(def.name);
+
+    smallTextSize(descSize);
+    const descH = textAscent() + textDescent();
+    const descLines = [];
+    let line = '';
+    for (const word of String(def.description || '').split(' ')) {
+      const test = line ? line + ' ' + word : word;
+      if (line && textWidth(test) > maxW - padX * 2) { descLines.push(line); line = word; }
+      else line = test;
+    }
+    if (line) descLines.push(line);
+    for (const l of descLines) contentW = Math.max(contentW, textWidth(l));
+
+    smallTextSize(statSize);
+    const statH = textAscent() + textDescent();
+    for (const s of stats) contentW = Math.max(contentW, textWidth(s));
+
+    const tw = Math.ceil(Math.min(maxW, contentW + padX * 2));
+    const th = Math.ceil(padY * 2 + nameH +
+      (descLines.length ? lineGap + descLines.length * descH : 0) +
+      (stats.length ? lineGap + 2 + stats.length * statH : 0));
 
     const _maxW = CONFIG.fullscreen ? CONFIG.canvasWidth : CONFIG.gameAreaWidth;
     x = constrain(x - tw / 2, 10, _maxW - tw - 10);
@@ -1677,62 +1737,70 @@ class GameUI {
     rect(x, y, tw, th, 8);
 
     // Name
-    fill(200, 240, 210);
     noStroke();
-    smallTextSize(13);
-    textAlign(LEFT, TOP);
-    text(def.name, x + 10, y + 8);
+    let ty = y + padY;
+    fill(200, 240, 210);
+    smallTextSize(nameSize);
+    text(def.name, x + padX, ty);
+    ty += nameH;
 
     // Description
-    fill(150, 180, 160);
-    smallTextSize(10);
-    text(def.description, x + 10, y + 28);
+    if (descLines.length) {
+      ty += lineGap;
+      fill(165, 195, 175);
+      smallTextSize(descSize);
+      for (const l of descLines) { text(l, x + padX, ty); ty += descH; }
+    }
 
     // Stats
-    fill(120, 150, 130);
-    smallTextSize(9);
-    text(`Duration: ${(def.duration / 60).toFixed(0)}s`, x + 10, y + 48);
-    text(`Radius: ${def.radius}px`, x + 10, y + 62);
+    if (stats.length) {
+      ty += lineGap + 2;
+      fill(130, 160, 140);
+      smallTextSize(statSize);
+      for (const s of stats) { text(s, x + padX, ty); ty += statH; }
+    }
   }
 
   renderSelectedToolInfo() {
     const def = (this.game.activePlaceables && this.game.activePlaceables[this.game.selectedPlaceable]) || PLACEABLES[this.game.selectedPlaceable];
     const x = this.layout.selectedToolX;
-    const y = this.bottomBar.y + 20;
+    const y = this.toolbarY;
 
-    // Make sure the panel fits within the game area
-    const panelWidth = 280;
+    // Make sure the panel fits within the game area; same height as the toolbar buttons.
+    const panelWidth = this.layout.selectedToolW;
+    const panelH = this.layout.toolbarBtnSize;
     const adjustedX = Math.min(x, this.config.gameAreaWidth - panelWidth - 20);
 
     // Info panel
     fill(40, 70, 50, 220);
     stroke(90, 140, 110);
     strokeWeight(1);
-    rect(adjustedX, y, panelWidth, 70, 8);
+    rect(adjustedX, y, panelWidth, panelH, 8);
 
     // Icon, on the same fauna-coloured backing as its toolbar button
     const hc = speciesUIColor(def.fauna);
+    const iconCX = adjustedX + 38, iconCY = y + panelH / 2;
     fill(hc[0] * 0.6, hc[1] * 0.6, hc[2] * 0.6);
     stroke(hc[0], hc[1], hc[2]);
     strokeWeight(1.5);
-    ellipse(adjustedX + 35, y + 35, 40, 40);
+    ellipse(iconCX, iconCY, 48, 48);
     noStroke();
-    this.renderPlaceableIcon(def, adjustedX + 35, y + 35, 34, 22);
+    this.renderPlaceableIcon(def, iconCX, iconCY, 40, 27);
 
-    // Name and cost
+    // Name, cost and instruction, stacked and centred on the panel
+    const tx = adjustedX + 74;
+    textAlign(LEFT, CENTER);
     fill(200, 240, 210);
-    textSize(14);
-    textAlign(LEFT, TOP);
-    text(def.name, adjustedX + 65, y + 12);
+    textSize(17);
+    text(def.name, tx, iconCY - 22);
 
     fill(140, 255, 160);
-    smallTextSize(12);
-    text(`Cost: ${def.cost} mauri`, adjustedX + 65, y + 32);
+    smallTextSize(13);
+    text(`Cost: ${def.cost} mauri`, tx, iconCY);
 
-    // Instruction
     fill(140, 170, 150);
-    smallTextSize(10);
-    text("Click in game area to place", adjustedX + 65, y + 50);
+    smallTextSize(11);
+    text("Click in game area to place", tx, iconCY + 20);
   }
 
   // ==========================================

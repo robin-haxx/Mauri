@@ -54,32 +54,7 @@ class Simulation {
 
     const worldWidth = terrain.mapWidth;
     const worldHeight = terrain.mapHeight;
-    this.worldWidth = worldWidth;
-    this.worldHeight = worldHeight;
-
-    // Spatial grids with appropriate cell sizes
-    this.moaGrid = new SpatialGrid(worldWidth, worldHeight, 60);
-    this.eagleGrid = new SpatialGrid(worldWidth, worldHeight, 100);
-    this.plantGrid = new SpatialGrid(worldWidth, worldHeight, 50);
-    this.placeableGrid = new SpatialGrid(worldWidth, worldHeight, 80);
-    this.eggGrid = new SpatialGrid(worldWidth, worldHeight, 40);
-
-    // Grids are split by whether their entities move.
-    //  • Moving grids (moa/eagle/placeable) are rebuilt every frame; only live entities
-    //    are inserted, so a dead entity is never a phantom neighbour.
-    //  • Static grids (plants/eggs) rebuild only when their list membership changes
-    //    (a `dirty` bit), skipping an O(plants) rebuild every frame.
-    this._movingGridPairs = [
-      { grid: this.moaGrid, list: this.moas },
-      { grid: this.eagleGrid, list: this.eagles },
-      { grid: this.placeableGrid, list: this.placeables }
-    ];
-    // Independent dirty flags per static grid, so egg churn never forces a plant-grid rebuild.
-    this._plantGridPair = { grid: this.plantGrid, list: this.plants, dirty: true };
-    this._eggGridPair   = { grid: this.eggGrid,   list: this.eggs,   dirty: true };
-    this._staticGridPairs = [this._plantGridPair, this._eggGridPair];
-
-    this._dynamicGrids = {};   // per-other-entity-type spatial grids (kereru, kokako, ...)
+    this._buildSpatialGrids(worldWidth, worldHeight);
 
     // Population cache
     this._cachedAliveMoas = 0;
@@ -139,6 +114,44 @@ class Simulation {
     // new site. Null outside a nesting-goal year.
     this.moaNestingWatch = null;
     this._moaNestTimer = 0;
+  }
+
+  // Spatial grids spanning the play window, with cell sizes per entity kind.
+  _buildSpatialGrids(worldWidth, worldHeight) {
+    this.worldWidth = worldWidth;
+    this.worldHeight = worldHeight;
+
+    this.moaGrid = new SpatialGrid(worldWidth, worldHeight, 60);
+    this.eagleGrid = new SpatialGrid(worldWidth, worldHeight, 100);
+    this.plantGrid = new SpatialGrid(worldWidth, worldHeight, 50);
+    this.placeableGrid = new SpatialGrid(worldWidth, worldHeight, 80);
+    this.eggGrid = new SpatialGrid(worldWidth, worldHeight, 40);
+
+    // Grids are split by whether their entities move.
+    //  • Moving grids (moa/eagle/placeable) are rebuilt every frame; only live entities
+    //    are inserted, so a dead entity is never a phantom neighbour.
+    //  • Static grids (plants/eggs) rebuild only when their list membership changes
+    //    (a `dirty` bit), skipping an O(plants) rebuild every frame.
+    this._movingGridPairs = [
+      { grid: this.moaGrid, list: this.moas },
+      { grid: this.eagleGrid, list: this.eagles },
+      { grid: this.placeableGrid, list: this.placeables }
+    ];
+    // Independent dirty flags per static grid, so egg churn never forces a plant-grid rebuild.
+    this._plantGridPair = { grid: this.plantGrid, list: this.plants, dirty: true };
+    this._eggGridPair   = { grid: this.eggGrid,   list: this.eggs,   dirty: true };
+    this._staticGridPairs = [this._plantGridPair, this._eggGridPair];
+
+    this._dynamicGrids = {};   // per-other-entity-type spatial grids (kereru, kokako, ...)
+  }
+
+  // The play window changed size (an endless run widening its view between loops). Runs
+  // inside an area transition, while the cast is unloaded; re-makes the grids at the new
+  // extent and resets the (full-window) view bounds.
+  resizeWorld(worldWidth, worldHeight) {
+    this._buildSpatialGrids(worldWidth, worldHeight);
+    this._viewRight = worldWidth;
+    this._viewBottom = worldHeight;
   }
 
   init() {

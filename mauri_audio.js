@@ -430,6 +430,18 @@ class AudioManager {
     }
   }
   
+  // Call from a user-gesture handler (touchend on iOS). Resumes a Web Audio context the browser
+  // left suspended, and retries a background play() that was rejected for beating the gesture
+  // (the stream still wants to play but sits paused). Never restarts music the game paused.
+  unlockFromGesture() {
+    try {
+      const ctx = (typeof getAudioContext === 'function') ? getAudioContext() : null;
+      if (ctx && ctx.state !== 'running' && ctx.resume) ctx.resume().catch(() => {});
+    } catch (e) {}
+    const bg = this.sounds.background;
+    if (bg && bg._wantPlaying && bg.el && bg.el.paused && bg.isLoaded()) bg._start();
+  }
+
   // Stop background music.
   stopBackground() {
     this._stopSound(this.sounds.background);

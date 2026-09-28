@@ -3372,6 +3372,19 @@ class Game {
     this.state = GAME_STATE.LEVEL_SELECT;
   }
 
+  // Restart the current level from the top (pause screen's "Restart" button, and the R key).
+  _restartLevel() {
+    if (!this.currentLevel) return;
+    this.loadLevel(this.currentLevel.id);
+    this._startLoading();
+  }
+
+  // Win / loss screen's "Back to Menu" button (and the R key there). playWin/playLoss already
+  // stopped the gameplay audio, so unlike _exitToMenu this doesn't cut the end fanfare.
+  _returnToMenuFromEnd() {
+    this.state = GAME_STATE.LEVEL_SELECT;
+  }
+
   // End a Free Play run on the player's terms (pause screen's "End Run" button): stop play and
   // drop to the final-stats card (a neutral "RUN ENDED", not an extinction), which offers the
   // run-stats export. Reuses the LOST state's stats screen via the _runEndedByChoice flag.
@@ -3932,14 +3945,18 @@ class Game {
     if (this.state === GAME_STATE.PAUSED && !_tutorialPause) {
       // Free Play: an "End Run" button ends the run to the final-stats screen (with export).
       const _endless = !!(this.currentLevel && this.currentLevel.endless);
-      const _pauseButtons = [{ label: "Exit to Menu", action: () => this._exitToMenu() }];
-      if (_endless) _pauseButtons.unshift({ label: "End Run", action: () => this._endFreeplayRun() });
+      // Every action is a button (touch has no keyboard); the keys stay as a small hint.
+      const _pauseButtons = [
+        { label: "Resume", action: () => { this.state = GAME_STATE.PLAYING; } },
+        { label: "Restart", action: () => this._restartLevel() },
+        { label: "Exit to Menu", action: () => this._exitToMenu() }
+      ];
+      if (_endless) _pauseButtons.splice(2, 0, { label: "End Run", action: () => this._endFreeplayRun() });
       this._renderOverlay(...CONFIG.col_UI.slice(0,3), 100, {
         title: "PAUSED",
         titleColor: [255, 255, 255],
         lines: [
-          { text: "Press P or SPACE to resume", color: [180, 200, 180], size: 16 },
-          { text: "Press R to restart", color: [150, 170, 150], size: 14 }
+          { text: "Keys: P / SPACE resume  ·  R restart", color: [150, 170, 150], size: 14 }
         ],
         boxColor: [30, 45, 35, 240],
         strokeColor: [70, 110, 80],
@@ -3959,12 +3976,11 @@ class Game {
           { text: `Final population: ${this._cachedMoaCount} moa`, color: [120, 180, 120], size: 14 },
           { text: `Total mauri earned: ${this.mauri.totalEarned | 0}`, color: [120, 180, 120], size: 14 },
           { text: `Time elapsed: ${(this.playTime / 60) | 0} seconds`, color: [120, 180, 120], size: 14 },
-          { text: `Final Score: ${computeLevelScore(this.currentLevel, this._scoreContext())} points`, color: [200, 240, 200], size: 16 },
-          { text: "", color: [200, 240, 200], size: 18 },
-          { text: "Press R to return to menu", color: [200, 240, 200], size: 18 }
+          { text: `Final Score: ${computeLevelScore(this.currentLevel, this._scoreContext())} points`, color: [200, 240, 200], size: 16 }
         ],
         boxColor: [30, 60, 40, 250],
-        strokeColor: [100, 180, 120]
+        strokeColor: [100, 180, 120],
+        buttons: [{ label: "Back to Menu", action: () => this._returnToMenuFromEnd() }]
       });
     } else if (this.state === GAME_STATE.LOST) {
       const _endless = !!(this.currentLevel && this.currentLevel.endless);
@@ -3980,15 +3996,15 @@ class Game {
           { text: `Years survived: ${(this._yearsSurvived || 0)}`, color: [180, 190, 170], size: 14 },
           { text: `Time survived: ${(this.playTime / 60) | 0} seconds`, color: [180, 190, 170], size: 14 },
           { text: `Moa hatched: ${this.simulation.stats.births}`, color: [180, 190, 170], size: 14 },
-          { text: `Total mauri earned: ${this.mauri.totalEarned | 0}`, color: [180, 190, 170], size: 14 },
-          { text: "", color: [200, 240, 200], size: 18 },
-          { text: _endless ? "R for menu  ·  X = export run" : "Press R to return to menu",
-            color: _byChoice ? [200, 230, 200] : [220, 180, 180], size: 18 }
+          { text: `Total mauri earned: ${this.mauri.totalEarned | 0}`, color: [180, 190, 170], size: 14 }
         ],
         boxColor: _byChoice ? [30, 50, 38, 250] : [60, 35, 35, 250],
         strokeColor: _byChoice ? [100, 160, 120] : [150, 100, 100],
-        // Free Play: a one-click export of the whole run's season-by-season stats.
-        buttons: _endless ? [{ label: "Export run stats", action: () => this.exportFreeplayStats() }] : null
+        // Free Play also gets a one-click export of the whole run's season-by-season stats.
+        buttons: [
+          ...(_endless ? [{ label: "Export run stats", action: () => this.exportFreeplayStats() }] : []),
+          { label: "Back to Menu", action: () => this._returnToMenuFromEnd() }
+        ]
       });
     }
 
@@ -5036,10 +5052,9 @@ class Game {
 
       if (key === 'r' || key === 'R') {
       if (this.state === GAME_STATE.WON || this.state === GAME_STATE.LOST) {
-        this.state = GAME_STATE.LEVEL_SELECT;
-      } else if (this.currentLevel) {
-        this.loadLevel(this.currentLevel.id);  // Restart current level
-        this._startLoading();
+        this._returnToMenuFromEnd();
+      } else {
+        this._restartLevel();
       }
       return;
     }
@@ -5509,7 +5524,35 @@ function renderFPSCounter() {
   pop();
 }
 
+// Touch input (iPad / touchscreens). Without a touchStarted(), p5 only sees a tap through the
+// browser's EMULATED mousedown, which iOS fires late (after touchend) and often swallows
+// (double-tap-zoom detection, hover emulation): the "have to tap twice" bug. Handle the touch
+// directly and preventDefault it so no emulated mouse events follow. The press lands on
+// touchstart so touch-and-hold-to-move still sees mouseIsPressed for the whole hold.
+let _lastTouchMs = -Infinity;
+function touchStarted(e) {
+  // Only taps on the game's canvases; leave any other page element's touches alone.
+  if (!e || !e.target || e.target.tagName !== 'CANVAS') return;
+  _lastTouchMs = performance.now();
+  // Extra fingers don't click (p5 tracks touches[0] as the pointer).
+  if (!(e.touches && e.touches.length > 1)) _handlePress();
+  return false;
+}
+function touchEnded(e) {
+  // p5 sets an internal `touchstart` flag after touchStarted() that only a later mousedown
+  // clears, so on a hybrid touch + mouse device every real click after a tap would be dropped.
+  if (typeof p5 !== 'undefined' && p5.instance) p5.instance.touchstart = false;
+  // touchend (not touchstart) is what iOS counts as a user gesture for audio, so unlock here.
+  if (audioManager && audioManager.unlockFromGesture) audioManager.unlockFromGesture();
+  if (e && e.target && e.target.tagName === 'CANVAS') return false;
+}
+
 function mousePressed() {
+  // A browser that still emulates a mousedown after a handled tap would double-fire it.
+  if (performance.now() - _lastTouchMs < 800) return;
+  _handlePress();
+}
+function _handlePress() {
   // mouseX/mouseY are in BACKING pixels (logical × SS); hit-testing is in 1080-space.
   const s = spriteSS();
   const mx = mouseX / s, my = mouseY / s;

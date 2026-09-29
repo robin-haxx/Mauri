@@ -564,8 +564,8 @@ const KEA_SPECIES = {
 
   // Movement / render; a strong flier, wider-ranging than the kererū, but below eagle
   // hunt speed so a chase resolves.
-  baseSpeed:        0.40,
-  maxForce:         0.06,
+  baseSpeed:        0.24,
+  maxForce:         0.05,
   size:             8,
   perceptionRadius: 80,
   cruiseAlt:        30,     // soars higher than the kererū (24)

@@ -42,7 +42,7 @@ const MOA_SPECIES = {
     rarity: 'common',
     
     // Physical characteristics
-    size: { min: 7, max: 9 },
+    size: { min: 10, max: 12 },
     bodyColor: { r: [90, 110], g: [60, 75], b: [28, 40] },
     
     // Movement

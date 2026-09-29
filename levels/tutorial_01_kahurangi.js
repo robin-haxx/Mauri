@@ -12,7 +12,8 @@
 //   title, content: ["paragraph", ...]  (each entry word-wraps to the panel; '' = blank row;
 //                                         a long title shrinks to fit)
 //   guidePosition: center|left|right|top|bottom|topLeft|topRight|bottomLeft|bottomRight
-//   (title, content and guidePosition may instead be (game, data) => value, resolved on show)
+//   (title, content, guidePosition and highlight may instead be (game, data) => value,
+//    resolved on show; a function highlight isn't affordability-gated, so gate it in the trigger)
 //   guideSprite: 'kea'        ; this tip's speaker, in place of the level's guide (the mantis)
 //   voice: 'kea'              ; open on a snippet of that species' call instead of the chime
 //   highlight / highlightAlt: { type: 'element', target: <TutorialUIMapper target> }

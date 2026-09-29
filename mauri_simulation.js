@@ -331,10 +331,74 @@ class Simulation {
     };
     for (let i = 0; i < forestCount; i++) place(forestBand, 'forest');
     for (let i = 0; i < openCount; i++) place(openBand, 'open');
+
+    // Designated nests: one per species Game lists (Free Play's off-focus zone moa, which can't
+    // found its own nests that year), placed among that species' moa now on the ground.
+    const designated = this._designatedNestSpecies || [];
+    for (let i = 0; i < designated.length; i++) {
+      this._placeDesignatedNest(designated[i], radius, forestBand, farEnough);
+    }
+  }
+
+  // An established nest reserved for one moa species, set among its herd so their eggs gather
+  // there: on the member standing most central to the rest (least total distance), in the
+  // species' own country: the forest band for a forest moa (forestAffinity), open country for
+  // the others, when any of the herd stands there. None when the species has no moa here.
+  // The herd then makes it home for the year: set down around the nest with their home range on
+  // it, so their eggs land in it from the first (a moa lays wherever it is ~1.5 s after mating,
+  // so a nest across the map would never see them). Runs as a year's cast is placed, while it is
+  // still faded out, so the move isn't seen.
+  _placeDesignatedNest(speciesKey, radius, forestBand, farEnough) {
+    const herd = [];
+    for (let i = 0; i < this.moas.length; i++) {
+      const m = this.moas[i];
+      if (m.alive && m.speciesKey === speciesKey && this.terrain.isWalkable(m.pos.x, m.pos.y)) herd.push(m);
+    }
+    if (!herd.length) return;
+
+    const inForest = (m) => {
+      const e = this.terrain.getElevationAt(m.pos.x, m.pos.y);
+      return e >= forestBand.min && e < forestBand.max;
+    };
+    const sp = (typeof MOA_SPECIES !== 'undefined' && MOA_SPECIES[speciesKey]) || {};
+    const forestMoa = (sp.forestAffinity || 0) >= 0.5;
+    const home = herd.filter(m => inForest(m) === forestMoa);
+    // Keep the nest clear of the window edge where the herd allows.
+    const inside = (home.length ? home : herd).filter(m => this.isInBounds(m.pos.x, m.pos.y, radius));
+    const pool = inside.length ? inside : (home.length ? home : herd);
+
+    let best = null, bestSum = Infinity;
+    for (const c of pool) {
+      if (!farEnough(c.pos.x, c.pos.y)) continue;
+      let sum = 0;
+      for (const m of herd) sum += Math.hypot(m.pos.x - c.pos.x, m.pos.y - c.pos.y);
+      if (sum < bestSum) { bestSum = sum; best = c; }
+    }
+    if (!best) return;
+    const site = new NestingSite(best.pos.x, best.pos.y,
+      { radius, habitat: inForest(best) ? 'forest' : 'open', reservedFor: speciesKey });
+    site.forSpecies = speciesKey;
+    this.nestingSites.push(site);
+
+    // Set-down spots stay within the species' own elevation band where the ground allows.
+    const band = sp.preferredElevation || null;
+    const sx = site.pos.x, sy = site.pos.y;
+    for (const m of herd) {
+      let spot = null;
+      for (let tries = 0; tries < 12 && !spot; tries++) {
+        const p = this.findWalkablePositionNear(sx, sy, radius * 1.3);
+        if (!p) continue;
+        const e = this.terrain.getElevationAt(p.x, p.y);
+        if (!band || (e >= band.min && e <= band.max) || tries === 11) spot = { x: p.x, y: p.y };
+      }
+      if (spot) { m.pos.set(spot.x, spot.y); m.vel.mult(0); }
+      m.homeRange.set(sx, sy);
+    }
   }
 
   // Nearest ALIVE nesting site within radius (optionally only those whose habitat a
-  // species favours; forest sites for the forest-dwelling little bush moa).
+  // species favours; forest sites for the forest-dwelling little bush moa). With a species,
+  // another species' designated nest is skipped; without one (eagles, spacing) every nest counts.
   getNearestNestingSite(x, y, radius = Infinity, speciesKey = null) {
     const forestSpecies = speciesKey === 'little_bush_moa';
     const rSq = radius === Infinity ? Infinity : radius * radius;
@@ -342,6 +406,8 @@ class Simulation {
     for (let i = 0; i < this.nestingSites.length; i++) {
       const s = this.nestingSites[i];
       if (!s.alive) continue;
+      // A designated nest is its own species': other moa neither gather nor lay there.
+      if (speciesKey && s.reservedFor && s.reservedFor !== speciesKey) continue;
       const dx = s.pos.x - x, dy = s.pos.y - y, dSq = dx * dx + dy * dy;
       // Soft habitat preference: forest moa favour forest sites (feel them nearer).
       const eff = (forestSpecies && s.habitat === 'forest') ? dSq * 0.5 : dSq;

@@ -18,11 +18,35 @@ const FP_MOA_NICKNAME = { upland_moa: 'upland moa', little_bush_moa: 'bush moa' 
 // The Year of the Kea: its Berry Cache tool is on the toolbar.
 const fpKeaYear = (game) => !!(game.activePlaceables && game.activePlaceables.keaLure);
 
-// A Berry Cache is standing somewhere on the map.
-const fpCachePlaced = (game) => {
-  const list = (game.simulation && game.simulation.placeables) || [];
-  for (let i = 0; i < list.length; i++) if (list[i].alive && list[i].type === 'keaLure') return true;
-  return false;
+// This year's focus zone moa and its favoured plant (speargrass / lancewood), when that plant
+// is on the toolbar: { moa, plant, def }, else null.
+const fpZonePlant = (game) => {
+  const z = game._moaZoneForCycle && game._moaZoneForCycle(game.cycle);
+  const def = z && game.activePlaceables && game.activePlaceables[z.plant];
+  return def ? { moa: z.moa, plant: z.plant, def } : null;
+};
+
+// The kea's "BERRIES!" tip, shared by its two triggers below (a Berry Cache placed, or
+// autumn arriving first). Whichever fires first shows it; the other then stands down (queued
+// counts too, so both firing in one go can't show it twice).
+const FP_KEA_BERRIES_IDS = ['fp_kea_berries', 'fp_kea_berries_autumn'];
+const fpKeaBerriesShown = (game) => {
+  const t = game.tutorial;
+  return FP_KEA_BERRIES_IDS.some(id => t.shownTips.has(id)) ||
+         t.pendingTips.some(p => FP_KEA_BERRIES_IDS.includes(p.id));
+};
+const FP_KEA_BERRIES_TIP = {
+  title: "KEE-A! KEE-A!",
+  content: [
+    "BERRIES! Juicy pātōtara berries!",
+    "Skraak, Huft-Tuft, get over here to eat the BERRIES!"
+  ],
+  guideSprite: 'kea', voice: 'kea',
+  guidePosition: 'center',
+  renderAboveOverlay: (game) => game.renderSpotlightAboveUI({ species: ['kea'] }),
+  // The guide follows up 5s of play after this closes (fp_kea_strongbeak).
+  onDismiss: (game) => { game.tutorial.scratch.keaBerriesAt = game.playTime; },
+  nextTip: null, pauseGame: true, showOnce: true, priority: 2
 };
 
 const TIPS = {
@@ -36,8 +60,8 @@ const TIPS = {
     },
     title: "Remember how to help the upland moa?",
     content: [
-      "Place speargrass to guide them in subalpine areas!",
-      "You can settle a nest by placing several."
+      "Place SPEARGRASS to guide them in the mountainous, subalpine tussock-land!",
+      "You can settle a NEST by placing several."
     ],
     guidePosition: 'bottomLeft',
     highlight: { type: 'element', target: 'tool:speargrass' },
@@ -93,14 +117,14 @@ const TIPS = {
     title: "Click or tap a species to highlight it!",
     // Names this year's off-focus zone moa (the bush moa in the upland opening year).
     content: (game) => {
-      const lines = ["Make sure to help these species; if one goes extinct this year, it's game over."];
+      const lines = ["Pay close attention to KEA (blue) and UPLAND MOA (grey); if either go extinct this year, it's game over."];
       const off = (game.freeplayOffMoa || [])[0];
       if (off) {
         const zones = (game.currentLevel && game.currentLevel.moaZones) || {};
         const uphill = zones.upland && zones.upland.moa === off;
         const name = FP_MOA_NICKNAME[off] || game._freeplaySpeciesName(off);
-        lines.push(`The ${name} isn't a "focus" species this year, we will go ${uphill ? 'uphill' : 'downhill'} to meet them soon. ` +
-                   "But keeping their numbers up if possible, will help the forest in the long term!");
+        lines.push(`The ${name} isn't a "FOCUS" species this year, we will go ${uphill ? 'uphill' : 'downhill'} to meet them soon. ` ,
+                   "Keeping their numbers up by feeding them kawakawa and ferns, will help the forest in the long term!");
       }
       return lines;
     },
@@ -119,7 +143,7 @@ const TIPS = {
     trigger: { type: TRIGGER_TYPE.IMMEDIATE },
     title: "Keep track of the seasons.",
     content: [
-      "Aim to achieve your GOALS by the start of next summer.",
+      "Achieve your GOALS by the end of next spring.",
       "Winter will see food sources dry up, and spring will be Kea's breeding season. " +
       "Keep protecting your vulnerable moa and Kea all year!"
     ],
@@ -129,25 +153,28 @@ const TIPS = {
   },
 
   // ---------- Year of the Kea: the berries, then the guide explains ----------
-  // A Berry Cache placed, or autumn reached (pātōtara fruit then), in the kea year.
+  // Fires on the placement itself: events raised while another tip is open are queued and
+  // replayed once it closes, so a cache placed mid-tip still gets its answer.
   fp_kea_berries: {
+    ...FP_KEA_BERRIES_TIP,
     id: 'fp_kea_berries',
     trigger: {
-      type: TRIGGER_TYPE.CONDITION,
-      condition: (game) => fpKeaYear(game) &&
-        (fpCachePlaced(game) || (game.seasonManager && game.seasonManager.currentKey === 'autumn'))
-    },
-    title: "KEE-A! KEE-A!",
-    content: [
-      "BERRIES! Juicy pātōtara berries!",
-      "Skraak, Huft-Tuft, get over here to eat the BERRIES!"
-    ],
-    guideSprite: 'kea', voice: 'kea',
-    guidePosition: 'center',
-    renderAboveOverlay: (game) => game.renderSpotlightAboveUI({ species: ['kea'] }),
-    // The guide follows up 5s of play after this closes (fp_kea_strongbeak).
-    onDismiss: (game) => { game.tutorial.scratch.keaBerriesAt = game.playTime; },
-    nextTip: null, pauseGame: true, showOnce: true, priority: 2
+      type: TRIGGER_TYPE.EVENT, event: TUTORIAL_EVENTS.PLACEMENT,
+      condition: (game, data) => !!data && data.type === 'keaLure' && fpKeaYear(game) &&
+                                 !fpKeaBerriesShown(game)
+    }
+  },
+
+  // Fallback: no cache placed by the kea year's autumn (pātōtara fruit then), so the kea find
+  // the berries themselves.
+  fp_kea_berries_autumn: {
+    ...FP_KEA_BERRIES_TIP,
+    id: 'fp_kea_berries_autumn',
+    trigger: {
+      type: TRIGGER_TYPE.EVENT, event: TUTORIAL_EVENTS.SEASON_CHANGE,
+      condition: (game, data) => !!data && data.seasonKey === 'autumn' && fpKeaYear(game) &&
+                                 !fpKeaBerriesShown(game)
+    }
   },
 
   fp_kea_strongbeak: {
@@ -161,7 +188,8 @@ const TIPS = {
     },
     title: "That's Strongbeak the kea",
     content: [
-      "The kea will follow wherever you place berries, and you can disperse them with the STORM. They eat eggs as well...",
+      "The kea will follow wherever you place berries, and you can disperse them with the STORM.",
+      "As well as berries, they snack on moa eggs...",
       "If your Moa are taking up too much territory, stage a NEST RAID to take over the area.",
       "With Moa driven out, Kea can nest in the podocarp forest, safe from Pouākai."
     ],
@@ -238,6 +266,38 @@ const TIPS = {
     spotlightHuntingEagle: true,
     guidedPlaceable: 'Storm',
     nextTip: null, pauseGame: true, showOnce: true, priority: 1, urgency: 'high'
+  },
+
+  // ---------- An eagle takes a moa: a setback, not the end ----------
+  // Level 1's "A Moa Has Fallen", with its kawakawa line swapped for this year's moa plant
+  // (kawakawa is gone after the first winter). It waits for a kill while that plant is
+  // affordable, so it never points at a greyed-out tool.
+  fp_moa_fallen: {
+    id: 'fp_moa_fallen',
+    trigger: {
+      type: TRIGGER_TYPE.EVENT, event: TUTORIAL_EVENTS.MOA_KILLED,
+      condition: (game) => {
+        const z = fpZonePlant(game);
+        return !!z && game.mauri.canAfford(z.def.cost);
+      }
+    },
+    title: "A Moa Has Fallen",
+    content: (game) => {
+      const z = fpZonePlant(game);
+      const lines = ["The eagle caught a moa... but don't lose hope!"];
+      if (z) {
+        const name = FP_MOA_NICKNAME[z.moa] || game._freeplaySpeciesName(z.moa);
+        lines.push(`Place ${z.plant} to help your ${name} feed and breed.`);
+      }
+      lines.push("When moa are food-secure and not threatened, they can reproduce.");
+      return lines;
+    },
+    guidePosition: 'center',
+    highlight: (game) => {
+      const z = fpZonePlant(game);
+      return z ? { type: 'element', target: 'tool:' + z.plant } : null;
+    },
+    nextTip: null, pauseGame: true, showOnce: true, priority: 2
   },
 
   // ---------- First winter: the Last Glacial Maximum, then how mauri is earned ----------

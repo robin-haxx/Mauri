@@ -475,9 +475,11 @@ class TutorialManager {
     if (!tip) return;
     
     this.currentTip = { ...tip, data };
-    // title / content / guidePosition may be (game, data) => value, resolved as the tip
-    // appears (e.g. words that name this year's focus, or a panel placed clear of a nest).
-    for (const k of ['title', 'content', 'guidePosition']) {
+    // title / content / guidePosition / highlight may be (game, data) => value, resolved as
+    // the tip appears (e.g. words that name this year's focus, a panel placed clear of a
+    // nest, or this year's tool). A function highlight isn't read by the affordability gate
+    // (_tipPlaceable), so such a tip gates its item in its own trigger condition.
+    for (const k of ['title', 'content', 'guidePosition', 'highlight']) {
       if (typeof tip[k] !== 'function') continue;
       try {
         this.currentTip[k] = tip[k](this.game, data);

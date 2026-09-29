@@ -16,6 +16,9 @@ class NestingSite {
     this.alive = true;
     // 'forest' (downslope podocarp) or 'open' (flats/subalpine): which moa favour it.
     this.habitat = opts.habitat || 'open';
+    // A designated nest belongs to one species (Free Play's off-focus moa): only its moa
+    // gather and lay there. null = any moa (seeded and player-founded nests).
+    this.reservedFor = opts.reservedFor || null;
     this.eggCount = 0;          // recomputed by the sim from eggs in range
     this.animTime = Math.random() * 1000;
   }

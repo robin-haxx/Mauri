@@ -2731,8 +2731,9 @@ class Game {
     }
 
     // 7b) Moa nest founding: every year, growing a patch of the focus moa's favoured plant
-    //     (lancewood / speargrass) with that moa drawn in founds a NEW nest; the only way
-    //     nests form (none are seeded). See Simulation._updateMoaNestingFormation.
+    //     (lancewood / speargrass) with that moa drawn in founds a NEW nest; the only way the
+    //     focus moa gets nests (the off-focus moa is given one; see _designatedNestSpecies
+    //     below). See Simulation._updateMoaNestingFormation.
     const zone = this._moaZoneForCycle(this.cycle);
     const FAVOURED_PLANT = { little_bush_moa: 'lancewood', upland_moa: 'speargrass' };
     if (sim) {
@@ -2824,6 +2825,10 @@ class Game {
     // one). Read by Simulation._seedNestingSites. Year 1 has no camera pan, so re-seed here;
     // later years re-seed inside the pan's spawnAreaEntities with this set.
     sim._nestingOverride = (entry && entry.nesting) ? entry.nesting : null;
+    // The off-focus zone moa can't found nests this year (only the focus moa's favoured plant is
+    // on the toolbar), so it starts the year with a designated nest of its own, set among its
+    // herd once the year's cast is on the ground (Simulation._placeDesignatedNest).
+    sim._designatedNestSpecies = this.freeplayOffMoa.slice();
     if (this.cycle === 0) sim._seedNestingSites();
 
     // World grid: LAST, once this year's populations are settled, pan the camera to the

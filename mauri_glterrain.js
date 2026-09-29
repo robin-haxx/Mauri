@@ -19,6 +19,17 @@ const GLTerrain = {
   _colKeyCur: null, _colKeyNext: null,
   _loc: {},
 
+  // ---- visibility culling ------------------------------------------------------
+  // The mesh spans the whole world, but in Free Play's 2×2 world only about a third of it is on
+  // screen at once, and its cost is per-vertex, not per-pixel. Indices are laid out in blocks
+  // of BLOCK_COLS quad columns (see build) so draw() can skip everything that can't reach the
+  // frame (see _drawVisible). Set cull = false to draw the whole mesh (for comparisons).
+  BLOCK_COLS: 64,
+  cull: true,
+  _blocks: null,        // [{ first, perRow }] per column block, in index-buffer order
+  _blockEMin: null, _blockEMax: null,   // per block × ext row: lowest / highest vertex elevation
+  _rowWorldY: null,     // per ext row: its world y (the vertex shader's aWorld.y)
+
   // ---- terrain-resolution cap (offscreen) ------------------------------------
   // A smooth shaded height-field gains far less from supersampling than pixel-art
   // sprites, so render it into an offscreen buffer capped at CONFIG.terrainMaxSS and
@@ -240,11 +251,17 @@ const GLTerrain = {
         nrm[o3] = nx * inv; nrm[o3 + 1] = ny * inv; nrm[o3 + 2] = nz * inv;
       }
     }
-    // Indices: one quad per cell over the EXTENDED rows, FAR→NEAR (er ascending) for
-    // painter's occlusion. (extRows-1)*(cols-1)*6 indices; Uint32 when the mesh is large.
-    const quads = (cols - 1) * (extRows - 1);
+    // Indices: one quad per cell over the EXTENDED rows, in COLUMN BLOCKS of BLOCK_COLS quads,
+    // each block holding its rows FAR→NEAR (er ascending) for painter's occlusion, so draw() can
+    // issue one ranged draw per visible block covering just its visible rows (_drawVisible). A
+    // quad spans a single column step on screen (the relief lifts only in y), so quads in
+    // different columns never overlap, and block by block paints exactly what row by row across
+    // the whole width did. (extRows-1)*(cols-1)*6 indices; Uint32 when the mesh is large.
+    const qCols = cols - 1, qRows = extRows - 1;
+    const quads = qCols * qRows;
     const idx = (n > 65535) ? new Uint32Array(quads * 6) : new Uint16Array(quads * 6);
     this._idxType = (n > 65535) ? gl.UNSIGNED_INT : gl.UNSIGNED_SHORT;
+    this._idxBytes = (n > 65535) ? 4 : 2;
     // 32-bit indices are core in WebGL2; only WebGL1 needs OES_element_index_uint.
     const uintOK = (typeof GLBatch !== 'undefined' && GLBatch._gl2) || gl.getExtension('OES_element_index_uint');
     if (this._idxType === gl.UNSIGNED_INT && !uintOK) {
@@ -252,14 +269,38 @@ const GLTerrain = {
       console.warn('[glterrain] mesh too large for 16-bit indices and no uint index ext; disabling');
       this.enabled = false; return false;
     }
+    const BLOCK = this.BLOCK_COLS;
+    const nBlocks = Math.ceil(qCols / BLOCK);
+    const blocks = [];
+    // Per block and ext row, the lowest and highest elevation among the block's vertices: bounds
+    // each quad row's on-screen extent under the relief lift (see _drawVisible).
+    const eMin = new Float32Array(nBlocks * extRows), eMax = new Float32Array(nBlocks * extRows);
     let k = 0;
-    for (let er = 0; er < extRows - 1; er++) {
-      for (let c = 0; c < cols - 1; c++) {
-        const a = er * cols + c, b = a + 1, d = a + cols, e = d + 1;
-        idx[k++] = a; idx[k++] = d; idx[k++] = b;
-        idx[k++] = b; idx[k++] = d; idx[k++] = e;
+    for (let bi = 0; bi < nBlocks; bi++) {
+      const c0 = bi * BLOCK, c1 = Math.min(qCols, c0 + BLOCK);   // quad columns [c0, c1)
+      blocks.push({ first: k, perRow: (c1 - c0) * 6 });
+      for (let er = 0; er < qRows; er++) {
+        for (let c = c0; c < c1; c++) {
+          const a = er * cols + c, b = a + 1, d = a + cols, e = d + 1;
+          idx[k++] = a; idx[k++] = d; idx[k++] = b;
+          idx[k++] = b; idx[k++] = d; idx[k++] = e;
+        }
+      }
+      for (let er = 0; er < extRows; er++) {
+        const row = er * cols;
+        let lo = Infinity, hi = -Infinity;
+        for (let c = c0; c <= c1; c++) {   // vertex columns c0..c1 (the block's quads' corners)
+          const h = extHeight[row + c];
+          if (h < lo) lo = h;
+          if (h > hi) hi = h;
+        }
+        eMin[bi * extRows + er] = lo; eMax[bi * extRows + er] = hi;
       }
     }
+    this._blocks = blocks;
+    this._blockEMin = eMin; this._blockEMax = eMax;
+    this._rowWorldY = worldYs;
+    this._meshCols = cols; this._meshWorldW = worldW;
 
     const mk = (data, drawType) => { const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf);
       gl.bufferData(gl.ARRAY_BUFFER, data, drawType || gl.STATIC_DRAW); return buf; };
@@ -425,7 +466,7 @@ const GLTerrain = {
     bindAttr(ck[curKey] || ck.summer, this._aColCur, 3);
     bindAttr(ck[nextKey] || ck[curKey] || ck.summer, this._aColNext, 3);
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, b.idx);
-    gl.drawElements(gl.TRIANGLES, b.count, this._idxType, 0);
+    this._drawVisible(gl, game, clipX, clipY, clipW, clipH);
 
     // Leave scissor off + mesh attribs disabled so the sprite batch draws clean.
     gl.disable(gl.SCISSOR_TEST);
@@ -433,6 +474,56 @@ const GLTerrain = {
     gl.disableVertexAttribArray(this._aNormal);
     gl.disableVertexAttribArray(this._aColCur);
     gl.disableVertexAttribArray(this._aColNext);
+  },
+
+  // Draw only the mesh that can reach the frame: for each column block overlapping the view, the
+  // run of its quad rows whose on-screen extent can meet the visible rect. A row's extent is
+  // bounded by its world y (the vertex shader's projection) and the block's lowest and highest
+  // elevation under the relief lift, so every culled triangle lies wholly off screen and the
+  // image is unchanged. A little padding and a row/column of margin absorb float rounding.
+  _drawVisible(gl, game, clipX, clipY, clipW, clipH) {
+    const blocks = this._blocks, type = this._idxType, bytes = this._idxBytes;
+    const extRows = this._extRows, qRows = extRows - 1;
+    if (!this.cull) {
+      for (const blk of blocks) gl.drawElements(gl.TRIANGLES, qRows * blk.perRow, type, blk.first * bytes);
+      return;
+    }
+    // The visible rect in logical px: the scissor clip within the canvas, padded a little.
+    const PAD = 2;
+    const x0 = Math.max(0, clipX) - PAD, x1 = Math.min(CONFIG.canvasWidth, clipX + clipW) + PAD;
+    const y0 = Math.max(0, clipY) - PAD, y1 = Math.min(CONFIG.canvasHeight, clipY + clipH) + PAD;
+    if (x1 <= x0 || y1 <= y0) return;
+
+    // Invert the vertex shader's view transform: screen x → world x (columns), screen y →
+    // paint y (paintY = (worldY − scrollY)·K − elev·LIFT + LIFT).
+    const t = game.terrain, P = Projection;
+    const zoom = CONFIG.viewZoom, K = P.K, LIFT = P.LIFT;
+    const scrollX = t.scrollX || 0, scrollY = t.scrollY || 0;
+    const wx0 = (x0 - CONFIG.viewX) / zoom + scrollX, wx1 = (x1 - CONFIG.viewX) / zoom + scrollX;
+    const py0 = (y0 - CONFIG.viewY) / zoom, py1 = (y1 - CONFIG.viewY) / zoom;
+
+    const qCols = this._meshCols - 1, colW = this._meshWorldW / Math.max(1, qCols);
+    const cMin = Math.max(0, Math.floor(wx0 / colW) - 1);
+    const cMax = Math.min(qCols - 1, Math.ceil(wx1 / colW) + 1);
+    if (cMax < cMin) return;
+
+    const BLOCK = this.BLOCK_COLS, rowY = this._rowWorldY;
+    const eMin = this._blockEMin, eMax = this._blockEMax;
+    for (let bi = Math.floor(cMin / BLOCK), bEnd = Math.floor(cMax / BLOCK); bi <= bEnd; bi++) {
+      const base = bi * extRows;
+      let r0 = -1, r1 = -1;
+      for (let er = 0; er < qRows; er++) {
+        const hi = Math.max(eMax[base + er], eMax[base + er + 1]);
+        const lo = Math.min(eMin[base + er], eMin[base + er + 1]);
+        const top = (rowY[er] - scrollY) * K - hi * LIFT + LIFT;          // highest it can reach
+        const bottom = (rowY[er + 1] - scrollY) * K - lo * LIFT + LIFT;   // lowest it can reach
+        if (bottom >= py0 && top <= py1) { if (r0 < 0) r0 = er; r1 = er; }
+      }
+      if (r0 < 0) continue;
+      r0 = Math.max(0, r0 - 1); r1 = Math.min(qRows - 1, r1 + 1);
+      const blk = blocks[bi];
+      gl.drawElements(gl.TRIANGLES, (r1 - r0 + 1) * blk.perRow, type, (blk.first + r0 * blk.perRow) * bytes);
+    }
   },
 
   // ---- offscreen terrain buffer (resolution cap) -----------------------------

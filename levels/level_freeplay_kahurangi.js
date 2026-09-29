@@ -25,7 +25,7 @@ const LEVEL_FREEPLAY_KAHURANGI = {
   terrain: {
     noiseScale: 0.005, octaves: 3, persistence: 0.32, lacunarity: 3.0,
     ridgeInfluence: 1.6, elevationPower: 1.4, islandFalloff: 0.2,
-    plantDensity: 0.005, useLakes: false
+    plantDensity: 0.004, useLakes: false
   },
 
   // ---- 2×2 continuous terrain grid: the camera pans a new area each year -----------
@@ -99,11 +99,11 @@ const LEVEL_FREEPLAY_KAHURANGI = {
   initialEntityCounts: { moa: 18, eagle: 2, kokako: 3, kea: 4 },
 
   economy: {
-    startingMauri: 80,
+    startingMauri: 50,
     seasonDuration: 3600,        // 1 min/season → a year ≈ 4 min
     eggIncubationTime: 600,
-    securityTimeToLay: 900,
-    securityTimeVariation: 300,
+    securityTimeToLay: 1000,
+    securityTimeVariation: 200,
     layingHungerThreshold: 26,
     eagleSpawnMilestones: [],
     maxPopulation: 60
@@ -323,10 +323,11 @@ const LEVEL_FREEPLAY_KAHURANGI = {
     disturbanceDecaySec: 22,    // a raid's disturbance fades over this long
     disturbancePerRaid: 1.0,    // strength added per raided egg
 
-    // ---- Moa nests (see mauri_nesting.js). None are seeded: every nest is FOUNDED by the
-    // player placing two patches of the focus moa's favoured plant close together with that
-    // moa drawn in (Simulation._updateMoaNestingFormation). Founded nests are what the kea
-    // raid. ----------
+    // ---- Moa nests (see mauri_nesting.js). None are seeded by count: the focus moa's nests are
+    // FOUNDED by the player placing two patches of its favoured plant close together with that
+    // moa drawn in (Simulation._updateMoaNestingFormation). The off-focus zone moa, whose plant
+    // isn't on that year's toolbar, starts each year with one designated nest of its own
+    // (reserved for its species). Nests are what the kea raid. ----------
     nestingSites: {
       forestCount: 0,           // no seeded forest nests
       openCount: 0,             // no seeded open-country nests

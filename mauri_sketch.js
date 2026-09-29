@@ -440,6 +440,7 @@ const PLACEABLES = {
     description: "Hardy + nutritious (and spicy!)",
     cost: 25,
     icon: '🌿',
+    iconDraw: 'kawakawa',      // one heart-leaf sprig of the plant's tuft (GameUI._drawToolIcon)
     color: '#2d8a4e',
     fauna: 'moa',
     effect: 'feeding',
@@ -461,6 +462,7 @@ const PLACEABLES = {
     description: "Eagles can't see moa here",
     cost: 40,
     icon: '🌴',
+    iconSprite: 'Fern_Mature.png',   // the mamaku frond the shelter grows
     color: '#1a5c32',
     fauna: 'moa',
     effect: 'shelter',
@@ -480,6 +482,7 @@ const PLACEABLES = {
     description: "Safe place to lay eggs",
     cost: 55,
     icon: '🪺',
+    iconDraw: 'nest',
     color: '#8b7355',
     fauna: 'moa',
     effect: 'nesting',
@@ -499,6 +502,7 @@ const PLACEABLES = {
     description: "A thunderous gust to divert flighted birds!",
     cost: 40,
     icon: '🌩️',
+    iconDraw: 'storm',         // the storm's own cloud + bolt sprites
     color: '#c4a35a',
     fauna: 'eagle',
     effect: 'Storm',
@@ -521,6 +525,7 @@ const PLACEABLES = {
     description: "Invoke a bumper year: next year the podocarp forest blooms and the fruit-birds boom",
     cost: 200,
     icon: '🌰',
+    iconSprite: 'Rimu_Thriving.png',   // a podocarp in fruit
     color: '#c98a3a',
     fauna: 'kakapo',
     effect: 'mastYear',
@@ -537,6 +542,7 @@ const PLACEABLES = {
     description: "Rest and slow hunger",
     cost: 45,
     icon: '💧',
+    iconDraw: 'waterhole',
     color: '#4a90a4',
     fauna: 'moa',
     effect: 'water',
@@ -557,6 +563,7 @@ const PLACEABLES = {
     description: "Food and light cover",
     cost: 30,
     icon: '🌾',
+    iconSprite: 'Flax_Mature.png',
     color: '#5a8a3a',
     fauna: 'moa',
     effect: 'feeding',
@@ -677,6 +684,7 @@ const PLACEABLES = {
     description: "Sprouts trees for Kākā!",
     cost: 35,
     icon: '🌱',
+    iconSprite: 'Beech_Mature.png',   // the forest grove it cultivates
     color: '#3b6a50',
     fauna: 'kaka',
     effect: 'forestBoost',
@@ -709,6 +717,7 @@ const PLACEABLES = {
     description: "Attempt to raid eggs and chase out moa!",
     cost: 0,
     icon: '🥚',
+    iconDraw: 'egg',           // a moa egg, drawn like the in-world clutch
     color: '#8a3a3a',
     fauna: 'kea',
     effect: 'nestRaid',
@@ -727,6 +736,7 @@ const PLACEABLES = {
     description: "Shakes the trees for fruit!",
     cost: 40,
     icon: '🍒',
+    iconSprite: 'Rimu_Mature.png',   // rimu laden with red fruit
     color: '#a23a4a',
     fauna: 'kakapo',
     effect: 'rimuScramble',
@@ -3074,13 +3084,15 @@ class Game {
     }
     this.mauri.spend(cost);
     const chance = this._raidSuccessChance(site);
-    if (Math.random() < chance) {
+    const success = Math.random() < chance;
+    if (success) {
       const eaten = this.simulation.destroyNestingSite(site);
       this.addNotification(`The kea raid the nest; ${eaten} egg${eaten === 1 ? '' : 's'} taken; the moa flee to another site.`, 'success');
       if (audioManager && audioManager.playEagleCatch) audioManager.playEagleCatch();
     } else {
       this.addNotification(`The moa drove the kea off; the raid failed. Thin their numbers here first.`, 'error');
     }
+    if (this.tutorial) this.tutorial.fireEvent(TUTORIAL_EVENTS.NEST_RAID, { site, success });
   }
 
   // Nest Raid is a NON-MODAL side panel (it does NOT grey out the play area), drawn in the
@@ -4056,7 +4068,82 @@ class Game {
     const moas = this.simulation.moas;
     for (let i = 0; i < moas.length; i++) {
       const m = moas[i];
-      if (m.alive && SPECIES_HIGHLIGHT.has(m.speciesKey)) m.render();
+      if (m.alive && SPECIES_HIGHLIGHT.has(m.speciesKey)) this._renderLifted(m, 'render');
+    }
+
+    drawingContext.restore();
+    pop();
+  }
+
+  // Draw one world entity's `method` with its feet on the relief (the sim's 3D billboard
+  // lift; a no-op offset in 2D). For the above-overlay spotlight passes.
+  _renderLifted(e, method = 'render') {
+    push();
+    translate(0, this._groundPaintY(e.pos.x, e.pos.y) - e.pos.y);
+    e[method]();
+    pop();
+  }
+
+  // Tutorial spotlight, drawn between a tip's dimming overlay and its panel (a tip's
+  // renderAboveOverlay hook) in the world pass's clip + view transform: every live moa or
+  // bird of `species`, and, with `at` (a world point such as a new egg), the nesting site
+  // holding it with its clutch, ringed by a pulsing marker.
+  renderSpotlightAboveUI({ species = [], at = null } = {}) {
+    const sim = this.simulation;
+    if (!sim) return;
+    const keys = new Set(species);
+    push();
+    drawingContext.save();
+    drawingContext.beginPath();
+    const _clip = this._worldClip();
+    drawingContext.rect(_clip.x, _clip.y, _clip.w, _clip.h);
+    drawingContext.clip();
+    translate(CONFIG.viewX, CONFIG.viewY);
+    scale(CONFIG.viewZoom);
+
+    if (at) {
+      const site = (sim.nestingSites || []).find(s => s.alive && s.isInRange(at));
+      const cx = site ? site.pos.x : at.x, cy = site ? site.pos.y : at.y;
+      const r = site ? site.radius : 24;
+      if (site) this._renderLifted(site, 'render');
+      const eggs = sim.eggs;
+      for (let i = 0; i < eggs.length; i++) {
+        const e = eggs[i];
+        if (!e.alive || e.hatched) continue;
+        const dx = e.pos.x - cx, dy = e.pos.y - cy;
+        if (dx * dx + dy * dy <= r * r) this._renderLifted(e, 'render');
+      }
+      const key = species[0];
+      const cfg = (typeof MOA_SPECIES !== 'undefined' && MOA_SPECIES[key]) || {};
+      const col = cfg.highlightColor || [255, 235, 120];
+      const pulse = 0.5 + 0.5 * Math.sin(frameCount * 0.08);
+      const px = 1 / CONFIG.viewZoom;   // one screen pixel, in world units
+      push();
+      translate(cx, this._groundPaintY(cx, cy));
+      noFill();
+      stroke(col[0], col[1], col[2], 170 + 85 * pulse);
+      strokeWeight(3 * px);
+      drawingContext.setLineDash([10 * px, 7 * px]);
+      const d = r * 2.1 * (1 + 0.06 * pulse);
+      ellipse(0, 0, d, d * 0.62);
+      drawingContext.setLineDash([]);
+      pop();
+    }
+
+    const moas = sim.moas;
+    for (let i = 0; i < moas.length; i++) {
+      const m = moas[i];
+      if (m.alive && keys.has(m.speciesKey)) this._renderLifted(m, 'render');
+    }
+    for (const k of keys) {
+      const list = sim.otherEntities && sim.otherEntities[k];
+      if (!list) continue;
+      for (let i = 0; i < list.length; i++) if (list[i].alive) this._renderLifted(list[i], 'render');
+    }
+    const eagles = sim.eagles;
+    for (let i = 0; i < eagles.length; i++) {
+      const e = eagles[i];
+      if (e.alive !== false && keys.has(e.speciesKey)) this._renderLifted(e, 'render');
     }
 
     drawingContext.restore();
@@ -4107,7 +4194,7 @@ class Game {
     const eagles = this.simulation.eagles;
     for (let i = 0; i < eagles.length; i++) {
       const e = eagles[i];
-      if (e.alive !== false && e.hunting) e.renderSpotlight();
+      if (e.alive !== false && e.hunting) this._renderLifted(e, 'renderSpotlight');
     }
 
     drawingContext.restore();
@@ -4116,7 +4203,8 @@ class Game {
 
   _getGuideSprite(spriteKey){
     const spriteMap = {
-      'mantis_talk': tutorialMantisSprite
+      'mantis_talk': tutorialMantisSprite,
+      'kea': EntitySprites.getKeaSprite()   // Free Play's kea-voiced tips
       //add others here
     };
     return spriteMap[spriteKey] || tutorialMantisSprite;

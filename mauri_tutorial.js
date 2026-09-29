@@ -23,13 +23,14 @@ const TUTORIAL_EVENTS = {
   EAGLE_SPAWNED: 'eagle_spawned',
   POPULATION_MILESTONE: 'population_milestone',
   MOA_HUNGRY: 'moa_hungry',
-  EGG_LAID: 'egg_laid',
+  EGG_LAID: 'egg_laid',    // every moa egg laid, data: { egg, speciesKey }
   EGG_HATCHED: 'egg_hatched',
   LOW_MAURI: 'low_mauri',
   PLACEABLE_EXPIRED: 'placeable_expired',
   FIRST_EGG: 'first_egg',
   PLACEMENT: 'placement',  // fired on every successful placement, data: { type }
-  YEAR_START: 'year_start' // endless: a year's focus, palette + goals are set, data: { cycle }
+  YEAR_START: 'year_start', // endless: a year's focus, palette + goals are set, data: { cycle }
+  NEST_RAID: 'nest_raid'    // a kea raid was rolled on a nest, data: { site, success }
 };
 
 // Named toolbar-button highlight targets → the placeable key each one shows.
@@ -130,7 +131,33 @@ class TutorialUIMapper {
         const cx = fs ? fs.mauriRingCX : layout.mauriRingCX;
         const cy = fs ? fs.mauriRingCY : layout.mauriRingCY;
         const r  = fs ? fs.mauriRingR  : layout.mauriRingR;
-        return { x: cx - r, y: cy - r, w: r * 2, h: r * 2 };
+        return { x: cx - r, y: cy - r, w: r * 2, h: r * 2, circle: true };
+      }
+      // Endless ecosystem dial (AVG POP / balance), right of the season ring.
+      case 'popDial': {
+        const cx = fs ? fs.popDialCX : layout.popDialCX;
+        const cy = fs ? fs.popDialCY : layout.popDialCY;
+        const r  = fs ? fs.popDialR  : layout.popDialR;
+        return { x: cx - r, y: cy - r, w: r * 2, h: r * 2, circle: true };
+      }
+      // Focus-species tiles under the fullscreen goals panel (the year's focus group, or the
+      // off-focus keystone moa beside it). Docked, the focus falls back to the POPULATION
+      // panel's species rows; the off-focus group has no docked tile.
+      case 'focusSpecies':
+      case 'offFocusSpecies': {
+        const wantSurvival = target === 'offFocusSpecies';
+        if (!fs) {
+          if (wantSurvival) return null;
+          return this.getBounds('populationPanel');
+        }
+        const tiles = (ui._fsFocusBtnBounds || []).filter(b => !!b.survival === wantSurvival);
+        if (!tiles.length) return null;
+        let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+        for (const b of tiles) {
+          x0 = Math.min(x0, b.x); y0 = Math.min(y0, b.y);
+          x1 = Math.max(x1, b.x + b.size); y1 = Math.max(y1, b.y + b.size);
+        }
+        return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
       }
       // Season/year/time are now one circular ring (renderSeasonRing) in place of
       // the old season + TIME panels; both targets map to that ring.
@@ -139,7 +166,7 @@ class TutorialUIMapper {
         const cx = fs ? fs.ringCX : layout.ringCX;
         const cy = fs ? fs.ringCY : layout.ringCY;
         const r  = fs ? fs.ringR  : layout.ringR;
-        return { x: cx - r, y: cy - r, w: r * 2, h: r * 2 };
+        return { x: cx - r, y: cy - r, w: r * 2, h: r * 2, circle: true };
       }
       case 'pauseButton':
         if (fs) return { x: fs.pauseBtnX, y: fs.btnY, w: fs.btnSize, h: fs.btnSize };
@@ -448,18 +475,33 @@ class TutorialManager {
     if (!tip) return;
     
     this.currentTip = { ...tip, data };
+    // title / content / guidePosition may be (game, data) => value, resolved as the tip
+    // appears (e.g. words that name this year's focus, or a panel placed clear of a nest).
+    for (const k of ['title', 'content', 'guidePosition']) {
+      if (typeof tip[k] !== 'function') continue;
+      try {
+        this.currentTip[k] = tip[k](this.game, data);
+      } catch (e) {
+        console.warn(`Tutorial ${k} error for ${tipId}:`, e);
+        this.currentTip[k] = k === 'content' ? [] : (k === 'title' ? '' : null);
+      }
+    }
     this.active = true;
     this.tipDisplayTime = 0;
     this.shownTips.add(tipId);
     this.lastTipTime = this.game.playTime;
-    
+
     if (tip.trigger.cooldown) {
       this.tipCooldowns[tipId] = this.game.playTime + tip.trigger.cooldown;
     }
-    
+
     this.targetFadeAlpha = 255;
 
-    if (audioManager) audioManager.playTutorialTip();
+    // A tip spoken by a bird (tip.voice) opens on a snippet of its call, else the chime.
+    if (audioManager) {
+      const voiced = tip.voice && audioManager.playVoiceCue && audioManager.playVoiceCue(tip.voice);
+      if (!voiced) audioManager.playTutorialTip();
+    }
 
     if (tip.pauseGame && this.game.state === GAME_STATE.PLAYING) {
       this.game.state = GAME_STATE.PAUSED;
@@ -583,57 +625,85 @@ class TutorialManager {
     if (!this.active || !this.currentTip) return;
     
     const alpha = this.fadeAlpha;
-    
-    // Overlay
-    noStroke();
-    fill(0, 0, 0, alpha * 0.5);
-    rect(0, 0, CONFIG.canvasWidth, CONFIG.canvasHeight);
-    
-    // Highlights
     const tip = this.currentTip;
-    if (tip.highlight) this._renderHighlightBox(tip.highlight, alpha);
-    if (tip.highlightAlt) this._renderHighlightBox(tip.highlightAlt, alpha * 0.7);
+    const hlMain = this._highlightBounds(tip.highlight);
+    const hlAlt = this._highlightBounds(tip.highlightAlt);
+
+    // Overlay, with the highlighted UI cut out of it: the icons, dials and buttons a tip
+    // points at stay at full brightness above the dimmed screen.
+    this._renderOverlay(alpha, [hlMain, hlAlt].filter(Boolean));
+
+    // Highlights
+    if (hlMain) this._renderHighlightBox(hlMain, alpha);
+    if (hlAlt) this._renderHighlightBox(hlAlt, alpha * 0.7);
 
     // A tip can spotlight part of the world through the overlay, under its panel.
-    if (typeof tip.renderAboveOverlay === 'function') tip.renderAboveOverlay(this.game);
+    if (typeof tip.renderAboveOverlay === 'function') tip.renderAboveOverlay(this.game, tip.data);
 
     // Tip panel
     this._renderTipPanel(alpha);
   }
-  
-  _renderHighlightBox(highlight, alpha) {
-    if (!this.uiMapper) return;
-    const bounds = this.uiMapper.getBounds(highlight.target);
-    if (!bounds) return;
-    
+
+  _highlightBounds(highlight) {
+    if (!highlight || !this.uiMapper) return null;
+    return this.uiMapper.getBounds(highlight.target);
+  }
+
+  // The dimming fill over the whole canvas, minus a hole per highlighted element. Each hole
+  // clips in turn (the canvas minus that hole, even-odd), so overlapping holes still combine
+  // into one clear area.
+  _renderOverlay(alpha, holes) {
+    const ctx = drawingContext;
+    ctx.save();
+    for (const b of holes) {
+      ctx.beginPath();
+      ctx.rect(0, 0, CONFIG.canvasWidth, CONFIG.canvasHeight);
+      this._highlightPath(ctx, b, 4);
+      ctx.clip('evenodd');
+    }
+    noStroke();
+    fill(0, 0, 0, alpha * 0.5);
+    rect(0, 0, CONFIG.canvasWidth, CONFIG.canvasHeight);
+    ctx.restore();
+  }
+
+  // Adds a highlight's outline, grown by pad, to the current canvas path: a circle for the
+  // round dials (bounds.circle), else a rounded rect.
+  _highlightPath(ctx, b, pad) {
+    const x = b.x - pad, y = b.y - pad, w = b.w + pad * 2, h = b.h + pad * 2;
+    if (b.circle) {
+      const r = Math.min(w, h) / 2;
+      ctx.moveTo(x + w / 2 + r, y + h / 2);
+      ctx.arc(x + w / 2, y + h / 2, r, 0, Math.PI * 2);
+      return;
+    }
+    const r = Math.min(10, w / 2, h / 2);
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+
+  // Glowing borders (inner + outer) around a highlighted element's cut-out.
+  _renderHighlightBox(bounds, alpha) {
     const pulse = sin(this.highlightPulse) * 0.3 + 0.7;
     const expand = sin(this.highlightPulse * 2) * 2;
-    
+
     push();
-    
-    // Brighten highlighted area
-    blendMode(LIGHTEST);
-    fill(30, 40, 35, alpha * 0.8);
-    noStroke();
-    rect(bounds.x - 4, bounds.y - 4, bounds.w + 8, bounds.h + 8, 8);
-    blendMode(BLEND);
-    
-    // Glowing borders (inner + outer)
     noFill();
     const glowLayers = [
-      { color: [180, 215, 190, alpha * pulse], weight: 3, pad: 0, radius: 10 },
-      { color: [255, 255, 200, alpha * 0.4 * pulse], weight: 6, pad: 4, radius: 12 }
+      { color: [180, 215, 190, alpha * pulse], weight: 3, pad: 4 },
+      { color: [255, 255, 200, alpha * 0.4 * pulse], weight: 6, pad: 8 }
     ];
     for (const layer of glowLayers) {
       stroke(...layer.color);
       strokeWeight(layer.weight);
-      rect(
-        bounds.x - expand - layer.pad, bounds.y - expand - layer.pad,
-        bounds.w + expand * 2 + layer.pad * 2, bounds.h + expand * 2 + layer.pad * 2,
-        layer.radius
-      );
+      drawingContext.beginPath();
+      this._highlightPath(drawingContext, bounds, layer.pad + expand);
+      drawingContext.stroke();
     }
-    
     pop();
   }
   
@@ -643,7 +713,15 @@ class TutorialManager {
     const panelWidth = 500 * S;
     const content = Array.isArray(tip.content) ? tip.content : [tip.content];
     const lineHeight = 24 * S;
-    const panelHeight = 80 * S + (content.length * lineHeight) + 60 * S;
+    const textW = panelWidth - 50 * S;
+    // Each content entry is a paragraph, word-wrapped to the panel so a long line takes the
+    // rows it needs instead of spilling over the next one ('' stays a blank spacer row).
+    push();
+    textFont('OpenDyslexic');
+    textSize(15 * S);
+    const lines = this._wrapTipLines(content, textW);
+    pop();
+    const panelHeight = 80 * S + (lines.length * lineHeight) + 60 * S;
 
     const pos = this._getTipPanelPosition(tip.guidePosition, panelWidth, panelHeight);
     this.panelBounds = { x: pos.x, y: pos.y, w: panelWidth, h: panelHeight };
@@ -679,11 +757,13 @@ class TutorialManager {
     noStroke();
     rect(pos.x, pos.y, panelWidth, 50 * S, 6, 6, 0, 0);
 
-    // Title text
+    // Title text (shrunk to fit a long title on one line)
     fill(200, 245, 210, alpha);
     textSize(20 * S);
     textAlign(LEFT, CENTER);
     if (typeof FreckleFace !== 'undefined') textFont(FreckleFace);
+    const titleW = textWidth(tip.title);
+    if (titleW > textW) textSize(20 * S * textW / titleW);
     text(tip.title, pos.x + 25 * S, pos.y + 25 * S);
     textFont('OpenDyslexic');
 
@@ -693,8 +773,8 @@ class TutorialManager {
     textAlign(LEFT, TOP);
 
     let contentY = pos.y + 65 * S;
-    for (const line of content) {
-      text(line, pos.x + 25 * S, contentY, panelWidth - 50 * S);
+    for (const line of lines) {
+      text(line, pos.x + 25 * S, contentY);
       contentY += lineHeight;
     }
 
@@ -704,17 +784,42 @@ class TutorialManager {
     pop();
 
     // Guide sprite (outside push/pop). (guideCX, guideCY) is the sprite's centre.
-    this._renderGuide(guideCX, guideCY, alpha, spriteSize);
+    this._renderGuide(guideCX, guideCY, alpha, spriteSize, this._tipGuideSprite(tip));
+  }
+
+  // Greedy word-wrap of each paragraph to maxW at the current text font/size.
+  _wrapTipLines(paragraphs, maxW) {
+    const out = [];
+    for (const para of paragraphs) {
+      const words = String(para == null ? '' : para).split(' ');
+      let line = '';
+      for (const w of words) {
+        const next = line ? line + ' ' + w : w;
+        if (line && textWidth(next) > maxW) { out.push(line); line = w; }
+        else line = next;
+      }
+      out.push(line);
+    }
+    return out;
+  }
+
+  // The speaker's sprite: a tip can name its own guide (tip.guideSprite, e.g. 'kea'),
+  // else the level's guide (the mantis).
+  _tipGuideSprite(tip) {
+    if (tip && tip.guideSprite && this.game._getGuideSprite) {
+      return this.game._getGuideSprite(tip.guideSprite) || this.guideSprite;
+    }
+    return this.guideSprite;
   }
 
   // Draws the guide sprite centred on (cx, cy).
-  _renderGuide(cx, cy, alpha, size) {
+  _renderGuide(cx, cy, alpha, size, sprite = this.guideSprite) {
     push();
     imageMode(CENTER);
 
-    if (this.guideSprite) {
+    if (sprite) {
       tint(255, alpha);
-      image(this.guideSprite, cx, cy, size, size);
+      image(sprite, cx, cy, size, size);
     } else {
       // Minimal fallback
       fill(80, 150, 80, alpha);

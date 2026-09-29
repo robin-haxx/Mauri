@@ -551,6 +551,31 @@ class AudioManager {
     this._playSound(this.sounds.moaMilestone, this._getVolume() * 0.55);
   }
 
+  // A short one-shot snippet of a species' voice recording (e.g. the kea when it speaks in a
+  // tutorial tip). Its fade-out and stop are scheduled on the audio clock, so it ends on
+  // time even while the game is paused (the per-frame voice driver only runs in play).
+  // Returns true if it played.
+  playVoiceCue(voiceKey, seconds = 3) {
+    const bank = this.sounds.speciesVoices[voiceKey];
+    const vol = this._getVolume() * VOICE_VOLUME;
+    if (!bank || this._muted || vol <= 0) return false;
+    const stateName = this._voiceTargetState(voiceKey, null);
+    const sf = stateName && bank[stateName];
+    if (!sf || !sf.isLoaded() || !sf.buffer) return false;
+    try {
+      const p = new BufferPlayback(sf, vol, { offset: this._randomCue(sf, seconds), fadeIn: 0.2 });
+      const t = getAudioContext().currentTime, fade = 0.8;
+      const g = p.gain.gain;
+      g.setValueAtTime(vol * p._scale, t + seconds - fade);
+      g.linearRampToValueAtTime(0, t + seconds);
+      p.src.stop(t + seconds + 0.05);
+      return true;
+    } catch (e) {
+      console.warn('Voice cue failed:', e);
+      return false;
+    }
+  }
+
   // Generic moa call (kept for existing call sites).
   playMoaCall() {
     this.playSpeciesCall(null);

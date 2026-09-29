@@ -764,8 +764,9 @@ class Moa extends Boid {
     egg.speedBonus = Math.max(this.eggSpeedBonus, nestBonus);
     if (this.speciesKey) egg.parentSpecies = this.speciesKey;
 
-    if (aliveMoaEggs.length === 0 && simulation.game?.tutorial) {
-      simulation.game.tutorial.fireEvent(TUTORIAL_EVENTS.FIRST_EGG, { egg });
+    if (simulation.game?.tutorial) {
+      if (aliveMoaEggs.length === 0) simulation.game.tutorial.fireEvent(TUTORIAL_EVENTS.FIRST_EGG, { egg });
+      simulation.game.tutorial.fireEvent(TUTORIAL_EVENTS.EGG_LAID, { egg, speciesKey: this.speciesKey });
     }
     
     // Laying earns mauri unless the level opts out (noEggLaidMauri).

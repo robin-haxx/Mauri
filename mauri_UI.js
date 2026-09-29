@@ -834,7 +834,7 @@ class GameUI {
       text(count, x + size / 2, y + size - 2);
       pop();
 
-      this._fsFocusBtnBounds.push({ key, x, y, size });
+      this._fsFocusBtnBounds.push({ key, x, y, size, survival: isSurvival });
       x += size + gap;
     }
     // Where the right-column content ends, for docking the field guide below it.
@@ -1665,9 +1665,11 @@ class GameUI {
     }
   }
 
-  // Draws a placeable's palette icon centred on (cx, cy): pixel art when the def names
-  // an `iconSprite`, else the emoji glyph. spriteSize/glyphSize differ (art fills more).
+  // Draws a placeable's palette icon centred on (cx, cy): a drawn icon when the def names
+  // an `iconDraw`, pixel art when it names an `iconSprite`, else the emoji glyph.
+  // spriteSize/glyphSize differ (art fills more).
   renderPlaceableIcon(def, cx, cy, spriteSize, glyphSize, alpha = 255) {
+    if (def.iconDraw && this._drawToolIcon(def.iconDraw, cx, cy, spriteSize, alpha)) return;
     const sprite = def.iconSprite ? placeableSprites.icons[def.iconSprite] : null;
 
     if (sprite && sprite.width > 0) {
@@ -1683,6 +1685,158 @@ class GameUI {
     textSize(glyphSize);
     textAlign(CENTER, CENTER);
     text(def.icon, cx, cy);
+  }
+
+  // Drawn palette icons (def.iconDraw), centred on (cx, cy) within a box of size s. Returns
+  // false when it can't draw (unknown kind, art not loaded) so the caller falls back.
+  _drawToolIcon(kind, cx, cy, s, alpha) {
+    const a = alpha / 255;
+    let drawn = true;
+    push();
+    translate(cx, cy);
+    switch (kind) {
+      case 'kawakawa':  this._iconKawakawa(s, a); break;
+      case 'egg':       this._iconEgg(s, a); break;
+      case 'nest':      this._iconNest(s, a); break;
+      case 'waterhole': this._iconWaterhole(s, a); break;
+      case 'storm':     drawn = this._iconStorm(s, alpha); break;
+      default:          drawn = false;
+    }
+    pop();
+    return drawn;
+  }
+
+  // One sprig of the kawakawa's radial tuft: a stem and a single heart-shaped leaf (notch
+  // at the stem, tip up), in the plant's own greens and veining.
+  _iconKawakawa(s, a) {
+    rotate(0.38);
+    const lh = s * 0.58, w = s * 0.28;      // leaf height, half-width
+    const by = s * 0.06, ty = by - lh;       // leaf base (where the stem joins) and tip
+    const n = s * 0.06;                     // depth of the heart's notch
+
+    noFill();
+    stroke(128, 160, 78, 255 * a);
+    strokeWeight(Math.max(1.5, s * 0.07));
+    bezier(-s * 0.1, s * 0.5, -s * 0.06, s * 0.3, 0, by + s * 0.08, 0, by - n);
+
+    fill(85, 155, 55, 255 * a);
+    stroke(60, 120, 45, 255 * a);
+    strokeWeight(Math.max(1, s * 0.03));
+    beginShape();
+    vertex(0, by - n);
+    bezierVertex(-w * 0.25, by + s * 0.05, -w * 1.05, by + s * 0.04, -w, by - lh * 0.3);
+    bezierVertex(-w * 0.95, by - lh * 0.62, -w * 0.4, ty + lh * 0.12, 0, ty);
+    bezierVertex(w * 0.4, ty + lh * 0.12, w * 0.95, by - lh * 0.62, w, by - lh * 0.3);
+    bezierVertex(w * 1.05, by + s * 0.04, w * 0.25, by + s * 0.05, 0, by - n);
+    endShape(CLOSE);
+
+    // Midrib and paired side veins.
+    stroke(55, 110, 40, 255 * a);
+    strokeWeight(Math.max(0.8, s * 0.025));
+    line(0, by - n, 0, ty + lh * 0.1);
+    strokeWeight(Math.max(0.6, s * 0.018));
+    for (const t of [0.22, 0.45, 0.68]) {
+      const y = (by - n) + (ty - (by - n)) * t;
+      const dx = w * (0.62 - t * 0.35);
+      line(0, y, -dx, y - lh * 0.1);
+      line(0, y, dx, y - lh * 0.1);
+    }
+  }
+
+  // Egg outline centred on the origin, narrow end up.
+  _eggShape(w, h) {
+    beginShape();
+    vertex(0, -h / 2);
+    bezierVertex(w * 0.36, -h / 2, w / 2, -h * 0.08, w / 2, h * 0.1);
+    bezierVertex(w / 2, h * 0.36, w * 0.28, h / 2, 0, h / 2);
+    bezierVertex(-w * 0.28, h / 2, -w / 2, h * 0.36, -w / 2, h * 0.1);
+    bezierVertex(-w / 2, -h * 0.08, -w * 0.36, -h / 2, 0, -h / 2);
+    endShape(CLOSE);
+  }
+
+  // A speckled moa egg in the in-world clutch's warm off-white (EGG_COLORS).
+  _drawEgg(w, h, a) {
+    fill(245, 238, 220, 255 * a);
+    stroke(170, 160, 140, 255 * a);
+    strokeWeight(Math.max(1, w * 0.05));
+    this._eggShape(w, h);
+    noStroke();
+    fill(255, 255, 255, 120 * a);
+    ellipse(-w * 0.16, -h * 0.14, w * 0.28, h * 0.34);
+    fill(165, 150, 120, 180 * a);
+    for (const [px, py, d] of [[0.14, 0.04, 0.11], [-0.12, 0.2, 0.08], [0.2, 0.27, 0.09],
+                               [-0.02, 0.36, 0.07], [0.07, -0.2, 0.08], [-0.24, 0.02, 0.06]]) {
+      ellipse(w * px, h * py, w * d, w * d);
+    }
+  }
+
+  _iconEgg(s, a) {
+    const w = s * 0.6, h = s * 0.78;
+    noStroke();
+    fill(0, 0, 0, 70 * a);
+    ellipse(s * 0.03, h * 0.46, w * 0.95, h * 0.16);   // ground shadow
+    this._drawEgg(w, h, a);
+  }
+
+  // A twig scrape holding a small clutch, like the in-world nesting site.
+  _iconNest(s, a) {
+    noStroke();
+    fill(78, 64, 42, 255 * a);
+    ellipse(0, s * 0.14, s * 0.94, s * 0.5);    // outer rim
+    fill(48, 38, 24, 255 * a);
+    ellipse(0, s * 0.1, s * 0.66, s * 0.3);     // hollow
+    for (const [x, y] of [[-s * 0.15, s * 0.0], [s * 0.13, -s * 0.02], [0, s * 0.06]]) {
+      push();
+      translate(x, y);
+      this._drawEgg(s * 0.26, s * 0.34, a);
+      pop();
+    }
+    // Front lip of twigs over the clutch.
+    noFill();
+    stroke(118, 94, 60, 255 * a);
+    strokeWeight(Math.max(1.5, s * 0.08));
+    arc(0, s * 0.14, s * 0.86, s * 0.42, 0.15, PI - 0.15);
+    stroke(90, 70, 44, 255 * a);
+    strokeWeight(Math.max(1, s * 0.035));
+    line(-s * 0.4, s * 0.22, -s * 0.12, s * 0.34);
+    line(s * 0.06, s * 0.36, s * 0.38, s * 0.2);
+  }
+
+  // A small pool: muddy bank, water, rippling rings and a few reeds.
+  _iconWaterhole(s, a) {
+    noStroke();
+    fill(70, 56, 36, 230 * a);
+    ellipse(0, s * 0.14, s * 0.94, s * 0.52);
+    fill(48, 112, 150, 255 * a);
+    ellipse(0, s * 0.12, s * 0.8, s * 0.4);
+    fill(88, 160, 196, 255 * a);
+    ellipse(-s * 0.06, s * 0.09, s * 0.5, s * 0.2);
+    noFill();
+    stroke(200, 235, 248, 210 * a);
+    strokeWeight(Math.max(1, s * 0.03));
+    ellipse(s * 0.1, s * 0.13, s * 0.3, s * 0.11);
+    ellipse(s * 0.1, s * 0.13, s * 0.14, s * 0.05);
+    stroke(98, 140, 70, 255 * a);
+    strokeWeight(Math.max(1, s * 0.04));
+    line(-s * 0.36, s * 0.1, -s * 0.4, -s * 0.3);
+    line(-s * 0.3, s * 0.12, -s * 0.26, -s * 0.2);
+    line(-s * 0.42, s * 0.13, -s * 0.5, -s * 0.12);
+  }
+
+  // The storm's own art: a bolt striking out of a cloud (placeableSprites).
+  _iconStorm(s, alpha) {
+    const cloud = placeableSprites.cloud2 || placeableSprites.cloud1;
+    const bolt = placeableSprites.bolt;
+    if (!cloud || !(cloud.width > 0)) return false;
+    imageMode(CENTER);
+    if (bolt && bolt.width > 0) {
+      tint(255, 236, 140, alpha);
+      image(bolt, s * 0.06, s * 0.22, s * 0.7, s * 0.7);
+    }
+    tint(255, alpha);
+    image(cloud, 0, -s * 0.12, s * 1.15, s * 1.15);
+    noTint();
+    return true;
   }
 
   // Hover card above a toolbar button, centred on x with its bottom edge at y. Sized to

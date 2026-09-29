@@ -9,15 +9,20 @@
 //              delay: frames                     (TIME tips, from level start),
 //              condition: (game, data) => bool   (CONDITION tips / EVENT gate),
 //              minGameTime: frames, cooldown: frames }
-//   title, content: ["short line", ...]  (lines don't reflow; keep them short)
+//   title, content: ["paragraph", ...]  (each entry word-wraps to the panel; '' = blank row;
+//                                         a long title shrinks to fit)
 //   guidePosition: center|left|right|top|bottom|topLeft|topRight|bottomLeft|bottomRight
+//   (title, content and guidePosition may instead be (game, data) => value, resolved on show)
+//   guideSprite: 'kea'        ; this tip's speaker, in place of the level's guide (the mantis)
+//   voice: 'kea'              ; open on a snippet of that species' call instead of the chime
 //   highlight / highlightAlt: { type: 'element', target: <TutorialUIMapper target> }
 //   guidedPlaceable: '<type>' ; a "place this" beat: placing anything else fires off_script_placement
 //   placeable: '<type>'       ; the item a tip teaches. Item tips (this, else guidedPlaceable,
 //                               else a highlighted tool button) only trigger while the player
 //                               can afford that item; a chain skips an unaffordable item link.
 //   onShow: (game, data) => {}; side effects when the tip appears (onDismiss mirrors it)
-//   renderAboveOverlay: (game) => {}; draw a world spotlight over the dimming overlay, under the panel
+//   renderAboveOverlay: (game, data) => {}; draw a world spotlight over the dimming overlay,
+//                               under the panel (e.g. game.renderSpotlightAboveUI({ species, at }))
 //   nextTip: '<id>'           ; chain; the next tip must be TRIGGER_TYPE.IMMEDIATE
 //   pauseGame, showOnce, priority (lower first), urgency: 'high' (skips spacing)
 // Shared helpers: tutorialGuidedWindowActive(game)

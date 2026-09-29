@@ -1894,10 +1894,7 @@ class Simulation {
     cast.sort(Simulation._castCmp);
     for (let i = 0; i < cast.length; i++) {
       const e = cast[i];
-      push();
-      translate(0, e._py - e.pos.y);
-      e.render();
-      pop();
+      this._drawLifted(e, e._py - e.pos.y, 'render');
     }
 
     // Overlays on top: storms, then moa indicators (hunger bars / halos), then the
@@ -1916,11 +1913,23 @@ class Simulation {
       if (filter && !filter(e)) continue;
       if (!inView(e.pos.x, e.pos.y, extraMargin + lift)) continue;
       const elev = this.terrain.getElevationAt(e.pos.x, e.pos.y);
-      push();
-      translate(0, P.groundY(e.pos.y, elev) - e.pos.y);
-      e[method]();
-      pop();
+      this._drawLifted(e, P.groundY(e.pos.y, elev) - e.pos.y, method);
     }
+  }
+
+  // Draw one entity's `method` with its feet lifted dy onto the relief. Isolated exactly as
+  // push(); translate(0, dy); …; pop(); would, but through the light style stack (liftPush /
+  // liftPop): this wraps every billboarded entity, every frame.
+  _drawLifted(e, dy, method) {
+    const R = (typeof _renderer !== 'undefined') ? _renderer : null;
+    if (!R || !R._pInst || !R.drawingContext) {
+      push(); translate(0, dy); e[method](); pop();
+      return;
+    }
+    liftPush(R);
+    R.drawingContext.translate(0, dy);   // what p5's 2D translate() does
+    e[method]();
+    liftPop(R);
   }
 
   // Push in-view entities onto the cast, tagging each with its projected ground y.
@@ -2035,3 +2044,41 @@ class Simulation {
 // farther (higher on screen) entities paint first and nearer ones over them.
 // Module-level so the per-frame sort allocates no comparator closure.
 Simulation._castCmp = (a, b) => a._py - b._py;
+
+// ---- light push()/pop() for the billboard lift (Simulation._drawLifted) ----------------------
+// p5's push()/pop() allocate fresh style objects and read two colour strings back off the canvas
+// on every pair (~5 µs); wrapped around each billboarded entity that was a large share of the 3D
+// sprite pass. These save and restore exactly what p5's pair does (every style field
+// p5.Renderer.push saves, the colour mode, and the canvas state via save()/restore()), into a
+// reused stack. p5's fill/stroke caches are cleared rather than read back off the canvas: p5
+// re-sends the colour on its next fill()/stroke(), and the canvas already holds the restored one.
+const _liftStack = [];
+let _liftDepth = 0;
+
+function liftPush(R) {
+  const s = _liftStack[_liftDepth] || (_liftStack[_liftDepth] = {});
+  _liftDepth++;
+  s.colorMode = R._pInst._colorMode;
+  s.doStroke = R._doStroke; s.strokeSet = R._strokeSet;
+  s.doFill = R._doFill; s.fillSet = R._fillSet;
+  s.tint = R._tint; s.imageMode = R._imageMode;
+  s.rectMode = R._rectMode; s.ellipseMode = R._ellipseMode;
+  s.textFont = R._textFont; s.textLeading = R._textLeading; s.leadingSet = R._leadingSet;
+  s.textSize = R._textSize; s.textAlign = R._textAlign; s.textBaseline = R._textBaseline;
+  s.textStyle = R._textStyle; s.textWrap = R._textWrap;
+  R.drawingContext.save();
+}
+
+function liftPop(R) {
+  const s = _liftStack[--_liftDepth];
+  R.drawingContext.restore();
+  R._cachedFillStyle = undefined; R._cachedStrokeStyle = undefined;
+  R._doStroke = s.doStroke; R._strokeSet = s.strokeSet;
+  R._doFill = s.doFill; R._fillSet = s.fillSet;
+  R._tint = s.tint; R._imageMode = s.imageMode;
+  R._rectMode = s.rectMode; R._ellipseMode = s.ellipseMode;
+  R._textFont = s.textFont; R._textLeading = s.textLeading; R._leadingSet = s.leadingSet;
+  R._textSize = s.textSize; R._textAlign = s.textAlign; R._textBaseline = s.textBaseline;
+  R._textStyle = s.textStyle; R._textWrap = s.textWrap;
+  R._pInst._colorMode = s.colorMode;
+}

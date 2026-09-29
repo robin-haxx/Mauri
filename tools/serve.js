@@ -43,10 +43,29 @@ http.createServer((req, res) => {
       res.writeHead(404, { 'Content-Type': 'text/plain' });
       return res.end('not found: ' + rel);
     }
-    res.writeHead(200, {
+    const headers = {
       'Content-Type': TYPES[path.extname(file).toLowerCase()] || 'application/octet-stream',
-      'Cache-Control': 'no-store'
-    });
+      'Cache-Control': 'no-store',
+      'Accept-Ranges': 'bytes'
+    };
+    // Byte ranges + a length, as a real host sends, so streamed <audio> (the species voice
+    // tracks) knows its duration and can seek.
+    const range = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range || '');
+    if (range && (range[1] || range[2])) {
+      const size = data.length;
+      const start = range[1] === '' ? Math.max(0, size - Number(range[2])) : Number(range[1]);
+      const end = (range[1] !== '' && range[2] !== '') ? Math.min(Number(range[2]), size - 1) : size - 1;
+      if (start >= size || start > end) {
+        res.writeHead(416, { 'Content-Range': `bytes */${size}` });
+        return res.end();
+      }
+      headers['Content-Range'] = `bytes ${start}-${end}/${size}`;
+      headers['Content-Length'] = end - start + 1;
+      res.writeHead(206, headers);
+      return res.end(data.subarray(start, end + 1));
+    }
+    headers['Content-Length'] = data.length;
+    res.writeHead(200, headers);
     res.end(data);
   });
 }).listen(PORT, '127.0.0.1', () => {

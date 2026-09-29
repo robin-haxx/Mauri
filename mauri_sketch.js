@@ -1,3 +1,11 @@
+// p5's Friendly Error System checks the arguments of every p5 call (fill, translate, tint,
+// text, random, lerp, …): thousands of checks a frame, and ~4× slower world-gen colouring.
+// Off for play; add ?fes=1 to the URL to get p5's friendly errors back while debugging. Set
+// here, before p5 starts on window load, so the globals are also bound as plain functions.
+if (typeof p5 !== 'undefined') {
+  p5.disableFriendlyErrors = !(typeof location !== 'undefined' && /[?&]fes=1(&|$)/.test(location.search));
+}
+
 let tutorialMantisSprite = null;
 let splashScreenMoa = null;
 
@@ -1193,6 +1201,9 @@ class Game {
 
   // Terrain generator + season manager (cheap; terrain data is filled afterwards).
   _initTerrainAndSeason() {
+    // A level load / restart replaces the terrain: free the old one's canvases first, or each
+    // load leaks its season buffers (see TerrainGenerator.dispose).
+    if (this.terrain && this.terrain.dispose) this.terrain.dispose();
     this.terrain = new TerrainGenerator(CONFIG, this.activeBiomes);
     this.seasonManager = new SeasonManager(CONFIG);
     this.terrain.setSeasonManager(this.seasonManager);
@@ -5638,6 +5649,9 @@ function touchEnded(e) {
 function mousePressed() {
   // A browser that still emulates a mousedown after a handled tap would double-fire it.
   if (performance.now() - _lastTouchMs < 800) return;
+  // A mouse press is a user gesture too: let the streamed audio (music, species voices) start
+  // on browsers that want one per element (Safari), as touchEnded does for touch.
+  if (audioManager && audioManager.unlockFromGesture) audioManager.unlockFromGesture();
   _handlePress();
 }
 function _handlePress() {

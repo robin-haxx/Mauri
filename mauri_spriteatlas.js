@@ -224,6 +224,14 @@ const SpriteAtlas = {
       if (img && img.__atlas) {
         const dw = (c === undefined) ? img.width : c;
         const dh = (d === undefined) ? img.height : d;
+        // A tinted frame takes SpriteAtlas's tint (_drawTinted), never p5's, which would
+        // re-tint the whole atlas page for one small sprite.
+        const R = (typeof _renderer !== 'undefined') ? _renderer : null;
+        if (R && R._tint) {
+          const self = this;
+          return SpriteAtlas._drawTinted(R, img,
+            (src, sx, sy) => orig.call(self, src, a, b, dw, dh, sx, sy, img.sw, img.sh));
+        }
         return orig.call(this, img.__page, a, b, dw, dh, img.sx, img.sy, img.sw, img.sh);
       }
       return orig.apply(this, arguments);
@@ -240,11 +248,85 @@ const SpriteAtlas = {
     if (img && img.__atlas) {
       const w = (dw === undefined) ? img.width : dw;
       const h = (dh === undefined) ? img.height : dh;
+      const R = g._renderer;
+      if (R && R._tint) {
+        this._drawTinted(R, img, (src, sx, sy) => g.image(src, dx, dy, w, h, sx, sy, img.sw, img.sh));
+        return;
+      }
       g.image(img.__page, dx, dy, w, h, img.sx, img.sy, img.sw, img.sh);
     } else {
       if (dw === undefined) g.image(img, dx, dy);
       else g.image(img, dx, dy, dw, dh);
     }
+  },
+
+  // ---- tinted frames on the 2D canvas -----------------------------------------
+  // p5 tints an image by building a tinted copy of its WHOLE canvas every draw
+  // (Renderer2D._getTintedImageCanvas). For an atlas frame that canvas is the entire atlas
+  // page, so each tinted draw of one small sprite re-tinted millions of pixels (the Storm
+  // toolbar icon alone cost ~25 ms a frame). Instead, an alpha-only tint becomes the
+  // canvas's globalAlpha, and a colour tint draws from a cached tinted copy of just this
+  // frame, made with p5's own compositing steps so it looks the same.
+  //
+  // draw(src, sx, sy) makes the plain (untinted) p5 image() call from `src` at source
+  // offset (sx, sy); R is the renderer whose tint applies.
+  _drawTinted(R, frame, draw) {
+    const t = R._tint;
+    let src = frame.__page, sx = frame.sx, sy = frame.sy;
+    if (t[0] < 255 || t[1] < 255 || t[2] < 255) {
+      const tinted = this._tintedFrame(frame, t[0], t[1], t[2]);
+      if (!tinted) return draw(src, sx, sy);   // no copy possible: p5's own (slow) tint
+      src = tinted; sx = tinted.pad; sy = tinted.pad;
+    }
+    const ctx = R.drawingContext;
+    const prevAlpha = ctx.globalAlpha;
+    R._tint = null;                             // p5 draws it plain; the tint is applied here
+    ctx.globalAlpha = prevAlpha * (t[3] / 255);
+    try {
+      return draw(src, sx, sy);
+    } finally {
+      ctx.globalAlpha = prevAlpha;
+      R._tint = t;
+    }
+  },
+
+  // A copy of one frame tinted by (r, g, b) at full alpha (the tint's alpha is applied at
+  // draw time), cached on the frame. Shaped like a p5 image ({canvas, width, height}) so
+  // p5's image() can draw it.
+  _tintedFrame(frame, r, g, b) {
+    const key = r + ',' + g + ',' + b;
+    const cache = frame.__tints || (frame.__tints = new Map());
+    let hit = cache.get(key);
+    if (hit) return hit;
+    const page = frame.__page;
+    const pageCnv = page && (page.canvas || page.elt);
+    if (!pageCnv || typeof document === 'undefined') return null;
+    // Keep a margin of the page's transparent gutter so filtering at the sprite's edge
+    // samples the same neighbours it would on the page.
+    const pad = Math.min(2, this.GUTTER);
+    const w = frame.sw + pad * 2, h = frame.sh + pad * 2;
+    const srcCnv = document.createElement('canvas');
+    srcCnv.width = w; srcCnv.height = h;
+    srcCnv.getContext('2d').drawImage(pageCnv, frame.sx - pad, frame.sy - pad, w, h, 0, 0, w, h);
+    const cnv = document.createElement('canvas');
+    cnv.width = w; cnv.height = h;
+    const c = cnv.getContext('2d');
+    // p5's colour-tint steps: opaque copy (luminosity, then colour, over the original),
+    // multiply by the tint, then the original's alpha back via destination-in.
+    c.drawImage(srcCnv, 0, 0);
+    c.globalCompositeOperation = 'luminosity';
+    c.drawImage(srcCnv, 0, 0);
+    c.globalCompositeOperation = 'color';
+    c.drawImage(srcCnv, 0, 0);
+    c.globalCompositeOperation = 'multiply';
+    c.fillStyle = 'rgb(' + r + ', ' + g + ', ' + b + ')';
+    c.fillRect(0, 0, w, h);
+    c.globalCompositeOperation = 'destination-in';
+    c.drawImage(srcCnv, 0, 0);
+    hit = { canvas: cnv, width: w, height: h, pad };
+    if (cache.size >= 8) cache.delete(cache.keys().next().value);   // bound it
+    cache.set(key, hit);
+    return hit;
   }
 };
 

@@ -108,7 +108,9 @@ class StreamingSound {
 // gain, so overlapping plays of one file (a voice crossfading back to itself) never fight
 // over a shared volume. Nodes are disconnected when the sound ends so they can be collected.
 class BufferPlayback {
-  // sf: a loaded p5.SoundFile. opts: { loop, offset (s), fadeIn (s) }.
+  // sf: a loaded p5.SoundFile. opts: { loop, offset (s), fadeIn (s), duration (s), fadeOut (s) }.
+  // duration makes it a timed one-shot: it fades out over its last fadeOut seconds and stops,
+  // scheduled on the audio clock so it ends on time even while the game is paused.
   constructor(sf, volume, opts = {}) {
     const ctx = getAudioContext();
     const buf = sf.buffer;
@@ -137,6 +139,12 @@ class BufferPlayback {
     this.src.onended = () => this._release();
     const offset = Math.max(0, Math.min(opts.offset || 0, Math.max(0, buf.duration - 0.01)));
     this.src.start(now, offset);
+    if (opts.duration > 0) {
+      const fade = opts.fadeOut || 0;
+      this.gain.gain.setValueAtTime(target, now + opts.duration - fade);
+      this.gain.gain.linearRampToValueAtTime(0, now + opts.duration);
+      this.src.stop(now + opts.duration + 0.05);
+    }
   }
 
   isPlaying() { return this.playing; }
@@ -169,6 +177,170 @@ class BufferPlayback {
   }
 }
 BufferPlayback.live = 0;   // playbacks still sounding (the perf HUD's audio node count)
+
+// A long recording (the species voice tracks) played by STREAMING rather than decoding.
+// p5.SoundFile decodes a whole file to PCM up front; the ~14 minutes of voice recordings held
+// ~277 MB of decoded audio for the whole session, which tablets can't spare. Here each track
+// is a couple of <audio> elements that decode only as they play, routed through Web Audio
+// (MediaElementSource → its own gain → p5's master input), so fades, crossfades and volume
+// still ramp on the audio clock and the master limiter applies, as with BufferPlayback.
+// Same surface the voice code reads off a p5.SoundFile: isLoaded(), duration().
+class StreamingTrack {
+  constructor(src, onLoad, onError) {
+    this.src = src;
+    this.isStreaming = true;
+    this._duration = 0;
+    this._loaded = false;
+    this._failed = false;
+    this._onLoad = onLoad;
+    this._onError = onError;
+    // Two players, so overlapping plays of one file (a voice crossfading back into itself before
+    // its fade-out ends) each get their own element. The second buffers only when first played.
+    this._players = [this._makePlayer('auto'), this._makePlayer('metadata')];
+  }
+
+  _makePlayer(preload) {
+    const el = new Audio();
+    el.preload = preload;
+    const ctx = getAudioContext();
+    // Created up front and left disconnected from the output while idle, so nothing reaches the
+    // speakers until a playback connects it (see prime()).
+    const node = ctx.createMediaElementSource(el);
+    const gain = ctx.createGain();
+    gain.gain.value = 0;
+    node.connect(gain);
+    const player = { el, gain, owner: null, primed: false };
+    // Loaded = the length is known (the voices start at a random point in the recording). A
+    // stream can report its metadata before its length, so watch durationchange too.
+    const onMeta = () => {
+      if (isFinite(el.duration) && el.duration > this._duration) this._duration = el.duration;
+      if (!this._loaded && !this._failed && this._duration > 0) {
+        this._loaded = true;
+        if (this._onLoad) { try { this._onLoad(this); } catch (e) {} }
+      }
+    };
+    el.addEventListener('loadedmetadata', onMeta);
+    el.addEventListener('durationchange', onMeta);
+    el.addEventListener('error', () => this._fail(el.error));
+    el.addEventListener('ended', () => { if (player.owner) player.owner._release(); });
+    el.src = this.src;
+    return player;
+  }
+
+  _fail(err) {
+    if (this._failed) return;
+    this._failed = true;
+    this._loaded = false;
+    if (this._onError) { try { this._onError(err); } catch (e) {} }
+  }
+
+  isLoaded() { return this._loaded && !this._failed; }
+  duration() { return this._duration; }
+
+  // A free player for `owner`; when both are sounding, the one started first is cut (it is the
+  // one fading out).
+  _acquire(owner) {
+    let p = this._players[0].owner ? (this._players[1].owner ? null : this._players[1]) : this._players[0];
+    if (!p) {
+      p = (this._players[0].owner._startedAt <= this._players[1].owner._startedAt)
+        ? this._players[0] : this._players[1];
+      p.owner._release();
+    }
+    p.owner = owner;
+    return p;
+  }
+
+  // Call inside a user gesture (touchend / mousedown). iOS lets a media element play by itself
+  // only after it has been played once inside a gesture, and the voices start from the game
+  // loop, so play-and-pause each idle element here. It is disconnected from the output, so
+  // this is silent. The streamed background music is unlocked the same way (unlockFromGesture).
+  prime() {
+    for (const p of this._players) {
+      if (p.primed || p.owner) continue;
+      p.primed = true;
+      let r;
+      try { r = p.el.play(); } catch (e) { p.primed = false; continue; }
+      if (r && r.then) r.then(() => { if (!p.owner) p.el.pause(); }, () => { p.primed = false; });
+    }
+  }
+}
+
+// One playing instance of a StreamingTrack; the same surface as BufferPlayback (isPlaying,
+// setVolume, stop, gain). The fade-in starts once the stream is actually playing, so a slow
+// buffer can't eat into it; a setVolume() before then just changes the level it fades up to.
+class StreamPlayback {
+  // track: a loaded StreamingTrack. opts: as BufferPlayback's.
+  constructor(track, volume, opts = {}) {
+    const ctx = getAudioContext();
+    this._scale = 1;   // the voice recordings are all stereo (see BufferPlayback's mono note)
+    this._target = Math.max(0, volume) * this._scale;
+    this._fadeIn = opts.fadeIn > 0 ? opts.fadeIn : 0;
+    this._started = false;
+    this._timer = null;
+    this._startedAt = ctx.currentTime;
+    const p = this._player = track._acquire(this);
+    this.gain = p.gain;
+    this.playing = true;
+    StreamPlayback.live++;
+
+    const g = this.gain.gain;
+    g.cancelScheduledValues(0);
+    g.setValueAtTime(0, ctx.currentTime);
+    this.gain.connect((typeof p5 !== 'undefined' && p5.soundOut && p5.soundOut.input) || ctx.destination);
+    const el = p.el;
+    el.loop = !!opts.loop;
+    try { el.currentTime = Math.max(0, opts.offset || 0); } catch (e) {}
+
+    const begin = () => {
+      if (!this.playing) return;
+      this._started = true;
+      const now = getAudioContext().currentTime;
+      g.cancelScheduledValues(now);
+      g.setValueAtTime(this._fadeIn > 0 ? 0 : this._target, now);
+      if (this._fadeIn > 0) g.linearRampToValueAtTime(this._target, now + this._fadeIn);
+      if (opts.duration > 0) {
+        const fade = opts.fadeOut || 0;
+        g.setValueAtTime(this._target, now + opts.duration - fade);
+        g.linearRampToValueAtTime(0, now + opts.duration);
+        this._timer = setTimeout(() => this.stop(), (opts.duration + 0.05) * 1000);
+      }
+    };
+    let r;
+    try { r = el.play(); } catch (e) { this._release(); return; }
+    if (r && r.then) r.then(begin, () => this._release());
+    else begin();
+  }
+
+  isPlaying() { return this.playing; }
+
+  setVolume(v, rampTime = 0) {
+    if (!this.playing) return;
+    this._target = Math.max(0, v) * this._scale;
+    if (!this._started) return;   // the fade-in, when it starts, heads for the new level
+    const g = this.gain.gain, now = getAudioContext().currentTime;
+    const from = g.value;
+    g.cancelScheduledValues(now);
+    g.setValueAtTime(from, now);
+    if (rampTime > 0) g.linearRampToValueAtTime(this._target, now + rampTime);
+    else g.setValueAtTime(this._target, now);
+  }
+
+  stop() { this._release(); }
+
+  // Idempotent; also runs when the track ends or another playback takes the element.
+  _release() {
+    if (!this.playing) return;
+    this.playing = false;
+    StreamPlayback.live--;
+    if (this._timer) { clearTimeout(this._timer); this._timer = null; }
+    const p = this._player;
+    if (p.owner !== this) return;
+    p.owner = null;
+    try { p.el.pause(); } catch (e) {}
+    try { p.gain.disconnect(); } catch (e) {}
+  }
+}
+StreamPlayback.live = 0;
 
 class AudioManager {
   constructor() {
@@ -335,14 +507,15 @@ class AudioManager {
       } catch (e) { /* pool stays as-is */ }
     }
 
-    // Extended species voice tracks; all optional (see SPECIES_VOICE_TRACKS). Same
-    // direct-construct pattern: a missing state file nulls out and the species falls back.
+    // Extended species voice tracks; all optional (see SPECIES_VOICE_TRACKS). STREAMED (see
+    // StreamingTrack), not decoded: minutes of recordings each. A missing state file nulls out
+    // and the species falls back.
     for (const [voiceKey, cfg] of Object.entries(SPECIES_VOICE_TRACKS)) {
       const bank = {};
       this.sounds.speciesVoices[voiceKey] = bank;
       for (const [stateName, file] of Object.entries(cfg.states)) {
         try {
-          const sf = new p5.SoundFile(audioPath + file,
+          const sf = new StreamingTrack(audioPath + file,
             () => {},
             () => {
               bank[stateName] = null;
@@ -440,6 +613,10 @@ class AudioManager {
     } catch (e) {}
     const bg = this.sounds.background;
     if (bg && bg._wantPlaying && bg.el && bg.el.paused && bg.isLoaded()) bg._start();
+    // The streamed voice tracks' elements need the same one-off gesture play (see prime()).
+    for (const bank of Object.values(this.sounds.speciesVoices)) {
+      for (const track of Object.values(bank)) if (track && track.prime) track.prime();
+    }
   }
 
   // Stop background music.
@@ -561,14 +738,10 @@ class AudioManager {
     if (!bank || this._muted || vol <= 0) return false;
     const stateName = this._voiceTargetState(voiceKey, null);
     const sf = stateName && bank[stateName];
-    if (!sf || !sf.isLoaded() || !sf.buffer) return false;
+    if (!this._voiceReady(sf)) return false;
     try {
-      const p = new BufferPlayback(sf, vol, { offset: this._randomCue(sf, seconds), fadeIn: 0.2 });
-      const t = getAudioContext().currentTime, fade = 0.8;
-      const g = p.gain.gain;
-      g.setValueAtTime(vol * p._scale, t + seconds - fade);
-      g.linearRampToValueAtTime(0, t + seconds);
-      p.src.stop(t + seconds + 0.05);
+      this._voicePlayback(sf, vol, { offset: this._randomCue(sf, seconds), fadeIn: 0.2,
+                                     duration: seconds, fadeOut: 0.8 });
       return true;
     } catch (e) {
       console.warn('Voice cue failed:', e);
@@ -701,14 +874,26 @@ class AudioManager {
   // playback, so a crossfade back to a file still fading out simply overlaps it.
   _startVoiceState(bank, stateName, voiceVol, loop, needSec = 0) {
     const sound = stateName && bank[stateName];
-    if (!sound || !sound.isLoaded() || !sound.buffer) return null;
+    if (!this._voiceReady(sound)) return null;
     const cue = this._randomCue(sound, loop ? 0 : needSec);
     try {
-      return new BufferPlayback(sound, voiceVol, { loop, offset: cue, fadeIn: VOICE_FADE_IN_SEC });
+      return this._voicePlayback(sound, voiceVol, { loop, offset: cue, fadeIn: VOICE_FADE_IN_SEC });
     } catch (e) {
       console.warn('Voice start failed:', e);
       return null;
     }
+  }
+
+  // A voice track that can start now: a streamed track once its length is known, or a decoded
+  // SoundFile once its buffer exists.
+  _voiceReady(sound) {
+    return !!sound && sound.isLoaded() && (sound.isStreaming || !!sound.buffer);
+  }
+
+  // Start a voice track's playback (streamed or decoded); both take the same opts.
+  _voicePlayback(sound, volume, opts) {
+    return sound.isStreaming ? new StreamPlayback(sound, volume, opts)
+                             : new BufferPlayback(sound, volume, opts);
   }
 
   // Begin a species voice on the rising highlight edge.
@@ -931,7 +1116,7 @@ class AudioManager {
   // DIAGNOSTICS (perf HUD)
   // ============================================
 
-  // Every decoded p5.SoundFile we hold (the streamed background track is not one).
+  // Every decoded p5.SoundFile we hold (the streamed background and voice tracks are not).
   _allSoundFiles() {
     const out = [];
     const push = (s) => { if (s && s.bufferSourceNodes) out.push(s); };
@@ -947,13 +1132,13 @@ class AudioManager {
   }
 
   // Snapshot for the 'd' perf HUD. `nodes` is the live Web Audio source nodes: our own
-  // playbacks (BufferPlayback) plus any left on p5's SoundFiles (none, now nothing plays
-  // through p5) — the number that would climb and starve the audio thread if 'ended' cleanup
-  // couldn't keep up. `ctxState` should read 'running'; if it flips to 'suspended'/
+  // playbacks (BufferPlayback, StreamPlayback) plus any left on p5's SoundFiles (none, now
+  // nothing plays through p5) — the number that would climb and starve the audio thread if
+  // 'ended' cleanup couldn't keep up. `ctxState` should read 'running'; if it flips to 'suspended'/
   // 'interrupted' when audio dies, that's the browser dropping the context (a resume() would
   // revive it). `voices`/`fading` track the extended-voice loops.
   getDiagnostics() {
-    let nodes = BufferPlayback.live;
+    let nodes = BufferPlayback.live + StreamPlayback.live;
     for (const sf of this._allSoundFiles()) {
       nodes += (sf.bufferSourceNodes && sf.bufferSourceNodes.length) || 0;
     }

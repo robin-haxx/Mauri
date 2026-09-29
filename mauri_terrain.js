@@ -2,6 +2,26 @@
 // TERRAIN GENERATOR - Pre-baked seasonal buffers
 // Zero computation during season transitions
 // ============================================
+
+// Release a p5.Graphics buffer for good: remove() takes it out of the page and p5's element
+// list, and zeroing the canvas makes Safari hand its memory back now rather than at some
+// later garbage collection. (remove() clears g.canvas, so the canvas is read first.)
+function freeGraphics(g) {
+  if (!g) return;
+  const cnv = g.canvas || g.elt;
+  if (typeof g.remove === 'function') g.remove();
+  if (cnv) { cnv.width = 0; cnv.height = 0; }
+}
+
+// p5 keeps loadPixels()'s ImageData on a buffer after updatePixels(): a second full copy of
+// a baked terrain buffer (~18 MB each at the Free Play world size) that nothing reads again.
+// Drop it once the canvas holds the image.
+function releasePixels(g) {
+  if (!g) return;
+  g.pixels = [];
+  g.imageData = undefined;
+}
+
 class TerrainGenerator {
   constructor(config, biomes) {
     this.config = config;
@@ -753,8 +773,7 @@ class TerrainGenerator {
     for (const season of seasons) {
       // A regenerate (glacial deepen / window resize) replaces the buffers; free the old
       // world-sized canvases rather than leaking a set each loop.
-      const old = this.seasonBuffers[season];
-      if (old && typeof old.remove === 'function') old.remove();
+      freeGraphics(this.seasonBuffers[season]);
       this.seasonBuffers[season] = this._bakeSeasonBuffer(season);
     }
     
@@ -806,6 +825,7 @@ class TerrainGenerator {
     }
 
     buf.updatePixels();
+    releasePixels(buf);
     return buf;
   }
 
@@ -843,6 +863,11 @@ class TerrainGenerator {
 
     // Pre-compute cell colors with snow for this season
     const cellColors = new Uint8Array(gridCols * gridRows * 3);
+
+    // Each biome's contour colour, resolved on its first contour cell and reused (the same
+    // red()/green()/blue() values as before, so the output is unchanged). Resolving it on
+    // every contour cell (about a third of the map) was ~95% of this pass's time.
+    const biomeContourRGB = [];
 
     for (let row = 0; row < gridRows; row++) {
       for (let col = 0; col < gridCols; col++) {
@@ -891,9 +916,11 @@ class TerrainGenerator {
 
           if (isContour) {
             const biomeIdx = biomeMap[cellIdx];
-            const biome = this.biomeArray[biomeIdx];
-            const contourC = this._getCachedColor(biome.contourColor);
-            contourRGB = [red(contourC), green(contourC), blue(contourC)];
+            contourRGB = biomeContourRGB[biomeIdx];
+            if (!contourRGB) {
+              const contourC = this._getCachedColor(this.biomeArray[biomeIdx].contourColor);
+              contourRGB = biomeContourRGB[biomeIdx] = [red(contourC), green(contourC), blue(contourC)];
+            }
           }
         }
 
@@ -1158,6 +1185,7 @@ class TerrainGenerator {
     }
 
     buf.updatePixels();
+    releasePixels(buf);
     return buf;
   }
 
@@ -1212,8 +1240,7 @@ class TerrainGenerator {
 
   _disposeReliefBuffers() {
     for (const key in this.reliefBuffers) {
-      const b = this.reliefBuffers[key];
-      if (b && typeof b.remove === 'function') b.remove();   // free the GPU-backed canvas
+      freeGraphics(this.reliefBuffers[key]);   // free the GPU-backed canvas
       this.reliefBuffers[key] = null;
     }
   }
@@ -1221,12 +1248,22 @@ class TerrainGenerator {
   // Free the previous-row relief buffers held for an N–S crossfade (see _ensureReliefBuffers).
   _disposeReliefPrev() {
     if (!this._reliefPrev) return;
-    for (const key in this._reliefPrev) {
-      const b = this._reliefPrev[key];
-      if (b && typeof b.remove === 'function') b.remove();
-    }
+    for (const key in this._reliefPrev) freeGraphics(this._reliefPrev[key]);
     this._reliefPrev = null;
     this._reliefPrevRow = null;
+  }
+
+  // Free every canvas this terrain holds; call when a new terrain replaces it (level load,
+  // restart). p5 keeps each createGraphics canvas in the page until remove(), so a replaced
+  // terrain otherwise leaked its four season buffers (~70 MB at the Free Play world size) on
+  // every load; the kind of growth that gets a tab reloaded on an iPad.
+  dispose() {
+    for (const key in this.seasonBuffers) {
+      freeGraphics(this.seasonBuffers[key]);
+      this.seasonBuffers[key] = null;
+    }
+    this._disposeReliefBuffers();
+    this._disposeReliefPrev();
   }
 
   regenerate() {

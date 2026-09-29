@@ -1,16 +1,17 @@
 // ============================================================
 // MAURI; local static server
 //   node tools/serve.js        then open http://127.0.0.1:8081
+//   node tools/serve.js 8091 dist   serves the release build instead
 //
-// Serves the project folder so p5's asset loading works (file:// is
-// blocked by Chrome's CORS policy). No dependencies, no caching.
+// Serves the project folder (or a subfolder of it) so p5's asset loading
+// works (file:// is blocked by Chrome's CORS policy). No dependencies, no caching.
 // ============================================================
 
 const http = require('http');
 const fs   = require('fs');
 const path = require('path');
 
-const ROOT = path.resolve(__dirname, '..');
+const ROOT = path.resolve(__dirname, '..', process.argv[3] || '.');
 const PORT = Number(process.argv[2]) || Number(process.env.PORT) || 8081;
 
 const TYPES = {

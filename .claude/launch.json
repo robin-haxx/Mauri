@@ -12,6 +12,12 @@
       "runtimeExecutable": "node",
       "runtimeArgs": ["tools/serve.js", "8090"],
       "port": 8090
+    },
+    {
+      "name": "mauri-dist",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["tools/serve.js", "8091", "dist"],
+      "port": 8091
     }
   ]
 }

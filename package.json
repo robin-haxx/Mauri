@@ -1,0 +1,14 @@
+{
+  "name": "mauri",
+  "private": true,
+  "description": "Avian Age: Mauri; build tooling only (the game itself has no build step: open index.html via tools/serve.js).",
+  "scripts": {
+    "build": "node tools/build.js",
+    "build:safe": "node tools/build.js --safe",
+    "serve": "node tools/serve.js",
+    "serve:dist": "node tools/serve.js 8091 dist"
+  },
+  "devDependencies": {
+    "terser": "^5.51.2"
+  }
+}

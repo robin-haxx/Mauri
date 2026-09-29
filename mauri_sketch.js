@@ -2357,7 +2357,7 @@ class Game {
       this.addNotification('Exported run stats (.txt + .json) to your downloads.', 'success');
     } catch (e) {
       console.error('Stats export failed:', e);
-      console.log(lines.join('\n'));   // fallback: at least surface it
+      console.warn(lines.join('\n'));   // fallback: at least surface it (warn: release builds drop console.log)
       this.addNotification('Export failed; stats logged to the console.', 'error');
     }
   }

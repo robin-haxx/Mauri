@@ -312,7 +312,9 @@ const EntitySprites = {
     if (typeof GLBatch !== 'undefined' && GLBatch.enabled && GLBatch._open) {
       // Ring radius matches the baked halo's dilation (source px scaled to draw size).
       const off = thickness * (drawW / (baseSprite.width || drawW));
-      const steps = 16;
+      // Performance mode stamps half as many (a slightly lumpier halo at sharp corners).
+      const steps = (typeof CONFIG !== 'undefined' && CONFIG.perfMode) ? 8 : 16;
+      if (GLBatch.emitSilhouetteRing(baseSprite, drawW, drawH, off, steps, col, a)) return;
       push();
       imageMode(CENTER);
       tint(col[0], col[1], col[2], 255 * a);   // per-quad colour; free on GL, not a bake

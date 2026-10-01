@@ -132,7 +132,12 @@ const SpriteAtlas = {
   // Return an ImageData copy of the page with each opaque edge colour extended `radius` px
   // into surrounding transparent px (alpha kept 0), so mipmapping can't average edges toward
   // black. Not written back to the canvas (premultiplied alpha discards colour under alpha 0);
-  // GLBatch uploads this ImageData to the texture instead. A bounded outward dilation, 1 px/pass.
+  // GLBatch uploads this ImageData to the texture instead. A bounded outward dilation, 1 px/pass:
+  // each pass fills every still-empty pixel next to a filled one, from its first filled neighbour
+  // (left, right, up, down) as of the end of the previous pass. Only the first pass scans the
+  // whole page; after that the only pixels that can have become fillable are the neighbours of
+  // the ones the previous pass filled, so each pass visits just that frontier (same result,
+  // ~1.6 s → a fraction at startup on an Iris Xe).
   _bleedEdges(page, radius) {
     const ctx = page.drawingContext, w = page.width, h = page.height;
     if (!ctx || !ctx.getImageData || !w || !h) return null;
@@ -141,27 +146,47 @@ const SpriteAtlas = {
     const d = img.data, N = w * h;
     const solid = new Uint8Array(N);
     for (let i = 0; i < N; i++) if (d[i * 4 + 3] > 0) solid[i] = 1;
-    const add = [];
+
+    // The fill source for empty pixel i (its first solid 4-neighbour, in the order above), or -1.
+    const sourceOf = (i) => {
+      const x = i % w;
+      if (x > 0 && solid[i - 1]) return i - 1;
+      if (x < w - 1 && solid[i + 1]) return i + 1;
+      if (i >= w && solid[i - w]) return i - w;
+      if (i < N - w && solid[i + w]) return i + w;
+      return -1;
+    };
+    const queued = new Int32Array(N);   // pass + 1 a pixel was last queued as a candidate in
+    let add = [], filled = [];
     for (let pass = 0; pass < radius; pass++) {
       add.length = 0;
-      for (let y = 0; y < h; y++) {
-        const row = y * w;
-        for (let x = 0; x < w; x++) {
-          const i = row + x;
+      if (pass === 0) {
+        for (let i = 0; i < N; i++) {
           if (solid[i]) continue;
-          let ni = -1;
-          if (x > 0 && solid[i - 1]) ni = i - 1;
-          else if (x < w - 1 && solid[i + 1]) ni = i + 1;
-          else if (y > 0 && solid[i - w]) ni = i - w;
-          else if (y < h - 1 && solid[i + w]) ni = i + w;
+          const ni = sourceOf(i);
           if (ni >= 0) { const o = ni * 4; add.push(i, d[o], d[o + 1], d[o + 2]); }
+        }
+      } else {
+        for (let k = 0; k < filled.length; k++) {
+          const f = filled[k], x = f % w;
+          // f's empty neighbours: the only pixels this pass can fill.
+          for (let n = 0; n < 4; n++) {
+            const j = (n === 0) ? (x > 0 ? f - 1 : -1) : (n === 1) ? (x < w - 1 ? f + 1 : -1)
+                    : (n === 2) ? (f >= w ? f - w : -1) : (f < N - w ? f + w : -1);
+            if (j < 0 || solid[j] || queued[j] === pass + 1) continue;
+            queued[j] = pass + 1;
+            const ni = sourceOf(j);
+            if (ni >= 0) { const o = ni * 4; add.push(j, d[o], d[o + 1], d[o + 2]); }
+          }
         }
       }
       if (!add.length) break;
+      filled = [];
       for (let k = 0; k < add.length; k += 4) {
         const o = add[k] * 4;
         d[o] = add[k + 1]; d[o + 1] = add[k + 2]; d[o + 2] = add[k + 3];
         solid[add[k]] = 1;
+        filled.push(add[k]);
       }
     }
     return img;

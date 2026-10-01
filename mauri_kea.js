@@ -532,19 +532,23 @@ class Kea extends Kereru {
   _renderExtra(s, perched) {
     const f = Math.max(0, Math.min(1, this.hunger / this.maxHunger));
     const w = s * 1.9, h = Math.max(1.5, s * 0.22), y = -s * 1.7;
+    // Square-cornered in performance mode (see Moa._drawBar).
+    const bar = (typeof CONFIG !== 'undefined' && CONFIG.perfMode)
+      ? (bx, by, bw, bh) => rect(bx, by, bw, bh)
+      : (bx, by, bw, bh) => rect(bx, by, bw, bh, 1);
     push();
     if (this._flip < 0 && this._getSprite(perched)) scale(-1, 1);   // cancel the sprite mirror
     noStroke();
     rectMode(CORNER);
     // Hunger: track + fill; the fill shrinks and reddens as hunger climbs.
     fill(20, 20, 20, 150);
-    rect(-w / 2, y, w, h, 1);
+    bar(-w / 2, y, w, h);
     fill(120 + f * 130, 235 - f * 140, 110);
-    rect(-w / 2, y, w * (1 - f), h, 1);
+    bar(-w / 2, y, w * (1 - f), h);
     // Security: a short blue bar when this kea is currently shielded from starving to death.
     if (this._shielded) {
       fill(90, 170, 255, 235);
-      rect(-w / 2, y + h + 1.2, w, Math.max(1, h * 0.7), 1);
+      bar(-w / 2, y + h + 1.2, w, Math.max(1, h * 0.7));
     }
     pop();
   }

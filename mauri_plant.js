@@ -193,6 +193,12 @@ const PlantStatics = {
   getSway(frameCount, phase, modifier) {
     const index = ((frameCount * 0.02 + phase) * (this.SWAY_TABLE_SIZE / TWO_PI)) % this.SWAY_TABLE_SIZE;
     return this.swayTable[index | 0] * 0.05 * modifier;
+  },
+
+  // Whether plants draw their ground shadow: one extra sprite per plant, of hundreds on
+  // screen, so performance mode leaves it out.
+  shadows() {
+    return !(typeof CONFIG !== 'undefined' && CONFIG.perfMode);
   }
 };
 
@@ -506,9 +512,10 @@ class Plant {
       if (fadeT >= 1) { this._fadeSprite = null; fadeT = 1; }
     }
 
-    // Shadow; sprite-shaped on GL (bake-free silhouette), ellipse blob on 2D.
+    // Shadow; sprite-shaped on GL (bake-free silhouette), ellipse blob on 2D. Skipped in
+    // performance mode (see PlantStatics.shadows).
     // Positional args (alpha, squash, wide, mirror, fbW, fbH) — no per-frame options object.
-    EntitySprites.drawSpriteShadow(sprite, px + 1, py + 1, displaySize, displaySize,
+    if (PlantStatics.shadows()) EntitySprites.drawSpriteShadow(sprite, px + 1, py + 1, displaySize, displaySize,
       dormant ? 0.05 : 0.10, 0.5, 0.82, null, displaySize * 1.2, displaySize * 0.6);
 
     // Calculate sprite size for growing plants
@@ -558,7 +565,7 @@ class Plant {
     }
 
     // Shadow at the base; sprite-shaped on GL, ellipse on 2D.
-    EntitySprites.drawSpriteShadow(sprite, px + 1, py + 1, displaySize, displaySize,
+    if (PlantStatics.shadows()) EntitySprites.drawSpriteShadow(sprite, px + 1, py + 1, displaySize, displaySize,
       dormant ? 0.05 : 0.10, 0.5, 0.82, null, displaySize * 1.2, displaySize * 0.6);
 
     // Width follows displaySize; height follows the sprite's aspect ratio.
@@ -592,7 +599,7 @@ class Plant {
     const buffer = dormant ? PlantStatics.kawakawaBufferDormant : PlantStatics.kawakawaBuffer;
     
     // Shadow; kawakawa's pre-rendered buffer works as the silhouette source on GL.
-    EntitySprites.drawSpriteShadow(buffer, px + 1, py + 1, displaySize, displaySize,
+    if (PlantStatics.shadows()) EntitySprites.drawSpriteShadow(buffer, px + 1, py + 1, displaySize, displaySize,
       dormant ? 0.05 : 0.10, 0.5, 0.82, null, displaySize * 1.2, displaySize * 0.6);
 
     const halfSize = displaySize * 0.5;

@@ -245,6 +245,8 @@ const GLBatch = {
     const upload = (this._gl2 && src._glMipSource) ? src._glMipSource : src;
     try { gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, upload); }
     catch (err) { console.warn('[glbatch] texImage2D failed:', err && err.message); return null; }
+    // The texture holds the bled pixels now; the JS copy (~34 MB for the atlas page) can go.
+    if (upload === src._glMipSource) src._glMipSource = null;
     // Sprite sources are static, so build a mip chain once and sample trilinearly; the
     // anti-aliasing that keeps a downscaled sprite crisp. WebGL1 can't do NPOT, so LINEAR only.
     if (this._gl2) {
@@ -322,6 +324,39 @@ const GLBatch = {
     const u0 = sx / te.w, v0 = sy / te.h, u1 = (sx + sw) / te.w, v1 = (sy + sh) / te.h;
     this._emit(te, this._ctm(ctx), lx0, ly0, lx1, ly1, u0, v0, u1, v1, r, g, bl, alpha,
       this._silhouette ? 1 : 0);
+    return true;
+  },
+
+  // A sprite-shaped outline: `steps` pure-colour silhouette stamps of `img`, each drawW×drawH,
+  // centred on a ring of radius `off` around the local origin. The same quads the ring of
+  // tinted image() calls in EntitySprites.drawSpriteOutline captures, emitted straight into
+  // the batch with one transform read for the lot (each image() call re-reads it and pays the
+  // shim + push/pop). col is [r,g,b] 0..255 and alpha 0..1, quantised like p5's tint() so the
+  // quads match. Returns false when it can't (the caller then draws the stamps itself).
+  emitSilhouetteRing(img, drawW, drawH, off, steps, col, alpha) {
+    if (!this.enabled || !this._open || !img) return false;
+    let src, sx, sy, sw, sh;
+    if (img.__atlas) {
+      src = this._canvasOf(img.__page);
+      sx = img.sx; sy = img.sy; sw = img.sw; sh = img.sh;
+    } else {
+      src = this._canvasOf(img);
+      if (!src) return false;
+      sx = 0; sy = 0; sw = src.width; sh = src.height;
+    }
+    const te = this._textureFor(src);
+    if (!te) return false;
+    const ctx = this._ctx(), m = this._ctm(ctx);
+    const lv = (v) => Math.round(Math.max(0, Math.min(1, v / 255)) * 255) / 255;   // tint()'s levels
+    const r = lv(col[0]), g = lv(col[1]), b = lv(col[2]);
+    const a = (ctx ? ctx.globalAlpha : 1) * lv(255 * alpha);
+    const u0 = sx / te.w, v0 = sy / te.h, u1 = (sx + sw) / te.w, v1 = (sy + sh) / te.h;
+    const hw = drawW * 0.5, hh = drawH * 0.5;
+    for (let i = 0; i < steps; i++) {
+      const ang = (i / steps) * Math.PI * 2;
+      const cx = Math.cos(ang) * off, cy = Math.sin(ang) * off;
+      this._emit(te, m, cx - hw, cy - hh, cx + hw, cy + hh, u0, v0, u1, v1, r, g, b, a, 1);
+    }
     return true;
   },
 

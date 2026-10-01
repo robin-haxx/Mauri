@@ -1281,11 +1281,16 @@ class Moa extends Boid {
     }
   }
 
-  // Small two-tone progress bar used by the indicators above.
+  // Small two-tone progress bar used by the indicators above. Square-cornered in performance
+  // mode: a rounded rect is a path the canvas rasterises; a plain one is about half the cost,
+  // and these are drawn four per moa per frame.
   _drawBar(x, y, w, h, pct, col) {
+    // (No corner argument at all for the square one: p5 builds a rounded path for any radius.)
+    const square = typeof CONFIG !== 'undefined' && CONFIG.perfMode;
+    const fw = w * Math.max(0, Math.min(1, pct));
     fill(40, 40, 40, 150);
-    rect(x - w/2, y, w, h, 1);
+    if (square) rect(x - w/2, y, w, h); else rect(x - w/2, y, w, h, 1);
     fill(col[0], col[1], col[2]);
-    rect(x - w/2, y, w * Math.max(0, Math.min(1, pct)), h, 1);
+    if (square) rect(x - w/2, y, fw, h); else rect(x - w/2, y, fw, h, 1);
   }
 }

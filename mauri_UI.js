@@ -29,6 +29,97 @@ const LEVEL_CLOCK = {
 };
 
 // ============================================
+// HUD ELEMENT CACHE
+// The HUD is drawn from scratch every frame through p5's 2D calls, and every rounded rect,
+// arc, stroke and vector icon in it is its own canvas draw. Integrated GPUs (Chrome draws
+// canvas 2D on the GPU) and tablets (Safari draws it on the CPU) pay for each of them every
+// frame: the toolbar, focus tiles and dials cost ~10 ms of a ~30 ms early Free Play frame on
+// an Iris Xe. They change only now and then, so each is drawn once into its own offscreen
+// canvas and blitted, and redrawn only when its signature (a string of everything that
+// changes how it looks) changes. ?hudcache=0 draws everything live, for comparisons.
+// ============================================
+const HudCache = {
+  enabled: !(typeof location !== 'undefined' && /[?&]hudcache=0(&|$)/.test(location.search)),
+  _entries: new Map(),
+  // Bumped whenever the page finishes loading a font: a canvas that draws text in a face that
+  // isn't loaded yet gets a fallback font, which a cached element would otherwise keep.
+  _fontGen: 0,
+  _fontWatch: false,
+
+  // Draw an element through the cache. (x, y, w, h) must bound everything drawFn paints, in
+  // canvas (1080-space) coordinates; sig must change whenever the element's look does.
+  draw(key, x, y, w, h, sig, drawFn) {
+    if (!this.enabled || typeof createGraphics !== 'function') { drawFn(); return; }
+    if (!this._fontWatch && typeof document !== 'undefined' && document.fonts) {
+      this._fontWatch = true;
+      document.fonts.addEventListener('loadingdone', () => { this._fontGen++; });
+    }
+    const ss = (typeof spriteSS === 'function') ? spriteSS() : 1;
+    const bx = Math.floor(x), by = Math.floor(y);
+    const bw = Math.max(1, Math.ceil(x + w) - bx), bh = Math.max(1, Math.ceil(y + h) - by);
+    const fullSig = `${sig}#${bx},${by},${bw},${bh}@${ss}f${this._fontGen}`;
+    let e = this._entries.get(key);
+    if (!e || e.sig !== fullSig) {
+      const pw = bw * ss, ph = bh * ss;
+      if (!e || e.g.width !== pw || e.g.height !== ph) {
+        if (e) freeGraphics(e.g);
+        const g = createGraphics(pw, ph);
+        g.pixelDensity(1);
+        e = { g, sig: null };
+        this._entries.set(key, e);
+      }
+      e.g.clear();
+      // Same backing scale and pixel grid as the main canvas, so the blit lands 1:1.
+      drawIntoGraphics(e.g, () => {
+        push();
+        scale(ss);
+        translate(-bx, -by);
+        drawFn();
+        pop();
+      });
+      e.sig = fullSig;
+    }
+    push();
+    imageMode(CORNER);
+    noTint();
+    image(e.g, bx, by, bw, bh);
+    pop();
+  },
+
+  // Free every cached element (a new level builds a new HUD).
+  clear() {
+    for (const e of this._entries.values()) freeGraphics(e.g);
+    this._entries.clear();
+  }
+};
+
+// Run fn with p5's global drawing calls aimed at the p5.Graphics g rather than the main canvas
+// (the HUD draws through the globals). The main renderer's current style is copied across
+// first, so whatever an element inherits (font, fill, alignment, modes) draws the same as live.
+const _HUD_STYLE_KEYS = ['_doStroke', '_strokeSet', '_doFill', '_fillSet', '_tint', '_imageMode',
+  '_rectMode', '_ellipseMode', '_textFont', '_textLeading', '_leadingSet', '_textSize',
+  '_textAlign', '_textBaseline', '_textStyle', '_textWrap', '_cachedFillStyle', '_cachedStrokeStyle'];
+
+function drawIntoGraphics(g, fn) {
+  const inst = p5.instance;
+  const main = inst._renderer, gr = g._renderer;
+  for (const k of _HUD_STYLE_KEYS) gr[k] = main[k];
+  const mc = main.drawingContext, gc = gr.drawingContext;
+  gc.fillStyle = mc.fillStyle; gc.strokeStyle = mc.strokeStyle; gc.lineWidth = mc.lineWidth;
+  gc.lineCap = mc.lineCap; gc.lineJoin = mc.lineJoin; gc.font = mc.font;
+  gc.textAlign = mc.textAlign; gc.textBaseline = mc.textBaseline;
+  const prevWinRenderer = window._renderer, prevWinCtx = window.drawingContext, prevCtx = inst.drawingContext;
+  inst._renderer = gr; window._renderer = gr;
+  inst.drawingContext = gc; window.drawingContext = gc;
+  try {
+    fn();
+  } finally {
+    inst._renderer = main; window._renderer = prevWinRenderer;
+    inst.drawingContext = prevCtx; window.drawingContext = prevWinCtx;
+  }
+}
+
+// ============================================
 // GAME UI CLASS - Responsive layout support
 // ============================================
 class GameUI {
@@ -374,6 +465,33 @@ class GameUI {
     return mx > x && mx < x + w && my > y && my < y + h;
   }
 
+  // Whether (mx, my) is over HUD chrome a click would hit (buttons, dials, panels, the
+  // toolbar) rather than the map beneath it. No side effects: a tool dragged off the toolbar
+  // and released here is not placed (see Game.handleRelease). Mirrors the regions the click
+  // handlers above consume. In the docked layout the bars and sidebar lie outside the game
+  // area (Game.isInGameArea), so only the field guide counts.
+  pointerOverHud(mx, my) {
+    const enc = this.game.encyclopedia;
+    if (enc && enc.open && enc.pointerOverPanel(mx, my)) return true;
+    if (!this.config.fullscreen) return false;
+
+    const fs = this.layout.fs, bs = fs.btnSize;
+    for (const [bx, by] of [[fs.guideBtnX, fs.guideBtnY], [fs.fsBtnX, fs.fsBtnY],
+                            [fs.pauseBtnX, fs.pauseBtnY], [fs.ffBtnX, fs.ffBtnY]]) {
+      if (this._inRect(mx, my, bx, by, bs, bs)) return true;
+    }
+    if (this._fsFocusBtnBounds) {
+      for (const b of this._fsFocusBtnBounds) if (this._inRect(mx, my, b.x, b.y, b.size, b.size)) return true;
+    }
+    if (this._inRect(mx, my, fs.toolbarStartX, fs.toolbarY,
+                     this.layout.toolbarTotalWidth, this.layout.toolbarBtnSize)) return true;
+    if (fs.hudSwallow) {
+      for (const r of fs.hudSwallow) if (this._inRect(mx, my, r.x, r.y, r.w, r.h)) return true;
+    }
+    const goalsH = 30 + this.game.goals.length * 26;
+    return this._inRect(mx, my, fs.goalsX, fs.goalsY, this.layout.sidebarPanelWidth, goalsH);
+  }
+
   handleFullscreenClick(mx, my) {
     const fs = this.layout.fs;
     const bs = fs.btnSize;
@@ -462,6 +580,8 @@ class GameUI {
       let x = startX + slots[i];
       if (mx > x && mx < x + btnSize && my > btnY && my < btnY + btnSize) {
         this.game.selectPlaceable(type);
+        // The press may turn into a drag onto the map (see Game.handleRelease).
+        if (this.game.selectedPlaceable === type) this.game.beginToolDrag(type, mx, my);
         return true;
       }
       i++;
@@ -759,86 +879,100 @@ class GameUI {
     const y = fs.goalsY + goalsH + 24;
     let sepAdded = false;
 
+    // Lay the row out (click rects, the right column's bottom) and sign it: the tiles are
+    // cached (HudCache) and redrawn only when a highlight toggles or a count changes.
+    const laid = [];
+    let sig = `${size}|`;
     for (const t of tiles) {
-      const key = t.key, isSurvival = t.survival;
-      if (isSurvival && !sepAdded) { x += gap; sepAdded = true; }   // separate the survival group
-      const isMoa = (typeof MOA_SPECIES !== 'undefined' && !!MOA_SPECIES[key]);
-      const regSp = (!isMoa && typeof REGISTRY !== 'undefined' && REGISTRY.getSpecies) ? REGISTRY.getSpecies(key) : null;
-      const cfg = isMoa ? MOA_SPECIES[key] : ((regSp && regSp.config) || {});
-      const active = typeof SPECIES_HIGHLIGHT !== 'undefined' && SPECIES_HIGHLIGHT.has(key);
-      const hc = cfg.highlightColor || [255, 235, 120];
-
-      if (active) {
-        fill(hc[0] * 0.25, hc[1] * 0.25, hc[2] * 0.25, 225);
-        stroke(hc[0], hc[1], hc[2]);
-        strokeWeight(3);
-      } else if (isSurvival) {
-        // Warm amber frame marks the off-focus keystone group (shown, but not a loss at 0).
-        fill(58, 42, 30, 210);
-        stroke(220, 138, 74);
-        strokeWeight(2);
-      } else {
-        fill(35, 55, 40, 200);
-        stroke(70, 110, 80);
-        strokeWeight(1);
-      }
-      rect(x, y, size, size, 10);
-
-      // Short name so a rotating focus reads (kea vs a moa).
-      const name = (isMoa ? cfg.displayName : (regSp && regSp.displayName)) || key;
-      noStroke(); fill(214, 230, 214); textAlign(CENTER, TOP); textSize(9);
-      text(name.length > 12 ? name.slice(0, 11) + '…' : name, x + size / 2, y + 4);
-
-      if (isMoa) {
-        // Idle sprite; the species' own art; generic art gets the species tint.
-        const set = (cfg.spriteSet && EntitySprites.moaVariants[cfg.spriteSet]) || EntitySprites.moa;
-        const sprite = EntitySprites.isValid(set.idle) ? set.idle : EntitySprites.moa.idle;
-        if (EntitySprites.isValid(sprite)) {
-          push();
-          imageMode(CENTER);
-          const s = Math.min(40 / sprite.width, 40 / sprite.height);
-          if (!cfg.spriteSet && cfg.tint) tint(cfg.tint[0], cfg.tint[1], cfg.tint[2]);
-          image(sprite, x + size / 2, y + size / 2 - 4, sprite.width * s, sprite.height * s);
-          pop();
-        }
-      } else {
-        // Bird focus species; its own sprite (keyed like EntitySprites.flyers), else the
-        // coloured marker fallback.
-        const birdSprite = (typeof EntitySprites !== 'undefined' && EntitySprites.flyers)
-          ? EntitySprites.flyers[key] : null;
-        if (EntitySprites.isValid(birdSprite)) {
-          push();
-          imageMode(CENTER);
-          const s = Math.min(44 / birdSprite.width, 44 / birdSprite.height);
-          image(birdSprite, x + size / 2, y + size / 2 - 4, birdSprite.width * s, birdSprite.height * s);
-          pop();
-        } else {
-          push(); noStroke();
-          fill(hc[0], hc[1], hc[2]); ellipse(x + size / 2, y + size / 2 - 2, 24, 19);
-          fill(hc[0] * 0.6 + 20, hc[1] * 0.6 + 20, hc[2] * 0.6 + 20);
-          ellipse(x + size / 2 + 7, y + size / 2 - 8, 11, 11);
-          pop();
-        }
-      }
-
-      // Live population count
+      if (t.survival && !sepAdded) { x += gap; sepAdded = true; }   // separate the survival group
+      const active = typeof SPECIES_HIGHLIGHT !== 'undefined' && SPECIES_HIGHLIGHT.has(t.key);
       const count = this.simulation.getCachedSpeciesCount
-        ? this.simulation.getCachedSpeciesCount(key)
+        ? this.simulation.getCachedSpeciesCount(t.key)
         : 0;
-      fill(230, 245, 235);
-      noStroke();
-      textSize(16);
-      textAlign(CENTER, BOTTOM);
-      push();
-      textFont(FreckleFace);
-      text(count, x + size / 2, y + size - 2);
-      pop();
-
-      this._fsFocusBtnBounds.push({ key, x, y, size, survival: isSurvival });
+      laid.push({ key: t.key, survival: t.survival, active, count, x });
+      sig += `${t.key}:${t.survival ? 1 : 0}${active ? 1 : 0}:${count},`;
+      this._fsFocusBtnBounds.push({ key: t.key, x, y, size, survival: t.survival });
       x += size + gap;
     }
     // Where the right-column content ends, for docking the field guide below it.
     this._fsFocusBottomY = y + size;
+
+    const x0 = laid[0].x, rowW = (x - gap) - x0;
+    HudCache.draw('focusTiles', x0 - 4, y - 4, rowW + 8, size + 8, sig, () => {
+      for (const t of laid) this._drawFocusTile(t.key, t.survival, t.active, t.count, t.x, y, size);
+    });
+  }
+
+  // One focus-species tile: frame (highlight / keystone / plain), short name, idle sprite and
+  // the live population count.
+  _drawFocusTile(key, isSurvival, active, count, x, y, size) {
+    const isMoa = (typeof MOA_SPECIES !== 'undefined' && !!MOA_SPECIES[key]);
+    const regSp = (!isMoa && typeof REGISTRY !== 'undefined' && REGISTRY.getSpecies) ? REGISTRY.getSpecies(key) : null;
+    const cfg = isMoa ? MOA_SPECIES[key] : ((regSp && regSp.config) || {});
+    const hc = cfg.highlightColor || [255, 235, 120];
+
+    if (active) {
+      fill(hc[0] * 0.25, hc[1] * 0.25, hc[2] * 0.25, 225);
+      stroke(hc[0], hc[1], hc[2]);
+      strokeWeight(3);
+    } else if (isSurvival) {
+      // Warm amber frame marks the off-focus keystone group (shown, but not a loss at 0).
+      fill(58, 42, 30, 210);
+      stroke(220, 138, 74);
+      strokeWeight(2);
+    } else {
+      fill(35, 55, 40, 200);
+      stroke(70, 110, 80);
+      strokeWeight(1);
+    }
+    rect(x, y, size, size, 10);
+
+    // Short name so a rotating focus reads (kea vs a moa).
+    const name = (isMoa ? cfg.displayName : (regSp && regSp.displayName)) || key;
+    noStroke(); fill(214, 230, 214); textAlign(CENTER, TOP); textSize(9);
+    text(name.length > 12 ? name.slice(0, 11) + '…' : name, x + size / 2, y + 4);
+
+    if (isMoa) {
+      // Idle sprite; the species' own art; generic art gets the species tint.
+      const set = (cfg.spriteSet && EntitySprites.moaVariants[cfg.spriteSet]) || EntitySprites.moa;
+      const sprite = EntitySprites.isValid(set.idle) ? set.idle : EntitySprites.moa.idle;
+      if (EntitySprites.isValid(sprite)) {
+        push();
+        imageMode(CENTER);
+        const s = Math.min(40 / sprite.width, 40 / sprite.height);
+        if (!cfg.spriteSet && cfg.tint) tint(cfg.tint[0], cfg.tint[1], cfg.tint[2]);
+        image(sprite, x + size / 2, y + size / 2 - 4, sprite.width * s, sprite.height * s);
+        pop();
+      }
+    } else {
+      // Bird focus species; its own sprite (keyed like EntitySprites.flyers), else the
+      // coloured marker fallback.
+      const birdSprite = (typeof EntitySprites !== 'undefined' && EntitySprites.flyers)
+        ? EntitySprites.flyers[key] : null;
+      if (EntitySprites.isValid(birdSprite)) {
+        push();
+        imageMode(CENTER);
+        const s = Math.min(44 / birdSprite.width, 44 / birdSprite.height);
+        image(birdSprite, x + size / 2, y + size / 2 - 4, birdSprite.width * s, birdSprite.height * s);
+        pop();
+      } else {
+        push(); noStroke();
+        fill(hc[0], hc[1], hc[2]); ellipse(x + size / 2, y + size / 2 - 2, 24, 19);
+        fill(hc[0] * 0.6 + 20, hc[1] * 0.6 + 20, hc[2] * 0.6 + 20);
+        ellipse(x + size / 2 + 7, y + size / 2 - 8, 11, 11);
+        pop();
+      }
+    }
+
+    // Live population count
+    fill(230, 245, 235);
+    noStroke();
+    textSize(16);
+    textAlign(CENTER, BOTTOM);
+    push();
+    textFont(FreckleFace);
+    text(count, x + size / 2, y + size - 2);
+    pop();
   }
 
   renderMauriCounter(x, y) {
@@ -878,6 +1012,20 @@ class GameUI {
   // ring, a "MAURI" label, and the value in the centre.
   renderMauriRing(cx, cy, r) {
     const val = Math.floor(this.mauri.mauri);
+    const g = this.game;
+    const showGain = !!(g && g.currentLevel && g.currentLevel.endless && g.ecosystemStats);
+    let gainStr = '';
+    if (showGain) {
+      const mps = g.ecosystemStats().mauriPerSec || 0;
+      gainStr = `${mps >= 0 ? '+' : ''}${mps.toFixed(1)}/s`;
+    }
+    // Cached (HudCache) on the two readouts it shows.
+    HudCache.draw('mauriRing', cx - r - 4, cy - r - 4, r * 2 + 8, r * 2 + 8,
+                  `${val}|${gainStr}|${r}|${SMALL_TEXT_BUMP}`,
+                  () => this._drawMauriRing(cx, cy, r, val, showGain, gainStr));
+  }
+
+  _drawMauriRing(cx, cy, r, val, showGain, gainStr) {
     push();
     ellipseMode(CENTER);
 
@@ -902,8 +1050,6 @@ class GameUI {
     // Value; scaled down for longer numbers so it never spills the disc.
     const str = String(val);
     // Nudge the value up a touch (endless) to make room for the gain/sec line below.
-    const g = this.game;
-    const showGain = !!(g && g.currentLevel && g.currentLevel.endless && g.ecosystemStats);
     const valY = showGain ? cy + r * 0.02 : cy + r * 0.12;
     let ts = r * 0.62;
     if (str.length >= 4) ts = r * 0.40;
@@ -918,10 +1064,9 @@ class GameUI {
     // Live mauri gain/sec under the counter (endless economy readout). Shares the
     // passive-income driver with the AVG POP dial (Game.ecosystemStats().mauriPerSec).
     if (showGain) {
-      const mps = g.ecosystemStats().mauriPerSec || 0;
       fill(150, 200, 165);
       smallTextSize(12);
-      text(`${mps >= 0 ? '+' : ''}${mps.toFixed(1)}/s`, cx, cy + r * 0.56);
+      text(gainStr, cx, cy + r * 0.56);
     }
 
     pop();
@@ -936,6 +1081,14 @@ class GameUI {
     if (!g.ecosystemStats) return;
     const s = g.ecosystemStats();
     const bal = Math.max(0, Math.min(1, s.balance || 0));
+    const avgPop = Math.round(s.avgPop || 0);
+    // Cached (HudCache) on its readouts; balance to 0.001 keeps the arc's end within a pixel.
+    HudCache.draw('popDial', cx - r - 4, cy - r - 4, r * 2 + 8, r * 2 + 8,
+                  `${avgPop}|${bal.toFixed(3)}|${r}|${SMALL_TEXT_BUMP}`,
+                  () => this._drawPopDial(cx, cy, r, bal, avgPop));
+  }
+
+  _drawPopDial(cx, cy, r, bal, avgPop) {
     // red (uneven) → green (even).
     const col = [Math.round(lerp(214, 110, bal)), Math.round(lerp(74, 205, bal)), Math.round(lerp(60, 120, bal))];
 
@@ -963,7 +1116,7 @@ class GameUI {
     text('AVG POP', cx, cy - r * 0.44);
     fill(col[0], col[1], col[2]);
     push(); textFont(FreckleFace); textSize(r * 0.6);
-    text(Math.round(s.avgPop || 0), cx, cy + r * 0.02); pop();
+    text(avgPop, cx, cy + r * 0.02); pop();
     fill(col[0], col[1], col[2]); smallTextSize(10);
     text(`eq ${bal.toFixed(2)}`, cx, cy + r * 0.44);
     pop();
@@ -981,13 +1134,38 @@ class GameUI {
   renderSeasonRing(cx, cy, R) {
     const sm = this.seasonManager;
     if (!sm || !sm.current) return;
-    const order = sm.seasonOrder;
     const curIdx = sm.currentSeasonIndex | 0;
     const prog = Math.max(0, Math.min(1, sm.progress || 0));
     const g = this.game;
     const level = g.currentLevel || g.level || g.levelConfig || {};
-    const endless = !!level.endless;
     const cycle = (g.cycle | 0);
+    const secs = Math.floor(g.playTime / 60);
+    const timeStr = Math.floor(secs / 60) + ':' + (secs % 60).toString().padStart(2, '0');
+    const season = sm.current;
+
+    // The dial is cached (HudCache) on its season, year and clock; only the progress notch,
+    // which creeps every frame, draws live, on top (nothing else on the dial overlaps it).
+    HudCache.draw('seasonRing', cx - R - 4, cy - R - 4, R * 2 + 8, R * 2 + 8,
+                  `${level.id}|${curIdx}|${season.name}|${season.color}|${cycle}|${timeStr}|${R}|${SMALL_TEXT_BUMP}`,
+                  () => this._drawSeasonRingDial(cx, cy, R, curIdx, cycle, timeStr, level));
+
+    // Progress notch: a bright dot at the current point in the year.
+    const RW = R * 0.16;                    // season-ring thickness
+    const ringD = (R - RW * 0.5) * 2;       // diameter the arc stroke is centred on
+    const pAng = -HALF_PI + ((curIdx + prog) / 4) * TWO_PI;
+    push();
+    ellipseMode(CENTER);
+    noStroke();
+    fill(245, 250, 240);
+    circle(cx + Math.cos(pAng) * (ringD / 2), cy + Math.sin(pAng) * (ringD / 2), RW * 0.9);
+    pop();
+  }
+
+  // The season dial minus its progress notch (see renderSeasonRing).
+  _drawSeasonRingDial(cx, cy, R, curIdx, cycle, timeStr, level) {
+    const sm = this.seasonManager;
+    const order = sm.seasonOrder;
+    const endless = !!level.endless;
 
     const RW = R * 0.16;                    // season-ring thickness
     const ringD = (R - RW * 0.5) * 2;       // diameter the arc stroke is centred on
@@ -1013,12 +1191,6 @@ class GameUI {
       strokeWeight(i === curIdx ? RW * 1.15 : RW);
       arc(cx, cy, ringD, ringD, a0, a1);
     }
-
-    // Progress notch: a bright dot at the current point in the year.
-    const pAng = TOP + ((curIdx + prog) / 4) * TWO_PI;
-    noStroke();
-    fill(245, 250, 240);
-    circle(cx + Math.cos(pAng) * (ringD / 2), cy + Math.sin(pAng) * (ringD / 2), RW * 0.9);
 
     // Endless: inner four-year tour ring (≈ terrain quadrants), current year lit. Year 1
     // lights the bottom-right quadrant, then advances clockwise (hence the +1 offset).
@@ -1051,8 +1223,6 @@ class GameUI {
     smallTextSize(11);
     text('YEAR ' + (cycle + 1), cx, cy + R * 0.17);
 
-    const secs = Math.floor(g.playTime / 60);
-    const timeStr = Math.floor(secs / 60) + ':' + (secs % 60).toString().padStart(2, '0');
     fill(205, 240, 215);
     push(); textFont(FreckleFace); textSize(19); text(timeStr, cx, cy + R * 0.45); pop();
 
@@ -1578,6 +1748,54 @@ class GameUI {
     const btnY = toolbarY;
     const btnSize = this.layout.toolbarBtnSize;
     const slots = this._toolbarSlotOffsets();
+    const palette = this.game.activePlaceables || PLACEABLES;
+    // Icon disc scales with the button (tuned at the 84px default); see _drawToolbarRow.
+    const k = btnSize / 84;
+    const disc = Math.round(48 * k);
+
+    // The row is cached (HudCache) on each tool's state; the Storm recharge wedge and the
+    // hover tooltip change every frame, so they draw live on top of it.
+    let sig = `${btnSize}|${SMALL_TEXT_BUMP}|`;
+    let hoveredDef = null, hoveredX = 0, stormX = null;
+    let i = 0;
+    for (const type in palette) {
+      const def = palette[type];
+      const x = startX + slots[i];
+      const isHovered = mouseX > x && mouseX < x + btnSize && mouseY > btnY && mouseY < btnY + btnSize;
+      sig += `${type}:${this.game.selectedPlaceable === type ? 1 : 0}` +
+             `${this.mauri.canAfford(def.cost) ? 1 : 0}${isHovered ? 1 : 0},`;
+      if (isHovered) { hoveredDef = def; hoveredX = x; }
+      if (type === 'Storm') stormX = x;
+      i++;
+    }
+    const rowW = slots.length ? slots[slots.length - 1] + btnSize : 0;
+    // Bounds: the buttons' strokes overhang a few px, and the hotkey numbers sit below.
+    HudCache.draw('toolbar', startX - 6, btnY - 6, rowW + 12, btnSize + 36, sig,
+                  () => this._drawToolbarRow(startX, btnY, btnSize, slots, palette));
+
+    // Storm recharge: a clock-style wedge over the icon covering the remaining cooldown,
+    // its edge advancing clockwise until ready.
+    if (stormX !== null) {
+      const cdRemaining = (this.game._stormCooldownUntil || 0) - this.game.playTime;
+      if (cdRemaining > 0) {
+        const cdTotal = this.game._stormCooldownDuration || 600;
+        const elapsed = constrain(1 - cdRemaining / cdTotal, 0, 1);
+        push();
+        translate(stormX + btnSize / 2, btnY + btnSize / 2 - 11 * k);
+        fill(15, 20, 25, 170);
+        noStroke();
+        arc(0, 0, disc, disc, -HALF_PI + elapsed * TWO_PI, -HALF_PI + TWO_PI, PIE);
+        pop();
+      }
+    }
+
+    // Tooltip on hover
+    if (hoveredDef) this.renderToolTooltip(hoveredX + btnSize / 2, btnY - 10, hoveredDef);
+  }
+
+  // The toolbar buttons themselves (everything but the Storm wedge and the tooltip), drawn
+  // into the HudCache when a tool's state changes.
+  _drawToolbarRow(startX, btnY, btnSize, slots, palette) {
     const mix = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
     const base = [22, 34, 28], grey = [70, 70, 70];
     // Icon disc, glyphs and labels scale with the button (tuned at the 84px default), so a
@@ -1585,7 +1803,6 @@ class GameUI {
     const k = btnSize / 84;
     const disc = Math.round(48 * k);
 
-    const palette = this.game.activePlaceables || PLACEABLES;
     let i = 0;
     for (let type in palette) {
       const def = palette[type];
@@ -1628,19 +1845,6 @@ class GameUI {
       // Icon (origin is already the centre of the icon circle)
       this.renderPlaceableIcon(def, 0, 0, Math.round(40 * k), Math.round(27 * k),
                                canAfford ? 240 : 100);
-
-      // Storm recharge: a clock-style wedge over the icon covering the remaining cooldown,
-      // its edge advancing clockwise until ready.
-      if (type === 'Storm') {
-        const cdRemaining = (this.game._stormCooldownUntil || 0) - this.game.playTime;
-        if (cdRemaining > 0) {
-          const cdTotal = this.game._stormCooldownDuration || 600;
-          const elapsed = constrain(1 - cdRemaining / cdTotal, 0, 1);
-          fill(15, 20, 25, 170);
-          noStroke();
-          arc(0, 0, disc, disc, -HALF_PI + elapsed * TWO_PI, -HALF_PI + TWO_PI, PIE);
-        }
-      }
       pop();
 
       // Cost
@@ -1655,11 +1859,6 @@ class GameUI {
       smallTextSize(Math.round(13 * k));
       textAlign(CENTER, TOP);
       text(i + 1, x + btnSize / 2, btnY + btnSize + 4);
-
-      // Tooltip on hover
-      if (isHovered) {
-        this.renderToolTooltip(x + btnSize / 2, btnY - 10, def);
-      }
 
       i++;
     }
@@ -1954,7 +2153,7 @@ class GameUI {
 
     fill(140, 170, 150);
     smallTextSize(11);
-    text("Click in game area to place", tx, iconCY + 20);
+    text("Click or drag onto the map", tx, iconCY + 20);
   }
 
   // ==========================================

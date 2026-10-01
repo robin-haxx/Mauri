@@ -38,8 +38,36 @@ const GLTerrain = {
   _fbo: null, _fboTex: null, _fboW: 0, _fboH: 0, _fboFailed: false,
   _blitProg: null, _blitBuf: null, _aBlitPos: 0, _uBlitTex: null,
 
+  // ---- quality (performance mode; see setPerfMode in mauri_sketch.js) ---------------------
+  // decimate: build the mesh with a vertex every round(terrain.detail) render cells, i.e. at the
+  // gameplay grid's own resolution (¼ of the triangles at the default 2× terrain detail),
+  // colours averaged down so contour lines stay continuous. waterSteps: the caustic loop
+  // length in the water shader (its most expensive part per pixel).
+  decimate: false,
+  waterSteps: 2,
+  _progWaterSteps: 0,   // the waterSteps the current program was compiled with
+  skirtStep: 0,         // columns between noise samples in the over-scan skirt (0 = auto; 1 = all)
+
+  setQuality({ decimate, waterSteps } = {}) {
+    if (decimate != null) this.decimate = !!decimate;   // takes effect at the next build()
+    if (waterSteps != null) this.waterSteps = Math.max(1, Math.min(4, waterSteps | 0));
+  },
+
   available() {
     return this.enabled && typeof GLBatch !== 'undefined' && GLBatch.enabled && GLBatch.gl;
+  },
+
+  // The render-cell step between mesh vertices for this terrain (1 = every render cell).
+  _meshStride(terrain) {
+    return this.decimate ? Math.max(1, Math.round((terrain && terrain.detail) || 1)) : 1;
+  },
+
+  // (Re)compile the terrain program when it's missing or its water quality changed.
+  _ensureProgram(gl) {
+    if (this._prog && this._progWaterSteps === this.waterSteps) return;
+    if (this._prog) gl.deleteProgram(this._prog);
+    this._prog = null;
+    this._buildProgram(gl);
   },
 
   // ---- program -----------------------------------------------------------------
@@ -85,8 +113,9 @@ const GLTerrain = {
       '    vec2 iq=p; float c=1.0; float inten=0.005;' +
       // PERF: this loop runs per water fragment every frame; the most expensive thing on the
       // terrain. Each step trades against water fill cost; 2 keeps the long-wave character
-      // (the output is banded to 4 levels below, so a 3rd step is barely visible).
-      '    const int WATER_STEPS=2;' +
+      // (the output is banded to 4 levels below, so a 3rd step is barely visible). Performance
+      // mode compiles it with 1 (see setQuality).
+      '    const int WATER_STEPS=' + this.waterSteps + ';' +
       '    for(int n=0;n<WATER_STEPS;n++){' +
       '      float t=time*(1.0-(3.5/float(n+1)));' +
       '      iq=p+vec2(cos(t-iq.x)+sin(t+iq.y), sin(t-iq.y)+cos(t+iq.x));' +
@@ -133,6 +162,7 @@ const GLTerrain = {
     gl.linkProgram(p);
     if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
     this._prog = p;
+    this._progWaterSteps = this.waterSteps;
     const U = ['uK','uLIFT','uScrollX','uScrollY','uViewX','uViewY','uViewZoom','uSS','uW','uH',
                'uSeasonBlend','uWorldH','uSun','uAmbient','uFrost','uFrostCol','uHazeCol','uHazeAmt',
                'uTime','uWaterCol','uSunCol','uSkyCol','uCold','uColdTint','uSnowLine','uSnowCol'];
@@ -151,10 +181,12 @@ const GLTerrain = {
     const cols = terrain.renderCols, rows = terrain.renderRows;
     const worldW = terrain.worldW, worldH = terrain.worldH;
     const H = terrain.renderHeightMap;
-    const key = cols + 'x' + rows + '@' + worldW + 'x' + worldH + '#' + (terrain.glacialAdvance || 0) + ':' + (terrain.seed || 0);
+    const stride = this._meshStride(terrain);
+    const key = cols + 'x' + rows + '@' + worldW + 'x' + worldH + '#' + (terrain.glacialAdvance || 0) +
+                ':' + (terrain.seed || 0) + '/' + stride;
     if (this._dims && this._dims.key === key && this._buffers) return true;   // already built for this land
 
-    if (!this._prog) this._buildProgram(gl);
+    this._ensureProgram(gl);
 
     // FAR/NEAR over-scan skirt; real receding terrain past the world's edges, so the tilted
     // plane fills the frame. Sample fresh terrain for a band of rows above (worldY<0) and
@@ -171,10 +203,10 @@ const GLTerrain = {
     const farRows  = marginFar  > 0 ? Math.max(1, Math.round(marginFar  / (dyMesh * SKIRT_STEP))) : 0;
     const nearRows = marginNear > 0 ? Math.max(1, Math.round(marginNear / (dyMesh * SKIRT_STEP))) : 0;
     const extRows = farRows + rows + nearRows;
-    this._meshRows = rows; this._extRows = extRows; this._farRows = farRows; this._nearRows = nearRows;
 
-    // Build an extended source (world rows verbatim + sampled skirt rows). Per-season vertex
-    // colours come from terrain._computeSeasonCellColors, the same logic the 2D relief uses.
+    // Build an extended source (world rows verbatim + sampled skirt rows) at render
+    // resolution. Per-season vertex colours come from terrain._computeSeasonCellColors, the
+    // same logic the 2D relief uses.
     const B = terrain.renderBiomeIndexMap;
     const base = terrain._baseCellColors;
     const extHeight = new Float32Array(cols * extRows);
@@ -185,6 +217,12 @@ const GLTerrain = {
     const showContours = _tc.showContours;
     const contourInterval = _tc.contourInterval || 1;
     const contourWidth = (_tc.contourWidth != null) ? _tc.contourWidth : 0.008;
+    // Skirt rows sample the noise only every `kx` render columns (the gameplay grid's pitch: at
+    // the default 2× detail the world rows are themselves interpolated from that grid) and
+    // interpolate between. The noise is the slowest part of the build, so this halves it.
+    const kx = this.skirtStep || Math.max(1, Math.round(terrain.detail || 1));
+    const skirtElev = new Float32Array(cols);
+    const rgb = [0, 0, 0];
 
     for (let er = 0; er < extRows; er++) {
       // ext-row → world render-row (may be <0 far or >=rows near) and its world Y.
@@ -211,15 +249,23 @@ const GLTerrain = {
           extBase[d4 + 2] = base[s4 + 2]; extBase[d4 + 3] = base[s4 + 3];
         }
       } else {
-        for (let c = 0; c < cols; c++) {                     // fresh sample past the edge
-          const wx = (c / Math.max(1, cols - 1)) * worldW;
-          const elev = terrain.getElevation(wx, worldY);
+        // Fresh samples past the edge, every kx columns (and the last), then interpolated.
+        const lastC = cols - 1, spanC = Math.max(1, lastC);
+        for (let c = 0; c < cols; c += kx) skirtElev[c] = terrain.getElevation((c / spanC) * worldW, worldY);
+        if (lastC % kx) skirtElev[lastC] = terrain.getElevation((lastC / spanC) * worldW, worldY);
+        for (let c = 0; c < cols; c++) {
+          let elev = skirtElev[c];
+          const r = c % kx;
+          if (r && c !== lastC) {
+            const c0 = c - r, c1 = Math.min(lastC, c0 + kx);
+            elev = skirtElev[c0] + (skirtElev[c1] - skirtElev[c0]) * ((c - c0) / (c1 - c0));
+          }
           const biome = terrain.getBiomeFromElevation(elev);
-          const col = terrain.getColor(elev, biome);
+          this._groundColor(terrain, elev, biome, rgb);
           const d4 = (dst + c) * 4;
           extHeight[dst + c] = elev;
           extBiome[dst + c] = terrain.biomeIndexByKey[biome.key];
-          extBase[d4] = red(col); extBase[d4 + 1] = green(col); extBase[d4 + 2] = blue(col);
+          extBase[d4] = rgb[0]; extBase[d4 + 1] = rgb[1]; extBase[d4 + 2] = rgb[2];
           let isC = 0;
           if (showContours) { const m = elev % contourInterval; isC = (m < contourWidth || m > contourInterval - contourWidth) ? 1 : 0; }
           extBase[d4 + 3] = isC;
@@ -228,36 +274,50 @@ const GLTerrain = {
     }
     this._extSrc = { cols, rows: extRows, heightMap: extHeight, biomeMap: extBiome, baseColors: extBase };
 
-    const n = cols * extRows;
+    // Mesh vertices: every render cell, or (decimated) every `stride` cells. The world's first
+    // and last rows and columns are always kept, so the mesh still spans exactly the same land.
+    const colIdx = this._strideIndices(0, cols - 1, stride);
+    const rowIdx = this._concatIndices(
+      farRows ? this._strideIndices(0, farRows - 1, stride) : [],
+      this._strideIndices(farRows, farRows + rows - 1, stride),
+      nearRows ? this._strideIndices(farRows + rows, extRows - 1, stride) : []);
+    const mCols = colIdx.length, mRows = rowIdx.length;
+    this._extRows = mRows;
+
+    const n = mCols * mRows;
     const pos = new Float32Array(n * 4);   // x, y, elev, waterFlag
     const nrm = new Float32Array(n * 3);
     // Sea cells (biome index 0 / _waterBiome) get the animated water path in the shader.
     const waterIdx = (terrain._waterBiome && terrain.biomeIndexByKey)
       ? terrain.biomeIndexByKey[terrain._waterBiome.key] : -1;
-    // Hillshade contrast: heights are 0..1; scale their gradient up so slopes read.
-    const SLOPE = 6.5;
-    for (let er = 0; er < extRows; er++) {
-      for (let c = 0; c < cols; c++) {
-        const i = er * cols + c, o = i * 4, o3 = i * 3;
-        pos[o] = (c / Math.max(1, cols - 1)) * worldW;
+    // Hillshade contrast: heights are 0..1; scale their gradient up so slopes read. A
+    // decimated mesh takes its gradient across `stride`× the distance, so scale that back.
+    const SLOPE = 6.5 / stride;
+    for (let r = 0; r < mRows; r++) {
+      const er = rowIdx[r], row = er * cols;
+      const rowU = rowIdx[r > 0 ? r - 1 : 0] * cols, rowD = rowIdx[r < mRows - 1 ? r + 1 : mRows - 1] * cols;
+      for (let c = 0; c < mCols; c++) {
+        const ec = colIdx[c];
+        const i = r * mCols + c, o = i * 4, o3 = i * 3, ei = row + ec;
+        pos[o] = (ec / Math.max(1, cols - 1)) * worldW;
         pos[o + 1] = worldYs[er];
-        pos[o + 2] = extHeight[i];                           // elevation 0..1
-        pos[o + 3] = (extBiome[i] === waterIdx) ? 1 : 0;     // water flag
-        // central-difference normal from the EXTENDED heightmap (continuous across the skirt)
-        const hl = extHeight[er * cols + Math.max(0, c - 1)], hr = extHeight[er * cols + Math.min(cols - 1, c + 1)];
-        const hu = extHeight[Math.max(0, er - 1) * cols + c], hd = extHeight[Math.min(extRows - 1, er + 1) * cols + c];
-        const nx = -(hr - hl) * SLOPE, ny = -(hd - hu) * SLOPE, nz = 1.0;
-        const inv = 1 / Math.hypot(nx, ny, nz);
-        nrm[o3] = nx * inv; nrm[o3 + 1] = ny * inv; nrm[o3 + 2] = nz * inv;
+        pos[o + 2] = extHeight[ei];                          // elevation 0..1
+        pos[o + 3] = (extBiome[ei] === waterIdx) ? 1 : 0;    // water flag
+        // central-difference normal between neighbouring mesh vertices (continuous across the skirt)
+        const hl = extHeight[row + colIdx[c > 0 ? c - 1 : 0]], hr = extHeight[row + colIdx[c < mCols - 1 ? c + 1 : mCols - 1]];
+        const hu = extHeight[rowU + ec], hd = extHeight[rowD + ec];
+        const nx = -(hr - hl) * SLOPE, ny = -(hd - hu) * SLOPE;
+        const inv = 1 / Math.sqrt(nx * nx + ny * ny + 1);
+        nrm[o3] = nx * inv; nrm[o3 + 1] = ny * inv; nrm[o3 + 2] = inv;
       }
     }
-    // Indices: one quad per cell over the EXTENDED rows, in COLUMN BLOCKS of BLOCK_COLS quads,
-    // each block holding its rows FAR→NEAR (er ascending) for painter's occlusion, so draw() can
+    // Indices: one quad per cell over the mesh rows, in COLUMN BLOCKS of BLOCK_COLS quads,
+    // each block holding its rows FAR→NEAR (row ascending) for painter's occlusion, so draw() can
     // issue one ranged draw per visible block covering just its visible rows (_drawVisible). A
     // quad spans a single column step on screen (the relief lifts only in y), so quads in
     // different columns never overlap, and block by block paints exactly what row by row across
-    // the whole width did. (extRows-1)*(cols-1)*6 indices; Uint32 when the mesh is large.
-    const qCols = cols - 1, qRows = extRows - 1;
+    // the whole width did. (mRows-1)*(mCols-1)*6 indices; Uint32 when the mesh is large.
+    const qCols = mCols - 1, qRows = mRows - 1;
     const quads = qCols * qRows;
     const idx = (n > 65535) ? new Uint32Array(quads * 6) : new Uint16Array(quads * 6);
     this._idxType = (n > 65535) ? gl.UNSIGNED_INT : gl.UNSIGNED_SHORT;
@@ -272,35 +332,40 @@ const GLTerrain = {
     const BLOCK = this.BLOCK_COLS;
     const nBlocks = Math.ceil(qCols / BLOCK);
     const blocks = [];
-    // Per block and ext row, the lowest and highest elevation among the block's vertices: bounds
-    // each quad row's on-screen extent under the relief lift (see _drawVisible).
-    const eMin = new Float32Array(nBlocks * extRows), eMax = new Float32Array(nBlocks * extRows);
+    // Per block and mesh row, the lowest and highest elevation among the block's vertices:
+    // bounds each quad row's on-screen extent under the relief lift (see _drawVisible).
+    const eMin = new Float32Array(nBlocks * mRows), eMax = new Float32Array(nBlocks * mRows);
     let k = 0;
     for (let bi = 0; bi < nBlocks; bi++) {
       const c0 = bi * BLOCK, c1 = Math.min(qCols, c0 + BLOCK);   // quad columns [c0, c1)
       blocks.push({ first: k, perRow: (c1 - c0) * 6 });
-      for (let er = 0; er < qRows; er++) {
+      for (let r = 0; r < qRows; r++) {
         for (let c = c0; c < c1; c++) {
-          const a = er * cols + c, b = a + 1, d = a + cols, e = d + 1;
+          const a = r * mCols + c, b = a + 1, d = a + mCols, e = d + 1;
           idx[k++] = a; idx[k++] = d; idx[k++] = b;
           idx[k++] = b; idx[k++] = d; idx[k++] = e;
         }
       }
-      for (let er = 0; er < extRows; er++) {
-        const row = er * cols;
+      for (let r = 0; r < mRows; r++) {
+        const row = r * mCols;
         let lo = Infinity, hi = -Infinity;
         for (let c = c0; c <= c1; c++) {   // vertex columns c0..c1 (the block's quads' corners)
-          const h = extHeight[row + c];
+          const h = pos[(row + c) * 4 + 2];
           if (h < lo) lo = h;
           if (h > hi) hi = h;
         }
-        eMin[bi * extRows + er] = lo; eMax[bi * extRows + er] = hi;
+        eMin[bi * mRows + r] = lo; eMax[bi * mRows + r] = hi;
       }
     }
     this._blocks = blocks;
     this._blockEMin = eMin; this._blockEMax = eMax;
-    this._rowWorldY = worldYs;
-    this._meshCols = cols; this._meshWorldW = worldW;
+    const rowWorldY = new Float32Array(mRows);
+    for (let r = 0; r < mRows; r++) rowWorldY[r] = worldYs[rowIdx[r]];
+    this._rowWorldY = rowWorldY;
+    this._meshCols = mCols; this._meshWorldW = worldW;
+    // World width of one mesh column (the last may be narrower when decimating; the cull's
+    // ±1-column margin covers it).
+    this._meshColW = worldW * stride / Math.max(1, cols - 1);
 
     const mk = (data, drawType) => { const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf);
       gl.bufferData(gl.ARRAY_BUFFER, data, drawType || gl.STATIC_DRAW); return buf; };
@@ -320,19 +385,97 @@ const GLTerrain = {
     this._dims = { cols, rows, worldW, worldH, key };
 
     // Per-season vertex colours: compute each season once and upload it to its own static GPU
-    // buffer, so a season change is just a buffer bind in draw() (no re-upload). The JS colour
-    // cache is released once uploaded.
+    // buffer, so a season change is just a buffer bind in draw() (no re-upload). Computed at
+    // render resolution; a decimated mesh takes a weighted average, so thin contour lines
+    // fade a little instead of breaking up.
     this._seasonColorCache = null;
     for (const _k of ['summer', 'autumn', 'winter', 'spring']) {
       try {
-        const c3 = this._seasonColors(terrain, _k);
+        let c3 = this._seasonColors(terrain, _k);
+        if (stride > 1) c3 = this._downsampleColors(c3, cols, extRows, colIdx, rowIdx, stride);
         const cb = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, cb);
         gl.bufferData(gl.ARRAY_BUFFER, c3, gl.STATIC_DRAW);
         this._buffers.colByKey[_k] = cb;
       } catch (_) {}
     }
     this._seasonColorCache = null;   // GPU holds the colours now; free the JS Float32 copies
+    this._extSrc = null;             // ...and the extended source they were computed from
     return true;
+  },
+
+  // [first, first+step, …] up to and always including `last` (inclusive range).
+  _strideIndices(first, last, step) {
+    const out = [];
+    for (let i = first; i < last; i += step) out.push(i);
+    out.push(last);
+    return out;
+  },
+
+  _concatIndices(...parts) {
+    const n = parts.reduce((s, p) => s + p.length, 0);
+    const out = new Int32Array(n);
+    let o = 0;
+    for (const p of parts) { out.set(p, o); o += p.length; }
+    return out;
+  },
+
+  // terrain.getColor(elevation, biome)'s red/green/blue, into out[0..2], without allocating
+  // a p5.Color per cell: the same arithmetic as getColor + p5's lerpColor()/red() (the levels
+  // ÷255 lerp, the ×255 round trip, the snap at t<0.01 / t>0.99), so the bytes stored from it
+  // are identical; just ~10× faster for the skirt's thousands of cells.
+  _groundColor(terrain, elevation, biome, out) {
+    const colors = biome.colors;
+    const range = biome.maxElevation - biome.minElevation;
+    const position = (elevation - biome.minElevation) / range;
+    const clampedPos = Math.max(0, Math.min(1, position));
+    const colorIndex = clampedPos * (colors.length - 1);
+    const lowerIndex = colorIndex | 0;
+    const upperIndex = Math.min(lowerIndex + 1, colors.length - 1);
+    const t = colorIndex - lowerIndex;
+    if (t < 0.01 || t > 0.99) {
+      const a = terrain._getCachedColor(colors[t < 0.01 ? lowerIndex : upperIndex])._array;
+      out[0] = a[0] * 255; out[1] = a[1] * 255; out[2] = a[2] * 255;
+      return out;
+    }
+    const lo = terrain._getCachedColor(colors[lowerIndex]).levels;
+    const hi = terrain._getCachedColor(colors[upperIndex]).levels;
+    const amt = Math.max(Math.min(t, 1), 0);
+    for (let ch = 0; ch < 3; ch++) {
+      const from = lo[ch] / 255, to = hi[ch] / 255;
+      const l = (amt * (to - from) + from) * 255;
+      out[ch] = Math.max(Math.min(l / 255, 1), 0) * 255;
+    }
+    return out;
+  },
+
+  // Average render-resolution vertex colours (cols × extRows × 3) down to the decimated
+  // mesh: each kept vertex takes the tent-weighted average of the cells within `stride` of it.
+  _downsampleColors(full, cols, extRows, colIdx, rowIdx, stride) {
+    const mCols = colIdx.length, mRows = rowIdx.length;
+    const out = new Float32Array(mCols * mRows * 3);
+    const R = stride - 1;
+    for (let r = 0; r < mRows; r++) {
+      const er = rowIdx[r];
+      for (let c = 0; c < mCols; c++) {
+        const ec = colIdx[c];
+        let sr = 0, sg = 0, sb = 0, sw = 0;
+        for (let dy = -R; dy <= R; dy++) {
+          const yy = er + dy;
+          if (yy < 0 || yy >= extRows) continue;
+          const wy = stride - Math.abs(dy);
+          for (let dx = -R; dx <= R; dx++) {
+            const xx = ec + dx;
+            if (xx < 0 || xx >= cols) continue;
+            const w = wy * (stride - Math.abs(dx));
+            const q = (yy * cols + xx) * 3;
+            sr += full[q] * w; sg += full[q + 1] * w; sb += full[q + 2] * w; sw += w;
+          }
+        }
+        const o = (r * mCols + c) * 3;
+        out[o] = sr / sw; out[o + 1] = sg / sw; out[o + 2] = sb / sw;
+      }
+    }
+    return out;
   },
 
   // Per-vertex RGB (0..1) for a season, over the extended source via the same
@@ -354,6 +497,7 @@ const GLTerrain = {
   draw(game, clipX, clipY, clipW, clipH) {
     if (!this.available() || !this._buffers) return;
     const gl = GLBatch.gl;
+    this._ensureProgram(gl);   // recompiles after a water-quality change (setQuality)
     const ss = (typeof spriteSS === 'function') ? spriteSS() : 1;
     const cap = (typeof CONFIG !== 'undefined' && CONFIG.terrainMaxSS != null) ? CONFIG.terrainMaxSS : ss;
     const terrainSS = Math.min(ss, cap);
@@ -502,7 +646,7 @@ const GLTerrain = {
     const wx0 = (x0 - CONFIG.viewX) / zoom + scrollX, wx1 = (x1 - CONFIG.viewX) / zoom + scrollX;
     const py0 = (y0 - CONFIG.viewY) / zoom, py1 = (y1 - CONFIG.viewY) / zoom;
 
-    const qCols = this._meshCols - 1, colW = this._meshWorldW / Math.max(1, qCols);
+    const qCols = this._meshCols - 1, colW = this._meshColW || (this._meshWorldW / Math.max(1, qCols));
     const cMin = Math.max(0, Math.floor(wx0 / colW) - 1);
     const cMax = Math.min(qCols - 1, Math.ceil(wx1 / colW) + 1);
     if (cMax < cMin) return;

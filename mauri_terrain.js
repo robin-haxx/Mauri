@@ -639,12 +639,36 @@ class TerrainGenerator {
       { label: 'Sorting elevation into habitat bands', fn: () => this._genBiomeMap() },
       { label: 'Painting the ground and snow line', fn: () => { this._buildRenderMaps(); this._initSnowColors(); this._computeBaseCellColors(); } }
     ];
-    const seasonLabels = { summer: 'Baking the summer terrain', autumn: 'Baking the autumn terrain',
-                           winter: 'Baking the winter snowpack', spring: 'Baking the spring terrain' };
-    for (const season of ['summer', 'autumn', 'winter', 'spring']) {
-      steps.push({ label: seasonLabels[season], fn: () => { this.seasonBuffers[season] = this._bakeSeasonBuffer(season); } });
+    // The flat season bakes only feed the 2D / top-down ground; skipped (baked on first use)
+    // while the GPU relief terrain draws it. See _flatBakesNeeded.
+    if (this._flatBakesNeeded()) {
+      const seasonLabels = { summer: 'Baking the summer terrain', autumn: 'Baking the autumn terrain',
+                             winter: 'Baking the winter snowpack', spring: 'Baking the spring terrain' };
+      for (const season of ['summer', 'autumn', 'winter', 'spring']) {
+        steps.push({ label: seasonLabels[season], fn: () => { this.seasonBuffers[season] = this._bakeSeasonBuffer(season); } });
+      }
     }
     return steps;
+  }
+
+  // Whether the four flat season buffers are needed up front. They are world-sized canvases
+  // (~70 MB at the Free Play world size, ~1.5 s to bake on an Iris Xe) that only the 2D /
+  // top-down ground draws from; with the GPU relief terrain drawing the ground they would sit
+  // unused, so they're skipped and baked on first use instead (_ensureSeasonBuffers: the V
+  // top-down toggle, or the 2D fallback after a lost WebGL context).
+  _flatBakesNeeded() {
+    return !(typeof CONFIG !== 'undefined' && CONFIG.useGL && CONFIG.view3D &&
+             typeof GLTerrain !== 'undefined' && GLTerrain.enabled);
+  }
+
+  // Bake the flat season buffers if they aren't there (see _flatBakesNeeded). A one-time
+  // hitch the first time the flat ground is drawn.
+  _ensureSeasonBuffers() {
+    if (this.seasonBuffers.summer || !this._baseCellColors) return;
+    for (const season of ['summer', 'autumn', 'winter', 'spring']) {
+      freeGraphics(this.seasonBuffers[season]);
+      this.seasonBuffers[season] = this._bakeSeasonBuffer(season);
+    }
   }
 
   // Build render-resolution height/biome maps (detail × the gameplay grid), used only for
@@ -769,15 +793,17 @@ class TerrainGenerator {
    */
   _bakeAllSeasonBuffers() {
     const seasons = ['summer', 'autumn', 'winter', 'spring'];
-    
+    const bake = this._flatBakesNeeded();
+
     for (const season of seasons) {
       // A regenerate (glacial deepen / window resize) replaces the buffers; free the old
-      // world-sized canvases rather than leaking a set each loop.
+      // world-sized canvases rather than leaking a set each loop. With the GPU terrain up they
+      // stay empty until the flat ground is first drawn (_ensureSeasonBuffers).
       freeGraphics(this.seasonBuffers[season]);
-      this.seasonBuffers[season] = this._bakeSeasonBuffer(season);
+      this.seasonBuffers[season] = bake ? this._bakeSeasonBuffer(season) : null;
     }
-    
-    if (CONFIG.debugMode) {
+
+    if (CONFIG.debugMode && bake) {
       console.log('Pre-baked all 4 seasonal terrain buffers');
     }
   }
@@ -1293,6 +1319,7 @@ class TerrainGenerator {
     const curKey = this.seasonManager ? this.seasonManager.currentKey : 'summer';
     const sx = this.scrollX || 0, sy = this.scrollY || 0;
     const isRelief = !!(use3D && this.reliefBuffers && this.reliefBuffers[curKey]);
+    if (!isRelief) this._ensureSeasonBuffers();
     const set = isRelief ? this.reliefBuffers : this.seasonBuffers;
     if (!set) return;
     const cur = set[curKey] || set.summer;
@@ -1415,6 +1442,7 @@ class TerrainGenerator {
   // ============================================
   
   getTerrainBuffer() {
+    this._ensureSeasonBuffers();
     if (!this.seasonManager) return this.seasonBuffers.summer;
     return this.seasonBuffers[this.seasonManager.currentKey];
   }

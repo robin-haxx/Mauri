@@ -6,6 +6,46 @@ if (typeof p5 !== 'undefined') {
   p5.disableFriendlyErrors = !(typeof location !== 'undefined' && /[?&]fes=1(&|$)/.test(location.search));
 }
 
+// ---- Browser-drawn text for loadFont() fonts -----------------------------------------------
+// p5 draws text in a font from loadFont() as vector outlines: opentype.js rebuilds each glyph's
+// path and the canvas fills it, on every text() call. FreckleFace (the HUD numbers, season name,
+// timer, titles) was the single most expensive thing in the HUD that way: ~25 ms of GPU-process
+// time for 8 strings on an Iris Xe, against ~1 ms for the same strings as browser text.
+// loadFont() also registers the file as a CSS @font-face named after it, so once the browser has
+// that face loaded, the text is filled with fillText instead: the same glyphs, at the baseline
+// and x p5's own alignment maths gives the path, drawn from the browser's glyph cache. Until the
+// face is ready (and for clip shapes) p5's outline drawing is used, so nothing ever falls back to
+// a stand-in font.
+const _P5_FONT_RENDER_PATH = (typeof p5 !== 'undefined' && p5.Font) ? p5.Font.prototype._renderPath : null;
+
+function useBrowserTextForFont(font, family) {
+  if (!font || !_P5_FONT_RENDER_PATH || typeof document === 'undefined' || !document.fonts) return;
+  p5.Font.prototype._renderPath = _browserFontRenderPath;
+  document.fonts.load(`16px "${family}"`)
+    .then(faces => { if (faces && faces.length) font._cssFamily = family; })
+    .catch(() => {});
+}
+
+function _browserFontRenderPath(line, x, y, options) {
+  const family = this._cssFamily;
+  const R = (options && options.renderer) || (this.parent && this.parent._renderer);
+  if (!family || typeof line !== 'string' || !R || !R.drawingContext || R._clipping) {
+    return _P5_FONT_RENDER_PATH.call(this, line, x, y, options);
+  }
+  // p5 wraps this call in push()/pop(), so the font/align settings below don't leak.
+  const ctx = R.drawingContext;
+  const pos = this._handleAlignment(R, line, x, y);
+  ctx.font = `${R._textSize}px "${family}"`;
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
+  if (R._doStroke && R._strokeSet) ctx.strokeText(line, pos.x, pos.y);
+  if (R._doFill) {
+    if (!R._fillSet) R._setFill(p5.prototype._DEFAULT_TEXT_FILL || '#000000');
+    ctx.fillText(line, pos.x, pos.y);
+  }
+  return this;
+}
+
 let tutorialMantisSprite = null;
 let splashScreenMoa = null;
 
@@ -43,6 +83,60 @@ const DYNRES_DOWN_MS = 20.0;    // frame slower than this (~50fps) → drop terr
 const DYNRES_COOLDOWN = 1200;   // ms between changes
 const DYNRES_TERRAIN_MIN = 0.5; // floor for the terrain buffer scale (soft, hazed distance)
 const DYNRES_TERRAIN_MAX = 1.0; // ceiling; terrain gains nothing above native 1080
+const PERF_TERRAIN_MAX = 0.75;  // ceiling in performance mode (see setPerfMode)
+
+// Terrain buffer ceiling for the current mode.
+function dynResTerrainMax() {
+  return (typeof CONFIG !== 'undefined' && CONFIG.perfMode) ? PERF_TERRAIN_MAX : DYNRES_TERRAIN_MAX;
+}
+
+// ============================================
+// PERFORMANCE MODE (toggled on the level-select screen)
+// A lighter render for integrated graphics and tablets. Gameplay is untouched; it trades:
+//   • the GPU terrain mesh, built at the gameplay grid's resolution (¼ of the triangles at the
+//     default 2× terrain detail), colours averaged down so the contour lines hold up
+//   • one caustic step in the water shader instead of two
+//   • the terrain drawn into a ¾-resolution buffer and scaled up (dynamic resolution still
+//     drops it further under load)
+//   • no sprite shadows under plants, 8-stamp highlight outlines instead of 16, and no soft
+//     glow on placed items' range rings (a canvas blur, costly on tablets)
+// The choice is saved per browser; ?perf=1 / ?perf=0 overrides it. With no saved choice,
+// touch-first devices (tablets, phones) start with it on.
+// ============================================
+const PERF_PREF_KEY = 'mauri_perfMode';
+
+function resolvePerfModePreference() {
+  try {
+    const q = (typeof window !== 'undefined' && window.location)
+      ? new URLSearchParams(window.location.search).get('perf') : null;
+    if (q === '1' || q === 'on') return true;
+    if (q === '0' || q === 'off') return false;
+  } catch (_) {}
+  try {
+    const saved = localStorage.getItem(PERF_PREF_KEY);
+    if (saved === '1') return true;
+    if (saved === '0') return false;
+  } catch (_) {}
+  try {
+    return !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
+  } catch (_) {
+    return false;
+  }
+}
+
+// Apply performance mode (and save the choice when `persist`). The terrain mesh change lands
+// on the next GLTerrain.build(): the next level load, since the toggle lives on level select.
+function setPerfMode(on, persist = true) {
+  on = !!on;
+  CONFIG.perfMode = on;
+  if (persist) { try { localStorage.setItem(PERF_PREF_KEY, on ? '1' : '0'); } catch (_) {} }
+  if (typeof GLTerrain !== 'undefined' && GLTerrain.setQuality) {
+    GLTerrain.setQuality({ decimate: on, waterSteps: on ? 1 : 2 });
+  }
+  // Restart the terrain buffer at the new ceiling; dynamic resolution lowers it under load.
+  CONFIG.terrainMaxSS = dynResTerrainMax();
+  return on;
+}
 
 function preload(){
   OpenDyslexic = loadFont('typefaces/OpenDyslexic.ttf');
@@ -143,6 +237,10 @@ const CONFIG = {
   // (terrainMaxSS); sprites/HUD keep their supersample. Raise it back with headroom.
   // Set false to pin the terrain buffer at terrainMaxSS.
   dynamicResolution: true,
+
+  // Performance mode: a lighter render for integrated GPUs and tablets (see setPerfMode).
+  // Set at startup from the saved choice (resolvePerfModePreference); toggled on level select.
+  perfMode: false,
 
   // Terrain-resolution scale. The GPU height-field renders into an offscreen buffer at this
   // fraction of 1080 and blits up; 1 (native) is the default, floated down toward 0.5 under
@@ -427,6 +525,10 @@ const GAME_STATE = {
   WON: 'won',
   LOST: 'lost'
 };
+
+// How far (canvas px) a press must travel before letting go counts as a drag-and-drop rather
+// than a click (Game.handleRelease). A finger's wobble on a tap stays under it.
+const DRAG_SLOP_PX = 12;
 
 // Terrain resolution options for the splash-screen slider (left to right).
 // Low resolutions coarsen the terrain cells (pixelScale) rather than
@@ -1042,6 +1144,12 @@ class Game {
     this._holdCandidate = null;   // { p, heldFrames, startMX, startMY }
     this.movingPlaceable = null;
 
+    // Drag to place (see handleRelease): the press that may become a drag onto the map, from
+    // a toolbar button (_toolDrag: { type, x0, y0 }) or from a just-lifted item still held
+    // after its touch-and-hold (_moveDrag: { p, x0, y0 }). Press point in canvas px.
+    this._toolDrag = null;
+    this._moveDrag = null;
+
     this.playTime = 0;
     this.maxPlayTime = 0;
     this._menuBtnBounds = null;
@@ -1158,8 +1266,27 @@ class Game {
     const plan = this.terrain.generateSteps();
     plan.push({ label: 'Laying the spatial grids',        fn: () => this._initCreateSim() });
     plan.push({ label: 'Sowing plants and founding the flock', fn: () => this.simulation.init() });
+    // The GPU relief mesh is built here, under the progress bar, instead of on the first frame
+    // of play (a multi-second freeze on integrated GPUs and tablets).
+    if (CONFIG.useGL && CONFIG.view3D && typeof GLTerrain !== 'undefined' && GLTerrain.enabled) {
+      plan.push({ label: 'Raising the mountains',         fn: () => this._buildGLRelief() });
+    }
     plan.push({ label: 'Waking the ecosystem',            fn: () => this._initFinalize() });
     return plan;
+  }
+
+  // Whether the ground is drawn by the GPU height-field (GLTerrain) this frame: the GL layer
+  // is up and the plan-oblique relief view is on. Mirrors what render() draws.
+  _glReliefActive() {
+    return typeof GLBatch !== 'undefined' && GLBatch.domStack &&
+           typeof GLTerrain !== 'undefined' && GLTerrain.enabled &&
+           CONFIG.view3D && typeof Projection !== 'undefined' && Projection.relief && !!this.terrain;
+  }
+
+  // Build the GPU relief mesh for the current terrain now (a no-op when it's already built, or
+  // when the GPU terrain isn't drawing). Needs the projection configured (_initCreateSim).
+  _buildGLRelief() {
+    if (this._glReliefActive()) GLTerrain.build(this.terrain);
   }
 
   // Advance the loading plan by one chunk per frame. renderLoading() has already
@@ -1194,6 +1321,7 @@ class Game {
     this.terrain.generate();
     this._initCreateSim();
     this.simulation.init();
+    this._buildGLRelief();
     this._initFinalize();
   }
 
@@ -1262,6 +1390,9 @@ class Game {
     this._stormCooldownUntil = 0;   // reset per level load, else a restart starts mid-cooldown
     this._holdCandidate = null;     // stale refs would point into the old simulation
     this.movingPlaceable = null;
+    this._toolDrag = null;
+    this._moveDrag = null;
+    if (typeof HudCache !== 'undefined') HudCache.clear();   // a new level builds a new HUD
     // Species highlights: reset, then enable by default for the level's focus
     // species (fall back to its vulnerable-highlight list if no focal list).
     if (audioManager && audioManager.stopAllVoices) audioManager.stopAllVoices();
@@ -3482,6 +3613,8 @@ class Game {
     if (hc.heldFrames >= 60) {   // ~1 second
       this._holdCandidate = null;
       this._beginMove(hc.p);
+      // Still held: dragging on from here and letting go sets it down there (handleRelease).
+      if (this.movingPlaceable === hc.p) this._moveDrag = { p: hc.p, x0: mouseX, y0: mouseY };
     }
   }
 
@@ -3494,8 +3627,50 @@ class Game {
     }
     this.cancelPlacement();
     this.movingPlaceable = p;
-    this.addNotification(`Moving ${def.name}; click to set it down (${cost} mauri), ESC to cancel`, 'info');
+    this.addNotification(`Moving ${def.name}; click or drag to set it down (${cost} mauri), ESC to cancel`, 'info');
     if (audioManager) audioManager.playPlantRustle();
+  }
+
+  // ============================================
+  // DRAG TO PLACE
+  // Both ways of placing are always live: click a tool, then click the map (the tool stays
+  // selected in between), or press a tool and drag it onto the map, where letting go places
+  // it. A press that ends back over the button, or anywhere on the HUD, is just a click and
+  // leaves the tool selected for click-to-place. A lifted item (touch-and-hold) works the
+  // same way: click where it should go, or keep holding and drag it there.
+  // ============================================
+
+  // A press on a toolbar button that selected `type` (GameUI.handleToolbarClick).
+  beginToolDrag(type, mx, my) {
+    this._toolDrag = { type, x0: mx, y0: my };
+  }
+
+  // The press is over: if it travelled off its start onto open map, drop the dragged tool or
+  // lifted item there. (mx, my) in canvas px.
+  handleRelease(mx, my) {
+    const tool = this._toolDrag, lift = this._moveDrag;
+    this._toolDrag = null;
+    this._moveDrag = null;
+    if (this.state !== GAME_STATE.PLAYING && this.state !== GAME_STATE.PAUSED) return;
+    const dropsHere = (d) => Math.hypot(mx - d.x0, my - d.y0) > DRAG_SLOP_PX &&
+                             this.isInGameArea(mx, my) && !this._pointerOverChrome(mx, my);
+    if (tool && this.selectedPlaceable === tool.type && dropsHere(tool)) {
+      const { x, y } = this._pointerWorld(mx, my);
+      this.tryPlace(x, y);            // a refused spot leaves the tool selected, as a click does
+    } else if (lift && this.movingPlaceable === lift.p && dropsHere(lift)) {
+      const { x, y } = this._pointerWorld(mx, my);
+      this.tryDropMove(x, y);
+    }
+  }
+
+  // Whether (mx, my) is over something a click there would hit instead of the map: HUD
+  // chrome, the tutorial tip, the nest-raid panel, an overlay button.
+  _pointerOverChrome(mx, my) {
+    const inR = (r) => r && mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h;
+    if (this._overlayBtns && this._overlayBtns.some(inR)) return true;
+    if (this.tutorial && this.tutorial.active && inR(this.tutorial.panelBounds)) return true;
+    if (this._raidPanelOpen && this._raidPanelRows && inR(this._raidPanelRows.panel)) return true;
+    return !!(this.ui && this.ui.pointerOverHud(mx, my));
   }
 
   cancelMove() {
@@ -3866,8 +4041,7 @@ class Game {
     // GL_PORT.md Phase 5: when the GPU height-field terrain is active, the terrain is drawn
     // as a lit mesh INSIDE the GL canvas (after GLBatch.begin(), below), so the CPU relief
     // bake + DOM bottom layer are skipped entirely. Frost + haze move into the terrain shader.
-    const _glTerrain = _domGL && typeof GLTerrain !== 'undefined' && GLTerrain.enabled &&
-                       CONFIG.view3D && typeof Projection !== 'undefined' && Projection.relief && this.terrain;
+    const _glTerrain = this._glReliefActive();
     if (_glTerrain) {
       // Ensure no stale DOM bottom layer shows under the GL terrain.
       if (GLBatch._bottomEl && GLBatch._bottomEl.style) GLBatch._bottomEl.style.display = 'none';
@@ -4344,8 +4518,34 @@ class Game {
     // at native 1080p, and the 2D renderer survives only as an automatic fallback when WebGL
     // is unavailable (setRenderGL). `?render=2d` still forces it for debugging.
     this._glToggleBounds = null;
+
+    // Performance mode switch (see setPerfMode): a pill with an on/off switch, and a line
+    // under it saying what it does. Sets _perfToggleBounds for _handleRenderSettingsClick.
+    const on = !!CONFIG.perfMode;
+    const tgW = Math.max(w, 300), tgH = 40, tgX = cx - tgW / 2, tgY = trackY + 44;
+    const tgHover = mouseX > tgX && mouseX < tgX + tgW && mouseY > tgY && mouseY < tgY + tgH;
+    fill(on ? [38, 68, 48] : [30, 44, 36]);
+    stroke(tgHover ? [200, 240, 210] : CACHED_COLORS.btnStroke);
+    strokeWeight(tgHover ? 2 : 1.5);
+    rect(tgX, tgY, tgW, tgH, tgH / 2);
+    noStroke();
+    fill(on ? [200, 240, 210] : CACHED_COLORS.menuText);
+    smallTextSize(12);
+    textAlign(LEFT, CENTER);
+    text("PERFORMANCE MODE", tgX + 20, tgY + tgH / 2);
+    const swW = 46, swH = 22, swX = tgX + tgW - swW - 12, swY = tgY + (tgH - swH) / 2;
+    fill(on ? [90, 170, 110] : [58, 70, 63]);
+    rect(swX, swY, swW, swH, swH / 2);
+    fill(235, 245, 238);
+    ellipse(on ? swX + swW - swH / 2 : swX + swH / 2, swY + swH / 2, swH - 6, swH - 6);
+    fill(CACHED_COLORS.menuHint);
+    smallTextSize(10);
+    textAlign(CENTER, TOP);
+    text(on ? "Lighter terrain and effects, for integrated graphics and tablets"
+            : "Full-detail terrain and effects", cx, tgY + tgH + 8);
+    this._perfToggleBounds = { x: tgX, y: tgY, w: tgW, h: tgH };
     pop();
-    return trackY + 30;
+    return tgY + tgH + 30;
   }
 
     renderLevelSelect() {
@@ -5040,9 +5240,15 @@ class Game {
     }
   }
 
-  // Shared click handling for the level-select render settings (terrain-resolution slider).
-  // The graphics-mode toggle was removed; GL is the sole path (see _renderRenderSettings).
+  // Shared click handling for the level-select render settings (terrain-resolution slider,
+  // performance mode). The graphics-mode toggle was removed; GL is the sole path (see
+  // _renderRenderSettings).
   _handleRenderSettingsClick(mx, my) {
+    const pt = this._perfToggleBounds;
+    if (pt && mx > pt.x && mx < pt.x + pt.w && my > pt.y && my < pt.y + pt.h) {
+      setPerfMode(!CONFIG.perfMode, true);
+      return true;
+    }
     if (this._detailSliderBounds) {
       const s = this._detailSliderBounds;
       if (mx > s.x && mx < s.x + s.w && my > s.y && my < s.y + s.h) {
@@ -5274,6 +5480,10 @@ function setup() {
   scaleCanvasToFit();
   frameRate(60);
   textFont('OpenDyslexic');
+  // Start the UI font's CSS face loading now, so the first frames that draw text have it.
+  if (typeof document !== 'undefined' && document.fonts) document.fonts.load('16px OpenDyslexic').catch(() => {});
+  // FreckleFace is drawn with the browser's text engine once its @font-face has loaded.
+  useBrowserTextForFont(FreckleFace, 'FreckleFace-Regular');
 
   initCachedColors();
   initPlaceableColors();
@@ -5286,6 +5496,9 @@ function setup() {
   // it's WebGL2 and alpha-bleed its pages for mipmapping. If GL is unavailable this falls back
   // to the 2D path.
   setRenderGL(resolveUseGLPreference(), false);
+  // Performance mode from the saved choice / URL / device (no write: an untouched choice keeps
+  // following the device default).
+  setPerfMode(resolvePerfModePreference(), false);
 
   // WebGL port (GL_PORT.md), Phase 1: consolidate every loaded sprite PNG into
   // shared GPU atlas pages now that preload() has resolved them all and the plant
@@ -5382,11 +5595,14 @@ function updateDynamicResolution() {
   if (now < dynResCooldownUntil) return;
 
   const cur = (typeof CONFIG !== 'undefined' && CONFIG.terrainMaxSS != null) ? CONFIG.terrainMaxSS : 1;
+  const ceil = dynResTerrainMax();
   let target = cur;
-  if (perfFrameMs > DYNRES_DOWN_MS && cur > DYNRES_TERRAIN_MIN) {
+  if (cur > ceil) {
+    target = ceil;                                           // performance mode lowered the ceiling
+  } else if (perfFrameMs > DYNRES_DOWN_MS && cur > DYNRES_TERRAIN_MIN) {
     target = Math.max(DYNRES_TERRAIN_MIN, cur - 0.25);       // shrink the terrain buffer
-  } else if (perfFrameMs < DYNRES_UP_MS && cur < DYNRES_TERRAIN_MAX) {
-    target = Math.min(DYNRES_TERRAIN_MAX, cur + 0.25);       // grow it back
+  } else if (perfFrameMs < DYNRES_UP_MS && cur < ceil) {
+    target = Math.min(ceil, cur + 0.25);                     // grow it back
   }
 
   if (target !== cur) {
@@ -5648,21 +5864,44 @@ function touchEnded(e) {
   if (typeof p5 !== 'undefined' && p5.instance) p5.instance.touchstart = false;
   // touchend (not touchstart) is what iOS counts as a user gesture for audio, so unlock here.
   if (audioManager && audioManager.unlockFromGesture) audioManager.unlockFromGesture();
+  if (e && e.target && e.target.tagName === 'CANVAS') {
+    // The last finger up ends the press: a drag from the toolbar drops where it lifted (p5
+    // leaves mouseX/mouseY at the last touchmove).
+    if (!(e.touches && e.touches.length)) { _lastTouchMs = performance.now(); _handleRelease(); }
+    return false;
+  }
+}
+// A finger dragging on the canvas (a tool on its way to the map) must not scroll or bounce the
+// page. p5 also routes mouse drags here, harmlessly.
+function touchMoved(e) {
   if (e && e.target && e.target.tagName === 'CANVAS') return false;
 }
 
 function mousePressed() {
   // A browser that still emulates a mousedown after a handled tap would double-fire it.
   if (performance.now() - _lastTouchMs < 800) return;
+  // p5 also keeps a `touchend` flag that swallows every mouseup until a mousedown clears it;
+  // clear it for this real press so its release still reaches mouseReleased (hybrid devices).
+  if (typeof p5 !== 'undefined' && p5.instance) p5.instance.touchend = false;
   // A mouse press is a user gesture too: let the streamed audio (music, species voices) start
   // on browsers that want one per element (Safari), as touchEnded does for touch.
   if (audioManager && audioManager.unlockFromGesture) audioManager.unlockFromGesture();
   _handlePress();
 }
+function mouseReleased() {
+  if (performance.now() - _lastTouchMs < 800) return;   // a tap's emulated mouseup
+  _handleRelease();
+}
+function _handleRelease() {
+  const s = spriteSS();
+  if (game) game.handleRelease(mouseX / s, mouseY / s);
+}
 function _handlePress() {
   // mouseX/mouseY are in BACKING pixels (logical × SS); hit-testing is in 1080-space.
   const s = spriteSS();
   const mx = mouseX / s, my = mouseY / s;
+  // A new press: forget any drag whose release never arrived (let go outside the window).
+  if (game) { game._toolDrag = null; game._moveDrag = null; }
   // The field guide is docked in the right bar now, not a modal; its clicks route through
   // GameUI (handleSidebarClick / handleFullscreenClick), so it no longer intercepts clicks
   // here. Non-modal Nest Raid panel: consume only clicks that land ON the panel; anything

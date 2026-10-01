@@ -470,11 +470,13 @@ class PlaceableObject {
   
   // A ring at the object's true effect radius. The line is steady; only a soft outer
   // glow breathes. Drawn with a raw canvas shadow so it renders in both the GL and 2D
-  // paths, with the blur scaled by the world→device transform.
+  // paths, with the blur scaled by the world→device transform. Performance mode draws the
+  // line alone: a canvas shadow blur is a full blur pass per ring (CPU-side in Safari).
   _drawRadiusRing(col, lineAlpha, weight, glowAlpha, lifeRatio, radiusOverride) {
     const R = (radiusOverride != null) ? radiusOverride : this.radius;
     const glow = 0.5 + 0.5 * Math.sin(frameCount * 0.05 + this.pulsePhase);   // 0..1, slow breath
-    const dc = (typeof drawingContext !== 'undefined') ? drawingContext : null;
+    const dc = (typeof drawingContext !== 'undefined' && !(typeof CONFIG !== 'undefined' && CONFIG.perfMode))
+      ? drawingContext : null;
     const sc = (dc && dc.getTransform) ? (dc.getTransform().a || 1) : 1;
     if (dc) {
       dc.shadowBlur = (3 + glow * 5) * sc;

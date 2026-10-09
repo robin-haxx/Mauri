@@ -243,8 +243,10 @@ class Simulation {
     for (const type in this.otherEntities) this.otherEntities[type].length = 0;
     if (this.nestingSites) this.nestingSites.length = 0;
     // Placed items don't travel with the flock; each new area is a fresh country, so
-    // the player's placements (caches, shelters, storms …) are cleared too. The placeable
-    // grid is a per-frame "moving" grid, so it rebuilds empty on its own next frame.
+    // the player's placements (caches, shelters, storms …) are cleared too. Planted stands
+    // that grow up (lancewood) are remembered with this area and come back on a return.
+    // The placeable grid is a per-frame "moving" grid, so it rebuilds empty on its own.
+    this._rememberStands();
     this.placeables.length = 0;
     this.markPlantGridDirty();
     this.markEggGridDirty();
@@ -256,6 +258,7 @@ class Simulation {
     const snap = this._areaSnapshot;
     this.spawnPlants();
     this._restoreForestLegacy();   // partly re-grow the forest you cultivated here last visit
+    this._replantStands();         // and the lancewood you planted here
     const yp = this._yearStartPops;
     if (yp) {
       // Reset-to-default (+ per-area nudge): Game computed this year's starting counts, so
@@ -274,6 +277,80 @@ class Simulation {
     }
     this._seedNestingSites();
     this._areaSnapshot = null;
+  }
+
+  // ---- Remembered stands (world-grid levels) ----------------------------------------------
+  // A planted stand that grows up (def.matureAfterYears; lancewood) is remembered with its
+  // area: where it stood, as a fraction of the window (the window can be resized between
+  // loops), and when it was planted. Its age runs on the world clock, so it keeps growing
+  // while you're away and may come back mature.
+
+  _areaKey() {
+    const t = this.terrain;
+    return t ? `${t.activeCol || 0},${t.activeRow || 0}` : '0,0';
+  }
+
+  // Record the active area's stands; called as the area is unloaded.
+  _rememberStands() {
+    const list = [];
+    for (const p of this.placeables) {
+      if (!p.alive || !p.def || !p.def.matureAfterYears) continue;
+      list.push({ type: p.type, u: p.pos.x / this.worldWidth, v: p.pos.y / this.worldHeight,
+                  plantedAt: p.plantedAt, nestFounded: !!p._nestFounded });
+    }
+    if (!this._areaStands) this._areaStands = {};
+    this._areaStands[this._areaKey()] = list;
+  }
+
+  // Replant the newly-framed area's remembered stands. The land may have changed since
+  // (a deepened glacial, a wider window), so each goes to the nearest spot it can still take
+  // root, near where it stood; one whose ground is gone past that is lost.
+  _replantStands() {
+    const key = this._areaKey();
+    const list = this._areaStands && this._areaStands[key];
+    if (!list) return;
+    delete this._areaStands[key];
+    for (const rec of list) {
+      const def = PLACEABLES[rec.type];
+      if (!def) continue;
+      const spot = this._nearestStandSpot(def, rec.u * this.worldWidth, rec.v * this.worldHeight);
+      if (!spot) continue;
+      const p = this.addPlaceable(spot.x, spot.y, rec.type, { quiet: true });
+      p.plantedAt = rec.plantedAt;
+      p._nestFounded = rec.nestFounded;
+      p.checkMaturity();   // grew up while the area was away
+    }
+  }
+
+  // The nearest point to (x, y) where a stand of `def` fits, searched in rings out to maxR;
+  // null if there's none.
+  _nearestStandSpot(def, x, y, maxR = 160) {
+    const step = 10;
+    for (let r = 0; r <= maxR; r += step) {
+      const n = r === 0 ? 1 : Math.ceil(TWO_PI * r / step);
+      const a0 = random(TWO_PI);
+      for (let i = 0; i < n; i++) {
+        const a = a0 + i * TWO_PI / n;
+        const px = x + Math.cos(a) * r, py = y + Math.sin(a) * r;
+        if (this.isInBounds(px, py, 10) && this._standFits(def, px, py)) return { x: px, y: py };
+      }
+    }
+    return null;
+  }
+
+  // A stand can take root at (x, y): placeable ground, an allowed biome, and clear of the
+  // stands already replanted (the same spacing rule as placing one).
+  _standFits(def, x, y) {
+    const t = this.terrain;
+    if (!t.canPlace(x, y)) return false;
+    if (def.allowedBiomes && !def.allowedBiomes.includes(t.getBiomeAt(x, y).key)) return false;
+    const gap = def.minSpacing || 40;
+    for (const p of this.placeables) {
+      const need = (gap + ((p.def && p.def.minSpacing) || 40)) * 0.5;
+      const dx = p.pos.x - x, dy = p.pos.y - y;
+      if (dx * dx + dy * dy < need * need) return false;
+    }
+    return true;
   }
 
   // Count live podocarp forest trees (rimu/beech/fern); used for the forest legacy.
@@ -1086,8 +1163,8 @@ class Simulation {
     list.length = wi;
   }
   
-  addPlaceable(x, y, type) {
-    const placeable = new PlaceableObject(x, y, type, this.terrain, this, this.seasonManager);
+  addPlaceable(x, y, type, opts) {
+    const placeable = new PlaceableObject(x, y, type, this.terrain, this, this.seasonManager, opts);
     this.placeables.push(placeable);
     if (type === 'nest') this._nestCacheValid = false;
     // A freshly placed Berry Cache clears every kea's cache-choice timer so they re-evaluate
@@ -1459,7 +1536,7 @@ class Simulation {
     if (!watch) return out;
     for (let i = 0; i < this.placeables.length; i++) {
       const p = this.placeables[i];
-      if (!p.alive || p._nestFounded || !p.def || p.def.plantType !== watch.plantType) continue;
+      if (!p.alive || p._nestFounded || p.matured || !p.def || p.def.plantType !== watch.plantType) continue;
       if (!p.spawnedPlants || !p.spawnedPlants.some(q => q.alive)) continue;
       out.push(p);
     }

@@ -142,9 +142,9 @@ function preload(){
   OpenDyslexic = loadFont('typefaces/OpenDyslexic.ttf');
   GroceryRounded = loadFont('typefaces/GroceryRounded.ttf');
   FreckleFace = loadFont('typefaces/FreckleFace-Regular.ttf');
-  const spritePlants = ['Tussock', 'Flax', 'Fern', 'Rimu', 'Beech', 'Patotara', 'Lancewood', 'Speargrass', 'Coprosma', 'Dracophyllum'];
+  const spritePlants = ['Tussock', 'Flax', 'Fern', 'Rimu', 'Beech', 'Patotara', 'Speargrass', 'Coprosma', 'Dracophyllum'];
   const states = ['Mature', 'Thriving', 'Wilting', 'Dormant'];
-  
+
   for (const plant of spritePlants) {
     const key = plant.toLowerCase();
     plantSprites[key] = {};
@@ -154,6 +154,17 @@ function preload(){
   }
   // Wharariki (mountain flax) has no art of its own yet: it draws with the flax sprites.
   plantSprites.wharariki = plantSprites.flax;
+
+  // Lancewood: one juvenile sprite for every state, and the adult tree a planted stand grows
+  // into after its first year (Plant.mature), out of a moa's reach.
+  const lancewoodJuvenile = loadImage('sprites/Lancewood.png');
+  const lancewoodMature = loadImage('sprites/Lancewood_Mature.png');
+  plantSprites.lancewood = {};
+  plantSprites.lancewood_mature = {};
+  for (const state of states) {
+    plantSprites.lancewood[state.toLowerCase()] = lancewoodJuvenile;
+    plantSprites.lancewood_mature[state.toLowerCase()] = lancewoodMature;
+  }
 
   // Portrait plant variants: 2 alternate sprites each in sprites/<Plant>/, anchored at
   // bottom-centre and rendered by a dedicated path (see mauri_plant.js).
@@ -705,7 +716,10 @@ const PLACEABLES = {
     fauna: 'little_bush_moa',
     effect: 'feeding',
     radius: 40,
-    duration: 2400,
+    // No duration: the stand doesn't wear out. After a year its plants grow into mature
+    // lancewood, which moa can't eat, and it stays as scenery (remembered with its area on
+    // a world-grid level; see Simulation._rememberStands).
+    matureAfterYears: 1,
     minSpacing: 30,
     ignoresSpacing: false,
     feedingRate: 0.15,

@@ -1909,7 +1909,7 @@ class MoaLife {
     this._eatTimer = 60 + random(40);
     const m = this.moa;
     if (m.hunger < 25) return;
-    const p = sim.getClosestPlant(m.pos.x, m.pos.y, 16, pl => pl.alive && pl.growth > 0.3 && !pl.dormant);
+    const p = sim.getClosestPlant(m.pos.x, m.pos.y, 16, pl => pl.alive && pl.growth > 0.3 && !pl.dormant && !pl.matured);
     if (!p) return;
     m.hunger = Math.max(0, m.hunger - p.consume() * 0.8);
     mauri.earnFromEating(mauri.onMoaEat, m.pos.x, m.pos.y);

@@ -34,8 +34,15 @@ function loadPlaceableSprites() {
 // ============================================
 // PLACEABLE OBJECT CLASS
 // ============================================
+// The run's world clock (Game.playTime, in frames). Growth that spans years reads this, so it
+// keeps counting while a stand is remembered off-screen in another area.
+function placeableWorldClock() {
+  return (typeof game !== 'undefined' && game && game.playTime) || 0;
+}
+
 class PlaceableObject {
-  constructor(x, y, type, terrain, simulation, seasonManager) {
+  // opts.quiet: no planting rustle (stands replanted at a year's area change).
+  constructor(x, y, type, terrain, simulation, seasonManager, opts = {}) {
     this.pos = createVector(x, y);
     this.type = type;
     this.terrain = terrain;
@@ -44,10 +51,12 @@ class PlaceableObject {
     // Prefer the level/year-resolved def (merged PLACEABLES[type] + overrides, carrying
     // _parsedColor); fall back to the global base for an off-palette spawn.
     this.def = (typeof game !== 'undefined' && game && game.activePlaceables && game.activePlaceables[type]) || PLACEABLES[type];
-    
-    this.life = this.def.duration;
-    this.maxLife = this.def.duration;
+
+    // A stand that matures (matureAfterYears) never wears out, so it has no life to count.
+    this.life = this.maxLife = this.def.matureAfterYears ? 1 : this.def.duration;
     this.alive = true;
+    this.plantedAt = placeableWorldClock();
+    this.matured = false;
     this.radius = this.def.radius;
     this.radiusSq = this.radius * this.radius;
     
@@ -66,7 +75,7 @@ class PlaceableObject {
     this.spawnedPlants = [];
     if (this.def.plantSpawnCount) {
       this.spawnPlantsInRadius();
-      if (audioManager) audioManager.playPlantRustle();
+      if (audioManager && !opts.quiet) audioManager.playPlantRustle();
     }
 
     // Forest cultivators drop a burst of saplings on placement, so the grove reads at once.
@@ -299,7 +308,8 @@ class PlaceableObject {
         plant.parentPlaceable = this;
         plant.favouredSpecies = this.def.favouredSpecies || null;
         plant.growth = 0.8;
-        
+        if (this.matured) plant.mature();   // a moved mature stand regrows as mature trees
+
         this.spawnedPlants.push(plant);
         this.simulation.addPlant(plant);   // syncs plants list, render partition & grid
       }
@@ -342,6 +352,8 @@ class PlaceableObject {
           return;
         }
       }
+    } else if (this.def.matureAfterYears) {
+      this.checkMaturity();
     } else {
       this.life -= dt;
       if (this.life <= 0) {
@@ -386,6 +398,7 @@ class PlaceableObject {
   feedMoa(moa, dt = 1) {
     if (!this.def.feedingRate) return 0;
     if (this.frostDying) return 0;   // a frost-killed grove no longer feeds (see frostKill)
+    if (this.matured) return 0;      // grown out of reach (see mature)
 
     // Species-selective feeders (lancewood, speargrass) nourish only their favoured
     // species; others are scaled by LEVEL_MECHANICS.unfavouredBrowsePenalty (0 = none).
@@ -433,7 +446,7 @@ class PlaceableObject {
   // ============================================
   
   getAttractionStrength(moa) {
-    if (!this.alive) return 0;
+    if (!this.alive || this.matured) return 0;
     
     let strength = 0;
     
@@ -499,6 +512,23 @@ class PlaceableObject {
     const seasonFrames = (typeof CONFIG !== 'undefined' && CONFIG.seasonDuration) ? CONFIG.seasonDuration : 3600;
     const witherFrames = seasonFrames * 0.5;
     if (this.life > witherFrames) this.life = witherFrames;
+  }
+
+  // A stand with matureAfterYears grows up once that many years (of world clock) have passed
+  // since it was planted. Also run when a remembered stand is replanted, so a stand that grew
+  // up while its area was away comes back mature.
+  checkMaturity() {
+    if (this.matured || !this.def.matureAfterYears) return;
+    const seasonFrames = (typeof CONFIG !== 'undefined' && CONFIG.seasonDuration) ? CONFIG.seasonDuration : 3600;
+    if (placeableWorldClock() - this.plantedAt >= this.def.matureAfterYears * 4 * seasonFrames) this.mature();
+  }
+
+  // Grown up: its plants become mature trees (their adult art, no longer moa food), and the
+  // stand stops feeding and drawing moa. It stays standing as scenery. One-way.
+  mature() {
+    if (this.matured) return;
+    this.matured = true;
+    for (const plant of this.spawnedPlants) plant.mature();
   }
   
   // ============================================
@@ -650,8 +680,8 @@ class PlaceableObject {
     this.renderTypeSpecific(lifeRatio);
     
     // Seasonal multiplier indicator (not on a module's standing patches: they're scenery the
-    // story points at, not tools being tuned)
-    if (this.seasonalMultiplier !== 1.0 && !this.standing) {
+    // story points at, not tools being tuned; nor on a matured stand, which no longer feeds)
+    if (this.seasonalMultiplier !== 1.0 && !this.standing && !this.matured) {
       fill(255, 255, 255, 200 * lifeRatio);
       textSize(7);
       textAlign(CENTER, CENTER);

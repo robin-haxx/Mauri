@@ -2092,6 +2092,7 @@ class GameUI {
     const stats = [];
     if (def.cost != null) stats.push(`Cost: ${def.cost} mauri`);
     if (def.duration) stats.push(`Lasts: ${(def.duration / 60).toFixed(0)}s`);
+    if (def.matureAfterYears) stats.push(`Matures: after ${def.matureAfterYears} year${def.matureAfterYears === 1 ? '' : 's'}`);
     if (def.moveCost != null) stats.push(`Moving one: ${def.moveCost} mauri`);
     if (def.radius) stats.push(`Radius: ${def.radius}px`);
 
@@ -2194,7 +2195,8 @@ class GameUI {
 
     fill(140, 255, 160);
     smallTextSize(13);
-    const lasts = def.duration ? `  ·  lasts ${Math.round(def.duration / 60)}s` : '';
+    const lasts = def.duration ? `  ·  lasts ${Math.round(def.duration / 60)}s`
+      : def.matureAfterYears ? `  ·  matures in ${def.matureAfterYears === 1 ? 'a year' : `${def.matureAfterYears} years`}` : '';
     text(`Cost: ${def.cost} mauri${lasts}`, tx, iconCY);
 
     fill(140, 170, 150);

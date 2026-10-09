@@ -342,7 +342,7 @@ class Moa extends Boid {
       let edible = 0, nearFav = false, nearPlaced = false;
       for (let i = 0; i < plants.length; i++) {
         const p = plants[i];
-        if (!p.alive) continue;
+        if (!p.alive || p.matured) continue;   // a mature lancewood is out of reach: not food
         if (p.favouredSpecies === this.speciesKey) nearFav = true;
         if (p.isSpawned) nearPlaced = true;   // player-placed plant nearby
         if (!p.dormant && p.growth > 0.5 && edible < 8) edible++;
@@ -1022,6 +1022,7 @@ class Moa extends Boid {
       // Free Play: a winter-inedible plant still stands (frosted) but has no food value;
       // skip it as forage, so the flock must seek the evergreen refuge.
       if (p.winterInedible) continue;
+      if (p.matured) continue;   // grown out of reach (mature lancewood)
       if (p.seasonalModifier < 0.3 && this.hunger < 70) continue;
       
       const dx = p.pos.x - this.pos.x, dy = p.pos.y - this.pos.y;

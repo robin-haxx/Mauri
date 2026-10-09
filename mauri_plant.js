@@ -217,6 +217,8 @@ class Plant {
     
     // Check if this plant uses sprites
     this.usesSprites = SPRITE_PLANTS.has(type);
+    this.spriteKey = type;   // PLANT_SPRITES key; a matured plant switches to '<type>_mature'
+    this.matured = false;    // grown out of a moa's reach (see mature)
 
     // Portrait-sprite plants pick one of 2 variants at random (fixed for life).
     this.usesPortraitSprite = PORTRAIT_PLANTS.has(type);
@@ -403,6 +405,15 @@ class Plant {
     this.maxNutrition = this.baseNutrition * this.seasonalModifier;
   }
   
+  // Grow into the adult form (a planted lancewood after its first year; see
+  // PlaceableObject.mature): drawn with the '<type>_mature' sprites when there are any, and
+  // skipped as food by moa. One-way.
+  mature() {
+    this.matured = true;
+    const key = this.type + '_mature';
+    if (PLANT_SPRITES && PLANT_SPRITES[key]) this.spriteKey = key;
+  }
+
   consume() {
     if (this.dormant) return 0;
     
@@ -479,7 +490,7 @@ class Plant {
       this._renderPortraitSprite(px, py, displaySize, dormant);
     } else if (this.typeId === PLANT_TYPE_ID.kawakawa) {
       this._renderKawakawa(px, py, displaySize, dormant);
-    } else if (this.usesSprites && PLANT_SPRITES && PLANT_SPRITES[this.type]) {
+    } else if (this.usesSprites && PLANT_SPRITES && PLANT_SPRITES[this.spriteKey]) {
       this._renderSprite(px, py, displaySize, dormant);
     } else {
       this._renderGenericPlant(px, py, displaySize, dormant);
@@ -493,7 +504,7 @@ class Plant {
   
   _renderSprite(px, py, displaySize, dormant) {
     const spriteState = this._getSpriteState();
-    const sprites = PLANT_SPRITES[this.type];
+    const sprites = PLANT_SPRITES[this.spriteKey];
     const sprite = sprites ? sprites[spriteState] : null;
 
     if (!sprite) {
@@ -501,14 +512,11 @@ class Plant {
       return;
     }
 
-    // Crossfade on a sprite-state change so trees don't hard-flick: blend the outgoing
-    // sprite out under the incoming one over ~0.5s.
-    if (spriteState !== this._spriteState) {
-      if (this._spriteState !== undefined && this._lastSprite && this._lastSprite !== sprite) {
-        this._fadeSprite = this._lastSprite;
-        this._fadeStart = frameCount;
-      }
-      this._spriteState = spriteState;
+    // Crossfade on a sprite change (a new sprite state, or growing into the mature art) so
+    // plants don't hard-flick: blend the outgoing sprite out under the incoming one over ~0.5s.
+    if (this._lastSprite && this._lastSprite !== sprite) {
+      this._fadeSprite = this._lastSprite;
+      this._fadeStart = frameCount;
     }
     this._lastSprite = sprite;
     let fadeT = 1;

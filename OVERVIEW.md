@@ -125,12 +125,19 @@ ecology and behaviour in a more narrative "how it works" style.
 - **`mauri_placeable.js`**; `PlaceableObject`: the player's tools (feeding groves,
   favoured-plant stands, fern shelter, nest, waterhole, thunderstorm). Spawns child
   plants, applies seasonal bonuses, species-selective attraction, and its own visuals
-  (incl. the animated storm).
+  (incl. the animated storm). Module levels also use *standing* storms (`makeStanding`:
+  placed by the level, never blow out until told to `fadeOver`).
+- **`mauri_module.js`**; module levels' story code, kept apart from everything else:
+  `ModuleDirector` (runs a level's `story` season by season: sites, goals, prompts, win
+  and loss, the "Continue" outro), `MoaLife` (a family moa's brain) and `EagleLife` (a
+  scripted eagle). A moa or eagle with a `lifeScript` skips its normal behaviour (one-line
+  hooks at the top of `Moa.behave` and `HaastsEagle.behave`).
 
 ### UI / meta
-- **`mauri_UI.js`**; `GameUI`: top bar (Mauri, season, timer), sidebar (goals panel,
-  event log, **population panel**, minimap), the **level-scoped toolbar/palette**,
-  placement preview, and tooltips.
+- **`mauri_UI.js`**; `GameUI`: the dials (season ring, and Free Play's avg-pop dial,
+  top-right next to the goals; the Mauri dial just left of the toolbar buttons), sidebar
+  (goals panel, event log, **population panel**, minimap), the **level-scoped
+  toolbar/palette**, placement preview, and tooltips.
 - **`mauri_menu_art.js`**; `MenuArt`: loads & lays out a level's start-screen
   illustration (with graceful fallback if art is missing).
 - **`mauri_tutorial.js`**; `TutorialManager` + `TutorialUIMapper` + the default
@@ -152,6 +159,33 @@ ecology and behaviour in a more narrative "how it works" style.
   tutorial. Most of the opt-in mechanics were built for this level.
 - **`levels/level_03_alpine_lakes.js`**; inland multi-species balance level (with weka
   & kea as extra entity types).
+- **Module levels** (`module: true`, numbered by `moduleIndex`): small lessons that follow
+  a few birds closely through a year, before the player has any plants. The level select
+  draws them as a row of small buttons above the main cards (`Game._renderModuleRow`,
+  labelled by `menu.moduleLabel`). A module level has a `story` block, run by
+  `ModuleDirector` (`mauri_module.js`), which sets its own goals per season.
+  **`levels/module_00_storms.js`** (Module 0, *Āwhā*): one upland moa family's year, with
+  the Storm as the only tool (a moa under a storm can't be seen by the eagle; one caught in
+  the open runs, and its safety bar drains). Summer at the nest, an autumn walk down to a
+  tarn along a path of storms (a lighter worn trail in the terrain shows the way), winter
+  by the water, spring back up; "Continue" walks them off north and pans to the next
+  world-grid area, where the next module will be. Its land is the middle-right area of a
+  2×3 world grid (the areas above and below are generated too), with
+  `terrain.elevationWindow` fitting its heights to tussock/forest/scree on any seed; the
+  director adds a tarn and the trail as terrain `features`. The toolbar Storm stays locked
+  (greyed) until the story's `new_storm` moment (`story.lockedTools`, `Game.unlockTool`).
+  Module levels show one goal at a time ("GOAL:", ticking off then fading into the next).
+  Its prompts are tutorial tips keyed to the story's moments
+  (`TUTORIAL_EVENTS.MODULE_BEAT`) in `levels/tutorial_module_00_storms.js` (scenes of
+  dialogue, each line opening on its speaker's call, and big-text banners for "do this").
+  **`levels/module_01_patotara.js`** (Module 1, *Pātōtara*; `PatotaraDirector` in
+  `mauri_module_patotara.js`) carries straight on from Module 0's "Continue" on the same
+  land: the next module loads behind a still of the last frame and fades in over it (no
+  loading screen). Module buttons skip the level splash. The first module opens on black
+  with Te Whē's welcome, and the last (no `story.nextModule` after it) fades to black for
+  Te Whē's farewell before its win card (`levels/tutorial_module_bookends.js`, added to
+  every module's tips). A module's win card shows "Next up": the next module's
+  `menu.focusItem` (a placeable's picture and name).
 
 ---
 
@@ -176,7 +210,9 @@ currently understood: `habitatStress` (+ margin/penalty/`winterStressMult`),
 `eagleHungerRate`, `eagleStarveThreshold`/`eagleStarveTimeout`, `eagleReproChance`/
 `eagleReproCooldown`/`eagleReproCheckInterval`, `eagleMaturityAge`), the legacy
 `eaglePreyCoupling` (+ `eaglesPerMoa`/min/max/interval), and `forestContraction`
-(+ `forestBand`/`forestBandBySeason`). This is the main extension pattern; add a flag,
+(+ `forestBand`/`forestBandBySeason`). A placeable def may also set `moveCost` to price
+its touch-and-hold move (default: half its cost). (Module levels don't use flags for their
+story; see `mauri_module.js`.) This is the main extension pattern; add a flag,
 read it behind a `typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.x` guard.
 
 ### 4.3 Goals vs. Phases

@@ -244,22 +244,24 @@ class GameUI {
       sidebarPanelWidth: this.sidebar.width - 30
     };
 
-    // Unified season/year RING; one element in place of the old season panel +
-    // TIME panel + level-countdown dial. Centred over the span those three occupied.
-    const _clockSpan = LEVEL_CLOCK.enabled ? (LEVEL_CLOCK.gap + LEVEL_CLOCK.size) : 0;
+    // Top-right dials: the season/year RING, and (endless only) the ecosystem dial (avg pop /
+    // balance) to its right. They line up against the right edge of the game area, so they sit
+    // next to the goals and populations in the sidebar.
+    const _endlessHud = !!(this.game && this.game.currentLevel && this.game.currentLevel.endless);
     this.layout.ringR = 78;
-    this.layout.ringCX = (this.layout.seasonX + this.layout.timerX + timerWidth + _clockSpan) / 2;
-    this.layout.ringCY = 20 + this.layout.ringR;
-
-    // Mauri counter as a large circular dial, sitting just LEFT of the season ring.
-    this.layout.mauriRingR = 56;
-    this.layout.mauriRingCX = this.layout.ringCX - this.layout.ringR - 26 - this.layout.mauriRingR;
-    this.layout.mauriRingCY = this.layout.ringCY;
-
-    // Ecosystem (avg-pop / balance) dial, sitting just RIGHT of the season ring. Endless only.
     this.layout.popDialR = 56;
-    this.layout.popDialCX = this.layout.ringCX + this.layout.ringR + 26 + this.layout.popDialR;
+    const _dialRight = gameAreaWidth - 24;   // right edge of the rightmost dial
+    this.layout.popDialCX = _dialRight - this.layout.popDialR;
+    this.layout.ringCX = _endlessHud
+      ? this.layout.popDialCX - this.layout.popDialR - 26 - this.layout.ringR
+      : _dialRight - this.layout.ringR;
+    this.layout.ringCY = 20 + this.layout.ringR;
     this.layout.popDialCY = this.layout.ringCY;
+
+    // The Mauri dial sits just left of the toolbar buttons (mauri pays for the tools), and
+    // the two are centred together as one group. Its x is set once the row is sized, below.
+    this.layout.mauriRingR = 56;
+    const _ringSpan = this.layout.mauriRingR * 2 + 24;   // the dial plus its gap to the row
 
     // If sidebar is narrower, shrink toolbar buttons slightly to fit
     // (toolbar is in the game area, not sidebar, but this keeps proportions)
@@ -273,7 +275,9 @@ class GameUI {
     // until it fits, rather than running off the edge.
     let _slots = this._toolbarSlotOffsets();
     const _rowWidth = (s) => s.length ? s[s.length - 1] + this.layout.toolbarBtnSize : 0;
-    const _rowMax = gameAreaWidth - 40;
+    // Room for the row: the game area, less margins and the Mauri dial beside it.
+    const _rowMinX = 20 + _ringSpan;
+    const _rowMax = gameAreaWidth - 20 - _rowMinX;
     if (_rowWidth(_slots) > _rowMax) {
       const k = _rowMax / _rowWidth(_slots);
       this.layout.toolbarBtnSize = Math.floor(this.layout.toolbarBtnSize * k);
@@ -282,9 +286,9 @@ class GameUI {
       _slots = this._toolbarSlotOffsets();
     }
 
-    // Calculate toolbar start position (centered in game area)
+    // Toolbar start: the dial + row group centred in the game area.
     const toolbarTotalWidth = _rowWidth(_slots);
-    this.layout.toolbarStartX = (gameAreaWidth - toolbarTotalWidth) / 2;
+    this.layout.toolbarStartX = Math.max(_rowMinX, (gameAreaWidth - _ringSpan - toolbarTotalWidth) / 2 + _ringSpan);
 
     // Selected tool info panel, right of the docked row. When the centred row leaves no
     // room for it, slide the row left (as far as the margin allows) so the two don't overlap.
@@ -293,9 +297,12 @@ class GameUI {
     const _overflow = this.layout.toolbarStartX + toolbarTotalWidth + _infoGap +
                       this.layout.selectedToolW - (gameAreaWidth - 20);
     if (_overflow > 0) {
-      this.layout.toolbarStartX = Math.max(20, this.layout.toolbarStartX - _overflow);
+      this.layout.toolbarStartX = Math.max(_rowMinX, this.layout.toolbarStartX - _overflow);
     }
     this.layout.selectedToolX = this.layout.toolbarStartX + toolbarTotalWidth + _infoGap;
+    // The Mauri dial, level with the buttons just left of the row.
+    this.layout.mauriRingCX = this.layout.toolbarStartX - 24 - this.layout.mauriRingR;
+    this.layout.mauriRingCY = this.toolbarY + this.layout.toolbarBtnSize / 2;
 
     // Event log and species panel heights scale with sidebar width
     // Wider sidebar = can show more; narrower = show less
@@ -355,6 +362,15 @@ class GameUI {
     const fs = this.layout.fs;
     const bs = fs.btnSize;
 
+    // Fullscreen: the Mauri dial just left of the toolbar row, the pair centred together;
+    // the season / avg-pop dials lined up just left of the goals panel.
+    fs.toolbarStartX = Math.max(20 + _ringSpan, (this.config.canvasWidth - _ringSpan - toolbarTotalWidth) / 2 + _ringSpan);
+    fs.mauriRingCX = fs.toolbarStartX - 24 - fs.mauriRingR;
+    fs.mauriRingCY = fs.toolbarY + this.layout.toolbarBtnSize / 2;
+    const _fsDialRight = fs.goalsX - 12 - 16;   // the goals panel's backing reaches 12px left of goalsX
+    fs.popDialCX = _fsDialRight - fs.popDialR;
+    fs.ringCX = _endlessHud ? fs.popDialCX - fs.popDialR - 26 - fs.ringR : _fsDialRight - fs.ringR;
+
     // Buttons: the SAME 2×2 top-left square as the docked top bar, so the controls sit in the
     // identical spot in both views (guide + focus top row, pause + fast-forward bottom row).
     fs.guideBtnX = this.layout.guideBtnX; fs.guideBtnY = this.layout.guideBtnY;
@@ -369,33 +385,40 @@ class GameUI {
     // button square (left) and the goals panel (right). Landscape leaves the dials game-area-
     // centred (ample room).
     if (this.config.portrait) {
+      // The dial cluster sits against the goals panel, but never over the button square.
       const pad = 14;
-      const endless = !!(this.game && this.game.currentLevel && this.game.currentLevel.endless);
-      const cLeft0 = fs.mauriRingCX - fs.mauriRingR;
-      const cRight0 = endless ? (fs.popDialCX + fs.popDialR) : (fs.ringCX + fs.ringR);
+      const cLeft0 = fs.ringCX - fs.ringR;
+      const cRight0 = _endlessHud ? (fs.popDialCX + fs.popDialR) : (fs.ringCX + fs.ringR);
       const half = (cRight0 - cLeft0) / 2;
       const minC = sqRight + pad + half;
       const maxC = fs.goalsX - pad - half;
-      const center = Math.min(Math.max(this.config.canvasWidth / 2, minC), maxC);
+      const center = Math.max(minC, maxC);
       const shift = Math.round(center - (cLeft0 + cRight0) / 2);
-      fs.mauriRingCX += shift;
       fs.ringCX += shift;
-      if (endless) fs.popDialCX += shift;
+      if (_endlessHud) fs.popDialCX += shift;
     }
 
     // HUD click-swallow rects: the button square + the dial/mast strip, so taps on chrome
     // don't drop items on the map beneath.
-    const endlessSw = !!(this.game && this.game.currentLevel && this.game.currentLevel.endless);
-    const cLeft = fs.mauriRingCX - fs.mauriRingR;
-    const cRight = endlessSw ? (fs.popDialCX + fs.popDialR) : (fs.ringCX + fs.ringR);
-    const dialsBottom = Math.max(fs.ringCY + fs.ringR, fs.mauriRingCY + fs.mauriRingR,
-                                 endlessSw ? (fs.popDialCY + fs.popDialR) : 0);
+    const cLeft = fs.ringCX - fs.ringR;
+    const cRight = _endlessHud ? (fs.popDialCX + fs.popDialR) : (fs.ringCX + fs.ringR);
+    const dialsBottom = Math.max(fs.ringCY + fs.ringR, _endlessHud ? (fs.popDialCY + fs.popDialR) : 0);
+    const mr = fs.mauriRingR;
     fs.hudSwallow = [
       { x: 0, y: fs.stripY, w: sqRight + 6, h: (sqBottom - fs.stripY) + 6 },
-      { x: cLeft - 6, y: fs.stripY, w: (cRight - cLeft) + 12, h: (dialsBottom + 74) - fs.stripY }
+      { x: cLeft - 6, y: fs.stripY, w: (cRight - cLeft) + 12, h: (dialsBottom + 74) - fs.stripY },
+      { x: fs.mauriRingCX - mr - 6, y: fs.mauriRingCY - mr - 6, w: mr * 2 + 12, h: mr * 2 + 12 }
     ];
     fs.mauriX = 0;   // vestigial after the relayout; kept defined for any old readers
   }
+
+  // Height of the goals panel. Module levels show one goal at a time in a larger panel
+  // (see renderGoalsPanel); other levels list them all.
+  goalsPanelHeight() {
+    return this._singleGoalMode() ? 84 : 30 + this.game.goals.length * 26;
+  }
+
+  _singleGoalMode() { return !!this.game.module; }
 
   // Safe color getters
   _getPanelBg() {
@@ -488,7 +511,7 @@ class GameUI {
     if (fs.hudSwallow) {
       for (const r of fs.hudSwallow) if (this._inRect(mx, my, r.x, r.y, r.w, r.h)) return true;
     }
-    const goalsH = 30 + this.game.goals.length * 26;
+    const goalsH = this.goalsPanelHeight();
     return this._inRect(mx, my, fs.goalsX, fs.goalsY, this.layout.sidebarPanelWidth, goalsH);
   }
 
@@ -544,7 +567,7 @@ class GameUI {
         if (this._inRect(mx, my, r.x, r.y, r.w, r.h)) return true;
       }
     }
-    const goalsH = 30 + this.game.goals.length * 26;
+    const goalsH = this.goalsPanelHeight();
     if (this._inRect(mx, my, fs.goalsX, fs.goalsY,
                      this.layout.sidebarPanelWidth, goalsH)) return true;
 
@@ -741,9 +764,6 @@ class GameUI {
   renderTopBar() {
     const contentY = 20;
 
-    // Mauri counter; a large circular dial just left of the season ring.
-    this.renderMauriRing(this.layout.mauriRingCX, this.layout.mauriRingCY, this.layout.mauriRingR);
-
     // Unified season/year/time ring (replaces the season panel, TIME panel and
     // level-countdown dial; one element for season progress, the year and the level).
     this.renderSeasonRing(this.layout.ringCX, this.layout.ringCY, this.layout.ringR);
@@ -784,7 +804,7 @@ class GameUI {
 
     // Extend the goals panel's own green backing 12px past the content on
     // every side (same colour as the panel body, so it reads as one panel).
-    const goalsH = 30 + this.game.goals.length * 26;
+    const goalsH = this.goalsPanelHeight();
     fill(30, 45, 38, 220);
     noStroke();
     rect(fs.goalsX - 12, fs.goalsY - 12,
@@ -803,12 +823,11 @@ class GameUI {
     // right column). It replaces the nest-raid slot that year, so the two never both apply.
     if (this.game._mastGoalPanelActive && this.game._mastGoalPanelActive()) {
       const endless = !!(this.game.currentLevel && this.game.currentLevel.endless);
-      const clusterLeft = fs.mauriRingCX - fs.mauriRingR;
+      const clusterLeft = fs.ringCX - fs.ringR;
       const clusterRight = endless ? (fs.popDialCX + fs.popDialR) : (fs.ringCX + fs.ringR);
       const barW = Math.max(240, clusterRight - clusterLeft);
       const barX = Math.round((clusterLeft + clusterRight) / 2 - barW / 2);
-      const dialsBottom = Math.max(fs.ringCY + fs.ringR, fs.mauriRingCY + fs.mauriRingR,
-                                   endless ? (fs.popDialCY + fs.popDialR) : 0);
+      const dialsBottom = Math.max(fs.ringCY + fs.ringR, endless ? (fs.popDialCY + fs.popDialR) : 0);
       this.game._renderMastGoalPanel(barX, Math.round(dialsBottom + 16), barW, 58);
     } else if (this.game._raidPanelActive && this.game._raidPanelActive()) {
       const rh = Math.round(this.layout.eventLogHeight / 2);
@@ -827,6 +846,9 @@ class GameUI {
     }
 
     this.renderToolbar(fs.toolbarStartX, fs.toolbarY);
+    if (this.game.selectedPlaceable) {
+      this.renderSelectedToolInfo(fs.toolbarStartX + this.layout.toolbarTotalWidth + 32, fs.toolbarY);
+    }
   }
 
   // Fullscreen-only quick toggles for the level's focus species (directly
@@ -861,7 +883,7 @@ class GameUI {
 
     if ((!focal || !focal.length) && !survival.length) {
       // No focus row; the guide (if open) docks straight below the goals panel.
-      const goalsH0 = 30 + this.game.goals.length * 26;
+      const goalsH0 = this.goalsPanelHeight();
       this._fsFocusBottomY = this.layout.fs.goalsY + goalsH0 + 24;
       return;
     }
@@ -873,7 +895,7 @@ class GameUI {
 
     // Sit the row just below the goals panel, left-aligned, clearing its backing skirt.
     const fs = this.layout.fs;
-    const goalsH = 30 + this.game.goals.length * 26;
+    const goalsH = this.goalsPanelHeight();
     const size = 70, gap = 10;
     let x = fs.goalsX;
     const y = fs.goalsY + goalsH + 24;
@@ -1210,8 +1232,9 @@ class GameUI {
     textAlign(CENTER, CENTER);
     noStroke();
 
+    // (A module level shows no name here: the story is enough.)
     let era = level.freeplaySchedule ? 'FREEPLAY'
-      : ((level.menu && level.menu.subtitle) ? level.menu.subtitle : '');
+      : (level.module ? '' : ((level.menu && level.menu.subtitle) ? level.menu.subtitle : ''));
     era = era.replace(/^[~\s]+/, '').toUpperCase();
     if (era) { fill(150, 175, 155); smallTextSize(9); text(era, cx, cy - R * 0.3); }
 
@@ -1737,6 +1760,8 @@ class GameUI {
   // ==========================================
 
   renderBottomBar() {
+    // Mauri dial at the left of the bar, beside the tools it pays for.
+    this.renderMauriRing(this.layout.mauriRingCX, this.layout.mauriRingCY, this.layout.mauriRingR);
     this.renderToolbar();
 
     if (this.game.selectedPlaceable) {
@@ -1757,13 +1782,15 @@ class GameUI {
     // hover tooltip change every frame, so they draw live on top of it.
     let sig = `${btnSize}|${SMALL_TEXT_BUMP}|`;
     let hoveredDef = null, hoveredX = 0, stormX = null;
+    const unlockGlows = [];
     let i = 0;
     for (const type in palette) {
       const def = palette[type];
       const x = startX + slots[i];
       const isHovered = mouseX > x && mouseX < x + btnSize && mouseY > btnY && mouseY < btnY + btnSize;
       sig += `${type}:${this.game.selectedPlaceable === type ? 1 : 0}` +
-             `${this.mauri.canAfford(def.cost) ? 1 : 0}${isHovered ? 1 : 0},`;
+             `${this.mauri.canAfford(def.cost) ? 1 : 0}${isHovered ? 1 : 0}${this.game.isToolLocked(type) ? 1 : 0},`;
+      unlockGlows.push({ type, x });
       if (isHovered) { hoveredDef = def; hoveredX = x; }
       if (type === 'Storm') stormX = x;
       i++;
@@ -1773,9 +1800,22 @@ class GameUI {
     HudCache.draw('toolbar', startX - 6, btnY - 6, rowW + 12, btnSize + 36, sig,
                   () => this._drawToolbarRow(startX, btnY, btnSize, slots, palette));
 
+    // A tool that has just unlocked glows for a few seconds (Game.unlockTool).
+    for (const u of unlockGlows) {
+      const t = this.game.toolUnlockAge(u.type);
+      if (t == null || t > 240) continue;
+      const fade = 1 - t / 240, pulse = 0.5 + 0.5 * Math.sin(t * 0.15);
+      push();
+      noFill();
+      stroke(255, 230, 140, 255 * fade * (0.5 + 0.5 * pulse));
+      strokeWeight(3 + 5 * pulse * fade);
+      rect(u.x - 4, btnY - 4, btnSize + 8, btnSize + 8, 13);
+      pop();
+    }
+
     // Storm recharge: a clock-style wedge over the icon covering the remaining cooldown,
     // its edge advancing clockwise until ready.
-    if (stormX !== null) {
+    if (stormX !== null && !this.game.isToolLocked('Storm')) {
       const cdRemaining = (this.game._stormCooldownUntil || 0) - this.game.playTime;
       if (cdRemaining > 0) {
         const cdTotal = this.game._stormCooldownDuration || 600;
@@ -1809,7 +1849,8 @@ class GameUI {
       const x = startX + slots[i];
 
       const isSelected = this.game.selectedPlaceable === type;
-      const canAfford = this.mauri.canAfford(def.cost);
+      const locked = this.game.isToolLocked(type);   // greyed until the level unlocks it
+      const canAfford = !locked && this.mauri.canAfford(def.cost);
       const isHovered = mouseX > x && mouseX < x + btnSize &&
                         mouseY > btnY && mouseY < btnY + btnSize;
 
@@ -1847,11 +1888,12 @@ class GameUI {
                                canAfford ? 240 : 100);
       pop();
 
-      // Cost
-      fill(canAfford ? 180 : 255, canAfford ? 255 : 120, canAfford ? 190 : 120);
+      // Cost (duration and the rest are in the tooltip and the selected-tool panel)
       noStroke();
       smallTextSize(Math.round(15 * k));
       textAlign(CENTER, BOTTOM);
+      const costCol = locked ? [110, 110, 110] : (canAfford ? [180, 255, 190] : [255, 120, 120]);
+      fill(costCol[0], costCol[1], costCol[2]);
       text(def.cost, x + btnSize / 2, btnY + btnSize - 5 * k);
 
       // Hotkey number
@@ -2048,7 +2090,9 @@ class GameUI {
     // Global interactions (Mast Year, Nest Raid, ...) have no footprint or lifetime, so
     // only list the stats a tool actually has.
     const stats = [];
-    if (def.duration) stats.push(`Duration: ${(def.duration / 60).toFixed(0)}s`);
+    if (def.cost != null) stats.push(`Cost: ${def.cost} mauri`);
+    if (def.duration) stats.push(`Lasts: ${(def.duration / 60).toFixed(0)}s`);
+    if (def.moveCost != null) stats.push(`Moving one: ${def.moveCost} mauri`);
     if (def.radius) stats.push(`Radius: ${def.radius}px`);
 
     // Measure every line at the size it's drawn at.
@@ -2114,15 +2158,16 @@ class GameUI {
     }
   }
 
-  renderSelectedToolInfo() {
+  // The panel beside the toolbar for the selected tool: name, cost, how long it lasts.
+  // (x, y) default to the docked spot; the fullscreen overlay passes its own.
+  renderSelectedToolInfo(x = this.layout.selectedToolX, y = this.toolbarY) {
     const def = (this.game.activePlaceables && this.game.activePlaceables[this.game.selectedPlaceable]) || PLACEABLES[this.game.selectedPlaceable];
-    const x = this.layout.selectedToolX;
-    const y = this.toolbarY;
 
-    // Make sure the panel fits within the game area; same height as the toolbar buttons.
+    // Make sure the panel fits on screen; same height as the toolbar buttons.
     const panelWidth = this.layout.selectedToolW;
     const panelH = this.layout.toolbarBtnSize;
-    const adjustedX = Math.min(x, this.config.gameAreaWidth - panelWidth - 20);
+    const maxRight = this.config.fullscreen ? this.config.canvasWidth : this.config.gameAreaWidth;
+    const adjustedX = Math.min(x, maxRight - panelWidth - 20);
 
     // Info panel
     fill(40, 70, 50, 220);
@@ -2149,7 +2194,8 @@ class GameUI {
 
     fill(140, 255, 160);
     smallTextSize(13);
-    text(`Cost: ${def.cost} mauri`, tx, iconCY);
+    const lasts = def.duration ? `  ·  lasts ${Math.round(def.duration / 60)}s` : '';
+    text(`Cost: ${def.cost} mauri${lasts}`, tx, iconCY);
 
     fill(140, 170, 150);
     smallTextSize(11);
@@ -2201,8 +2247,9 @@ class GameUI {
   }
 
   renderGoalsPanel(x, y) {
+    if (this._singleGoalMode()) return this._renderSingleGoal(x, y);
     const panelWidth = this.layout.sidebarPanelWidth;
-    const panelHeight = 30 + this.game.goals.length * 26;
+    const panelHeight = this.goalsPanelHeight();
 
     // Panel header
     const header = this._getPanelHeader();
@@ -2276,6 +2323,78 @@ class GameUI {
     this._goalsPanelBounds = { x, y, w: panelWidth, h: panelHeight };
 
     return y + panelHeight;
+  }
+
+  // Module levels: one goal at a time. A large "GOAL:" over the current goal; when it's met
+  // it ticks, holds a moment, then fades into the next one. Timed in real frames, so it
+  // still plays out while a tip has the game paused.
+  _renderSingleGoal(x, y) {
+    const w = this.layout.sidebarPanelWidth, h = this.goalsPanelHeight();
+    const s = this._singleGoalState();
+    const goal = s.shown;
+
+    fill(30, 45, 38, 225);
+    noStroke();
+    rect(x, y, w, h, 8);
+
+    push();
+    textFont(FreckleFace);
+    fill(180, 225, 190);
+    textSize(24);
+    textAlign(LEFT, CENTER);
+    text('GOAL:', x + 14, y + 22);
+    pop();
+
+    if (goal) {
+      const a = 255 * s.alpha;
+      const done = goal.achieved;
+      // Tick box
+      fill(done ? 80 : 50, done ? 160 : 60, done ? 100 : 55, a);
+      stroke(done ? 120 : 90, done ? 200 : 110, done ? 140 : 95, a);
+      strokeWeight(1.5);
+      rect(x + 14, y + 44, 22, 22, 4);
+      if (done) {
+        noStroke();
+        fill(30, 70, 40, a);
+        textSize(22);
+        textAlign(CENTER, CENTER);
+        text('✓', x + 25, y + 55);
+      }
+      // Goal text, shrunk to fit the panel
+      noStroke();
+      fill(done ? 150 : 220, done ? 200 : 240, done ? 160 : 225, a);
+      let ts = 20;
+      textSize(ts);
+      while (ts > 13 && textWidth(goal.name) > w - 60) textSize(--ts);
+      textAlign(LEFT, CENTER);
+      text(goal.name, x + 46, y + 55);
+    }
+    this._goalsPanelBounds = { x, y, w, h };
+    return y + h;
+  }
+
+  // Which goal the single-goal panel shows, and how faded in it is. The next goal is the one
+  // after the last one met (a skipped goal doesn't hold the panel up).
+  _singleGoalState() {
+    const s = this._sg || (this._sg = { shown: null, alpha: 0, doneAt: -1, inAt: 0 });
+    const goals = this.game.goals || [];
+    let last = -1;
+    for (let i = 0; i < goals.length; i++) if (goals[i].achieved) last = i;
+    const target = goals.length ? goals[Math.min(goals.length - 1, last + 1)] : null;
+    if (s.shown !== target) {
+      if (s.shown && s.shown.achieved && goals.includes(s.shown)) {
+        // Just met: hold the tick, then fade it out.
+        if (s.doneAt < 0) s.doneAt = frameCount;
+        const t = frameCount - s.doneAt;
+        if (t < 70) s.alpha = 1;
+        else if (t < 90) s.alpha = 1 - (t - 70) / 20;
+        else { s.shown = target; s.doneAt = -1; s.inAt = frameCount; }
+      } else {
+        s.shown = target; s.doneAt = -1; s.inAt = frameCount;
+      }
+    }
+    if (s.shown === target) s.alpha = Math.min(1, (frameCount - s.inAt) / 20);
+    return s;
   }
 
   renderEventLog(x, y) {

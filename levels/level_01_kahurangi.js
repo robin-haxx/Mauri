@@ -167,7 +167,7 @@ const LEVEL_KAHURANGI = {
     featuredSpecies: {
       key: 'upland_moa',
       displayName: 'Upland Moa',
-      localName: 'Moa Koukou',
+      localName: 'Moa Pukepuke',
       spriteKey: 'upland_walk_01',
       spriteScale: 0.4   // upland art is 360px native (vs the old 72px); 360*0.4 ≈ old 72*2 display
     },

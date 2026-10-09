@@ -68,7 +68,8 @@ const EntitySprites = {
   eagle: {
     fly: [],
     dive: null,
-    glide: null
+    glide: null,
+    hunt: null    // wings up, beak open: the portrait for "stop the Pouākai" prompts (not drawn in the world)
   },
   // Flighted-bird art: one static sprite each (perched vs flying not distinguished).
   flyers: {
@@ -160,6 +161,12 @@ const EntitySprites = {
       `${spritePath}eagle_glide.png`,
       () => console.log('Loaded eagle_glide.png'),
       () => console.warn('Could not load eagle_glide.png')
+    );
+
+    this.eagle.hunt = loadImage(
+      `${spritePath}eagle_hunt.png`,
+      () => {},
+      () => console.warn('Could not load eagle_hunt.png')
     );
 
     // Flighted-bird sprites; one static image each.

@@ -106,8 +106,11 @@ class PlaceableObject {
   
   _initThunderstorm() {
     this.clouds = [];
-    const cloudCount = 4 + Math.floor(random(2));
-    
+    // A storm wider than the usual 70 (a standing one; see makeStanding) gets more and bigger
+    // clouds, so it reads as one weather system instead of a thin ring of puffs.
+    const sizeK = Math.max(1, this.radius / 70);
+    const cloudCount = Math.round((4 + Math.floor(random(2))) * sizeK * sizeK);
+
     for (let i = 0; i < cloudCount; i++) {
       const angle = (i / cloudCount) * TWO_PI + random(-0.3, 0.3);
       const dist = random(this.radius * 0.2, this.radius * 0.7);
@@ -118,7 +121,7 @@ class PlaceableObject {
         vx: random(-0.3, 0.3),
         vy: random(-0.2, 0.2),
         spriteType: random() < 0.5 ? 'cloud1' : 'cloud2',
-        scale: random(0.5, 0.9),
+        scale: random(0.5, 0.9) * Math.sqrt(sizeK),
         bobPhase: random(TWO_PI),
         bobSpeed: random(0.02, 0.04),
         alpha: random(180, 255)
@@ -133,10 +136,56 @@ class PlaceableObject {
     this.boltScale = 1;
     this.boltRotation = 0;
   }
-  
+
+  // ---- Standing storms (module levels) -------------------------------------------------
+  // A standing storm is weather the level puts down at the start. It stays where it is and
+  // does not blow out by itself. The player can still pick it up and move it (press and
+  // hold). Later the level can make it wear out with fadeOver(). See ModuleDirector.
+  makeStanding(radius) {
+    this.standing = true;
+    this.fading = false;
+    this.radius = radius;
+    this.radiusSq = radius * radius;
+    this._baseRadius = radius;      // the size its clouds are laid out for (see swellTo)
+    this.life = this.maxLife = 1;   // not used until the storm starts fading
+    this._initThunderstorm();       // new radius, so new clouds
+  }
+
+  // Grow or shrink a standing storm to `radius` over `frames` (a storm gathering, or
+  // clearing): its cover and its clouds together. Timed by frameCount, so it plays on while a
+  // tip has the game paused.
+  swellTo(radius, frames = 60) {
+    if (frames <= 1) {   // at once
+      this._swell = null;
+      this.radius = radius;
+      this.radiusSq = radius * radius;
+      return;
+    }
+    this._swell = { from: this.radius, to: radius, start: frameCount, frames };
+    this._applySwell();
+  }
+
+  _applySwell() {
+    const s = this._swell;
+    if (!s) return;
+    const t = Math.min(1, (frameCount - s.start) / s.frames), e = t * t * (3 - 2 * t);
+    this.radius = s.from + (s.to - s.from) * e;
+    this.radiusSq = this.radius * this.radius;
+    if (t >= 1) this._swell = null;
+  }
+
+  // Make a standing storm wear out over `seconds`, then vanish. With refreshOnMove, moving
+  // it again tops it back up to full (the winter "keep the storms going" job). Without it,
+  // nothing saves the storm (the story clearing a storm on purpose).
+  fadeOver(seconds, refreshOnMove = false) {
+    this.fading = true;
+    this.refreshOnMove = refreshOnMove;
+    this.maxLife = this.life = Math.max(1, seconds * 60);
+  }
+
   _updateThunderstorm(dt = 1) {
     const lifeRatio = this.life / this.maxLife;
-    const maxDist = this.radius * 0.8;
+    const maxDist = (this._baseRadius || this.radius) * 0.8;   // (clouds keep their layout; see swellTo)
     const maxDistSq = maxDist * maxDist;
     
     for (const cloud of this.clouds) {
@@ -184,16 +233,18 @@ class PlaceableObject {
   
   _renderThunderstorm(lifeRatio) {
     if (!placeableSprites.loaded) return; // Sprites load in preload; fallback unnecessary
-    
+
     push();
     imageMode(CENTER);
-    
+    // A standing storm grown or shrunk from its laid-out size (swellTo) scales its clouds too.
+    if (this._baseRadius && this.radius !== this._baseRadius) scale(this.radius / this._baseRadius);
+
     for (const cloud of this.clouds) {
       const sprite = placeableSprites[cloud.spriteType];
       if (!sprite) continue;
       
       const size = 64 * cloud.scale;
-      tint(255, cloud.alpha * lifeRatio);
+      tint(255, this._held ? 255 : cloud.alpha * lifeRatio);
       image(sprite, cloud.x, cloud.y + sin(cloud.bobPhase) * 2, size, size);
     }
     
@@ -279,11 +330,24 @@ class PlaceableObject {
   // ============================================
   
   update(dt = 1) {
-    this.life -= dt;
-    
-    if (this.life <= 0) {
-      this.destroy();
-      return;
+    if (this._swell) this._applySwell();
+    if (this.standing) {
+      // A standing storm only counts down once fadeOver() has been called. Placeables update
+      // every other frame (Simulation.updatePlaceables), so step 2x to keep fadeOver in real
+      // seconds.
+      if (this.fading) {
+        this.life -= dt * 2;
+        if (this.life <= 0) {
+          this.destroy();
+          return;
+        }
+      }
+    } else {
+      this.life -= dt;
+      if (this.life <= 0) {
+        this.destroy();
+        return;
+      }
     }
     
     this.updateSeasonalBonus();
@@ -408,6 +472,8 @@ class PlaceableObject {
   // regrown at the new spot, remaining life unchanged.
   moveTo(x, y) {
     this.pos.set(x, y);
+    // Moving a fading standing storm tops it back up, when the level allows it (fadeOver).
+    if (this.standing && this.fading && this.refreshOnMove) this.life = this.maxLife;
     if (this.def.plantSpawnCount) {
       for (const plant of this.spawnedPlants) plant.alive = false;
       this.spawnedPlants = [];
@@ -441,11 +507,15 @@ class PlaceableObject {
   
   render() {
     if (!this.alive) return;
-    
+    if (this._swell) this._applySwell();
+
     push();
-    translate(this.pos.x, this.pos.y);
-    
-    const lifeRatio = this.life / this.maxLife;
+    // A storm being moved is drawn under the pointer (_dragPos, set by the game each frame);
+    // it still covers its old spot until it is set down.
+    const at = this._dragPos || this.pos;
+    translate(at.x, at.y);
+
+    const lifeRatio = (this.standing && !this.fading) ? 1 : this.life / this.maxLife;
 
     if (this.type === 'Storm') {
       this._renderStorm(lifeRatio);
@@ -496,6 +566,15 @@ class PlaceableObject {
     ellipse(0, 0, this.radius * 1.8, this.radius * 1.8);
     // ...then the steady, softly-glowing rim at the true radius.
     this._drawRadiusRing([120, 130, 160], 70, 1, 0.5, lifeRatio);
+    // Pressed and held, or being moved (_held, set by the game): a bright pulsing rim and a
+    // lit body, so it's clear which storm is in hand.
+    if (this._held) {
+      const k = 0.5 + 0.5 * Math.sin(frameCount * 0.15);
+      fill(255, 250, 215, 26 + 22 * k);
+      noStroke();
+      ellipse(0, 0, this.radius * 1.8, this.radius * 1.8);
+      this._drawRadiusRing([255, 245, 190], 170 + 70 * k, 2.5, 0.9, 1);
+    }
 
     this._renderThunderstorm(lifeRatio);
     this._renderLifeBar(lifeRatio, this.radius * 0.6);
@@ -545,7 +624,8 @@ class PlaceableObject {
     // Types that render their own sprite (spawned plants, or the fern canopy) skip the
     // generic central icon dot+border; otherwise it reads as a second, smaller "range"
     // ring inside the effective-radius ring and muddies where the real range is.
-    const hasSpawnedPlants = this.type === 'kawakawa' || this.type === 'harakeke' || this.type === 'lancewood' || this.type === 'speargrass';
+    const hasSpawnedPlants = this.type === 'kawakawa' || this.type === 'harakeke' || this.type === 'lancewood' || this.type === 'speargrass' ||
+      this.type === 'patotara' || this.type === 'wharariki';
     const hasOwnVisual = hasSpawnedPlants || this.type === 'shelter';
 
     if (!hasOwnVisual) {
@@ -569,8 +649,9 @@ class PlaceableObject {
     noStroke();
     this.renderTypeSpecific(lifeRatio);
     
-    // Seasonal multiplier indicator
-    if (this.seasonalMultiplier !== 1.0) {
+    // Seasonal multiplier indicator (not on a module's standing patches: they're scenery the
+    // story points at, not tools being tuned)
+    if (this.seasonalMultiplier !== 1.0 && !this.standing) {
       fill(255, 255, 255, 200 * lifeRatio);
       textSize(7);
       textAlign(CENTER, CENTER);

@@ -349,7 +349,9 @@ class Boid {
     this.acc.x = 0;
     this.acc.y = 0;
     
-    // Constrain to map (inline)
+    // Constrain to map (inline). A module family walking off the map in its outro is let go
+    // (MoaLife.offMap).
+    if (this.lifeScript && this.lifeScript.offMap) return;
     const w = this.terrain.mapWidth - 5;
     const h = this.terrain.mapHeight - 5;
     

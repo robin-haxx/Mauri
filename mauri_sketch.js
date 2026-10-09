@@ -152,6 +152,8 @@ function preload(){
       plantSprites[key][state.toLowerCase()] = loadImage(`sprites/${plant}_${state}.png`);
     }
   }
+  // Wharariki (mountain flax) has no art of its own yet: it draws with the flax sprites.
+  plantSprites.wharariki = plantSprites.flax;
 
   // Portrait plant variants: 2 alternate sprites each in sprites/<Plant>/, anchored at
   // bottom-centre and rendered by a dedicated path (see mauri_plant.js).
@@ -434,6 +436,8 @@ function applyLevelToConfig(levelDef) {
   }
 
   CONFIG.plantDensity = t.plantDensity;
+  // Optional per-level elevation fit of the play window (TerrainGenerator._fitElevationWindow).
+  CONFIG.elevationWindow = t.elevationWindow || null;
 
   // Endless "years" world grid (a 2×2 grid of terrain areas the world scrolls
   // through, one per year). Null on classic levels → the terrain behaves exactly
@@ -740,6 +744,55 @@ const PLACEABLES = {
     attractionStrength: 1.4
   },
 
+  // Module levels: patches of food the story puts down for the player to move (press and hold),
+  // not on the toolbar. The director makes them standing (they don't wear out).
+  patotara: {
+    name: "Pātōtara Patch",
+    description: "Sweet orange berries of the open tops",
+    cost: 20,
+    moveCost: 10,
+    icon: '🫐',
+    iconSprite: 'Patotara_Mature.png',
+    color: '#c94c5a',
+    fauna: 'moa',
+    effect: 'feeding',
+    radius: 34,
+    duration: 3600,
+    minSpacing: 30,
+    ignoresSpacing: false,
+    feedingRate: 0.12,
+    baseFeedingRate: 0.12,
+    plantSpawnCount: 4,
+    plantType: 'patotara',
+    seasonalBonus: { summer: 1.3, autumn: 0.8, winter: 0.2, spring: 0.9 },
+    attractsHungryMoa: true,
+    attractionStrength: 1.1
+  },
+
+  wharariki: {
+    name: "Wharariki",
+    description: "Mountain flax: food and light cover",
+    cost: 20,
+    moveCost: 10,
+    icon: '🌾',
+    iconSprite: 'Flax_Mature.png',
+    color: '#5a7a30',
+    fauna: 'moa',
+    effect: 'feeding',
+    radius: 34,
+    duration: 3600,
+    minSpacing: 30,
+    ignoresSpacing: false,
+    feedingRate: 0.15,
+    baseFeedingRate: 0.15,
+    plantSpawnCount: 3,
+    plantType: 'wharariki',
+    securityBonus: 1.4,
+    seasonalBonus: { summer: 1.2, autumn: 1.3, winter: 0.9, spring: 1.0 },
+    attractsHungryMoa: true,
+    attractionStrength: 1.2
+  },
+
   // Year-1 kea interaction (Free Play). A cache of subalpine berries that the food-driven
   // kea flock to; placed DOWNSLOPE to draw the kea onto the forest, where they rob moa nests
   // and start the cascade. Behaviour read by mauri_kea.js (attractsKea / keaAttractRadius).
@@ -957,6 +1010,8 @@ const PLANT_TYPES = {
     winterEdibility: 0.20, description: "Hardy grass that covers the high country" },
   flax: { name: "Flax", nutrition: 35, color: '#487020', size: 26, growthTime: 280,
     winterEdibility: 0.10, description: "Harakeke: versatile, with sweet nectar" },
+  wharariki: { name: "Wharariki", nutrition: 32, color: '#5a7a30', size: 21, growthTime: 260,
+    winterEdibility: 0.15, description: "Mountain flax: harakeke's smaller cousin of the tops" },
   fern: { name: "Fern", nutrition: 30, color: '#228B22', size: 36, growthTime: 240,
     winterEdibility: 0.10, description: "The iconic Ponga's fronds populate forests" },
   rimu: { name: "Rimu", nutrition: 50, color: '#8B0000', size: 48, growthTime: 400,
@@ -1133,6 +1188,7 @@ class Game {
     this.ui = null;
     this.seasonManager = null;
     this.tutorial = null;
+    this.module = null;   // the ModuleDirector on module levels (mauri_module.js), else null
     this.menuArt = new MenuArtManager();
     
     this.selectedPlaceable = null;
@@ -1177,6 +1233,13 @@ class Game {
     // while the opening tutorial tip pauses the sim. See _castRenderAlpha / _initFinalize.
     this._castFadeStartFrame = null;
     this._castFadeFrames = 48;    // ~0.8s materialise-in
+    // A full-screen fade to/from black (a module's opening and ending; see fadeScreen).
+    this._screenFade = { a: 0, to: 0, step: 0 };
+    // A module hand-off loads the next module behind a still of the last frame, then fades the
+    // new one in over it (see startModuleHandoff), so there's no loading screen between them.
+    this._handoffPending = null;
+    this._handoffShot = null;
+    this._handoffFade = null;
     this._kawakawaBanned = false; // set at the first winter (endless): kawakawa unplantable for good
     // Mast Year interactable (see triggerMastYear): the cycle a bought mast lands on
     // (-1 = none). Global one-shot cooldowns live here, keyed by placeable type.
@@ -1210,6 +1273,8 @@ class Game {
 
     const levelDef = resolveLevelDef(rawDef);
     this.currentLevel = levelDef;
+    // A module hand-off only carries into the level it leads to (see startModuleHandoff).
+    if (this._moduleHandoff && this._moduleHandoff.levelId !== levelId) this._moduleHandoff = null;
 
     applyLevelToConfig(levelDef);
 
@@ -1335,6 +1400,98 @@ class Game {
     this.terrain = new TerrainGenerator(CONFIG, this.activeBiomes);
     this.seasonManager = new SeasonManager(CONFIG);
     this.terrain.setSeasonManager(this.seasonManager);
+
+    // Module levels (a level with a `story`) are run by a ModuleDirector (mauri_module.js). It
+    // picks the nest, tarn and storm sites from the bare land while the terrain generates
+    // (featurePlanner runs inside the height-map step), and runs the story once play starts.
+    // story.director names the director class (MODULE_DIRECTORS); Module 0's is the base one.
+    const story = this.currentLevel && this.currentLevel.story;
+    const Director = story && typeof ModuleDirector !== 'undefined'
+      ? ((typeof MODULE_DIRECTORS !== 'undefined' && MODULE_DIRECTORS[story.director]) || ModuleDirector) : null;
+    this.module = Director ? new Director(this, this.currentLevel) : null;
+    if (this.module) this.terrain.featurePlanner = (t) => this.module.planTerrain(t);
+    // Carried on from the previous module's "Continue": the same land (seed and height fit),
+    // so the area it panned to is the one this level opens on.
+    const h = this.module && this.module.handoff;
+    if (h) {
+      if (h.seed != null) this.terrain.seed = h.seed;
+      if (h.elevFit) this.terrain.fixedElevFit = h.elevFit;
+    }
+  }
+
+  // A module's "Continue" has walked the family off and panned to the next area: load the
+  // next module there, on the same land, with the family carried over (see ModuleDirector's
+  // handoff). The hand-off stays for restarts of that module; another level clears it.
+  // The load starts at the end of this frame's render (_beginPendingHandoff), which keeps a
+  // still of the frame to show while the next module loads, so there's no loading screen.
+  startModuleHandoff(handoff) {
+    this._moduleHandoff = handoff;
+    this._handoffPending = handoff;
+  }
+
+  _beginPendingHandoff() {
+    const h = this._handoffPending;
+    this._handoffPending = null;
+    this._handoffShot = this._snapshotScreen();
+    this.loadLevel(h.levelId);
+    this._startLoading();
+  }
+
+  // A still of what's on screen right now (call at the end of a render): the GL layers under
+  // the main canvas and the main canvas itself, flattened into one canvas at the main canvas's
+  // backing size. null if it can't be taken.
+  _snapshotScreen() {
+    try {
+      const main = drawingContext.canvas;
+      const c = document.createElement('canvas');
+      c.width = main.width;
+      c.height = main.height;
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = 'rgb(20, 30, 25)';
+      ctx.fillRect(0, 0, c.width, c.height);
+      if (typeof GLBatch !== 'undefined' && GLBatch.domStack) {
+        const b = GLBatch._bottomEl;
+        if (b && b.style && b.style.display !== 'none') ctx.drawImage(b, 0, 0, c.width, c.height);
+        if (GLBatch.canvas) ctx.drawImage(GLBatch.canvas, 0, 0, c.width, c.height);
+      }
+      ctx.drawImage(main, 0, 0, c.width, c.height);
+      return c;
+    } catch (e) {
+      console.warn('Hand-off snapshot failed:', e);
+      return null;
+    }
+  }
+
+  // Draw a still (see _snapshotScreen) over the whole canvas at `alpha`.
+  _drawScreenShot(shot, alpha = 1) {
+    const ctx = drawingContext;
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = alpha;
+    ctx.drawImage(shot, 0, 0, ctx.canvas.width, ctx.canvas.height);
+    ctx.restore();
+  }
+
+  // Fade the whole screen (world and HUD; tips stay on top) to `to` (1 = black, 0 = clear)
+  // over `frames` real frames, so it runs while a tip has the game paused. 0 frames: at once.
+  fadeScreen(to, frames = 60) {
+    const f = this._screenFade;
+    f.to = to;
+    if (frames <= 1) f.a = to;
+    f.step = Math.abs(to - f.a) / Math.max(1, frames);
+  }
+
+  screenFadeDone() { return this._screenFade.a === this._screenFade.to; }
+
+  _renderScreenFade() {
+    const f = this._screenFade;
+    if (f.a !== f.to) f.a = f.a < f.to ? Math.min(f.to, f.a + f.step) : Math.max(f.to, f.a - f.step);
+    if (f.a <= 0) return;
+    push();
+    noStroke();
+    fill(0, 255 * f.a);
+    rect(0, 0, CONFIG.canvasWidth, CONFIG.canvasHeight);
+    pop();
   }
 
   // Projection/view (needs the generated map dimensions) + the simulation object.
@@ -1388,6 +1545,9 @@ class Game {
     this._mastGoalStartEarned = 0;
     this._globalCooldownUntil = {};
     this._stormCooldownUntil = 0;   // reset per level load, else a restart starts mid-cooldown
+    // Tools a level keeps locked (greyed out) until it unlocks them (see unlockTool).
+    this._lockedTools = new Set();
+    this._toolUnlockFrame = {};
     this._holdCandidate = null;     // stale refs would point into the old simulation
     this.movingPlaceable = null;
     this._toolDrag = null;
@@ -1402,6 +1562,9 @@ class Game {
     for (const _k of _hlDefaults) SPECIES_HIGHLIGHT.add(_k);
     this.state = GAME_STATE.PLAYING;
     this._castFadeStartFrame = frameCount;   // begin the level-start cast fade-in
+    this._screenFade = { a: 0, to: 0, step: 0 };   // (a module's setup may start it black)
+    // Carried on from a module hand-off: the still of the last module fades out over this one.
+    this._handoffFade = this._handoffShot ? { t: 0, frames: 45 } : null;
     this._tempVec = createVector(0, 0);
     
     for (const goal of this.goals) goal.achieved = false;
@@ -1417,13 +1580,19 @@ class Game {
     // Per-level scripts live in levels/tutorial_*.js (see TUTORIAL_REGISTRY).
     // Endless levels never fall back to the story's script: without their own, no tips.
     const _endlessLevel = !!(this.currentLevel && this.currentLevel.endless);
-    this.tutorial.setLevelTips(
-      this.currentLevel.tutorial?.tips ||
+    let _tips = this.currentLevel.tutorial?.tips ||
       TUTORIAL_REGISTRY.get(this.currentLevel.id) ||
-      (_endlessLevel ? null : TUTORIAL_REGISTRY.get('default'))
-    );
+      (_endlessLevel ? null : TUTORIAL_REGISTRY.get('default'));
+    // Module levels all carry Te Whē's welcome and farewell (levels/tutorial_module_bookends.js);
+    // the director decides which module shows which.
+    const _bookends = this.module && TUTORIAL_REGISTRY.get('module_bookends');
+    if (_bookends) _tips = Object.assign({}, _bookends, _tips || {});
+    this.tutorial.setLevelTips(_tips);
     if (BENCHMARK.pending) this.tutorial.enabled = false;   // benchmark runs clean
     this.tutorial.init();
+
+    // Module levels: place the family, egg, food, storms and eagle, and start the story.
+    if (this.module) this.module.setup();
 
     // Benchmark: start an armed run; a reload mid-run abandons the old one
     if (BENCHMARK.pending) BENCHMARK.start(this);
@@ -1767,15 +1936,17 @@ class Game {
     if (this.tutorial) this.tutorial.update(dt);
     this.updateHoldToMove(dt);   // like placement, works while paused
     if (this.state !== GAME_STATE.PLAYING) return;
-    
-    this.playTime += dt;
+
+    // A module's clock stops once its last goal is done (home), so the walk-off and pan to the
+    // next area don't add to the time.
+    if (!(this.module && this.module.clockStopped())) this.playTime += dt;
     if (this.playTime > this.maxPlayTime) this.maxPlayTime = this.playTime;
 
     // Free Play: track the year, and advance the deepening climate. The cycle (year)
     // drives the endless yearly goals; coldIndex is the glacial severity of the year,
     // which the season manager folds into its winter-end getters. Set BEFORE
     // seasonManager.update and simulation.update so this frame reads it.
-    this.cycle = Math.floor(this.playTime / (4 * CONFIG.seasonDuration));
+    this.cycle = this.module ? this.module.cycle : Math.floor(this.playTime / (4 * CONFIG.seasonDuration));
     if (this._climateCfg) {
       this.coldIndex = ClimateDrift.severityOfCycle(this.cycle, this._climateCfg);
       this.seasonManager.coldIndex = this.coldIndex;
@@ -1788,9 +1959,11 @@ class Game {
     this.seasonManager.mastYear = _mast;
     this.simulation.mastYear = _mast;
 
-    if (this.seasonManager.update(dt)) this.onSeasonChange();
+    if (this.seasonManager.update(this.module ? this.module.seasonStep(dt) : dt)) this.onSeasonChange();
     
     this.simulation.update(this.mauri, dt);
+    // Module levels: the story moves on after the birds have moved.
+    if (this.module) this.module.update(dt);
     // Extended species voices: fade highlight tracks in/out and crossfade the kākāpō
     // ambience to match the flock (booming in a mast, territorial when males contest).
     if (audioManager && audioManager.update) audioManager.update(this.simulation, dt);
@@ -1839,7 +2012,7 @@ class Game {
     // fail / apex-extinction verdicts until it settles.
     const _areaTransition = this.terrain && this.terrain.hasWorldGrid && !!this._yearTransition;
 
-    if (!_areaTransition && this._cachedMoaCount === 0 && this._cachedEggCount === 0) {
+    if (!_areaTransition && !this.module && this._cachedMoaCount === 0 && this._cachedEggCount === 0) {
       this.state = GAME_STATE.LOST;
       this.gameOverReason = "All moa here were hunted...";
       if (audioManager) audioManager.playLoss();
@@ -1944,6 +2117,8 @@ class Game {
   }
 
   checkGoals() {
+    // Module levels: the director sets each season's goals, ticks them, and decides the win.
+    if (this.module) return;
     // Free Play is endless: rolling yearly goals, and NEVER a win (an empty goals array
     // would otherwise win on frame one). Loss stays with the all-moa-gone check in update().
     if (this.currentLevel && this.currentLevel.endless) { this._checkFreeplayYear(); return; }
@@ -3462,6 +3637,9 @@ class Game {
     this.addNotification(`Season changed to ${season.name} ${season.icon}`, 'info');
     if (audioManager) audioManager.playSeasonChange(seasonKey);
 
+    // Module levels: the story moves into the new season (its goals, moves and prompts).
+    if (this.module) this.module.onSeasonChange(seasonKey);
+
     // Glacial predation: winter drives an extra hungry eagle to hunt.
     if (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.winterPredation && seasonKey === 'winter') {
       this.simulation.spawnEagle();
@@ -3559,7 +3737,35 @@ class Game {
     this.state = GAME_STATE.LOST;
   }
 
+  // ---- Locked tools ----------------------------------------------------------------------
+  // A level can keep a tool greyed out until the story needs it (module levels list them in
+  // story.lockedTools). unlockTool lights it up; the toolbar glows it for a few seconds.
+  isToolLocked(type) { return !!(this._lockedTools && this._lockedTools.has(type)); }
+
+  lockTool(type) {
+    if (!this._lockedTools) this._lockedTools = new Set();
+    this._lockedTools.add(type);
+  }
+
+  unlockTool(type) {
+    if (!this.isToolLocked(type)) return;
+    this._lockedTools.delete(type);
+    this._toolUnlockFrame[type] = frameCount;
+    if (audioManager && audioManager.playTutorialTip) audioManager.playTutorialTip();
+  }
+
+  // Real frames since a tool unlocked (drives the toolbar's glow), or null if it never was.
+  toolUnlockAge(type) {
+    const f = this._toolUnlockFrame && this._toolUnlockFrame[type];
+    return (f == null) ? null : frameCount - f;
+  }
+
   selectPlaceable(type) {
+    if (this.module && this.module.inputLocked()) return;   // a module's outro is hands-off
+    if (this.isToolLocked(type)) {
+      this.addNotification("That isn't ready yet.", 'info');
+      return;
+    }
     if (this.movingPlaceable) this.cancelMove();   // one mode at a time
     // Check against level's active placeables, not global PLACEABLES
     const def = this.activePlaceables[type];
@@ -3587,8 +3793,11 @@ class Game {
     return (this.activePlaceables && this.activePlaceables[p.type]) || p.def;
   }
 
+  // Moving a placed item costs half its price, unless the level gives it its own moveCost.
   _moveCost(p) {
-    return Math.ceil((this._moveDef(p).cost || 0) / 2);
+    const def = this._moveDef(p);
+    if (def.moveCost != null) return def.moveCost;
+    return Math.ceil((def.cost || 0) / 2);
   }
 
   // Ticks an armed hold candidate toward becoming a move; called every frame
@@ -3628,7 +3837,8 @@ class Game {
     this.cancelPlacement();
     this.movingPlaceable = p;
     this.addNotification(`Moving ${def.name}; click or drag to set it down (${cost} mauri), ESC to cancel`, 'info');
-    if (audioManager) audioManager.playPlantRustle();
+    // A storm lifts with a gust of wind; plants rustle.
+    if (audioManager) p.type === 'Storm' && audioManager.playWindGust ? audioManager.playWindGust() : audioManager.playPlantRustle();
   }
 
   // ============================================
@@ -3715,14 +3925,17 @@ class Game {
 
     p.moveTo(x, y);
     if (p.type === 'nest') this.simulation._nestCacheValid = false;
+    if (p.type === 'Storm') this.simulation.stats.stormsMoved = (this.simulation.stats.stormsMoved || 0) + 1;
     this.movingPlaceable = null;
     this.addNotification(`Moved ${def.name} (-${cost} mauri)`, 'info');
-    if (audioManager) audioManager.playPlantRustle();
+    if (audioManager) p.type === 'Storm' ? audioManager.playBoltStrike() : audioManager.playPlantRustle();
+    if (this.tutorial) this.tutorial.fireEvent(TUTORIAL_EVENTS.PLACEABLE_MOVED, { type: p.type });
     return true;
   }
   
   canPlaceWithSpacing(x, y, type, exclude = null) {
-    const def = this.activePlaceables[type];
+    // An item off the level's palette (a module's movable food patch) uses its base def.
+    const def = this.activePlaceables[type] || PLACEABLES[type];
     if (def.ignoresSpacing) return { allowed: true };
 
     const mySpacing = def.minSpacing || 40;
@@ -3762,13 +3975,14 @@ class Game {
     if (!this.selectedPlaceable) return false;
 
     const def = this.activePlaceables[this.selectedPlaceable];
-    if (!def) return false;
+    if (!def || this.isToolLocked(this.selectedPlaceable)) return false;
 
     // Global one-shot interactables (e.g. Mast Year) fire a gamewide effect instead of
     // placing an object; route them past the spatial checks below.
     if (def.global) return this._useGlobalInteractable(this.selectedPlaceable, def);
 
-    if (this.selectedPlaceable === 'Storm' && this.playTime < this._stormCooldownUntil) {
+    const _stormFree = !!(this.module && this.module.stormCooldownFree());   // module spring: no recharge
+    if (this.selectedPlaceable === 'Storm' && !_stormFree && this.playTime < this._stormCooldownUntil) {
       const secs = Math.ceil((this._stormCooldownUntil - this.playTime) / 60);
       this.addNotification(`Storm is recharging (${secs}s)`, 'error');
       return false;
@@ -3805,10 +4019,11 @@ class Game {
     const placed = this.simulation.addPlaceable(x, y, this.selectedPlaceable);
     BENCHMARK.recordPlacement(this.selectedPlaceable);
     this._recordPlaceableUse(this.selectedPlaceable);   // stats export tally
-    if (this.selectedPlaceable === 'Storm') {
+    if (this.selectedPlaceable === 'Storm' && !_stormFree) {
       this._stormCooldownDuration = 600;   // 10s @60fps (UI reads this for the cooldown sweep)
       this._stormCooldownUntil = this.playTime + this._stormCooldownDuration;
     }
+    if (this.module) this.module.onPlaced(placed);   // a module's storms join its weather
     // A lone patch of the focus moa's plant can't found a nest yet: say it needs a partner.
     let placedMsg = `Placed ${def.name}`;
     const watch = this.simulation.moaNestingWatch;
@@ -4019,7 +4234,9 @@ class Game {
     }
 
     if (this.state === GAME_STATE.LOADING) {
-      this.renderLoading();   // paints the bar with the CURRENT chunk's label…
+      // (A module hand-off loads behind a still of the last module instead of the bar.)
+      if (this._handoffShot) this._drawScreenShot(this._handoffShot);
+      else this.renderLoading();   // paints the bar with the CURRENT chunk's label…
       this._stepLoading();    // …then runs that chunk (browser already showed the bar)
       return;
     }
@@ -4103,8 +4320,11 @@ class Game {
     // clear (in begin) but BEFORE the sprite quads, so sprites composite on top. build()
     // is a no-op once the mesh exists for this land; draw() restores the sprite program.
     if (_glTerrain) { GLTerrain.build(this.terrain); GLTerrain.draw(this, _clip.x, _clip.y, _clip.w, _clip.h); }
+    if (this.module) this.module.renderGround();
+    this._markHeldStorm();
     this.simulation.render();
     if (typeof GLBatch !== 'undefined' && GLBatch.enabled && GLBatch._open) GLBatch.composite(drawingContext);
+    if (this.module) this.module.renderOver();   // a module's markers, over the birds
     this.mauri.renderFloatingTexts();
     if (_castAlpha < 1) drawingContext.globalAlpha = 1;
 
@@ -4137,12 +4357,66 @@ class Game {
       BENCHMARK.finish(this, this.state === GAME_STATE.WON ? 'win' : 'loss');
     }
 
-    // A tutorial-tip pause shows only the tip (its own overlay dims the
-    // world); the PAUSED dialog is for pauses the player asked for.
-    const _tutorialPause = this.tutorial && this.tutorial._pausedByTutorial;
     // Overlay button hit-rects are rebuilt each frame by _renderOverlay (only the paused /
     // game-over screens set them); clear them so a stale rect never eats a click.
     this._overlayBtns = null;
+
+    // The paused / won / lost card sits under the HUD (drawn after it so the HUD's panels and
+    // buttons stay bright above the tint). While the screen is faded (a module's opening or
+    // ending), the HUD fades with the world and the card shows over the black instead.
+    const _faded = this._screenFade.a > 0 || this._screenFade.to > 0;
+    if (!_faded) this._renderStateOverlay();
+
+    if (CONFIG.fullscreen) this.ui.renderFullscreenOverlay();
+    else this.ui.render();
+
+    if (_faded) {
+      this._renderScreenFade();
+      this._renderStateOverlay();
+    }
+
+    // Carried on from the last module: its still fades out over this one (and is then let go).
+    const hf = this._handoffFade;
+    if (hf && this._handoffShot) {
+      hf.t++;
+      if (hf.t >= hf.frames) { this._handoffFade = null; this._handoffShot = null; }
+      else this._drawScreenShot(this._handoffShot, 1 - hf.t / hf.frames);
+    }
+
+    if (this.tutorial) {
+      this.tutorial.render();
+      // Tips flagged ringsAboveUI (e.g. "Say hello to the new Moa!") re-draw
+      // the vulnerable-founder rings above the tutorial overlay so the player
+      // can spot the highlighted moa while the tip is up.
+      if (this.tutorial.active && this.tutorial.currentTip &&
+          this.tutorial.currentTip.ringsAboveUI) {
+        this.renderVulnerableRingsAboveUI();
+      }
+      // Tips flagged spotlightHuntingEagle (e.g. "Drop It on the Eagle!")
+      // re-draw the hunting eagle's sprite above the overlay, flashing white,
+      // so the player knows exactly which bird to storm.
+      if (this.tutorial.active && this.tutorial.currentTip &&
+          this.tutorial.currentTip.spotlightHuntingEagle) {
+        this.renderHuntingEagleAboveUI();
+      }
+      // Tips flagged speciesHighlightAboveUI (e.g. "The Upland Moa need your
+      // help!") re-draw every SPECIES_HIGHLIGHT moa above the overlay, so the
+      // flock the tip introduces glows through the dimmed world.
+      if (this.tutorial.active && this.tutorial.currentTip &&
+          this.tutorial.currentTip.speciesHighlightAboveUI) {
+        this.renderHighlightedMoaAboveUI();
+      }
+    }
+
+    // A module hand-off waits for the end of this frame, so its still shows this frame whole.
+    if (this._handoffPending) this._beginPendingHandoff();
+  }
+
+  // The card over the game for the paused / won / lost states (see render).
+  _renderStateOverlay() {
+    // A tutorial-tip pause shows only the tip (its own overlay dims the
+    // world); the PAUSED dialog is for pauses the player asked for.
+    const _tutorialPause = this.tutorial && this.tutorial._pausedByTutorial;
 
     if (this.state === GAME_STATE.PAUSED && !_tutorialPause) {
       // Free Play: an "End Run" button ends the run to the final-stats screen (with export).
@@ -4163,6 +4437,42 @@ class Game {
         boxColor: [30, 45, 35, 240],
         strokeColor: [70, 110, 80],
         buttons: _pauseButtons
+      });
+    } else if (this.state === GAME_STATE.WON && this.module) {
+      // Module levels: the family made it home. "Continue" walks them off the map and pans
+      // on to the next area; once that has played, the card points on to the next module.
+      // The card shows what the next module is about: "Next up", its focus item's picture and
+      // name (its level's menu.focusItem).
+      const m = this.module, done = m.outroDone;
+      const buttons = [];
+      if (m.hasOutro()) buttons.push({ label: "Continue", action: () => m.beginOutro() });
+      buttons.push({ label: "Back to Menu", action: () => this._returnToMenuFromEnd() });
+      const next = !done && m.nextModuleDef ? m.nextModuleDef() : null;
+      const item = next && next.menu && next.menu.focusItem;
+      this._renderOverlay(...CONFIG.col_UI.slice(0,3), done ? 90 : 150, {
+        title: done ? "ONWARD" : (m.cfg.winTitle || "HOME AGAIN"),
+        titleColor: [180, 255, 180],
+        lines: done
+          ? [{ text: m.cfg.nextText || "The next module is on its way.", color: [150, 220, 150], size: 18 }]
+          : [{ text: m.cfg.winText || "The family is back at the nest.", color: [150, 220, 150], size: 18 },
+             { text: `Total mauri earned: ${this.mauri.totalEarned | 0}`, color: [120, 180, 120], size: 14 }],
+        art: item ? { h: 190, draw: (cx, top) => this._renderNextUp(item, cx, top) } : null,
+        boxColor: [30, 60, 40, 250],
+        strokeColor: [100, 180, 120],
+        buttons
+      });
+    } else if (this.state === GAME_STATE.LOST && this.module) {
+      // Module levels: a family member was taken. Straight back in, or out to the menu.
+      this._renderOverlay(80, 30, 30, 150, {
+        title: "TAKEN",
+        titleColor: [255, 190, 180],
+        lines: [{ text: this.gameOverReason, color: [230, 160, 150], size: 18 }],
+        boxColor: [60, 35, 35, 250],
+        strokeColor: [150, 100, 100],
+        buttons: [
+          { label: "Try Again", action: () => this._restartLevel() },
+          { label: "Back to Menu", action: () => this._returnToMenuFromEnd() }
+        ]
       });
     } else if (this.state === GAME_STATE.WON) {
       // "Thriving" is reserved for a full-clear; a win with unmet goals is
@@ -4209,36 +4519,6 @@ class Game {
         ]
       });
     }
-
-    // HUD drawn after the paused/won/lost overlay so its panels and buttons
-    // stay bright and readable above the tint.
-    if (CONFIG.fullscreen) this.ui.renderFullscreenOverlay();
-    else this.ui.render();
-
-    if (this.tutorial) {
-      this.tutorial.render();
-      // Tips flagged ringsAboveUI (e.g. "Say hello to the new Moa!") re-draw
-      // the vulnerable-founder rings above the tutorial overlay so the player
-      // can spot the highlighted moa while the tip is up.
-      if (this.tutorial.active && this.tutorial.currentTip &&
-          this.tutorial.currentTip.ringsAboveUI) {
-        this.renderVulnerableRingsAboveUI();
-      }
-      // Tips flagged spotlightHuntingEagle (e.g. "Drop It on the Eagle!")
-      // re-draw the hunting eagle's sprite above the overlay, flashing white,
-      // so the player knows exactly which bird to storm.
-      if (this.tutorial.active && this.tutorial.currentTip &&
-          this.tutorial.currentTip.spotlightHuntingEagle) {
-        this.renderHuntingEagleAboveUI();
-      }
-      // Tips flagged speciesHighlightAboveUI (e.g. "The Upland Moa need your
-      // help!") re-draw every SPECIES_HIGHLIGHT moa above the overlay, so the
-      // flock the tip introduces glows through the dimmed world.
-      if (this.tutorial.active && this.tutorial.currentTip &&
-          this.tutorial.currentTip.speciesHighlightAboveUI) {
-        this.renderHighlightedMoaAboveUI();
-      }
-    }
   }
 
   // Re-draws every moa of a highlighted species (outline + sprite) in world
@@ -4268,9 +4548,34 @@ class Game {
   // Draw one world entity's `method` with its feet on the relief (the sim's 3D billboard
   // lift; a no-op offset in 2D). For the above-overlay spotlight passes.
   _renderLifted(e, method = 'render') {
+    const q = e._dragPos || e.pos;   // a storm being moved draws under the pointer
     push();
-    translate(0, this._groundPaintY(e.pos.x, e.pos.y) - e.pos.y);
+    translate(0, this._groundPaintY(q.x, q.y) - q.y);
     e[method]();
+    pop();
+  }
+
+  // Tutorial spotlight for chosen entities (a tip's renderAboveOverlay hook): each live one in
+  // `list` (moa, eagle, storm...) drawn again above the dimming overlay, in the world pass's
+  // clip + view transform. `method` per entity: 'render', or the eagle's flashing
+  // 'renderSpotlight'.
+  renderEntitiesAboveUI(list, method = 'render') {
+    const ents = (list || []).filter(e => e && e.alive !== false);
+    if (!ents.length) return;
+    push();
+    drawingContext.save();
+    drawingContext.beginPath();
+    const _clip = this._worldClip();
+    drawingContext.rect(_clip.x, _clip.y, _clip.w, _clip.h);
+    drawingContext.clip();
+    translate(CONFIG.viewX, CONFIG.viewY);
+    scale(CONFIG.viewZoom);
+    for (const e of ents) {
+      // A food patch is mostly its plants: light those too.
+      if (e.spawnedPlants) for (const pl of e.spawnedPlants) if (pl.alive) this._renderLifted(pl, 'render');
+      this._renderLifted(e, typeof e[method] === 'function' ? method : 'render');
+    }
+    drawingContext.restore();
     pop();
   }
 
@@ -4394,7 +4699,13 @@ class Game {
   _getGuideSprite(spriteKey){
     const spriteMap = {
       'mantis_talk': tutorialMantisSprite,
-      'kea': EntitySprites.getKeaSprite()   // Free Play's kea-voiced tips
+      'kea': EntitySprites.getKeaSprite(),   // Free Play's kea-voiced tips
+      // Module 0's speakers: the moa family and the Pouākai
+      'upland_moa': EntitySprites.moaVariants?.upland?.walk?.[0],
+      'haasts_eagle': EntitySprites.getEagleSprite(0, 'patrol'),
+      // The Pouākai on the hunt: the "stop it!" prompts (a module's banners)
+      'haasts_eagle_hunt': EntitySprites.isValid(EntitySprites.eagle.hunt)
+        ? EntitySprites.eagle.hunt : EntitySprites.getEagleSprite(0, 'hunting')
       //add others here
     };
     return spriteMap[spriteKey] || tutorialMantisSprite;
@@ -4413,6 +4724,25 @@ class Game {
   }
 
   // Unified overlay renderer for the paused / won / lost screens.
+  // A module's win card: "Next up", the next module's focus item (its level's menu.focusItem,
+  // e.g. { placeable: 'patotara', name: 'Pātōtara' }): the item's picture and its common name,
+  // in a block 190 tall from `top`.
+  _renderNextUp(item, cx, top) {
+    const def = (typeof PLACEABLES !== 'undefined' && PLACEABLES[item.placeable]) || null;
+    noStroke();
+    textAlign(CENTER, CENTER);
+    if (typeof FreckleFace !== 'undefined') textFont(FreckleFace);
+    fill(255, 222, 140);
+    textSize(26);
+    text("NEXT UP:", cx, top + 14);
+    fill(255, 255, 255, 24);
+    ellipse(cx, top + 88, 120, 120);
+    if (def && this.ui) this.ui.renderPlaceableIcon(def, cx, top + 88, 100, 64);
+    fill(220, 250, 225);
+    textSize(32);
+    text(item.name || (def && def.name) || '', cx, top + 166);
+  }
+
   _renderOverlay(r, g, b, a, opts) {
     const cw = CONFIG.fullscreen ? CONFIG.canvasWidth : CONFIG.gameAreaWidth;
     const ch = CONFIG.fullscreen ? CONFIG.canvasHeight : CONFIG.gameAreaHeight;
@@ -4427,8 +4757,10 @@ class Game {
     
     // Buttons: accept a `buttons` array (stacked), or a single `button` for back-compat.
     const buttons = opts.buttons || (opts.button ? [opts.button] : []);
-    // Box (reserve extra height for any buttons so they sit inside the panel)
-    const boxH = 60 + opts.lines.length * 40 + (buttons.length ? 20 + buttons.length * 56 : 0);
+    // opts.art: { h, draw(centerX, top) }, a picture between the lines and the buttons.
+    const art = opts.art || null;
+    // Box (reserve extra height for any picture and buttons so they sit inside the panel)
+    const boxH = 60 + opts.lines.length * 40 + (art ? art.h : 0) + (buttons.length ? 20 + buttons.length * 56 : 0);
     const boxW = Math.max(300, 400);
     
     push();
@@ -4457,6 +4789,12 @@ class Game {
       textSize(line.size);
       text(line.text, centerX, lineY);
       lineY += line.size + 10;
+    }
+    if (art) {
+      push();
+      art.draw(centerX, lineY);
+      pop();
+      lineY += art.h;
     }
 
     // Clickable buttons (e.g. pause-screen "End Run" / "Exit to Menu"), stacked. Bounds are
@@ -4548,6 +4886,60 @@ class Game {
     return tgY + tgH + 30;
   }
 
+  // The module levels' row on the level select: small buttons, each a numbered badge and the
+  // tool it teaches (level.menu.moduleLabel), centred with their bottom edge at bottomY.
+  // Pushes each button's bounds onto _levelCardBounds, so a click loads it like a card.
+  _renderModuleRow(modules, centerX, bottomY) {
+    const btnW = 190, btnH = 56, gap = 18;
+    const totalW = modules.length * btnW + (modules.length - 1) * gap;
+    const y = bottomY - btnH;
+    let x = centerX - totalW / 2;
+
+    push();
+    textAlign(CENTER, CENTER);
+    fill(CACHED_COLORS.menuSubtitle);
+    smallTextSize(12);
+    text("LEARN A TOOL", centerX, y - 16);
+
+    for (const level of modules) {
+      const unlocked = PROGRESS.isUnlocked(level.id);
+      const completed = PROGRESS.isCompleted(level.id);
+      const hover = unlocked && mouseX > x && mouseX < x + btnW && mouseY > y && mouseY < y + btnH;
+
+      if (!unlocked) { fill(30, 30, 35, 200); stroke(50, 50, 55); }
+      else if (hover) { fill(40, 65, 45, 240); stroke(100, 160, 110); }
+      else { fill(30, 50, 35, 240); stroke(70, 110, 80); }
+      strokeWeight(completed ? 3 : 2);
+      rect(x, y, btnW, btnH, btnH / 2);
+
+      // Numbered badge (green once completed).
+      const bx = x + btnH / 2, by = y + btnH / 2;
+      noStroke();
+      fill(completed ? [80, 180, 100] : (unlocked ? [55, 90, 65] : [45, 45, 50]));
+      ellipse(bx, by, btnH - 16, btnH - 16);
+      fill(unlocked ? [225, 245, 230] : [90, 90, 95]);
+      textSize(18);
+      push(); textFont(FreckleFace);
+      text(String(level.moduleIndex ?? ''), bx, by + 1);
+      pop();
+
+      // Tool name over the level's name.
+      const tx = x + btnH + (btnW - btnH - 14) / 2;
+      fill(unlocked ? [200, 240, 210] : [80, 80, 85]);
+      textSize(18);
+      push(); textFont(FreckleFace);
+      text((level.menu && level.menu.moduleLabel) || level.name, tx, by - 8);
+      pop();
+      fill(unlocked ? [140, 180, 150] : [60, 60, 65]);
+      smallTextSize(11);
+      text(unlocked ? level.name : 'Locked', tx, by + 13);
+
+      this._levelCardBounds.push({ x, y, w: btnW, h: btnH, levelId: level.id, unlocked, module: true });
+      x += btnW + gap;
+    }
+    pop();
+  }
+
     renderLevelSelect() {
     const cw = CONFIG.canvasWidth;
     const ch = CONFIG.canvasHeight;
@@ -4568,8 +4960,11 @@ class Game {
     textSize(18);
     text("Select a habitat...", centerX, 150);
 
-    // Responsive card layout
-    const levels = LEVEL_REGISTRY.getAll();
+    // Responsive card layout. Module levels (one-tool lessons, `module: true`) aren't cards;
+    // they sit above the cards as a row of smaller buttons (_renderModuleRow).
+    const allLevels = LEVEL_REGISTRY.getAll();
+    const levels = allLevels.filter(l => !l.module);
+    const modules = allLevels.filter(l => l.module);
     const maxCardW = 320;
     const minCardW = 200;
     const cardH = 200;
@@ -4664,6 +5059,9 @@ class Game {
         levelId: level.id, unlocked
       });
     }
+
+    // Module buttons, above the cards (their bounds join _levelCardBounds for handleClick).
+    if (modules.length) this._renderModuleRow(modules, centerX, cardY - 34);
 
     // Render settings (terrain resolution), below the cards.
     this._renderRenderSettings(centerX, cardY + cardH + 34, 240);
@@ -5052,9 +5450,29 @@ class Game {
     pop();
   }
   
+  // The storm in hand, for its render: _held (pressed and held, or being moved) lights it up,
+  // and _dragPos draws a storm being moved under the pointer. Called each frame before the
+  // simulation draws; the last frame's storm is cleared first.
+  _markHeldStorm() {
+    const prev = this._heldStorm;
+    if (prev) { prev._held = false; prev._dragPos = null; }
+    this._heldStorm = null;
+    const live = this.state === GAME_STATE.PLAYING || this.state === GAME_STATE.PAUSED;
+    const mv = this.movingPlaceable, hc = this._holdCandidate;
+    const p = !live ? null : (mv && mv.alive) ? mv : (hc && hc.p.alive ? hc.p : null);
+    if (!p || p.type !== 'Storm') return;
+    p._held = true;
+    this._heldStorm = p;
+    if (p === mv && this.isInGameArea(mouseX, mouseY) && !this._pointerOverChrome(mouseX, mouseY)) {
+      const w = this._pointerWorld(mouseX, mouseY);
+      if (w.x >= 0 && w.y >= 0 && w.x <= this.terrain.mapWidth && w.y <= this.terrain.mapHeight) p._dragPos = w;
+    }
+  }
+
   // Visuals for the touch-and-hold move: a filling progress ring while the
   // press is held, then a dashed marker on the lifted item plus a validity
-  // ghost that follows the cursor until the drop click.
+  // ghost that follows the cursor until the drop click. (A storm itself follows the cursor;
+  // see _markHeldStorm.)
   renderMovePreview() {
     const hc = this._holdCandidate;
     if (hc && hc.p.alive) {
@@ -5102,6 +5520,13 @@ class Game {
     noFill();
     stroke(ok ? CACHED_COLORS.placementValid : CACHED_COLORS.placementInvalid);
     strokeWeight(1);
+    // A storm draws itself under the cursor; its ring shows whether it can be set down here.
+    if (p.type === 'Storm') {
+      strokeWeight(2);
+      ellipse(0, 0, p.radius * 2, p.radius * 2);
+      pop();
+      return;
+    }
     ellipse(0, 0, def.radius * 2, def.radius * 2);
     const col = def._parsedColor;
     if (col) fill(red(col), green(col), blue(col), ok ? 150 : 80);
@@ -5271,7 +5696,10 @@ class Game {
               mx > card.x && mx < card.x + card.w &&
               my > card.y && my < card.y + card.h) {
             this.loadLevel(card.levelId);
-            this.state = GAME_STATE.MENU;  // Go to level splash
+            // A module level starts straight away (its story opens it); a card goes to the
+            // level splash first.
+            if (card.module) this._startLoading();
+            else this.state = GAME_STATE.MENU;  // Go to level splash
             return;
           }
         }
@@ -5341,6 +5769,7 @@ class Game {
     }
 
     if (this.state !== GAME_STATE.PLAYING && this.state !== GAME_STATE.PAUSED) return;
+    if (this.module && this.module.inputLocked()) return;   // a module's outro is hands-off
 
     if (this.isInGameArea(mx, my)) {
       const { x: tx, y: ty } = this._pointerWorld(mx, my);
@@ -5350,8 +5779,10 @@ class Game {
 
       // Nothing selected: pressing near a placed item's center arms a touch-and-hold;
       // held ~1s it becomes a move (see updateHoldToMove).
+      // A storm is wide and has no solid centre, so it can be taken anywhere in its inner half.
       const held = this.simulation &&
-        this.simulation.getClosestPlaceable(tx, ty, 26, (pl) => pl.alive);
+        (this.simulation.getClosestPlaceable(tx, ty, 26, (pl) => pl.alive) ||
+         this.simulation.stormAt(tx, ty, 0, 0.5));
       if (held) {
         this._holdCandidate = { p: held, heldFrames: 0, startMX: mx, startMY: my };
       }

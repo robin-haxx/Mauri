@@ -30,7 +30,9 @@ const TUTORIAL_EVENTS = {
   FIRST_EGG: 'first_egg',
   PLACEMENT: 'placement',  // fired on every successful placement, data: { type }
   YEAR_START: 'year_start', // endless: a year's focus, palette + goals are set, data: { cycle }
-  NEST_RAID: 'nest_raid'    // a kea raid was rolled on a nest, data: { site, success }
+  NEST_RAID: 'nest_raid',   // a kea raid was rolled on a nest, data: { site, success }
+  PLACEABLE_MOVED: 'placeable_moved', // a touch-and-hold move set an item down, data: { type }
+  MODULE_BEAT: 'module_beat'          // a module level's story moment, data: { beat, director, ... }
 };
 
 // Named toolbar-button highlight targets → the placeable key each one shows.
@@ -104,7 +106,7 @@ class TutorialUIMapper {
     const _fsGoals = fs ? {
       x: fs.goalsX - 12, y: fs.goalsY - 12,
       w: layout.sidebarPanelWidth + 24,
-      h: 30 + ui.game.goals.length * 26 + 24
+      h: ui.goalsPanelHeight() + 24
     } : null;
 
     switch (target) {
@@ -190,12 +192,12 @@ class TutorialUIMapper {
         if (fs) return _fsGoals;
         return ui._goalsPanelBounds ||
           { x: ui.sidebar.x + layout.sidebarPadding, y: layout.sidebarPadding,
-            w: layout.sidebarPanelWidth, h: 30 + ui.game.goals.length * 26 };
+            w: layout.sidebarPanelWidth, h: ui.goalsPanelHeight() };
       case 'populationPanel':
         if (fs) return _fsGoals;
         return ui._populationPanelBounds ||
           { x: ui.sidebar.x + layout.sidebarPadding,
-            y: layout.sidebarPadding + (30 + ui.game.goals.length * 26) + 12,
+            y: layout.sidebarPadding + (ui.goalsPanelHeight()) + 12,
             w: layout.sidebarPanelWidth, h: layout.speciesPanelHeight };
       case 'eventLog':
         if (fs) return _fsGoals;
@@ -240,6 +242,9 @@ class TutorialManager {
     // Per-run scratch space for tips (e.g. timestamps set in one tip's onShow
     // and read by another tip's condition). Cleared on init/reset.
     this.scratch = {};
+    // Frames of live play (the game running, not paused) since the level began, for tips that
+    // wait a while of play after another (see MODULE_TIP_KIT's line `wait`).
+    this.liveTime = 0;
 
     // Timing
     this.tipDisplayTime = 0;
@@ -285,6 +290,7 @@ class TutorialManager {
     this.lastTipTime = -this.minTimeBetweenTips;
     this.tipCooldowns = {};
     this.scratch = {};
+    this.liveTime = 0;
     this._pausedByTutorial = false;
 
     if (this.game.ui) {
@@ -380,8 +386,9 @@ class TutorialManager {
   // ============================================
   
   update(dt = 1) {
+    if (this.game.state === GAME_STATE.PLAYING) this.liveTime += dt;
     if (!this.enabled && !this.active) return;
-    
+
     // Animations always update
     this.highlightPulse += 0.02 * dt;
     this._guideWobble += 0.04 * dt;
@@ -389,6 +396,14 @@ class TutorialManager {
     
     if (this.active) {
       this.tipDisplayTime += dt;
+      // A tip with no buttons (a banner) closes itself once the player has done what it asks.
+      const cur = this.currentTip;
+      if (cur && typeof cur.dismissWhen === 'function') {
+        let done = false;
+        try { done = cur.dismissWhen(this.game, cur.data); }
+        catch (e) { console.warn(`Tutorial dismissWhen error for ${cur.id}:`, e); }
+        if (done) this.dismissCurrentTip();
+      }
       return;
     }
     
@@ -491,6 +506,9 @@ class TutorialManager {
     this.active = true;
     this.tipDisplayTime = 0;
     this.shownTips.add(tipId);
+    // The buttons are laid out again as the panel draws. A banner has none, so stale bounds
+    // left from the last panel must not catch its clicks.
+    this.nextButtonBounds = this.skipButtonBounds = this.panelBounds = null;
     this.lastTipTime = this.game.playTime;
 
     if (tip.trigger.cooldown) {
@@ -499,9 +517,18 @@ class TutorialManager {
 
     this.targetFadeAlpha = 255;
 
-    // A tip spoken by a bird (tip.voice) opens on a snippet of its call, else the chime.
+    // A tip spoken by a bird (tip.voice) opens on a snippet of its call, or on its one-shot
+    // species call (tip.call, e.g. the eagle's cry), or on its speaker's sound (tip.speaker:
+    // a story line, see AudioManager.playSpeaker), else the chime.
     if (audioManager) {
-      const voiced = tip.voice && audioManager.playVoiceCue && audioManager.playVoiceCue(tip.voice);
+      let voiced = tip.voice && audioManager.playVoiceCue && audioManager.playVoiceCue(tip.voice);
+      if (!voiced && tip.call && audioManager.playSpeciesCall) {
+        audioManager.playSpeciesCall(tip.call);
+        voiced = true;
+      }
+      if (!voiced && tip.speaker && audioManager.playSpeaker) {
+        voiced = audioManager.playSpeaker(tip.speaker, tip.speakerPitch || 1);
+      }
       if (!voiced) audioManager.playTutorialTip();
     }
 
@@ -632,18 +659,80 @@ class TutorialManager {
     const hlAlt = this._highlightBounds(tip.highlightAlt);
 
     // Overlay, with the highlighted UI cut out of it: the icons, dials and buttons a tip
-    // points at stay at full brightness above the dimmed screen.
-    this._renderOverlay(alpha, [hlMain, hlAlt].filter(Boolean));
+    // points at stay at full brightness above the dimmed screen. A banner with dim: false
+    // (one shown while the game plays on) leaves the screen undimmed and spotlights nothing.
+    const dim = !(tip.banner && tip.dim === false);
+    if (dim) this._renderOverlay(alpha, [hlMain, hlAlt].filter(Boolean));
 
     // Highlights
     if (hlMain) this._renderHighlightBox(hlMain, alpha);
     if (hlAlt) this._renderHighlightBox(hlAlt, alpha * 0.7);
 
-    // A tip can spotlight part of the world through the overlay, under its panel.
+    // A tip can spotlight part of the world through the overlay, under its panel. (An undimmed
+    // banner draws its markers straight over the game, e.g. rings round the birds it means.)
     if (typeof tip.renderAboveOverlay === 'function') tip.renderAboveOverlay(this.game, tip.data);
 
-    // Tip panel
-    this._renderTipPanel(alpha);
+    // Tip panel, or a banner's big line of text
+    if (tip.banner) this._renderBanner(alpha);
+    else this._renderTipPanel(alpha);
+  }
+
+  // The part of the canvas the world shows in: the world clip (in fullscreen, the whole map,
+  // which runs off the canvas) cut down to the canvas.
+  playArea() {
+    const cw = CONFIG.canvasWidth, ch = CONFIG.canvasHeight;
+    const c = this.game._worldClip ? this.game._worldClip() : { x: 0, y: 0, w: cw, h: ch };
+    const x = Math.max(0, c.x), y = Math.max(0, c.y);
+    return { x, y, w: Math.min(cw, c.x + c.w) - x, h: Math.min(ch, c.y + c.h) - y };
+  }
+
+  // A banner tip: a large line of FreckleFace text across the play area, with no panel and no
+  // buttons, so the map stays free to use. tip.banner is a string or (game, data) => string,
+  // read every frame so it can follow what the player is doing. It sits in the upper part of
+  // the play area, clear of the action the camera frames. (It closes by tip.dismissWhen.)
+  // tip.bannerSprite (a guide-sprite key, e.g. the hunting Pouākai) stands beside the words,
+  // twitching, for a prompt that's an alarm.
+  _renderBanner(alpha) {
+    const tip = this.currentTip;
+    let words = tip.banner;
+    if (typeof words === 'function') {
+      try { words = words(this.game, tip.data); } catch (e) { words = ''; }
+    }
+    if (!words) return;
+    const { x: ax, y: ay, w: aw, h: ah } = this.playArea();
+    const size = 54 * TIP_PANEL_SCALE * (CONFIG.portrait ? 0.8 : 1);
+    const breathe = 1 + 0.025 * Math.sin(this.highlightPulse * 2);
+    const sprite = tip.bannerSprite && this.game._getGuideSprite ? this.game._getGuideSprite(tip.bannerSprite) : null;
+    const spriteSize = sprite ? size * 2.8 : 0, gap = sprite ? size * 0.3 : 0;
+
+    push();
+    if (typeof FreckleFace !== 'undefined') textFont(FreckleFace);
+    textSize(size);
+    const lines = this._wrapTipLines([words], aw * 0.86 - spriteSize - gap);
+    let textW = 0;
+    for (const l of lines) textW = Math.max(textW, textWidth(l));
+    textAlign(CENTER, CENTER);
+    // (With a sprite, the words move right to make room for it on their left.)
+    translate(ax + aw * 0.5 + (spriteSize + gap) * 0.5, ay + ah * 0.2);
+    scale(breathe);
+    const lh = size * 1.15, y0 = -(lines.length - 1) * lh * 0.5;
+    if (sprite) {
+      push();
+      translate(-textW * 0.5 - gap - spriteSize * 0.5, 0);
+      rotate(0.06 * Math.sin(this.highlightPulse * 9));
+      imageMode(CENTER);
+      const k = spriteSize / Math.max(sprite.width || 1, sprite.height || 1);
+      tint(255, alpha);
+      image(sprite, 0, 0, sprite.width * k, sprite.height * k);
+      pop();
+    }
+    // A dark outline keeps the words readable over any ground.
+    stroke(12, 22, 16, alpha * 0.9);
+    strokeWeight(size * 0.14);
+    strokeJoin(ROUND);
+    fill(235, 250, 225, alpha);
+    for (let i = 0; i < lines.length; i++) text(lines[i], 0, y0 + i * lh);
+    pop();
   }
 
   _highlightBounds(highlight) {
@@ -725,14 +814,21 @@ class TutorialManager {
     pop();
     const panelHeight = 80 * S + (lines.length * lineHeight) + 60 * S;
 
-    const pos = this._getTipPanelPosition(tip.guidePosition, panelWidth, panelHeight);
+    // A guidePosition worked out from the world (e.g. away from a speaker) is worked out again
+    // each frame, so it holds even if the camera was still settling when the tip appeared.
+    let where = tip.guidePosition;
+    const src = this.tips[tip.id];
+    if (src && typeof src.guidePosition === 'function') {
+      try { where = src.guidePosition(this.game, tip.data); } catch (e) { /* keep the first answer */ }
+    }
+    const pos = this._getTipPanelPosition(where, panelWidth, panelHeight);
     this.panelBounds = { x: pos.x, y: pos.y, w: panelWidth, h: panelHeight };
 
     // Guide sprite (mantis). Landscape: to the LEFT of the panel, vertically centred.
     // Portrait: ABOVE the panel, horizontally centred — there's no room to its left on a
     // narrow screen (it would hang off the canvas). Falls back to below the panel if the
     // panel sits too high to fit the sprite above it.
-    const spriteSize = 200 * S;
+    const spriteSize = 200 * S * (tip.guideScale || 1);
     let guideCX, guideCY;
     if (CONFIG.portrait) {
       const gap = 10 * S;
@@ -820,8 +916,10 @@ class TutorialManager {
     imageMode(CENTER);
 
     if (sprite) {
+      // Fit the sprite in a size x size square, keeping its shape (a moa is taller than wide).
+      const sw = sprite.width || 1, sh = sprite.height || 1, k = size / Math.max(sw, sh);
       tint(255, alpha);
-      image(sprite, cx, cy, size, size);
+      image(sprite, cx, cy, sw * k, sh * k);
     } else {
       // Minimal fallback
       fill(80, 150, 80, alpha);
@@ -841,7 +939,7 @@ class TutorialManager {
     // "Next" / "Got it" button
     const nextBtnW = 110 * S;
     const nextBtnX = x + panelWidth - nextBtnW - 25 * S;
-    const nextLabel = tip.nextTip ? "Next →" : "Got it!";
+    const nextLabel = tip.buttonLabel || (tip.nextTip ? "Next →" : "Got it!");
     const hoverNext = this._hitTest({ x: nextBtnX, y: btnY, w: nextBtnW, h: btnHeight }, mouseX, mouseY);
     
     fill(hoverNext ? [70, 135, 80, alpha] : [50, 110, 60, alpha]);
@@ -879,7 +977,21 @@ class TutorialManager {
     const margin = 60;
     const topMargin = CONFIG.topBarHeight + 40;
     const bottomMargin = CONFIG.bottomBarHeight + 40;
-    
+
+    // { fx, fy }: the panel's centre as fractions of the play area, kept on screen (with room
+    // for the guide sprite beside or above it). Lets a tip sit clear of a point in the world.
+    if (guidePosition && typeof guidePosition === 'object') {
+      const S = TIP_PANEL_SCALE;
+      const { x: ax, y: ay, w: aw, h: ah } = this.playArea();
+      const roomL = CONFIG.portrait ? 20 : 240 * S, roomT = CONFIG.portrait ? 230 * S : topMargin;
+      const x = ax + aw * guidePosition.fx - panelWidth / 2;
+      const y = ay + ah * guidePosition.fy - panelHeight / 2;
+      return {
+        x: Math.max(roomL, Math.min(cw - panelWidth - 20, x)),
+        y: Math.max(roomT, Math.min(ch - panelHeight - bottomMargin, y))
+      };
+    }
+
     const positions = {
       center:      { x: (cw - panelWidth) / 3, y: (ch - panelHeight) / 2 },
       left:        { x: CONFIG.gameAreaWidth - panelWidth * 1.2, y: (ch - panelHeight) / 2 },

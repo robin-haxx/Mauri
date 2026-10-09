@@ -83,6 +83,9 @@ class Kea extends Kereru {
   // the base loop steers, add a gentle drift toward the preferred elevation band while
   // airborne (the alpine↔forest migration), weak enough that a kea still detours to food.
   behave(sim, mauri, seasonManager, dt) {
+    // A kea on a script (a module level's story; see KeaLife in mauri_module_patotara.js)
+    // skips its own life entirely.
+    if (this.lifeScript) { this.lifeScript.behave(sim, mauri, seasonManager, dt); return; }
     this._sm = seasonManager;
     this._shielded = this._starveImmune(sim);   // for the security bar (see _renderExtra)
     if (this._raidCooldown > 0) this._raidCooldown -= dt;

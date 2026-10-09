@@ -17,11 +17,12 @@ const PLANT_TYPE_ID = {
   lancewood: 10,
   speargrass: 11,
   toatoa: 12,
-  pohuehue: 13
+  pohuehue: 13,
+  wharariki: 14
 };
 
-// Plants that use sprite rendering
-const SPRITE_PLANTS = new Set(['tussock', 'flax', 'fern', 'rimu', 'beech', 'patotara', 'lancewood', 'speargrass', 'coprosma', 'dracophyllum']);
+// Plants that use sprite rendering (wharariki borrows the flax sprites for now; see preload)
+const SPRITE_PLANTS = new Set(['tussock', 'flax', 'fern', 'rimu', 'beech', 'patotara', 'lancewood', 'speargrass', 'coprosma', 'dracophyllum', 'wharariki']);
 
 // Forest canopy trees subject to seasonal forest-band contraction
 const FOREST_TREES = new Set(['beech', 'rimu', 'fern']);
@@ -248,6 +249,10 @@ class Plant {
     this.favouredSpecies = null;   // set by a placeable that plants a species-specific resource
     this.suppressed = false;       // true when a forest tree is outside the contracted forest band
     this.winterInedible = false;   // Free Play: standing (frosted) but no winter food value
+    // A level can keep some plant types standing all year (mechanics.evergreenPlants): they
+    // never go dormant.
+    this.evergreen = !!(typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.evergreenPlants &&
+                        LEVEL_MECHANICS.evergreenPlants.includes(type));
     
     // Pre-calculate visual variation
     this.visualOffset = random(-1, 1);
@@ -333,7 +338,7 @@ class Plant {
   }
   
   checkDormancy(seasonManager) {
-    if (this.dormant || !this.alive) return;
+    if (this.dormant || !this.alive || this.evergreen) return;
     
     // Summer uses wilting sprites instead of dormancy for harsh conditions
     if (seasonManager.currentKey === 'summer') return;

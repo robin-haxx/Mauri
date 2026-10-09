@@ -108,7 +108,8 @@ class StreamingSound {
 // gain, so overlapping plays of one file (a voice crossfading back to itself) never fight
 // over a shared volume. Nodes are disconnected when the sound ends so they can be collected.
 class BufferPlayback {
-  // sf: a loaded p5.SoundFile. opts: { loop, offset (s), fadeIn (s), duration (s), fadeOut (s) }.
+  // sf: a loaded p5.SoundFile. opts: { loop, offset (s), fadeIn (s), duration (s), fadeOut (s),
+  // rate (playback speed and pitch, 1 = as recorded) }.
   // duration makes it a timed one-shot: it fades out over its last fadeOut seconds and stops,
   // scheduled on the audio clock so it ends on time even while the game is paused.
   constructor(sf, volume, opts = {}) {
@@ -121,6 +122,7 @@ class BufferPlayback {
     this.src = ctx.createBufferSource();
     this.src.buffer = buf;
     this.src.loop = !!opts.loop;   // whole-buffer loop (p5 looped only from the cue to the end)
+    if (opts.rate > 0) this.src.playbackRate.value = opts.rate;
     this.src.connect(this.gain);
     const out = (typeof p5 !== 'undefined' && p5.soundOut && p5.soundOut.input) || ctx.destination;
     this.gain.connect(out);
@@ -674,6 +676,18 @@ class AudioManager {
     this._playSound(sound, volume);
   }
 
+  // A gust: a short snippet of the winter wind (picking up a storm).
+  playWindGust() {
+    if (!this._checkCooldown('plantRustle')) return;
+    const sf = this.sounds.seasonChange.winter;
+    if (!sf || !this.enabled || !sf.isLoaded() || !sf.buffer) return;
+    try {
+      const len = sf.buffer.duration || 0;
+      new BufferPlayback(sf, this._getVolume() * 0.5,
+        { offset: Math.random() * Math.max(0, len - 1.6), duration: 1.4, fadeIn: 0.15, fadeOut: 0.5 });
+    } catch (e) { console.warn('Error playing wind gust:', e); }
+  }
+
   playBoltStrike() {
     this._playSound(this.sounds.boltStrike, this._getVolume() * 0.7);
   }
@@ -747,6 +761,51 @@ class AudioManager {
       console.warn('Voice cue failed:', e);
       return false;
     }
+  }
+
+  // A line of story dialogue opens on its speaker's own sound: 'moa' (the moa call; `rate`
+  // pitches it, e.g. lower for the bigger mother), 'chick' (a cheep), 'eagle' (a hunt cry) or
+  // 'kea' (a snippet of kea song). Each new line cuts the last line's sound short, so clicking
+  // through a scene never piles calls up. Returns false for a speaker with no sound of its own
+  // (the tip then plays its usual chime).
+  playSpeaker(kind, rate = 1) {
+    if (!this.enabled || this._muted) return true;   // (silent: no chime instead)
+    this._stopSpeaker();
+    const vol = this._getVolume();
+    if (vol <= 0) return false;
+    const shot = (sf, v, opts) => (sf && sf.isLoaded() && sf.buffer) ? new BufferPlayback(sf, v, opts) : null;
+    let pb = null;
+    try {
+      if (kind === 'moa') {
+        pb = shot(this.sounds.moaMilestone, vol * 0.5, { rate, duration: 2.2, fadeOut: 0.5 });
+      } else if (kind === 'chick') {
+        pb = shot(this.sounds.mateCheep, vol * 0.55, { rate: 1.15 * rate, duration: 1.5, fadeOut: 0.3 });
+      } else if (kind === 'eagle') {
+        pb = shot(this._randomEagleCry(), vol * 0.4, { duration: 2.6, fadeOut: 0.7 });
+      } else if (kind === 'kea') {
+        const bank = this.sounds.speciesVoices.kea;
+        const st = bank && this._voiceTargetState('kea', null);
+        const sf = st && bank[st];
+        if (this._voiceReady(sf)) {
+          pb = this._voicePlayback(sf, vol * VOICE_VOLUME,
+            { offset: this._randomCue(sf, 2), fadeIn: 0.1, duration: 2, fadeOut: 0.6 });
+        }
+      }
+    } catch (e) {
+      console.warn('Speaker sound failed:', e);
+      pb = null;
+    }
+    this._speaker = pb;
+    return !!pb;
+  }
+
+  // Cut the last dialogue line's sound short (a quick fade, not a click).
+  _stopSpeaker() {
+    const pb = this._speaker;
+    this._speaker = null;
+    if (!pb || !pb.isPlaying()) return;
+    pb.setVolume(0, 0.08);
+    setTimeout(() => pb.stop(), 120);
   }
 
   // Generic moa call (kept for existing call sites).

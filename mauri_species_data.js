@@ -43,6 +43,9 @@ const MOA_SPECIES = {
     
     // Physical characteristics
     size: { min: 10, max: 12 },
+    // Every male is the same size and every female 2 units bigger (moa hens were the larger
+    // sex). Replaces the random size and the usual 10% sexual dimorphism (Moa.updateAge).
+    sizeBySex: { male: 10, female: 12 },
     bodyColor: { r: [90, 110], g: [60, 75], b: [28, 40] },
     
     // Movement

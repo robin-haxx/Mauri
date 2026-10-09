@@ -112,6 +112,16 @@ class TerrainGenerator {
     // compounded it. Halve it: near-identical terrain, ~2× faster noise.
     if (typeof noiseDetail === 'function') noiseDetail(2, 0.5);
 
+    // Terrain features a level adds to the land, in world units:
+    //   { type: 'tarn', x, y, r, level }  a small lake: water out to r, sitting at height
+    //       `level`, with the ground easing back to its natural height by 2r.
+    //   { type: 'trail', points, width, seasons, amount, endWidth }  a worn way along a line of
+    //       points: the ground there is lightened in the listed seasons (see _stampTrails).
+    // A level that wants them sets featurePlanner(terrain) => [features]; it runs inside
+    // _genHeightMap, once the window's heights are known and before the height map is filled.
+    this.features = [];
+    this.featurePlanner = null;
+
     this._initBiomeIndex();
     this._colorCache = new Map();
     this._snowColorsRGB = null;
@@ -418,7 +428,62 @@ class TerrainGenerator {
     }
     // Gentle alps + broad forest at the opening; glacial habitats spread over the years.
     elevation = this._applyGridProfile(elevation);
+    // Per-level window fit (see _fitElevationWindow); null on most levels.
+    if (this._elevFit) elevation = this._elevFit.a * elevation + this._elevFit.b;
+    if (this.features.length) elevation = this._applyFeatureHeights(x, y, elevation);
     return Math.max(0, Math.min(1, elevation));
+  }
+
+  // Flatten the ground under each tarn to its water level, easing back to the natural height
+  // between r and 2r so the lake sits in a gentle hollow. (x, y) are world coordinates.
+  _applyFeatureHeights(x, y, elevation) {
+    for (let i = 0; i < this.features.length; i++) {
+      const f = this.features[i];
+      if (f.type !== 'tarn') continue;
+      const d = Math.hypot(x - f.x, y - f.y);
+      if (d >= f.r * 2) continue;
+      const t = this._smoothstep(f.r, f.r * 2, d);   // 0 inside the water, 1 at 2r
+      elevation = f.level + (elevation - f.level) * t;
+    }
+    return elevation;
+  }
+
+  // Whether the world point (x, y) lies in a tarn's water.
+  _inFeatureWater(x, y) {
+    for (let i = 0; i < this.features.length; i++) {
+      const f = this.features[i];
+      if (f.type === 'tarn' && Math.hypot(x - f.x, y - f.y) < f.r) return true;
+    }
+    return false;
+  }
+
+  // Per-level elevation fit (terrain.elevationWindow: { lo, hi, pLo, pHi }). A small window can
+  // come out as all forest or all ice depending on the seed. This stretches or squashes its
+  // heights onto a set band instead: it samples the window, finds the height that a share pLo
+  // of it lies below (and pHi), and maps those two heights onto lo and hi with a straight line.
+  // The result (a, b) is applied at the end of getElevation, so the height map, the drawn
+  // terrain and the 3D edges all agree.
+  _fitElevationWindow() {
+    this._elevFit = null;
+    // A module carried on from the one before keeps that module's fit (set by the game), so
+    // the shared land comes out the same height.
+    if (this.fixedElevFit) { this._elevFit = Object.assign({}, this.fixedElevFit); return; }
+    const fit = this.config.elevationWindow;
+    if (!fit) return;
+    const N = 48, M = 28, samples = new Float32Array(N * M);
+    let k = 0;
+    for (let j = 0; j < M; j++) {
+      for (let i = 0; i < N; i++) {
+        samples[k++] = this.getElevation(this._activeOriginX + ((i + 0.5) / N) * this.viewW,
+                                         this._activeOriginY + ((j + 0.5) / M) * this.viewH);
+      }
+    }
+    samples.sort();
+    const q = (p) => samples[Math.min(samples.length - 1, Math.max(0, Math.round(p * (samples.length - 1))))];
+    const eLo = q(fit.pLo ?? 0.1), eHi = q(fit.pHi ?? 0.9);
+    if (eHi - eLo < 1e-4) return;
+    const a = (fit.hi - fit.lo) / (eHi - eLo);
+    this._elevFit = { a, b: fit.lo - a * eLo };
   }
 
   _applyLakeBasins(x, y, elevation) {
@@ -591,6 +656,11 @@ class TerrainGenerator {
   // Allocate + fill the coarse gameplay height map. Split out of generate() so the
   // stepped loader (generateSteps) can run it as its own frame.
   _genHeightMap() {
+    // getElevation reads this.features, so clear them while the window fit and the level's
+    // planner look at the bare land. Then let the level choose its features.
+    this.features = [];
+    this._fitElevationWindow();
+    if (this.featurePlanner) this.features = this.featurePlanner(this) || [];
     const gridCols = this.gridCols;
     const gridRows = this.gridRows;
     const scale = this.scale;
@@ -621,6 +691,11 @@ class TerrainGenerator {
           if (!this.hasAdjacentWater(row, col)) {
             biome = this._fallbackBiome;
           }
+        }
+        // A tarn's cells are water whatever their height (see this.features).
+        if (this.features.length && this._waterBiome &&
+            this._inFeatureWater(col * this.scale, row * this.scale)) {
+          biome = this._waterBiome;
         }
         this.biomeIndexMap[idx] = this.biomeIndexByKey[biome.key];
         idx++;
@@ -717,6 +792,11 @@ class TerrainGenerator {
         if (biome === this.biomeList[1] && this._waterBiome) {
           if (!this.hasAdjacentWater(r0, c0)) biome = this._fallbackBiome;
         }
+        // Tarn water, matched to the gameplay grid's (see _genBiomeMap).
+        if (this.features.length && this._waterBiome &&
+            this._inFeatureWater(col * renderScale, row * renderScale)) {
+          biome = this._waterBiome;
+        }
         this.renderBiomeIndexMap[idx] = this.biomeIndexByKey[biome.key];
         idx++;
       }
@@ -778,6 +858,47 @@ class TerrainGenerator {
         }
       }
     }
+    this._stampTrails();
+  }
+
+  // Mark the ground under each trail feature. A cell near a trail's line gets a strength
+  // (0-127, strongest on the line, fading to its edge, a little ragged) stored in the upper
+  // bits of its colour's 4th byte; bit 0 stays the contour flag. _computeSeasonCellColors
+  // lightens marked cells in the trail's seasons, so the season cross-fade fades it in and out.
+  _stampTrails() {
+    const trails = this.features.filter(f => f.type === 'trail');
+    if (!trails.length || !this._baseCellColors) return;
+    const cols = this.renderCols, rows = this.renderRows, cs = this.scale / this.detail;
+    const base = this._baseCellColors;
+    const stamp = (px, py, w) => {
+      const c0 = Math.max(0, Math.floor((px - w) / cs)), c1 = Math.min(cols - 1, Math.ceil((px + w) / cs));
+      const r0 = Math.max(0, Math.floor((py - w) / cs)), r1 = Math.min(rows - 1, Math.ceil((py + w) / cs));
+      for (let r = r0; r <= r1; r++) {
+        for (let c = c0; c <= c1; c++) {
+          const x = c * cs, y = r * cs;
+          const edge = w * (0.8 + 0.4 * noise(x * 0.06 + 37, y * 0.06 + 91));   // ragged edge
+          const d = Math.hypot(x - px, y - py);
+          if (d >= edge) continue;
+          const s = Math.round(127 * Math.pow(1 - d / edge, 0.6));
+          const i = (r * cols + c) * 4 + 3;
+          if (s > (base[i] >> 1)) base[i] = (base[i] & 1) | (s << 1);
+        }
+      }
+    };
+    for (const tr of trails) {
+      for (const p of tr.points) stamp(p.x, p.y, tr.width);
+      // A wider worn patch at each end (the nest and the harakeke).
+      const ends = [tr.points[0], tr.points[tr.points.length - 1]];
+      for (const p of ends) stamp(p.x, p.y, tr.endWidth || tr.width * 2);
+    }
+  }
+
+  // How strongly trails lighten the ground in a season (0 = not shown).
+  _trailAmount(seasonKey) {
+    for (const f of this.features) {
+      if (f.type === 'trail' && (!f.seasons || f.seasons.includes(seasonKey))) return f.amount ?? 0.4;
+    }
+    return 0;
   }
 
   // Hex string → [r,g,b] (0-255), reusing the p5.Color parse cache. Used to build the
@@ -895,6 +1016,10 @@ class TerrainGenerator {
     // every contour cell (about a third of the map) was ~95% of this pass's time.
     const biomeContourRGB = [];
 
+    // Trails show (lightened ground) only in their seasons; 0 means none this season.
+    const trailAmount = this._trailAmount(seasonKey);
+    const TRAIL_RGB = [246, 236, 196];
+
     for (let row = 0; row < gridRows; row++) {
       for (let col = 0; col < gridCols; col++) {
         const cellIdx = row * gridCols + col;
@@ -902,7 +1027,7 @@ class TerrainGenerator {
         const baseIdx = cellIdx * 4;
         const outIdx = cellIdx * 3;
 
-        const isContour = baseCellColors[baseIdx + 3] === 1;
+        const isContour = (baseCellColors[baseIdx + 3] & 1) === 1;   // bits 1-7: trail strength
 
         // 1. Resolve the ground colour for this cell (base, or base blended
         //    toward snow for the season), ignoring contours entirely.
@@ -953,14 +1078,23 @@ class TerrainGenerator {
         // 2. Shade the contour over the top, rather than replacing it.
         if (contourRGB && contourStrength > 0) {
           const s = contourStrength;
-          cellColors[outIdx]     = gR + (contourRGB[0] - gR) * s;
-          cellColors[outIdx + 1] = gG + (contourRGB[1] - gG) * s;
-          cellColors[outIdx + 2] = gB + (contourRGB[2] - gB) * s;
-        } else {
-          cellColors[outIdx]     = gR;
-          cellColors[outIdx + 1] = gG;
-          cellColors[outIdx + 2] = gB;
+          gR += (contourRGB[0] - gR) * s;
+          gG += (contourRGB[1] - gG) * s;
+          gB += (contourRGB[2] - gB) * s;
         }
+        // 3. A trail lightens the ground under it, in its seasons (see _stampTrails).
+        if (trailAmount > 0) {
+          const strength = baseCellColors[baseIdx + 3] >> 1;
+          if (strength) {
+            const k = (strength / 127) * trailAmount;
+            gR += (TRAIL_RGB[0] - gR) * k;
+            gG += (TRAIL_RGB[1] - gG) * k;
+            gB += (TRAIL_RGB[2] - gB) * k;
+          }
+        }
+        cellColors[outIdx]     = gR;
+        cellColors[outIdx + 1] = gG;
+        cellColors[outIdx + 2] = gB;
       }
     }
 

@@ -49,6 +49,8 @@
     <script src="mauri_plant.js"></script>
     <script src="mauri_placeable.js"></script>
     <script src="mauri_nesting.js"></script>  <!-- moa nesting sites (Kea Raid v2) -->
+    <script src="mauri_module.js"></script>   <!-- module levels: story director, moa family + eagle scripts -->
+    <script src="mauri_module_patotara.js"></script>   <!-- module 1 director + scripted kea (after mauri_module.js) -->
 
     <!-- UI -->
     <script src="mauri_UI.js"></script>
@@ -60,6 +62,8 @@
     <script src="mauri_progress.js"></script>
 
     <!-- Level definitions (registration order = level order) -->
+    <script src="levels/module_00_storms.js"></script>  <!-- module 0 (Storms): small button above the cards -->
+    <script src="levels/module_01_patotara.js"></script>  <!-- module 1 (Pātōtara); reuses module 0's land settings -->
     <script src="levels/level_01_kahurangi.js"></script>
     <script src="levels/level_02_glacial_kahurangi.js"></script>
     <script src="levels/level_03_alpine_lakes.js"></script>
@@ -70,6 +74,10 @@
     <script src="levels/tutorial_01_kahurangi.js"></script>
     <script src="levels/tutorial_02_glacial_kahurangi.js"></script>
     <script src="levels/tutorial_freeplay_kahurangi.js"></script>
+    <script src="levels/tutorial_module_kit.js"></script>  <!-- shared scene/banner helpers for module scripts -->
+    <script src="levels/tutorial_module_bookends.js"></script>  <!-- Te Whē's welcome + farewell, added to every module -->
+    <script src="levels/tutorial_module_00_storms.js"></script>
+    <script src="levels/tutorial_module_01_patotara.js"></script>
 
     <!-- Debug tools -->
     <script src="mauri_benchmark.js"></script>

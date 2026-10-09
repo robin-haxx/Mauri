@@ -49,8 +49,9 @@ class NestingSite {
     ellipse(0, 0, r * 1.15, r * 0.7);
     noStroke();
 
-    // A small clutch of pale eggs when the site holds one.
-    const eggs = Math.min(4, this.eggCount);
+    // A small clutch of pale eggs when the site holds one (unless the eggs draw themselves:
+    // a module level's nests, whose eggs are real Egg entities, set hideClutch).
+    const eggs = this.hideClutch ? 0 : Math.min(4, this.eggCount);
     fill(236, 228, 208);
     for (let i = 0; i < eggs; i++) {
       const a = (i / 4) * TWO_PI + this.animTime * 0.001;

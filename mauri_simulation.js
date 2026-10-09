@@ -193,6 +193,30 @@ class Simulation {
   }
 
   // ============================================
+  // STANDING STORMS (module levels)
+  // ============================================
+  // Put down one standing storm: weather that stays where it is until the player moves it
+  // or the level makes it fade (see PlaceableObject.makeStanding / fadeOver).
+  addStandingStorm(x, y, radius) {
+    const p = this.addPlaceable(x, y, 'Storm');
+    p.makeStanding(radius);
+    return p;
+  }
+
+  // The live storm covering the point (x, y), or null. The covered area is the storm's
+  // radius x frac, plus pad. There are only ever a few storms, so a plain loop is fine.
+  stormAt(x, y, pad = 0, frac = 1) {
+    const ps = this.placeables;
+    for (let i = 0; i < ps.length; i++) {
+      const p = ps[i];
+      if (!p.alive || p.type !== 'Storm') continue;
+      const r = p.radius * frac + pad, dx = x - p.pos.x, dy = y - p.pos.y;
+      if (dx * dx + dy * dy < r * r) return p;
+    }
+    return null;
+  }
+
+  // ============================================
   // WORLD-GRID AREA CHANGE (endless "years" camera pan)
   // ============================================
   // The world is one continuous landmass, but only the active area is populated. At a year
@@ -637,11 +661,26 @@ class Simulation {
         
         if (biome.canHavePlants && random() < density) {
           const plantTypes = biome.plantTypes;
-          const plantType = plantTypes[(random() * plantTypes.length) | 0];
+          const plantType = biome.plantWeights
+            ? Simulation._weightedPlant(plantTypes, biome.plantWeights)
+            : plantTypes[(random() * plantTypes.length) | 0];
           this.addPlant(new Plant(x, y, plantType, terrain, biome.key));
         }
       }
     }
+  }
+
+  // One of `types`, picked by `weights` ({ type: weight }; a type not listed weighs 1). A biome
+  // can set plantWeights to make a plant rarer (or commoner) than the others in its list.
+  static _weightedPlant(types, weights) {
+    let total = 0;
+    for (const t of types) total += weights[t] ?? 1;
+    let r = random() * total;
+    for (const t of types) {
+      r -= weights[t] ?? 1;
+      if (r <= 0) return t;
+    }
+    return types[types.length - 1];
   }
   
   spawnMoas(count, speciesKey = null) {
@@ -1695,7 +1734,8 @@ class Simulation {
       if (moa.alive) {
         moa.behave(this, mauri, seasonManager, dt);
         moa.update(dt);
-        this.constrainToBounds(moa.pos);
+        // A module's outro walks its family off the bottom of the map (MoaLife.offMap).
+        if (!(moa.lifeScript && moa.lifeScript.offMap)) this.constrainToBounds(moa.pos);
       }
     }
   }
@@ -1707,7 +1747,8 @@ class Simulation {
       if (!eagle.alive) continue;   // starved emergent birds await cleanup()
       eagle.behave(this, mauri, dt);
       eagle.update(dt);
-      this.constrainToBounds(eagle.pos);
+      // A module's eagle can fly off the map and back (EagleLife.offMap).
+      if (!(eagle.lifeScript && eagle.lifeScript.offMap)) this.constrainToBounds(eagle.pos);
     }
   }
   
@@ -1815,8 +1856,8 @@ class Simulation {
     
     for (let i = 0, len = plants.length; i < len; i++) {
       const plant = plants[i];
-      if (plant.isSpawned) continue;
-      
+      if (plant.isSpawned || plant.evergreen) continue;
+
       const shouldBeDormant = seasonManager.shouldPlantBeDormant(plant.elevation, plant.biomeKey);
       
       if (shouldBeDormant && !plant.dormant && plant.alive) {
@@ -1898,6 +1939,7 @@ class Simulation {
 
     // Layer 7: Storms
     this._renderFiltered(placeables, 80, p => p.type === 'Storm', true, inView);
+    this._renderOverStorms(inView, 0);
 
     // GL_PORT.md Phase 2: every sprite pass above enqueued GPU quads. Composite the
     // WebGL entity layer HERE; after all sprites, before the indicator over-pass;
@@ -1923,7 +1965,8 @@ class Simulation {
       const e = list[i];
       if (aliveCheck && !e.alive) continue;
       if (filter && !filter(e)) continue;
-      if (inView(e.pos.x, e.pos.y, extraMargin)) {
+      const q = e._dragPos || e.pos;   // a storm being moved draws under the pointer
+      if (inView(q.x, q.y, extraMargin)) {
         e[method]();
       }
     }
@@ -1966,8 +2009,39 @@ class Simulation {
     // Overlays on top: storms, then moa indicators (hunger bars / halos), then the
     // nest-raid hover cue (tint + success%) so it reads above the foliage.
     this._billboardList(this.placeables, 80, p => p.type === 'Storm', inView, lift, 'render');
+    this._renderOverStorms(inView, lift);
     this._billboardList(this.moas, 0, null, inView, lift, 'renderIndicators');
     this._billboardList(this.nestingSites, 100, s => s._raidHover, inView, lift, 'renderRaidOverlay');
+  }
+
+  // Highlighted (outlined) moa under a storm's clouds are drawn again over the storms, outline
+  // and all (Moa.renderOverStorm), so the player can still see where they are. A storm's
+  // clouds spread to about 1.3x its radius. `lift` widens the cull in the 3D view, where the
+  // birds stand on the relief.
+  _renderOverStorms(inView, lift) {
+    const storms = this._stormScratch || (this._stormScratch = []);
+    storms.length = 0;
+    for (const p of this.placeables) if (p.alive && p.type === 'Storm') storms.push(p);
+    if (!storms.length) return;
+    const relief = CONFIG.view3D && typeof Projection !== 'undefined' && Projection.relief;
+    const moas = this.moas;
+    for (let i = 0; i < moas.length; i++) {
+      const m = moas[i];
+      if (!m.alive || !m.hasOutline || !inView(m.pos.x, m.pos.y, lift)) continue;
+      let under = false;
+      for (const s of storms) {
+        const q = s._dragPos || s.pos, r = (s.radius || 56) * 1.3;
+        const dx = q.x - m.pos.x, dy = q.y - m.pos.y;
+        if (dx * dx + dy * dy < r * r) { under = true; break; }
+      }
+      if (!under || !m.hasOutline()) continue;
+      if (relief) {
+        const elev = this.terrain.getElevationAt(m.pos.x, m.pos.y);
+        this._drawLifted(m, Projection.groundY(m.pos.y, elev) - m.pos.y, 'renderOverStorm');
+      } else {
+        m.renderOverStorm();
+      }
+    }
   }
 
   // Draw a list billboarded (feet on the relief) in its existing order.
@@ -1977,9 +2051,10 @@ class Simulation {
       const e = list[i];
       if (!e.alive) continue;
       if (filter && !filter(e)) continue;
-      if (!inView(e.pos.x, e.pos.y, extraMargin + lift)) continue;
-      const elev = this.terrain.getElevationAt(e.pos.x, e.pos.y);
-      this._drawLifted(e, P.groundY(e.pos.y, elev) - e.pos.y, method);
+      const q = e._dragPos || e.pos;   // a storm being moved draws under the pointer
+      if (!inView(q.x, q.y, extraMargin + lift)) continue;
+      const elev = this.terrain.getElevationAt(q.x, q.y);
+      this._drawLifted(e, P.groundY(q.y, elev) - q.y, method);
     }
   }
 

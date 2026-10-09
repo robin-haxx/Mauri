@@ -118,14 +118,29 @@ class Egg {
     const px = this.pos.x;
     const py = this.pos.y;
     const progress = this.currentTime / this.incubationTime;
-    
+
+    // Hatching (a module story sets hatchProgress 0..1): the egg rocks in ever stronger fits,
+    // with a little hop at the end of each, its cracks spreading.
+    if (this.hatchProgress != null) {
+      const h = this.hatchProgress;
+      const fit = Math.max(0, Math.sin(this.hatchProgress * 40 + this.wobblePhase));   // fits of rocking
+      const rock = sin(frameCount * 0.9) * (0.12 + 0.4 * h) * fit;
+      const hop = -Math.pow(fit, 6) * (0.4 + 1.6 * h);
+      push();
+      translate(px, py + hop);
+      rotate(rock);
+      this._renderEggBody(0, 0, 0.85 + 0.15 * Math.min(1, h * 1.6));
+      pop();
+      return;
+    }
+
     // Calculate wobble
     let wobble = 0;
     if (progress > 0.7) {
       const wobbleIntensity = (progress - 0.7) / 0.3;
       wobble = sin(frameCount * 0.3 + this.wobblePhase) * wobbleIntensity * 0.15;
     }
-    
+
     // Only use push/pop if wobbling
     if (wobble !== 0) {
       push();

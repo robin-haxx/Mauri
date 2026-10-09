@@ -137,6 +137,10 @@ class HaastsEagle extends Boid {
   // ============================================
   
   behave(simulation, mauri, dt = 1) {
+    // Module levels fly their eagle from a script (EagleLife in mauri_module.js). When one is
+    // attached it does everything, and none of the behaviour below runs.
+    if (this.lifeScript) { this.lifeScript.behave(simulation, mauri, dt); return; }
+
     this.animTime += dt;
     this.hunger = Math.min(this.hunger + this.hungerRate * dt, this.maxHunger);
 

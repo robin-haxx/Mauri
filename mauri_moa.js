@@ -28,6 +28,7 @@ const MOA_BAR_PREG    = [220, 200, 100];
 const MOA_BAR_MATE    = [255, 150, 180];
 const MOA_BAR_SECURE  = [220, 180, 200];
 const _moaHungerBarCol = [0, 0, 120];   // scratch: r/g track hunger, filled at draw time
+const _moaSafetyBarCol = [150, 210, 250]; // scratch: a module family moa's safety bar
 
 class Moa extends Boid {
   static DEFAULTS = {
@@ -68,6 +69,7 @@ class Moa extends Boid {
 
     // Size & age
     this.baseSize = typeof s.size === 'object' ? random(s.size.min, s.size.max) : (s.size || random(8, 11));
+    if (s.sizeBySex) this.baseSize = this.isFemale ? s.sizeBySex.female : s.sizeBySex.male;
     this.size = this.baseSize * MOA_AGE.SIZE_JUVENILE;
     this.age = 0;
     this.ageStage = 'juvenile';
@@ -207,15 +209,21 @@ class Moa extends Boid {
 
   updateAge(dt) {
     this.age += dt;
-    
+
+    // A species with fixed sizes per sex (sizeBySex) takes its size from the bird's sex, read
+    // here since a bird's sex can be set after it is made. It needs no dimorphism factor.
+    const bySex = this.speciesConfig.sizeBySex;
+    if (bySex) this.baseSize = this.isFemale ? bySex.female : bySex.male;
+    const maleMult = bySex ? 1 : 0.9;
+
     let sizeMult;
     if (this.age >= MOA_AGE.ADULT_MIN) {
       this.ageStage = 'adult';
-      // Adult females ~10% larger than males (sexual dimorphism)
-      sizeMult = this.isFemale ? MOA_AGE.SIZE_ADULT : MOA_AGE.SIZE_ADULT * 0.9;
+      // Adult females ~10% larger than males (sexual dimorphism), unless sizeBySex sets both
+      sizeMult = this.isFemale ? MOA_AGE.SIZE_ADULT : MOA_AGE.SIZE_ADULT * maleMult;
     } else if (this.age >= MOA_AGE.JUVENILE_MAX) {
       this.ageStage = 'adolescent';
-      const adultSize = this.isFemale ? MOA_AGE.SIZE_ADULT : MOA_AGE.SIZE_ADULT * 0.9;
+      const adultSize = this.isFemale ? MOA_AGE.SIZE_ADULT : MOA_AGE.SIZE_ADULT * maleMult;
       sizeMult = lerp(MOA_AGE.SIZE_ADOLESCENT, adultSize, 
         (this.age - MOA_AGE.JUVENILE_MAX) / (MOA_AGE.ADULT_MIN - MOA_AGE.JUVENILE_MAX));
     } else {
@@ -271,6 +279,10 @@ class Moa extends Boid {
   // ============================================
 
   behave(simulation, mauri, seasonManager, dt = 1) {
+    // Module levels run their moa from a "life" script (MoaLife in mauri_module.js). When one
+    // is attached it does everything, and none of the behaviour below runs.
+    if (this.lifeScript) { this.lifeScript.behave(simulation, mauri, seasonManager, dt); return; }
+
     this.updateAge(dt);
     this.animTime += dt;
     this._updateSeasonCache(seasonManager);
@@ -1212,6 +1224,41 @@ class Moa extends Boid {
     pop();
   }
 
+  // Whether this bird is drawn with a highlight outline right now (see render).
+  hasOutline() {
+    return typeof highlightOutlineColor !== 'undefined' &&
+      !!highlightOutlineColor(this.speciesKey, this.speciesConfig.highlightColor);
+  }
+
+  // A highlighted bird under a storm's clouds, drawn again over them (Simulation draws this
+  // after the storms): its outline, and its body inside it, shaded a little toward the cloud's
+  // grey so it still reads as under the storm.
+  renderOverStorm() {
+    if (!this.alive) return;
+    const col = (typeof highlightOutlineColor !== 'undefined')
+      ? highlightOutlineColor(this.speciesKey, this.speciesConfig.highlightColor) : null;
+    if (!col) return;
+    const variant = this.speciesConfig.spriteSet;
+    const sprite = EntitySprites.getMoaSprite(this.animTime, this.vel.magSq() > 0.01, this.isJuvenile(), variant,
+      this.currentState === MOA_STATE.MATING);
+    if (!sprite) return;
+    push();
+    translate(this.pos.x, this.pos.y);
+    const flip = (this._flip !== undefined) ? this._flip : 1;
+    scale(flip * EntitySprites.getMoaFaceSign(variant), 1 + (1 - Math.abs(flip)) * 0.18);
+    imageMode(CENTER);
+    const size = this.size * 2.5 * (this.speciesConfig.spriteScale || 1);
+    EntitySprites.drawSpriteOutline(sprite, size, size, col);
+    if (typeof GLBatch !== 'undefined' && GLBatch.enabled && GLBatch._open) {
+      tint(205, 214, 228);   // free on the GL layer
+      image(sprite, 0, 0, size, size);
+      noTint();
+    } else {
+      image(sprite, 0, 0, size, size);
+    }
+    pop();
+  }
+
   // Vulnerable-founder marker: now a no-op (the highlight shows only as the sprite-
   // silhouette outline). Kept so renderIndicators / tutorial-overlay callers need no change.
   renderLowPopRing() {}
@@ -1255,8 +1302,16 @@ class Moa extends Boid {
     _moaHungerBarCol[1] = 260 - _hf * 120;
     this._drawBar(px, py + yOff, 14, 2, 1 - _hf, _moaHungerBarCol);
 
-    // Secondary bar (age/mating/pregnancy)
-    if (!this.canMateByAge()) {
+    // Secondary bar (age/mating/pregnancy). A module family's moa shows its sense of safety
+    // instead (MoaLife.security): it drains while the bird is out in the open with the eagle
+    // after it, going from pale blue to red.
+    if (this.lifeScript) {
+      const sec = this.lifeScript.security;
+      _moaSafetyBarCol[0] = 235 - sec * 85;
+      _moaSafetyBarCol[1] = 90 + sec * 120;
+      _moaSafetyBarCol[2] = 90 + sec * 160;
+      this._drawBar(px, py + yOff - 3, 14, 2, sec, _moaSafetyBarCol);
+    } else if (!this.canMateByAge()) {
       this._drawBar(px, py + yOff - 3, 14, 2, this.age / MOA_AGE.MATING_AGE, MOA_BAR_AGE);
     } else if (this.isPregnant) {
       this._drawBar(px, py + yOff - 3, 14, 2, 1 - this.pregnancyTimer / this.pregnancyDuration, MOA_BAR_PREG);

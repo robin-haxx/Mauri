@@ -206,6 +206,11 @@ const MODULE_TIP_KIT = (function () {
     return !game.mauri.canAfford(cost || 0);
   };
 
+  // Whether calling a new `type` is blocked by the Storm's recharge right now. A paused banner
+  // also stops the recharge (it runs on playTime), so one asking for a storm must not wait on it.
+  const recharging = (game, type = 'Storm') => type === 'Storm' &&
+    game.playTime < (game._stormCooldownUntil || 0) && !(game.module && game.module.stormCooldownFree());
+
   // A banner: big words across the map. `words` is [idle, inHand]: the second shows while
   // the banner's thing is in hand: extra.tool (default 'Storm') picked up to move, or its
   // toolbar button selected. The game waits (paused, dimmed) until `done(game, data)` holds,
@@ -224,7 +229,8 @@ const MODULE_TIP_KIT = (function () {
         return inHand(game) ? w[1] : w[0];
       },
       dismissWhen: (game, data) => game.state === GAME_STATE.WON || game.state === GAME_STATE.LOST ||
-        (!game.movingPlaceable && (done(game, data) || (!game.selectedPlaceable && broke(game, extra.needs, tool)))),
+        (!game.movingPlaceable && (done(game, data) || (extra.needs === 'place' && recharging(game, tool)) ||
+                                   (!game.selectedPlaceable && broke(game, extra.needs, tool)))),
       renderAboveOverlay: lit,
       highlight: null,
       pauseGame: true,
@@ -311,7 +317,7 @@ const MODULE_TIP_KIT = (function () {
       ? ["The Pouākai has seen them! Move a STORM over the family", "Cover the family with the STORM"]
       : ["The Pouākai has seen them! Tap the STORM button and call one over them", "Tap beside the family to call the STORM"];
     const coverDone = (game) => !game.module || !game.module.chase || exposed(game).length === 0 ||
-      (!storms(game).length && !game.selectedPlaceable && broke(game, 'place', 'Storm'));
+      (!storms(game).length && (recharging(game) || (!game.selectedPlaceable && broke(game, 'place', 'Storm'))));
     if (opts.teach === false) {
       return {
         cover_again: banner('cover_again', onBeat(['last_chance', 'winter_pass', 'spotted_again']),
@@ -338,6 +344,6 @@ const MODULE_TIP_KIT = (function () {
   }
 
   return { onBeat, spot, placed, storms, family, stormsMoved, marker, inWorld, trail, rings, exposed,
-           awayFrom, sceneWith, banner, moveBanner, placeBanner, reachBanner, eagleAlert, eagleTips, broke,
+           awayFrom, sceneWith, banner, moveBanner, placeBanner, reachBanner, eagleAlert, eagleTips, broke, recharging,
            unsproutedFood, SPROUT_WORDS, sproutBanner, sproutTips };
 })();

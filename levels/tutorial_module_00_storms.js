@@ -42,7 +42,7 @@
 (function () {
 
 const { onBeat, spot, storms, family, marker, trail, rings, awayFrom, sceneWith, banner, moveBanner,
-        placeBanner, eagleAlert, eagleTips } = MODULE_TIP_KIT;
+        placeBanner, eagleAlert, eagleTips, recharging } = MODULE_TIP_KIT;
 
 // Who speaks: their name (the tip's title), their sprite, which bird to light up, and their
 // call as each line opens (Mama, the bigger bird, a little lower than Papa).
@@ -197,8 +197,9 @@ const TIPS = Object.assign({},
     },
 
     // ==== WINTER: by the tarn ================================================================
-    // Storms fade away in winter: call new ones.
-    winter: placeBanner('winter', onBeat('winter'),
+    // Storms fade away in winter: call new ones. Not if one was just called (still recharging):
+    // the player already has, and it couldn't be called again until the recharge is done.
+    winter: placeBanner('winter', onBeat('winter', (d, game) => !recharging(game)),
       ["STORMS fade over time in winter! Tap the STORM button to call a new one", "Tap beside the family to call the STORM"],
       (game) => game.renderEntitiesAboveUI([...storms(game), ...family(game)])),
 

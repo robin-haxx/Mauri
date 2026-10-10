@@ -340,6 +340,9 @@ const CONFIG = {
   expectedCanvas(windowW, windowH) {
     const s = this.referenceHeight;
     let aspect = windowW / windowH;
+    // A frame that isn't laid out yet (e.g. an itch.io embed created hidden) reports 0×0, and
+    // 0/0 = NaN would size the canvas NaN, throw in the first draw and stop p5's loop for good.
+    if (!(aspect > 0 && isFinite(aspect))) aspect = 16 / 9;
     aspect = Math.max(this.minAspectRatio, Math.min(this.maxAspectRatio, aspect));
     const portrait = aspect < 1;
     return portrait
@@ -6273,6 +6276,9 @@ function setup() {
 }
 
 function windowResized() {
+  // Hidden/collapsed (0×0) frame: keep the current layout; the resize on reveal redoes it.
+  if (!(windowWidth > 0 && windowHeight > 0)) return;
+
   // Recalculate layout for actual window dimensions
   CONFIG.recalculateLayout(windowWidth, windowHeight);
 

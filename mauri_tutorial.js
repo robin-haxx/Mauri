@@ -519,9 +519,13 @@ class TutorialManager {
 
     // A tip spoken by a bird (tip.voice) opens on a snippet of its call, or on its one-shot
     // species call (tip.call, e.g. the eagle's cry), or on its speaker's sound (tip.speaker:
-    // a story line, see AudioManager.playSpeaker), else the chime.
+    // a story line, see AudioManager.playSpeaker), else the chime. A tip about birds can play
+    // their recordings instead, together (tip.voices: voice keys, for tip.voicesSec seconds).
     if (audioManager) {
       let voiced = tip.voice && audioManager.playVoiceCue && audioManager.playVoiceCue(tip.voice);
+      if (!voiced && tip.voices && audioManager.playVoiceCue) {
+        for (const v of tip.voices) if (audioManager.playVoiceCue(v, tip.voicesSec || 6)) voiced = true;
+      }
       if (!voiced && tip.call && audioManager.playSpeciesCall) {
         audioManager.playSpeciesCall(tip.call);
         voiced = true;
@@ -535,6 +539,9 @@ class TutorialManager {
     if (tip.pauseGame && this.game.state === GAME_STATE.PLAYING) {
       this.game.state = GAME_STATE.PAUSED;
       this._pausedByTutorial = true;
+      // Freeze every moa on a settled facing, not squashed edge-on mid-turn under the spotlight.
+      const sim = this.game.simulation;
+      if (sim && sim.moas) for (const m of sim.moas) m.settleFacing();
     }
 
     // "Place this" tips open a guided window that lasts only while this tip
@@ -953,8 +960,9 @@ class TutorialManager {
     text(nextLabel, nextBtnX + nextBtnW / 2, btnY + btnHeight / 2);
     
     this.nextButtonBounds = { x: nextBtnX, y: btnY, w: nextBtnW, h: btnHeight };
-    
-    // "Skip Tutorial" button
+
+    // "Skip Tutorial" button (not in the module levels: their tips tell the story)
+    if (this.game.module) { this.skipButtonBounds = null; return; }
     const skipBtnX = x + 25 * S;
     const skipBtnW = 100 * S;
     const hoverSkip = this._hitTest({ x: skipBtnX, y: btnY, w: skipBtnW, h: btnHeight }, mouseX, mouseY);

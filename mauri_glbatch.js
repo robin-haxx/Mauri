@@ -52,6 +52,13 @@ const GLBatch = {
   _cap: 0, _verts: null, _n: 0,
   _curTex: null,
 
+  // Hollow-outline quads (emitOutlineOnly): their own small program and buffer, drawn in order
+  // with the main batch (each side flushes the other before adding). Per vertex
+  // [x, y, u, v, r, g, b, a, rectU0, rectV0, rectU1, rectV1, offU, offV].
+  OL_FLOATS: 14,
+  _olProg: null, _olVbo: null, _olVerts: null, _olCap: 256 * 6, _olN: 0, _olTex: null,
+  _OL_CX: [0, 1, 1, 0, 1, 0], _OL_CY: [0, 0, 1, 0, 1, 1],   // a quad's 6 corners (TL TR BR TL BR BL)
+
   // ---- URL flag + init --------------------------------------------------------
   // GL is opt-in: enable with ?render=gl (or =webgl / =on); anything else stays on 2D.
   // If the context can't be created init() returns false and 2D is used regardless.
@@ -86,6 +93,9 @@ const GLBatch = {
 
       this.canvas = cnv; this.gl = gl; this.W = width; this.H = height;
       this._buildProgram();
+      // (Optional: without it, outline-only draws fall back to a baked ring; see emitOutlineOnly.)
+      try { this._buildOutlineProgram(); }
+      catch (e) { this._olProg = null; console.warn('[glbatch] outline program failed:', e && e.message); }
       this._buildDiscTexture();
       this._cap = 8192 * 6;
       this._verts = new Float32Array(this._cap * this.FLOATS_PER_VERT);
@@ -213,6 +223,37 @@ const GLBatch = {
     this._uColdTint = gl.getUniformLocation(p, 'uColdTint');
   },
 
+  // The hollow-outline program: a ring `off` wide just outside the sprite's opaque edge, and
+  // nothing inside it (12 taps round the ring, minus the sprite itself). Taps outside the
+  // sprite's atlas rect read as clear, so neighbouring frames never bleed in.
+  _buildOutlineProgram() {
+    const gl = this.gl;
+    const vs = 'attribute vec2 aPos;attribute vec2 aUV;attribute vec4 aCol;attribute vec4 aRect;attribute vec2 aOff;' +
+      'varying vec2 vUV;varying vec4 vCol;varying vec4 vRect;varying vec2 vOff;' +
+      'void main(){vUV=aUV;vCol=aCol;vRect=aRect;vOff=aOff;gl_Position=vec4(aPos,0.0,1.0);}';
+    const fs = 'precision mediump float;varying vec2 vUV;varying vec4 vCol;varying vec4 vRect;varying vec2 vOff;' +
+      'uniform sampler2D uTex;' +
+      'float A(vec2 uv){vec2 r=step(vRect.xy,uv)*step(uv,vRect.zw);return texture2D(uTex,uv).a*r.x*r.y;}' +
+      'void main(){float ring=0.0;' +
+      'for(int i=0;i<12;i++){float t=float(i)*0.5235988;ring=max(ring,A(vUV+vec2(cos(t),sin(t))*vOff));}' +
+      'float a=smoothstep(0.06,0.30,ring)*(1.0-smoothstep(0.06,0.30,A(vUV)))*vCol.a;' +
+      'gl_FragColor=vec4(vCol.rgb,a);}';
+    const co = (ty, src) => { const s = gl.createShader(ty); gl.shaderSource(s, src); gl.compileShader(s);
+      if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)); return s; };
+    const p = gl.createProgram();
+    gl.attachShader(p, co(gl.VERTEX_SHADER, vs));
+    gl.attachShader(p, co(gl.FRAGMENT_SHADER, fs));
+    gl.bindAttribLocation(p, 0, 'aPos'); gl.bindAttribLocation(p, 1, 'aUV');
+    gl.bindAttribLocation(p, 2, 'aCol'); gl.bindAttribLocation(p, 3, 'aRect');
+    gl.bindAttribLocation(p, 4, 'aOff');
+    gl.linkProgram(p);
+    if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+    this._olProg = p;
+    this._olSampler = gl.getUniformLocation(p, 'uTex');
+    this._olVerts = new Float32Array(this._olCap * this.OL_FLOATS);
+    this._olVbo = gl.createBuffer();
+  },
+
   // A white filled disc with a 1px-soft edge; the stand-in for a p5 ellipse().
   // Tinted per-quad by the captured fill, it reproduces the soft shadow / halo look.
   _buildDiscTexture() {
@@ -277,6 +318,7 @@ const GLBatch = {
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.useProgram(this._prog);
     this._n = 0; this._curTex = null;
+    this._olN = 0; this._olTex = null;
     this._open = true;
     // Recompute the edge-fade band each frame so a live tweak to edgeFade takes hold.
     this._edgeMarginPx = (this.edgeFade && this.edgeFade.on)
@@ -360,6 +402,80 @@ const GLBatch = {
     return true;
   },
 
+  // A hollow sprite-shaped outline (see _buildOutlineProgram): one quad, `off` larger all round
+  // than the drawW×drawH sprite centred on the local origin. It's drawn over what's already on
+  // this layer without adding to its alpha, so it shows only where something is drawn there
+  // already (a storm's clouds, say) and not over the bare terrain below: the outline of a moa
+  // under a storm shows just where the clouds hide it. col [r,g,b] 0..255, alpha 0..1.
+  // Returns false when it can't (no outline program, or not capturing).
+  emitOutlineOnly(img, drawW, drawH, off, col, alpha) {
+    if (!this.enabled || !this._open || !img || !this._olProg) return false;
+    let src, sx, sy, sw, sh;
+    if (img.__atlas) {
+      src = this._canvasOf(img.__page);
+      sx = img.sx; sy = img.sy; sw = img.sw; sh = img.sh;
+    } else {
+      src = this._canvasOf(img);
+      if (!src) return false;
+      sx = 0; sy = 0; sw = src.width; sh = src.height;
+    }
+    const te = this._textureFor(src);
+    if (!te) return false;
+    this._flush();   // what was batched before this draws first
+    if (te.tex !== this._olTex) { this._olFlush(); this._olTex = te.tex; }
+    if (this._olN + 6 > this._olCap) this._olFlush();
+
+    const ctx = this._ctx(), m = this._ctm(ctx);
+    const r = col[0] / 255, g = col[1] / 255, b = col[2] / 255;
+    const a = (ctx ? ctx.globalAlpha : 1) * alpha;
+    const u0 = sx / te.w, v0 = sy / te.h, u1 = (sx + sw) / te.w, v1 = (sy + sh) / te.h;
+    const offU = off * (u1 - u0) / drawW, offV = off * (v1 - v0) / drawH;
+    const lx0 = -drawW * 0.5 - off, ly0 = -drawH * 0.5 - off, lx1 = -lx0, ly1 = -ly0;
+    const qu0 = u0 - offU, qv0 = v0 - offV, qu1 = u1 + offU, qv1 = v1 + offV;
+    const W = this.W, H = this.H;
+    const ma = m.a, mb = m.b, mc = m.c, md = m.d, me = m.e, mf = m.f;
+    const V = this._olVerts, FP = this.OL_FLOATS;
+    let o = this._olN * FP;
+    // 6 verts: TL, TR, BR, TL, BR, BL (corner k: x from lx0/lx1, y from ly0/ly1).
+    const CX = this._OL_CX, CY = this._OL_CY;
+    for (let k = 0; k < 6; k++) {
+      const lx = CX[k] ? lx1 : lx0, ly = CY[k] ? ly1 : ly0;
+      const sxp = ma * lx + mc * ly + me, syp = mb * lx + md * ly + mf;
+      V[o] = (sxp / W) * 2 - 1; V[o + 1] = 1 - (syp / H) * 2;
+      V[o + 2] = CX[k] ? qu1 : qu0; V[o + 3] = CY[k] ? qv1 : qv0;
+      V[o + 4] = r; V[o + 5] = g; V[o + 6] = b; V[o + 7] = this._edgeAlpha(sxp, syp, a);
+      V[o + 8] = u0; V[o + 9] = v0; V[o + 10] = u1; V[o + 11] = v1;
+      V[o + 12] = offU; V[o + 13] = offV;
+      o += FP;
+    }
+    this._olN += 6;
+    return true;
+  },
+
+  // Draw the pending hollow-outline quads, then hand the GL state back to the main batch.
+  // The blend leaves the destination alpha as it is (see emitOutlineOnly).
+  _olFlush() {
+    if (!this._olN || !this._olTex) { this._olN = 0; return; }
+    const gl = this.gl, F = 4, stride = this.OL_FLOATS * F;
+    gl.useProgram(this._olProg);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this._olVbo);
+    gl.bufferData(gl.ARRAY_BUFFER, this._olVerts.subarray(0, this._olN * this.OL_FLOATS), gl.DYNAMIC_DRAW);
+    gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, stride, 0);
+    gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 2, gl.FLOAT, false, stride, 2 * F);
+    gl.enableVertexAttribArray(2); gl.vertexAttribPointer(2, 4, gl.FLOAT, false, stride, 4 * F);
+    gl.enableVertexAttribArray(3); gl.vertexAttribPointer(3, 4, gl.FLOAT, false, stride, 8 * F);
+    gl.enableVertexAttribArray(4); gl.vertexAttribPointer(4, 2, gl.FLOAT, false, stride, 12 * F);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, this._olTex);
+    gl.uniform1i(this._olSampler, 0);
+    gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ZERO, gl.ONE);
+    gl.drawArrays(gl.TRIANGLES, 0, this._olN);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    gl.disableVertexAttribArray(4);
+    gl.useProgram(this._prog);   // the main _flush rebinds its own buffer, pointers and texture
+    this._olN = 0;
+  },
+
   // Capture one ellipse()/circle() as a tinted disc quad. (x,y) is the centre in
   // the default ellipseMode(CENTER); w,h the diameters. Returns true if consumed.
   tryCaptureEllipse(x, y, w, h) {
@@ -394,6 +510,7 @@ const GLBatch = {
   // Map a local rect through the CTM to clip space and push two triangles (sil: 1 =
   // silhouette, 0 = textured). Fully inlined; runs hundreds of times a frame, so no allocation.
   _emit(te, m, lx0, ly0, lx1, ly1, u0, v0, u1, v1, r, g, b, a, sil) {
+    if (this._olN) this._olFlush();   // hollow outlines batched before this draw first
     if (te.tex !== this._curTex) { this._flush(); this._curTex = te.tex; }
     if (this._n + 6 > this._cap) this._flush();
     const W = this.W, H = this.H;
@@ -444,6 +561,7 @@ const GLBatch = {
   composite(/* ctx2d */) {
     if (!this.enabled || !this._open) return;
     this._flush();
+    this._olFlush();
     this._open = false;
   },
   endSpan() { this.composite(); },

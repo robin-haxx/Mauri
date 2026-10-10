@@ -89,8 +89,9 @@ turn that into aggregation:
   favoured plant is multiplied by 0.6 (preferred). Agents therefore **cluster on their
   own resource**.
 - *Payoff is selective.* When a non-favoured moa does eat one, `Moa.forage()` scales the
-  nutrition by `unfavouredBrowsePenalty` (0.25). The plant is, to a competitor, barely
-  worth the trip.
+  nutrition by `unfavouredBrowsePenalty` (0.25 by default; the glacial level and Free Play
+  set 0, so a stand feeds only its own species). The plant is, to a competitor, barely
+  worth the trip, or worth nothing.
 
 Net effect: plant a lancewood corridor and the bush moa aggregate there; the giant and
 stout-legged moa largely ignore it. That is the paper's aggregation; engineered rather
@@ -301,10 +302,11 @@ band**, which is what gives the coexistence problem its teeth.
 Season changes touch a lot of visual state (snow creeping down the mountains), so the
 engine avoids recomputing anything mid-transition:
 
-- At generation, `TerrainGenerator` **pre-bakes one full terrain image per season**
-  (`_bakeSeasonBuffer`), blending snow into every cell above that season's snow line. At
-  runtime `render()` just draws the current season's image and **cross-fades** to the
-  next during the transition window; pure image compositing, zero per-cell work.
+- At build, each season's terrain colours (snow blended into every cell above that
+  season's snow line) are computed **once**: as vertex colours for the GPU terrain mesh, or
+  as one baked image per season for the flat 2D view. At runtime the renderer just
+  **cross-fades** the current season into the next during the transition window; zero
+  per-cell work.
 - For *gameplay* (not just visuals), the snow line is a single **lerped scalar**
   (`getSnowLineElevation()`); `getEffectiveBiomeAt()` treats anything above it as the snow
   biome, so high ground becomes non-walkable seasonally without re-tiling the map.

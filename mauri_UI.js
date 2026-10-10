@@ -635,11 +635,7 @@ class GameUI {
   }
 
   _togglePause() {
-    if (this.game.state === GAME_STATE.PLAYING) {
-      this.game.state = GAME_STATE.PAUSED;
-    } else if (this.game.state === GAME_STATE.PAUSED) {
-      this.game.state = GAME_STATE.PLAYING;
-    }
+    this.game.togglePause();
   }
 
   handlePauseButtonClick(mx, my) {
@@ -863,7 +859,10 @@ class GameUI {
     if (this.game && this.game.freeplayFocus && this.game.freeplayFocus.length) {
       focal = this.game.freeplayFocus;
     } else {
-      focal = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.focalSpecies) ||
+      // (mechanics.speciesTiles: a level's own tile list, e.g. its forest birds, without
+      // focalSpecies' default highlights.)
+      const M = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS) || {};
+      focal = M.speciesTiles || M.focalSpecies ||
         ((this.simulation.activeSpecies && this.simulation.activeSpecies.moa) || null);
     }
 
@@ -1035,10 +1034,13 @@ class GameUI {
   renderMauriRing(cx, cy, r) {
     const val = Math.floor(this.mauri.mauri);
     const g = this.game;
-    const showGain = !!(g && g.currentLevel && g.currentLevel.endless && g.ecosystemStats);
+    // The gain/sec line: Free Play's ecosystem income, or a module director's own steady
+    // income (the Free Play years: the families plus every bird in the forest).
+    const modRate = (g && g.module && g.module.mauriPerSec) ? g.module.mauriPerSec() : null;
+    const showGain = modRate != null || !!(g && g.currentLevel && g.currentLevel.endless && g.ecosystemStats);
     let gainStr = '';
     if (showGain) {
-      const mps = g.ecosystemStats().mauriPerSec || 0;
+      const mps = modRate != null ? modRate : (g.ecosystemStats().mauriPerSec || 0);
       gainStr = `${mps >= 0 ? '+' : ''}${mps.toFixed(1)}/s`;
     }
     // Cached (HudCache) on the two readouts it shows.
@@ -2088,13 +2090,17 @@ class GameUI {
     const nameSize = 15, descSize = 12, statSize = 11;   // smallTextSize bases
 
     // Global interactions (Mast Year, Nest Raid, ...) have no footprint or lifetime, so
-    // only list the stats a tool actually has.
+    // only list the stats a tool actually has. A module's story levels show just the name and
+    // description (their Free Play keeps the stats).
     const stats = [];
-    if (def.cost != null) stats.push(`Cost: ${def.cost} mauri`);
-    if (def.duration) stats.push(`Lasts: ${(def.duration / 60).toFixed(0)}s`);
-    if (def.matureAfterYears) stats.push(`Matures: after ${def.matureAfterYears} year${def.matureAfterYears === 1 ? '' : 's'}`);
-    if (def.moveCost != null) stats.push(`Moving one: ${def.moveCost} mauri`);
-    if (def.radius) stats.push(`Radius: ${def.radius}px`);
+    const lv = this.game.currentLevel;
+    if (!(lv && lv.module && !lv.freePlay)) {
+      if (def.cost != null) stats.push(`Cost: ${def.cost} mauri`);
+      if (def.duration) stats.push(`Lasts: ${(def.duration / 60).toFixed(0)}s`);
+      if (def.matureAfterYears) stats.push(`Matures: after ${def.matureAfterYears} year${def.matureAfterYears === 1 ? '' : 's'}`);
+      if (def.moveCost != null) stats.push(`Moving one: ${def.moveCost} mauri`);
+      if (def.radius) stats.push(`Radius: ${def.radius}px`);
+    }
 
     // Measure every line at the size it's drawn at.
     textAlign(LEFT, TOP);

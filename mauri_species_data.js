@@ -91,6 +91,9 @@ const MOA_SPECIES = {
     scientificName: "Dinornis robustus",
     tint: [170, 150, 130],     // Dinornis; desaturated brown
     highlightColor: [190, 140, 90],   // brown; player highlight
+    // The outline scales with the sprite, and these are drawn big: a thinner one (source px;
+    // the default is 6) keeps it in line with the other moa's.
+    outlineThickness: 3.5,
     description: "Massive moa of the lowland plains, up to 3.6m tall",
     rarity: 'uncommon',
     

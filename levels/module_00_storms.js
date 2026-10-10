@@ -29,7 +29,7 @@
 
 const MODULE_STORMS = {
   id: 'module_storms',
-  name: 'Āwhā',                 // "storm"
+  name: '',                 // "storm"
   module: true,
   moduleIndex: 0,
   unlockCondition: null,
@@ -124,7 +124,10 @@ const MODULE_STORMS = {
     noSpeciation: true,
     // The tussock and dracophyllum stay standing through winter (no dormant die-back), so the
     // land doesn't change under the story.
-    evergreenPlants: ['tussock', 'dracophyllum']
+    evergreenPlants: ['tussock', 'dracophyllum'],
+    // Pātōtara on the land stands bare until the player sprouts it (press and hold on it); the
+    // patches the story plants come up in fruit. (Plant.sproutsByHand, Game._sprout)
+    sproutPatotara: true
   },
 
   // ---- The story (ModuleDirector). Anything left out uses MODULE_STORY_DEFAULTS. ----------
@@ -138,9 +141,11 @@ const MODULE_STORMS = {
     outroDir: 'north',
     // The Storm tool is greyed out until the second autumn attack, when a new storm is needed.
     lockedTools: { Storm: 'new_storm' },
-    // Once the chick is out, the clouds down the mountain clear and the eagle flies off until
+    // Once the chick is out, the eagle flies off and every storm clears (the nest's too) until
     // autumn (ModuleDirector._calmAfterHatch).
     calmAfterHatch: true,
+    // Left without a storm to walk to on the way down, they go the wrong way first (the lesson).
+    journey: { wrongWay: true },
     // From autumn on, new storms gather on the tops now and then (ModuleDirector._updateWeather).
     weather: { from: 'autumn', firstSec: 3, everySec: 15, max: 3 },
     winTitle: "HOME AGAIN",

@@ -50,8 +50,8 @@ const MODULE_TIP_KIT = (function () {
     pop();
   };
 
-  // A way to go (a list of world points, e.g. the trail down to the tarn) lit up: a soft glow
-  // with bright dashes flowing along it from its first point to its last.
+  // A way to go (a list of world points, e.g. the trail down to the tarn) lit up: just a dotted
+  // line flowing along it from its first point to its last (the trail itself shows in the ground).
   const trail = (game, pts) => {
     if (!pts || pts.length < 2) return;
     inWorld(game, (px) => {
@@ -63,12 +63,6 @@ const MODULE_TIP_KIT = (function () {
       noFill();
       strokeJoin(ROUND);
       strokeCap(ROUND);
-      stroke(255, 236, 150, 60);
-      strokeWeight(22 * px);
-      line();
-      stroke(255, 236, 150, 110);
-      strokeWeight(10 * px);
-      line();
       stroke(255, 250, 215, 240);
       strokeWeight(4 * px);
       drawingContext.setLineDash([16 * px, 14 * px]);
@@ -214,22 +208,23 @@ const MODULE_TIP_KIT = (function () {
 
   // A banner: big words across the map. `words` is [idle, inHand]: the second shows while
   // the banner's thing is in hand: extra.tool (default 'Storm') picked up to move, or its
-  // toolbar button selected. The game waits (paused, dimmed) until `done(game)` holds, with
-  // `lit(game)` drawn through the dimming. extra.needs ('move' or 'place') says what the
-  // player has to afford. Extras override any tip field.
+  // toolbar button selected. The game waits (paused, dimmed) until `done(game, data)` holds,
+  // with `lit(game, data)` drawn through the dimming (data: the moment's, e.g. data.food).
+  // extra.needs ('move' or 'place') says what the player has to afford. Extras override any
+  // tip field.
   function banner(id, trigger, words, done, lit, extra = {}) {
     const tool = extra.tool || 'Storm';
     const inHand = (game) => (game.movingPlaceable && game.movingPlaceable.type === tool) ||
                              game.selectedPlaceable === tool;
     return Object.assign({
       id, trigger,
-      // (words can also be (game) => [idle, inHand], for words that follow the situation)
-      banner: (game) => {
-        const w = typeof words === 'function' ? words(game) : words;
+      // (words can also be (game, data) => [idle, inHand], for words that follow the situation)
+      banner: (game, data) => {
+        const w = typeof words === 'function' ? words(game, data) : words;
         return inHand(game) ? w[1] : w[0];
       },
-      dismissWhen: (game) => game.state === GAME_STATE.WON || game.state === GAME_STATE.LOST ||
-        (!game.movingPlaceable && (done(game) || (!game.selectedPlaceable && broke(game, extra.needs, tool)))),
+      dismissWhen: (game, data) => game.state === GAME_STATE.WON || game.state === GAME_STATE.LOST ||
+        (!game.movingPlaceable && (done(game, data) || (!game.selectedPlaceable && broke(game, extra.needs, tool)))),
       renderAboveOverlay: lit,
       highlight: null,
       pauseGame: true,
@@ -271,9 +266,39 @@ const MODULE_TIP_KIT = (function () {
       }, lit, Object.assign({ needs: 'move' }, extra));
   }
 
+  // ---- Pātōtara: it comes up bare, and a press and hold on it sprouts its berries ----------
+  // (Game._sprout, Plant.sproutsByHand.) The pātōtara the player grew that's still bare.
+  const unsproutedFood = (game) => game.module && game.module.placedFood
+    ? game.module.placedFood.filter(p => p.alive && p.unsprouted) : [];
+  const SPROUT_WORDS = "Tap and hold the PĀTŌTARA to sprout its berries";
+
+  // A banner that goes once target(game, data) (a pātōtara patch or plant) is sprouted.
+  function sproutBanner(id, trigger, target, lit, extra = {}) {
+    return banner(id, trigger, [SPROUT_WORDS, SPROUT_WORDS],
+      (game, data) => { const t = target(game, data); return !t || !t.alive || !t.unsprouted; },
+      lit, Object.assign({ needs: 'none', tool: 'patotara' }, extra));
+  }
+
+  // The reminder every module with grown pātōtara shares: grown and left bare a while (the
+  // director's 'unsprouted' moment, data.food), it's ringed while play goes on. It gives way
+  // after a while, or as soon as the eagle comes (so its warning isn't kept waiting).
+  function sproutTips() {
+    return {
+      sprout_again: banner('sprout_again', onBeat('unsprouted', (d, game) => !!game.module && !game.module.chase),
+        [SPROUT_WORDS, SPROUT_WORDS],
+        (game, data) => {
+          const t = data && data.food;
+          return !t || !t.alive || !t.unsprouted || game.tutorial.tipDisplayTime > 600 ||
+                 !!(game.module && game.module.chase);
+        },
+        (game, data) => { if (data && data.food && data.food.alive) marker(game, data.food.pos); },
+        { needs: 'none', tool: 'patotara', pauseGame: false, dim: false, showOnce: false })
+    };
+  }
+
   // Extras for a banner where the player has to step in to stop the Pouākai: its screech as the
-  // banner appears, and the Pouākai on the hunt drawn beside the words.
-  const eagleAlert = { bannerSprite: 'haasts_eagle_hunt', call: 'haasts_eagle' };
+  // banner appears.
+  const eagleAlert = { call: 'haasts_eagle' };
 
   // The eagle prompts every module shares: their storm breaking up (call a new one), and
   // "cover them!" (paused the first time, then shown again while play goes on). With no storm
@@ -313,5 +338,6 @@ const MODULE_TIP_KIT = (function () {
   }
 
   return { onBeat, spot, placed, storms, family, stormsMoved, marker, inWorld, trail, rings, exposed,
-           awayFrom, sceneWith, banner, moveBanner, placeBanner, reachBanner, eagleAlert, eagleTips, broke };
+           awayFrom, sceneWith, banner, moveBanner, placeBanner, reachBanner, eagleAlert, eagleTips, broke,
+           unsproutedFood, SPROUT_WORDS, sproutBanner, sproutTips };
 })();

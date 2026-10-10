@@ -31,6 +31,8 @@ const _moaHungerBarCol = [0, 0, 120];   // scratch: r/g track hunger, filled at 
 const _moaSafetyBarCol = [150, 210, 250]; // scratch: a module family moa's safety bar
 
 class Moa extends Boid {
+  static STORM_OUTLINE = [236, 240, 248];   // a plain (unhighlighted) bird's outline under a storm
+
   static DEFAULTS = {
     size: { min: 8, max: 11 },
     baseSpeed: 0.1,
@@ -1031,6 +1033,7 @@ class Moa extends Boid {
       const hx = this.homeRange.x - p.pos.x, hy = this.homeRange.y - p.pos.y;
       if (hx * hx + hy * hy < this.homeRangeRadiusSq) score *= 0.7;
       if (p.isSpawned) score *= 0.45;   // pull moa toward player-placed plants a little more
+      if (p._lured) score *= PLANT_LURE.pull;   // the player just tapped it (Simulation.lurePlant)
       if (p.favouredSpecies) {
         if (p.favouredSpecies === this.speciesKey) score *= 0.6;  // prefer own resource
         else score *= 4.0;                                        // largely ignore others'
@@ -1211,7 +1214,7 @@ class Moa extends Boid {
     // this rotated/mirrored frame so it lines up.
     const _olCol = (typeof highlightOutlineColor !== 'undefined')
       ? highlightOutlineColor(this.speciesKey, this.speciesConfig.highlightColor) : null;
-    if (_olCol) EntitySprites.drawSpriteOutline(sprite, _drawSize, _drawSize, _olCol);
+    if (_olCol) EntitySprites.drawSpriteOutline(sprite, _drawSize, _drawSize, _olCol, this.speciesConfig.outlineThickness || 6);
     // On the GL layer a live tint() is free (the batch multiplies the per-quad colour), so
     // use it; on 2D fall back to the cached pre-tinted frame.
     if (_tint && typeof GLBatch !== 'undefined' && GLBatch.enabled && GLBatch._open) {
@@ -1225,38 +1228,38 @@ class Moa extends Boid {
     pop();
   }
 
-  // Whether this bird is drawn with a highlight outline right now (see render).
-  hasOutline() {
-    return typeof highlightOutlineColor !== 'undefined' &&
-      !!highlightOutlineColor(this.speciesKey, this.speciesConfig.highlightColor);
-  }
-
-  // A highlighted bird under a storm's clouds, drawn again over them (Simulation draws this
-  // after the storms): its outline, and its body inside it, shaded a little toward the cloud's
-  // grey so it still reads as under the storm.
-  renderOverStorm() {
+  // A bird under a storm's clouds (`storm`), drawn again over them (Simulation draws this
+  // after the storms): just its outline, hollow, as a silhouette of the bird the clouds hide.
+  // On GL only the hidden segments show (EntitySprites.drawSpriteOutlineOnly); in 2D the ring
+  // is clipped to the storm. A highlighted bird keeps its highlight colour (and pulse); any
+  // other gets a thinner, steady pale line.
+  renderOverStorm(storm) {
     if (!this.alive) return;
-    const col = (typeof highlightOutlineColor !== 'undefined')
+    const hl = (typeof highlightOutlineColor !== 'undefined')
       ? highlightOutlineColor(this.speciesKey, this.speciesConfig.highlightColor) : null;
-    if (!col) return;
     const variant = this.speciesConfig.spriteSet;
     const sprite = EntitySprites.getMoaSprite(this.animTime, this.vel.magSq() > 0.01, this.isJuvenile(), variant,
       this.currentState === MOA_STATE.MATING);
     if (!sprite) return;
+    const gl = typeof GLBatch !== 'undefined' && GLBatch.enabled && GLBatch._open;
+    const dc = drawingContext;
     push();
     translate(this.pos.x, this.pos.y);
+    const clip = !gl && storm;
+    if (clip) {
+      const q = storm._dragPos || storm.pos;
+      dc.save();
+      dc.beginPath();
+      dc.arc(q.x - this.pos.x, q.y - this.pos.y, (storm.radius || 56) * 1.3, 0, Math.PI * 2);
+      dc.clip();
+    }
     const flip = (this._flip !== undefined) ? this._flip : 1;
     scale(flip * EntitySprites.getMoaFaceSign(variant), 1 + (1 - Math.abs(flip)) * 0.18);
     imageMode(CENTER);
     const size = this.size * 2.5 * (this.speciesConfig.spriteScale || 1);
-    EntitySprites.drawSpriteOutline(sprite, size, size, col);
-    if (typeof GLBatch !== 'undefined' && GLBatch.enabled && GLBatch._open) {
-      tint(205, 214, 228);   // free on the GL layer
-      image(sprite, 0, 0, size, size);
-      noTint();
-    } else {
-      image(sprite, 0, 0, size, size);
-    }
+    if (hl) EntitySprites.drawSpriteOutlineOnly(sprite, size, size, hl, this.speciesConfig.outlineThickness || 6);
+    else EntitySprites.drawSpriteOutlineOnly(sprite, size, size, Moa.STORM_OUTLINE, 4, 0.75);
+    if (clip) dc.restore();
     pop();
   }
 

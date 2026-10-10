@@ -98,8 +98,9 @@ const GLTerrain = {
       'uniform vec3 uSun;uniform float uAmbient;uniform float uFrost;uniform vec3 uFrostCol;' +
       'uniform vec3 uHazeCol;uniform float uHazeAmt;uniform float uTime;uniform vec3 uWaterCol;' +
       'uniform vec3 uSunCol;uniform vec3 uSkyCol;uniform float uCold;uniform vec3 uColdTint;' +
-      'uniform float uSnowLine;uniform vec3 uSnowCol;' +
+      'uniform float uSnowLine;uniform vec3 uSnowCol;uniform float uAlpha;uniform float uWaterOnly;' +
       'void main(){' +
+      '  if(uWaterOnly>0.5 && vWater<0.5) discard;' +   // the water-over-trees pass: water only
       '  vec3 sun=normalize(uSun); vec3 N=normalize(vN); vec3 col;' +
       '  if(vWater>0.5){' +
       // Caustic water-turbulence effect (after David Hoskins / joltz0r). Sampled in the terrain
@@ -152,7 +153,7 @@ const GLTerrain = {
       '  col=mix(col, vec3(g), uCold*0.50*(1.0 - 0.5*vDown));' +          // ease the grey wash near the camera (keep foreground colour)
       '  col*=mix(vec3(1.0), uColdTint, uCold);' +
       '  col*=(1.0 - uCold*0.10);' +
-      '  gl_FragColor=vec4(col,1.0);' +
+      '  gl_FragColor=vec4(col,uAlpha);' +
       '}';
     const co = (ty, src) => { const s = gl.createShader(ty); gl.shaderSource(s, src); gl.compileShader(s);
       if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)); return s; };
@@ -165,7 +166,8 @@ const GLTerrain = {
     this._progWaterSteps = this.waterSteps;
     const U = ['uK','uLIFT','uScrollX','uScrollY','uViewX','uViewY','uViewZoom','uSS','uW','uH',
                'uSeasonBlend','uWorldH','uSun','uAmbient','uFrost','uFrostCol','uHazeCol','uHazeAmt',
-               'uTime','uWaterCol','uSunCol','uSkyCol','uCold','uColdTint','uSnowLine','uSnowCol'];
+               'uTime','uWaterCol','uSunCol','uSkyCol','uCold','uColdTint','uSnowLine','uSnowCol',
+               'uAlpha','uWaterOnly'];
     this._loc = {};
     for (const u of U) this._loc[u] = gl.getUniformLocation(p, u);
     this._aWorld = gl.getAttribLocation(p, 'aWorld');
@@ -363,6 +365,8 @@ const GLTerrain = {
     for (let r = 0; r < mRows; r++) rowWorldY[r] = worldYs[rowIdx[r]];
     this._rowWorldY = rowWorldY;
     this._meshCols = mCols; this._meshWorldW = worldW;
+    // Each mesh column's world x (for picking out a tarn's quads; see _tarnBuffer).
+    this._meshColX = Float32Array.from(colIdx, (ec) => (ec / Math.max(1, cols - 1)) * worldW);
     // World width of one mesh column (the last may be narrower when decimating; the cull's
     // ±1-column margin covers it).
     this._meshColW = worldW * stride / Math.max(1, cols - 1);
@@ -563,7 +567,24 @@ const GLTerrain = {
     gl.scissor(bx, targetH - (byTop + bh), bw, bh);
     if (!isFBO) gl.clear(gl.COLOR_BUFFER_BIT);
 
+    this._scene = { cold, hz: _hz };   // for the water-over-trees pass later this frame
+    this._drawnFrame = frameCount;
+    this._bindScene(gl, game, ss, cold, _hz);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this._buffers.idx);
+    this._drawVisible(gl, game, clipX, clipY, clipW, clipH);
+
+    // Leave scissor off + mesh attribs disabled so the sprite batch draws clean.
+    gl.disable(gl.SCISSOR_TEST);
+    this._unbindScene(gl);
+  },
+
+  // The mesh program's uniforms for this frame, and its vertex attributes bound (the land's
+  // buffers, the season's colours). Shared by the terrain draw and the water-over-trees pass.
+  _bindScene(gl, game, ss, cold, _hz) {
+    const t = game.terrain, P = Projection;
     const L = this._loc;
+    gl.uniform1f(L.uAlpha, 1);
+    gl.uniform1f(L.uWaterOnly, 0);
     gl.uniform1f(L.uK, P.K);
     gl.uniform1f(L.uLIFT, P.LIFT);
     gl.uniform1f(L.uScrollX, t.scrollX || 0);
@@ -609,15 +630,79 @@ const GLTerrain = {
     const ck = b.colByKey || {};
     bindAttr(ck[curKey] || ck.summer, this._aColCur, 3);
     bindAttr(ck[nextKey] || ck[curKey] || ck.summer, this._aColNext, 3);
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, b.idx);
-    this._drawVisible(gl, game, clipX, clipY, clipW, clipH);
+  },
 
-    // Leave scissor off + mesh attribs disabled so the sprite batch draws clean.
-    gl.disable(gl.SCISSOR_TEST);
+  _unbindScene(gl) {
     gl.disableVertexAttribArray(this._aWorld);
     gl.disableVertexAttribArray(this._aNormal);
     gl.disableVertexAttribArray(this._aColCur);
     gl.disableVertexAttribArray(this._aColNext);
+  },
+
+  // ---- water over the trees ------------------------------------------------------
+  // A tarn's water drawn again, at waterOverTrees opacity, over the sprites in front of it (a
+  // tree on the near shore stands up over the water in the 3D view), so the water still reads
+  // through them. Just the tarn's own quads of the mesh (a small index buffer, rebuilt only
+  // when the land or its tarns change), with the land fragments discarded and the canvas's
+  // alpha left as it is: one small extra draw. Only on a frame the GL terrain drew.
+  waterOverTrees: 0.5,
+  _tarn: null,   // { key, buf, count }
+
+  drawWaterOverlay(game) {
+    if (!this.available() || !this._buffers || !this._prog || this._drawnFrame !== frameCount) return;
+    const tb = this._tarnBuffer(game.terrain);
+    if (!tb || !tb.count) return;
+    const gl = GLBatch.gl, sc = this._scene;
+    GLBatch._flush();                          // the sprites so far draw first
+    if (GLBatch._olFlush) GLBatch._olFlush();
+    const ss = (typeof spriteSS === 'function') ? spriteSS() : 1;
+    const clip = game._worldClip();
+    gl.useProgram(this._prog);
+    gl.viewport(0, 0, GLBatch.W, GLBatch.H);
+    gl.enable(gl.SCISSOR_TEST);
+    gl.scissor(Math.max(0, Math.round(clip.x * ss)), GLBatch.H - Math.round((clip.y + clip.h) * ss),
+               Math.round(clip.w * ss), Math.round(clip.h * ss));
+    this._bindScene(gl, game, ss, sc.cold, sc.hz);
+    gl.uniform1f(this._loc.uAlpha, this.waterOverTrees);
+    gl.uniform1f(this._loc.uWaterOnly, 1);
+    gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ZERO, gl.ONE);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, tb.buf);
+    gl.drawElements(gl.TRIANGLES, tb.count, this._idxType, 0);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    gl.disable(gl.SCISSOR_TEST);
+    this._unbindScene(gl);
+    gl.useProgram(GLBatch._prog);
+  },
+
+  // The mesh quads over the land's tarns (terrain.features), as an index buffer. Rebuilt when
+  // the mesh or the tarns change.
+  _tarnBuffer(terrain) {
+    const tarns = (terrain.features || []).filter(f => f.type === 'tarn');
+    if (!tarns.length || !this._meshColX) return null;
+    const key = this._dims.key + '|' + tarns.map(f => f.x.toFixed(1) + ',' + f.y.toFixed(1) + ',' + f.r).join(';');
+    if (this._tarn && this._tarn.key === key) return this._tarn;
+    const gl = GLBatch.gl, X = this._meshColX, Y = this._rowWorldY, mCols = X.length, mRows = Y.length;
+    const list = [];
+    for (const f of tarns) {
+      const R = f.r + 2 * (this._meshColW || 2);   // a quad or two past the shore
+      for (let r = 0; r < mRows - 1; r++) {
+        if (Y[r + 1] < f.y - R || Y[r] > f.y + R) continue;
+        for (let c = 0; c < mCols - 1; c++) {
+          if (X[c + 1] < f.x - R || X[c] > f.x + R) continue;
+          const cx = (X[c] + X[c + 1]) * 0.5 - f.x, cy = (Y[r] + Y[r + 1]) * 0.5 - f.y;
+          if (cx * cx + cy * cy > R * R) continue;
+          const a = r * mCols + c, b = a + 1, d = a + mCols, e = d + 1;
+          list.push(a, d, b, b, d, e);
+        }
+      }
+    }
+    const idx = (this._idxType === gl.UNSIGNED_INT) ? new Uint32Array(list) : new Uint16Array(list);
+    if (this._tarn && this._tarn.buf) gl.deleteBuffer(this._tarn.buf);
+    const buf = gl.createBuffer();
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, buf);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, idx, gl.STATIC_DRAW);
+    this._tarn = { key, buf, count: idx.length };
+    return this._tarn;
   },
 
   // Draw only the mesh that can reach the frame: for each column block overlapping the view, the

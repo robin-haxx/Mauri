@@ -133,6 +133,11 @@ class Kereru extends Boid {
     this._mateRadius = sp.mateRadius ?? 200;
     this._reproCheckFrames = (sp.reproCheckSec ?? 3.5) * F;
     this._reproCheckTimer = random(0, this._reproCheckFrames);
+    // A level with seasonal breeding (LEVEL_MECHANICS.seasonalBirdBreeding) runs the birds'
+    // year itself: it lays each species' clutches in its season and brings chicks of age
+    // after so many years (see FreePlayDirector). Then the bird never lays on its own, and
+    // never comes of age by the seconds.
+    this._seasonal = !!(typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS && LEVEL_MECHANICS.seasonalBirdBreeding);
     // "In a flock" if a conspecific is within this radius. A bird with none nearby is restless:
     // it rests less and takes off to roam sooner, so solitary birds keep moving (and wandering)
     // until they find company / a mate instead of camping alone.
@@ -175,7 +180,7 @@ class Kereru extends Boid {
     // Age → maturity, and hunger (feeding pays it back below). A waterhole in reach draws the
     // bird's dispersal hops in (see _pickHop), and at the water it gets hungry more slowly.
     this.age += dt;
-    if (!this.mature && this.age >= this._maturityFrames) this.mature = true;
+    if (!this.mature && !this._seasonal && this.age >= this._maturityFrames) this.mature = true;
     const pool = this._pool = this._nearestWaterhole(sim);
     const thirstMod = (pool && pool.isInRange(this.pos)) ? (pool.def.birdHungerSlowdown ?? 1) : 1;
     this.hunger = Math.min(this.hunger + this.hungerRate * thirstMod * dt, this.maxHunger);
@@ -236,14 +241,31 @@ class Kereru extends Boid {
     if (!list) return null;
     const px = this.pos.x, py = this.pos.y;
     let best = null, bestSq = Infinity;
+    const flush = this._stormFlushMult();
     for (let i = 0; i < list.length; i++) {
       const p = list[i];
       if (!p.alive || p.type !== 'Storm') continue;
-      const r = (p.radius || 70) * 1.6;              // flush a bit beyond the visible cloud
+      const r = (p.radius || 70) * flush;            // flush a bit beyond the visible cloud
       const dx = p.pos.x - px, dy = p.pos.y - py, d2 = dx * dx + dy * dy;
       if (d2 <= r * r && d2 < bestSq) { bestSq = d2; best = p; }
     }
     return best;
+  }
+
+  // How close to the map's edge a bird lets itself go before turning back inward:
+  // LEVEL_MECHANICS.flyerEdgeMargin, default 60. A small window whose forest runs to its edges
+  // brings it in.
+  _edgeMargin() {
+    const m = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS) ? LEVEL_MECHANICS.flyerEdgeMargin : null;
+    return m != null ? m : 60;
+  }
+
+  // How far round a storm, as a multiple of its radius, birds won't stay (and won't pick a tree):
+  // LEVEL_MECHANICS.stormFlushMult, default 1.6 (a bit beyond the visible cloud). A level with a
+  // small forest and storms the moa live under can bring it in to the cloud itself.
+  _stormFlushMult() {
+    const m = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS) ? LEVEL_MECHANICS.stormFlushMult : null;
+    return m != null ? m : 1.6;
   }
 
   // A Storm within range flushes the bird: it drops its tree and flies away to seek a
@@ -252,17 +274,31 @@ class Kereru extends Boid {
     if (!this.isFlyer) return false;
     const storm = this._nearestStorm(sim);
     if (!storm) return false;
+    let dx = this.pos.x - storm.pos.x, dy = this.pos.y - storm.pos.y;
+    let m = Math.hypot(dx, dy);
+    if (m < 1) { const a = Math.random() * Math.PI * 2; dx = Math.cos(a); dy = Math.sin(a); m = 1; }  // dead-centre → any way out
+    // Where to fly: straight away from the storm, else fanning round from there, to the first
+    // point (on land, inside the map's margins) that gets clear of it. With nowhere further
+    // away to go (pinned against the map's edge or the sea), it stays under the cloud and
+    // carries on, rather than hovering at the edge, unable to feed, until it starves.
+    const t = this.terrain, w = t.mapWidth, h = t.mapHeight, edge = this._edgeMargin();
+    const ins = (typeof CONFIG !== 'undefined' && CONFIG.viewInsetX) ? CONFIG.viewInsetX : 0;
+    const ux = dx / m, uy = dy / m;
+    let fx = 0, fy = 0, found = false;
+    for (const a of [0, 0.6, -0.6, 1.2, -1.2, 1.8, -1.8]) {
+      const c = Math.cos(a), s = Math.sin(a);
+      const land = this._clampToLand(this.pos.x + (ux * c - uy * s) * 90, this.pos.y + (ux * s + uy * c) * 90);
+      const lx = constrain(land.x, ins + edge, w - ins - edge), ly = constrain(land.y, edge, h - edge);
+      if (Math.hypot(lx - storm.pos.x, ly - storm.pos.y) > m + 8) { fx = lx; fy = ly; found = true; break; }
+    }
+    if (!found) return false;
     this._fleeingStorm = true;
     this.state = KERERU_STATE.FLYING;
     this._targetTree = null;                         // drop the tree it was heading to / feeding at
     this._perchTree = null;                          // and any home perch (kea); re-chosen once clear
     const base = this.speciesData?.config?.baseSpeed || 0.42;
     this.maxSpeed = base * 1.2;                      // hurry off, a shade above cruise
-    let dx = this.pos.x - storm.pos.x, dy = this.pos.y - storm.pos.y;
-    let m = Math.hypot(dx, dy);
-    if (m < 1) { const a = Math.random() * Math.PI * 2; dx = Math.cos(a); dy = Math.sin(a); m = 1; }  // dead-centre → any way out
-    const land = this._clampToLand(this.pos.x + (dx / m) * 90, this.pos.y + (dy / m) * 90);
-    this._target.set(land.x, land.y);
+    this._target.set(fx, fy);
     this.applyForce(this.seek(this._target, 1.5));
     this.applyForce(this._landward());
     this.edges();
@@ -311,7 +347,7 @@ class Kereru extends Boid {
     const f = this._landForce; f.set(0, 0);
     const t = this.terrain;
     if (!t || typeof t.isWalkable !== 'function') return f;
-    const w = t.mapWidth, h = t.mapHeight, m = 60;
+    const w = t.mapWidth, h = t.mapHeight, m = this._edgeMargin();
     const ins = (typeof CONFIG !== 'undefined' && CONFIG.viewInsetX) ? CONFIG.viewInsetX : 0;
     const px = this.pos.x, py = this.pos.y;
     const xlo = ins + m, xhi = w - ins - m;
@@ -373,6 +409,8 @@ class Kereru extends Boid {
     return (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.kereruMaxPopulation) ?? 16;
   }
   _populationFloor() {
+    // A level can take the floor away for every bird (mechanics.birdPopulationFloor: 0).
+    if (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.birdPopulationFloor != null) return LEVEL_MECHANICS.birdPopulationFloor;
     const c = this.speciesData && this.speciesData.config;
     if (c && c.populationFloor != null) return c.populationFloor;
     return (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.kereruPopulationFloor) ?? 2;
@@ -495,8 +533,9 @@ class Kereru extends Boid {
     this._target.set(land.x, land.y);
   }
 
-  // Home anchor for territory/pair fidelity. null = free-ranging (the kererū).
-  _anchorPoint() { return null; }
+  // Home anchor for territory/pair fidelity. null = free-ranging (the kererū), unless a level
+  // gives it a forest to keep to (_forestHome, e.g. a small forest it could drift out of).
+  _anchorPoint() { return this._forestHome || null; }
 
   // Drift when no fruit tree is in reach: an anchored bird beyond its leash seeks home,
   // else wanders.
@@ -510,7 +549,7 @@ class Kereru extends Boid {
   }
 
   _treeValid(p) {
-    return !!(p && p.alive && !p._consumed && !p.dormant && p.growth > 0.4);
+    return !!(p && p.alive && !p._consumed && !p.dormant && !p.unsprouted && p.growth > 0.4);
   }
 
   // Nearest fruiting forest tree: alive, grown, and in FOREST_TREES.
@@ -520,12 +559,24 @@ class Kereru extends Boid {
     const isForest = (typeof FOREST_TREES !== 'undefined') ? FOREST_TREES : null;
     let best = null, bestSq = Infinity;
     const px = this.pos.x, py = this.pos.y;
+    // Trees under a storm aren't worth flying to: it would only be flushed off them again.
+    const storms = this.isFlyer ? (sim.placeables || []).filter(s => s.alive && s.type === 'Storm') : [];
+    const flush = storms.length ? this._stormFlushMult() : 0;
+    // Nor a tree hard against the map's edge: the edge steering (Boid.edges) keeps a bird from
+    // getting close enough to perch, and it would starve trying.
+    const W = this.terrain.mapWidth, H = this.terrain.mapHeight, E = 18;
     for (let i = 0; i < plants.length; i++) {
       const p = plants[i];
-      if (!p.alive || p._consumed || p.dormant || p.growth < 0.5) continue;
+      if (!p.alive || p._consumed || p.dormant || p.unsprouted || p.growth < 0.5) continue;
       if (isForest && !isForest.has(p.type)) continue;    // only large-fruited forest
+      if (p.pos.x < E || p.pos.y < E || p.pos.x > W - E || p.pos.y > H - E) continue;
+      if (flush && storms.some(s => {
+        const r = s.radius * flush, dx = p.pos.x - s.pos.x, dy = p.pos.y - s.pos.y;
+        return dx * dx + dy * dy < r * r;
+      })) continue;
       const dx = p.pos.x - px, dy = p.pos.y - py;
-      const dSq = dx * dx + dy * dy;
+      let dSq = dx * dx + dy * dy;
+      if (p._lured) dSq *= PLANT_LURE.pull * PLANT_LURE.pull;   // tapped by the player (Simulation.lurePlant)
       if (dSq < bestSq) { bestSq = dSq; best = p; }
     }
     return best;
@@ -534,6 +585,7 @@ class Kereru extends Boid {
   // Emergent reproduction: a mature, well-fed, off-cooldown female below the flock cap
   // with a mature mate nearby lays.
   _tryReproduce(sim) {
+    if (this._seasonal) return;   // the level lays clutches by the season (see constructor)
     if (!this.mature || !this.isFemale || this._eggCooldown > 0) return;
     if (this.crop <= 0) return;                             // must be well-fed
     // Mast year (Free Play): a higher flock cap and shorter cooldown turn the glut into chicks.

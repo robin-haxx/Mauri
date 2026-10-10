@@ -319,7 +319,7 @@ const LEVEL_GLACIAL_KAHURANGI = {
   menu: {
     title: "Glacial Kahurangi",
     subtitle: "~21,000 years ago",
-    areaLabel: "NW Nelson, Te Waipounamu",
+    areaLabel: "PROTOTYPE 02: Niche-finding",
     areaSubtitle: "Upper West Coast, South Island",
     featuredSpecies: {
       key: 'little_bush_moa',

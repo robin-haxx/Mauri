@@ -348,6 +348,48 @@ const EntitySprites = {
     if (dc) dc.globalAlpha = prev;
   },
 
+  // Just the outline ring, hollow (nothing over the sprite itself): for a bird hidden under a
+  // storm's clouds, drawn over them (Moa.renderOverStorm). On GL it shows only where the clouds
+  // (or anything else on the sprite layer) cover the ground, so just the hidden segments of the
+  // outline appear (GLBatch.emitOutlineOnly). In 2D it's the halo with the sprite cut out,
+  // baked once per sprite and colour; the caller clips it to the storm. Same call shape as
+  // drawSpriteOutline.
+  drawSpriteOutlineOnly(baseSprite, drawW, drawH, col, thickness = 6, alpha = null) {
+    const a = (alpha != null) ? alpha : 0.6 + 0.4 * (0.5 + 0.5 * Math.sin(frameCount * 0.12));
+    if (typeof GLBatch !== 'undefined' && GLBatch.enabled && GLBatch._open) {
+      const off = thickness * (drawW / (baseSprite.width || drawW));
+      if (GLBatch.emitOutlineOnly(baseSprite, drawW, drawH, off, col, a)) return;
+    }
+    const ring = this._getHollowOutline(baseSprite, col, thickness);
+    if (!ring) return;
+    const kx = drawW / baseSprite.width, ky = drawH / baseSprite.height;
+    const dc = (typeof drawingContext !== 'undefined') ? drawingContext : null;
+    const prev = dc ? dc.globalAlpha : 1;
+    if (dc) dc.globalAlpha = prev * a;
+    image(ring, 0, 0, ring.width * kx, ring.height * ky);
+    if (dc) dc.globalAlpha = prev;
+  },
+
+  // The baked halo (getOutline) with the sprite's own shape cut out of it, cached beside it.
+  _getHollowOutline(baseSprite, col, thickness) {
+    const halo = this.getOutline(baseSprite, col, thickness);
+    if (!halo) return null;
+    const perSprite = this._outlineCache.get(baseSprite);
+    const key = col[0] + ',' + col[1] + ',' + col[2] + ':' + thickness + ':hollow';
+    let ring = perSprite.get(key);
+    if (ring === undefined) {
+      ring = createGraphics(halo.width, halo.height);
+      ring.clear();
+      ring.image(halo, 0, 0);
+      ring.drawingContext.globalCompositeOperation = 'destination-out';
+      if (typeof SpriteAtlas !== 'undefined') SpriteAtlas.drawTo(ring, baseSprite, halo._pad, halo._pad);
+      else ring.image(baseSprite, halo._pad, halo._pad);
+      ring.drawingContext.globalCompositeOperation = 'source-over';
+      perSprite.set(key, ring);
+    }
+    return ring;
+  },
+
   // Sprite-shaped ground shadow, reusing the bake-free silhouette path. GL stamps the
   // sprite's alpha shape once as a dark flattened pool; 2D falls back to an ellipse.
   // Positional args (not an options object) so the per-entity, per-frame hot path allocates
@@ -403,6 +445,40 @@ const EntitySprites = {
     noStroke();
     fill(0, 0, 0, 255 * _alpha);
     ellipse(cx, cy, (fbW != null ? fbW : drawW), (fbH != null ? fbH : drawH * _squash));
+  },
+
+  // A tree's cast shadow: its silhouette laid on the ground from the trunk's foot. The
+  // shadow's base is the tree's own bottom-centre (bx, by); the crown falls toward the
+  // viewer, flattened by `squash` and leaning right by `lean` (per unit of shadow length).
+  //   drawW,drawH  the tree's on-screen draw size (its image, bottom-centred on bx, by)
+  //   alpha        darkness 0..1
+  //   fbW          ellipse width for the 2D fallback (a blob reaching down from the base)
+  drawTreeShadow(sprite, bx, by, drawW, drawH, alpha, squash, lean, fbW) {
+    const R = (typeof _renderer !== 'undefined') ? _renderer : null;
+    if (sprite && R && R.drawingContext && typeof GLBatch !== 'undefined' && GLBatch.enabled && GLBatch._open) {
+      // Allocation-free, as drawSpriteShadow's hot path: the transform goes straight on the
+      // context (GLBatch reads it back per quad), and only _tint + _imageMode are swapped.
+      const ctx = R.drawingContext;
+      const prevTint = R._tint, prevImageMode = R._imageMode;
+      ctx.save();
+      // Flip the image about its base (y → −squash·y, crown downward) and shear it sideways.
+      ctx.transform(1, 0, -lean * squash, -squash, bx, by);
+      const st = this._shadowTint || (this._shadowTint = [0, 0, 0, 0]);
+      st[3] = 255 * alpha;
+      R._tint = st;
+      R._imageMode = (typeof CORNER !== 'undefined') ? CORNER : 'corner';
+      GLBatch._silhouette = true;
+      image(sprite, -drawW / 2, -drawH, drawW, drawH);
+      GLBatch._silhouette = false;
+      R._tint = prevTint;
+      R._imageMode = prevImageMode;
+      ctx.restore();
+      return;
+    }
+    const h = drawH * squash;
+    noStroke();
+    fill(0, 0, 0, 255 * alpha);
+    ellipse(bx + lean * h * 0.35, by + h * 0.3, fbW, h * 0.7);
   }
 };
 

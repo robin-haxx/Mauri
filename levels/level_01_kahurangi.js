@@ -162,7 +162,7 @@ const LEVEL_KAHURANGI = {
   menu: {
     title: "Kahurangi Region",
     subtitle: "~30,000 years ago",
-    areaLabel: "Kahurangi, Te Waipounamu",
+    areaLabel: "Prototype 01: Predator/Prey",
     areaSubtitle: "Upper West Coast, South Island",
     featuredSpecies: {
       key: 'upland_moa',

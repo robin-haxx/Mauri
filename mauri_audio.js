@@ -657,10 +657,12 @@ class AudioManager {
   // SOUND EFFECTS
   // ============================================
   
-  // Play tutorial tip sound.
+  // Play tutorial tip sound (Te Whē, the mantis guide). Never stacked: while the last one is
+  // still playing, a new tip stays quiet.
   playTutorialTip() {
+    if (this._tipPlayback && this._tipPlayback.isPlaying()) return;
     if (!this._checkCooldown('tutorialTip')) return;
-    this._playSound(this.sounds.tutorialTip, this._getVolume() * 0.6);
+    this._tipPlayback = this._playSound(this.sounds.tutorialTip, this._getVolume() * 0.6);
   }
   
   // Play a random plant rustle sound.
@@ -765,7 +767,7 @@ class AudioManager {
 
   // A line of story dialogue opens on its speaker's own sound: 'moa' (the moa call; `rate`
   // pitches it, e.g. lower for the bigger mother), 'chick' (a cheep), 'eagle' (a hunt cry) or
-  // 'kea' (a snippet of kea song). Each new line cuts the last line's sound short, so clicking
+  // 'kea' (a snippet of kea song) or 'gust' (the winter wind). Each new line cuts the last line's sound short, so clicking
   // through a scene never piles calls up. Returns false for a speaker with no sound of its own
   // (the tip then plays its usual chime).
   playSpeaker(kind, rate = 1) {
@@ -782,6 +784,13 @@ class AudioManager {
         pb = shot(this.sounds.mateCheep, vol * 0.55, { rate: 1.15 * rate, duration: 1.5, fadeOut: 0.3 });
       } else if (kind === 'eagle') {
         pb = shot(this._randomEagleCry(), vol * 0.4, { duration: 2.6, fadeOut: 0.7 });
+      } else if (kind === 'gust') {
+        // The winter wind, a longer snippet than the storm-pickup gust (playWindGust).
+        const sf = this.sounds.seasonChange.winter;
+        if (sf && sf.isLoaded() && sf.buffer) {
+          const len = sf.buffer.duration || 0;
+          pb = shot(sf, vol * 0.6, { offset: Math.random() * Math.max(0, len - 4.2), duration: 4, fadeIn: 0.4, fadeOut: 1.2 });
+        }
       } else if (kind === 'kea') {
         const bank = this.sounds.speciesVoices.kea;
         const st = bank && this._voiceTargetState('kea', null);

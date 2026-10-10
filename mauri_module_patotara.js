@@ -7,23 +7,24 @@
 // with a few additions:
 //
 //   summer  The family arrives from the south and meets the other family at their nest. The
-//           other family asks for pātōtara, and the player moves the pātōtara patch to their
-//           nest. The berries draw a kea (Strongbeak), who calls two more (Skraak and
-//           Huft-Tuft); the three mean to raid the egg. The player grows more pātōtara (the
-//           toolbar) by the nest: the family comes to feed on it, and a marker on the nest shows
-//           the raid's chance falling as moa gather. With all five moa there the raid fails (set
+//           pātōtara by their nest is still bare: the player sprouts it (press and hold on it;
+//           every pātōtara here, wild or grown, needs sprouting before it bears berries). The
+//           berries draw a kea (Strongbeak), who calls two more (Skraak and Huft-Tuft); the three
+//           mean to raid the egg. The player grows more pātōtara (the toolbar) by the nest and
+//           sprouts it: the family comes to feed on it, and a marker on the nest shows the
+//           raid's chance falling as moa gather. With all five moa there the raid fails (set
 //           up to, for the lesson) and the kea fly off to their own nest, downslope in the
 //           forest. The families make friends (ours stays close by: they don't settle a nest
 //           here), and the other family's egg hatches (the young moa meet).
-//   all year, once the kea have their nest: pātōtara the player grows draws any kea within
+//   all year, once the kea have their nest: pātōtara the player sprouts draws any kea within
 //           reach of it. Kea come at the family if it wanders near their nest, too. Kea that
 //           land where the family is warn them and raid, at real odds (more kea, better odds;
 //           more moa, worse): a raid that works scatters the family and the kea eat the berries
 //           there. A storm in a coming kea's way turns it back.
 //   autumn  The two families head downhill to different places: the other family walks to
 //           its own winter spot by itself; ours makes the storm path to the waterhole.
-//   winter  Pātōtara fruits in summer: in winter its plants stand bare (moa can't eat them),
-//           and pātōtara grown now is bare too. The player moves the wharariki (mountain
+//   winter  Pātōtara fruits in the warm months: in winter its plants stand bare (moa can't
+//           eat them), and none can be sprouted. The player moves the wharariki (mountain
 //           flax) down to the waterhole to feed the family instead.
 //   spring  The pātōtara comes back. Both families walk home; ours makes a storm path up.
 //
@@ -36,7 +37,9 @@ const PATOTARA_STORY_DEFAULTS = {
   nestRadius: 26,        // size of the nesting sites
   meetReach: 70,         // the families have met once the leader is this close to the friends' nest
   patchReach: 50,        // the pātōtara counts as "at their nest" this close
+  patchDist: [34, 46],   // the story's pātōtara grows this far from their nest (just outside it)
   foodReach: 55,         // pātōtara grown this close to their nest brings the family to defend it
+  sproutRemindSec: 8,    // pātōtara the player grew but hasn't sprouted gets a reminder after this
   juvenileSize: 0.55,    // Pukepuke, a year older: this share of adult size
   introZoomSec: 2.5,     // carried on from Module 0: the camera eases in from zoom 1 over this long
   // The summer raid: moa within `radius` of the nest defend it. With `needed` of them there
@@ -89,6 +92,7 @@ class PatotaraDirector extends ModuleDirector {
         !this._intro && !this._finale) {
       this._updateKeaBand(dt);
     }
+    if (this.beats && !this._intro && !this._finale && !this.outro) this._remindUnsprouted();
   }
 
   // The family doesn't settle here: no nest of their own this year (they stay by their
@@ -160,16 +164,22 @@ class PatotaraDirector extends ModuleDirector {
     const entryRoute = this._findPath(entry, meet);
     const entryPath = this._smoothPath(entryRoute || [entry, meet]);
 
-    // ---- The pātōtara patch: open ground a walk away from the friends' nest (the player brings
-    // it to them). ----
+    // ---- The pātōtara patch: just outside the friends' nest, on the side the family comes in
+    // from, out in the open where no tree hides it (still bare: the player sprouts it). ----
     let patch = null; best = -Infinity;
-    for (let i = 0; i < N; i++) {
-      const p = centre(i), d = dist(p, friendNest);
-      if (!walk[i] || d < 110 || d > 170 || !inside(p, 40) || dist(p, nest) < 70) continue;
-      const s = openness(p, 30) * 3 - Math.abs(elev[i] - E(friendNest)) * 15 + random(0.3);
-      if (s > best) { best = s; patch = p; }
+    const [pMin, pMax] = this.k.patchDist;
+    for (const clear of [24, 12, 0]) {
+      for (let i = 0; i < N; i++) {
+        const p = centre(i), d = dist(p, friendNest);
+        if (!walk[i] || d < pMin || d > pMax || !inside(p, 30) || dist(p, nest) < 40) continue;
+        if (clear && P.toForest[i] < clear) continue;
+        const s = openness(p, 16) * 3 - dist(p, entry) * 0.004 + random(0.3);
+        if (s > best) { best = s; patch = p; }
+      }
+      if (patch) break;
     }
-    if (!patch) patch = { x: Math.max(40, Math.min(W - 40, friendNest.x - 130)), y: friendNest.y };
+    if (!patch) patch = { x: Math.max(30, Math.min(W - 30, friendNest.x + toEntry.x / toEntryLen * pMax)),
+                          y: Math.max(30, Math.min(H - 30, friendNest.y + toEntry.y / toEntryLen * pMax)) };
 
     // ---- Where the family forages after the meeting: open ground well outside the nest's
     // defence ring (so it takes more pātōtara to bring them over), toward where they came in. ----
@@ -305,7 +315,8 @@ class PatotaraDirector extends ModuleDirector {
       else this.chick = moa;
     });
 
-    // Food to move: the pātōtara (to the friends' nest) and the wharariki (to the waterhole).
+    // The food: the pātōtara by the friends' nest (bare until the player sprouts it) and the
+    // wharariki (moved to the waterhole in winter).
     this.patch = this._standingPatch('patotara', s.patch);
     this.whararikiPatch = this._standingPatch('wharariki', s.wharariki);
 
@@ -368,8 +379,8 @@ class PatotaraDirector extends ModuleDirector {
       this._beat('opening');
     }
 
-    // 1. They arrive and meet the neighbours (who ask for pātōtara), then go off to forage a
-    // little way away (outside the nest's defence ring).
+    // 1. They arrive and meet the neighbours (who ask for help with the pātōtara), then go off
+    // to forage a little way away (outside the nest's defence ring).
     if (!b.met && this.mother && (this.mother.lifeScript.routeDone() || this._near(this.mother, fn, this.k.meetReach))) {
       b.met = true;
       this._grazeFamily(s.forage, 18);
@@ -377,8 +388,10 @@ class PatotaraDirector extends ModuleDirector {
       this._beat('meet', { patch: this.patch });
     }
 
-    // 2. The pātōtara is at their nest: their mother feeds on it, and the berries draw the kea.
-    if (b.met && !b.patchHome && this.patch && this.patch.alive && this._near(this.patch, fn, this.k.patchReach)) {
+    // 2. The pātōtara by their nest is sprouted: their mother feeds on it, and the berries draw
+    // the kea.
+    if (b.met && !b.patchHome && this.patch && this.patch.alive && !this.patch.unsprouted &&
+        this._near(this.patch, fn, this.k.patchReach)) {
       b.patchHome = true;
       this.friendMother.lifeScript.graze(this.patch.pos.x, this.patch.pos.y, 12);
       if (this.kea) this.kea.lifeScript.comeTo(this.patch.pos.x + 10, this.patch.pos.y - 6, 'peck');
@@ -481,10 +494,13 @@ class PatotaraDirector extends ModuleDirector {
     return !!this.beats.friends && this.stageTime >= (this._hatchFrom || 0);
   }
 
-  // The friends' chick is out. It sticks by its mother, and Pukepuke comes to meet it.
+  // The friends' chick (Koukou) is out. It sticks by its mother, and Pukepuke comes to meet it.
+  // Koukou is the other sex to Pukepuke: years from now the two of them pair up (see the Free
+  // Play years, FreePlayDirector).
   _hatchChick(egg) {
     const fn = this.sites.friendNest;
-    this.friendChick = this._spawnMoa(egg.pos.x, egg.pos.y, random() < 0.5, 'chick', { group: this.friends });
+    const female = this.chick ? !this.chick.isFemale : random() < 0.5;
+    this.friendChick = this._spawnMoa(egg.pos.x, egg.pos.y, female, 'chick', { group: this.friends });
     this.friendFather.lifeScript.graze(fn.x, fn.y, 18);
     this.friendMother.lifeScript.graze(fn.x, fn.y, 24);
     this.friendChick.lifeScript.follow(this.friendMother, 8);
@@ -532,21 +548,41 @@ class PatotaraDirector extends ModuleDirector {
     this.friendFather.lifeScript.follow(this.friendChick || fm, 12);
   }
 
-  // Pātōtara the player grows lasts the year (the family feeds at it); in winter it comes up
-  // bare, which the story points out the first time.
+  // Pātōtara the player grows lasts the year (the family feeds at it once it's sprouted). It
+  // comes up bare: the player sprouts it (Game._sprout; see onSprouted). In winter it stays bare.
   onPlaced(p) {
     super.onPlaced(p);
     if (!p || p.type !== 'patotara') return;
     this._stand(p);
+    p._placedAt = this.game.playTime;
     this.placedFood.push(p);
-    // Once the kea have their nest, berries draw any kea within reach of them.
-    if (this._keaHome) this._lureKea(p.pos, (k) => this._near(k, p.pos, this.k.keaLife.lureRadius));
-    if (this.stage === 'winter') {
-      this._bareBerries(true);
-      if (!this.beats.berriesBare) {
-        this.beats.berriesBare = true;
-        this._beat('berries_bare', { food: p });
-      }
+    if (this.stage === 'winter') this._bareBerries(true);
+  }
+
+  // A pātōtara has been sprouted: once the kea have their nest, its berries draw any kea within
+  // reach of them.
+  onSprouted(t) {
+    if (this._keaHome) this._lureKea(t.pos, (k) => this._near(k, t.pos, this.k.keaLife.lureRadius));
+    this._beat('sprouted', { food: t });
+  }
+
+  // Trying to sprout one in winter: no berries now (the story points it out the first time).
+  onSproutRefused(t) {
+    if (this.beats.berriesBare) return;
+    this.beats.berriesBare = true;
+    this._beat('berries_bare', { food: t });
+  }
+
+  // Pātōtara the player grew and left unsprouted gets a reminder (once each), a while after
+  // it went down: the 'unsprouted' moment.
+  _remindUnsprouted() {
+    if (this.stage === 'winter' || this.chase || this.won || this._winAt != null || this._loseAt != null) return;
+    const now = this.game.playTime, wait = this._sec(this.k.sproutRemindSec);
+    for (const p of this.placedFood) {
+      if (!p.alive || !p.unsprouted || p._reminded || now - (p._placedAt || 0) < wait) continue;
+      p._reminded = true;
+      this._beat('unsprouted', { food: p });
+      return;
     }
   }
 
@@ -691,6 +727,7 @@ class PatotaraDirector extends ModuleDirector {
   // the better of it, green when the moa do), the kea and moa counted under it, and a ring
   // round who counts.
   renderOver() {
+    super.renderOver();   // (the walk's guide)
     const r = this.raid, kr = this.keaRaid;
     if (r && !r.done && this.beats.keaGang) {
       this._drawOdds(this.sites.friendNest, this.k.defence.radius, this._summerChance(r.count),
@@ -758,9 +795,12 @@ class PatotaraDirector extends ModuleDirector {
     if (this.chick && this.chick.alive) this.chick.lifeScript.follow(this.mother, 9);
   }
 
-  // The pātōtara the player grew most recently (not the story's patch).
+  // The pātōtara the player grew (and sprouted) most recently (not the story's patch).
   _newestFood() {
-    for (let i = this.placedFood.length - 1; i >= 0; i--) if (this.placedFood[i].alive) return this.placedFood[i];
+    for (let i = this.placedFood.length - 1; i >= 0; i--) {
+      const p = this.placedFood[i];
+      if (p.alive && !p.unsprouted) return p;
+    }
     return null;
   }
 }
@@ -796,6 +836,21 @@ class KeaLife {
 
   behave(sim, mauri, seasonManager, dt) {
     const k = this.k;
+    // The Pouākai diving at this kea (it only hunts kea in the Free Play years): it takes off
+    // away from it, and once clear flies back to where it was going.
+    const e = this.dir.eagle;
+    if (e && e.alive && e.hunting && e.target === k) {
+      const ex = k.pos.x - e.pos.x, ey = k.pos.y - e.pos.y, ed = Math.hypot(ex, ey) || 1;
+      if (ed < 90) {
+        k.state = KERERU_STATE.FLYING;
+        k.maxSpeed = 0.5;
+        k.applyForce(k.seekPoint(k.pos.x + ex / ed * 60, k.pos.y + ey / ed * 60, 1.4));
+        if (this.mode !== 'fly' && this.mode !== 'lunge') { this.then = this.mode; this.mode = 'fly'; }
+        this.landed = false;
+        k.edges();
+        return;
+      }
+    }
     const dx = this.point.x - k.pos.x, dy = this.point.y - k.pos.y, d = Math.hypot(dx, dy);
     if (this.mode === 'fly' || this.mode === 'lunge') {
       k.state = KERERU_STATE.FLYING;

@@ -105,6 +105,10 @@ class Simulation {
     // { x, y, strength }; strength ebbs to 0 and is pruned. Read via disturbanceAt().
     this._disturbances = [];
 
+    // Plants the player has tapped, drawing hungry plant-eaters for a few seconds (see
+    // lurePlant). Each { plant, t } (frames left); the plant carries _lured while it lasts.
+    this._lures = [];
+
     // Established moa nesting sites. Seeded in init() when the level opts in; moa lay at their nearest site.
     this.nestingSites = [];
     this._nestingRecomputeTimer = 0;
@@ -970,6 +974,7 @@ class Simulation {
 
     flock.push(chick);
     this._invalidateCache();
+    if (this.game && this.game.module && this.game.module.onHatched) this.game.module.onHatched(chick, type);
 
     if (this.stats && this.stats.births !== undefined) this.stats.births++;
     const name = (sp && sp.displayName) || (chick.species && chick.species.displayName) || type;
@@ -1149,6 +1154,52 @@ class Simulation {
     }
     return sum;
   }
+
+  // The player tapped `plant` (Game._tapPlant): for PLANT_LURE.sec it draws the hungry
+  // plant-eaters near it a little. Their food searches weigh a lured plant as if it were nearer
+  // (Moa.findPlant, the fruit birds' _findFruitTree), and the hungry ones within reach look
+  // again now rather than carrying on to what they'd picked. A module family member walks over
+  // to it itself (MoaLife._luredPlant). A plant with nothing to eat on it draws no one.
+  lurePlant(plant) {
+    if (!plant || !plant.hasFood()) return;
+    const frames = PLANT_LURE.sec * 60;
+    const had = this._lures.find(l => l.plant === plant);
+    if (had) had.t = frames;
+    else this._lures.push({ plant, t: frames });
+    plant._lured = true;
+
+    const R2 = PLANT_LURE.range * PLANT_LURE.range, px = plant.pos.x, py = plant.pos.y;
+    const near = (e) => { const dx = e.pos.x - px, dy = e.pos.y - py; return dx * dx + dy * dy < R2; };
+    for (const m of this.moas) {
+      if (!m.alive || m.lifeScript || m.hunger <= m.hungerThreshold || !near(m)) continue;
+      m.targetPlant = null;
+      m._nextForageSearch = 0;
+    }
+    for (const type in this.otherEntities) {
+      for (const b of this.otherEntities[type]) {
+        // A fruit bird on the wing with an empty crop is the one out looking for food.
+        if (!b.alive || !b._findFruitTree || b.state !== KERERU_STATE.FLYING || b.crop > 0 || !near(b)) continue;
+        b._targetTree = null;
+        b._treeSearchTimer = 0;
+      }
+    }
+  }
+
+  _updateLures(dt) {
+    const list = this._lures;
+    if (list.length === 0) return;
+    let wi = 0;
+    for (let i = 0; i < list.length; i++) {
+      const l = list[i];
+      l.t -= dt;
+      if (l.t > 0 && l.plant.hasFood()) list[wi++] = l;
+      else l.plant._lured = false;
+    }
+    list.length = wi;
+  }
+
+  // The lured plants (for a module family member's look round; see MoaLife._luredPlant).
+  get lures() { return this._lures; }
 
   _decayDisturbances(dt) {
     const list = this._disturbances;
@@ -1525,6 +1576,7 @@ class Simulation {
     }
 
     this._decayDisturbances(dt);   // age out raided-nest disturbance
+    this._updateLures(dt);         // age out tapped-plant lures
     this._updateNestingSites(dt);  // refresh site egg tallies (raid indicator)
     this._updateMoaNestingFormation(dt);   // grow player nesting sites (moa focus year)
   }
@@ -1771,6 +1823,7 @@ class Simulation {
             newMoa.homeRange.set(egg.pos.x, egg.pos.y);
             this.moas.push(newMoa);
             this.stats.births++;
+            if (this.game && this.game.module && this.game.module.onHatched) this.game.module.onHatched(newMoa, newMoa.speciesKey);
             // Track per-species birth
             const offspringKey = newMoa.speciesKey || offspringSpecies || 'unknown';
             if (this.stats.birthsBySpecies[offspringKey] !== undefined) {
@@ -2083,6 +2136,11 @@ class Simulation {
       this._drawLifted(e, e._py - e.pos.y, 'render');
     }
 
+    // A tarn's water, half-seen through the trees standing up in front of it (GL terrain only).
+    if (typeof GLTerrain !== 'undefined' && typeof GLBatch !== 'undefined' && GLBatch._open) {
+      GLTerrain.drawWaterOverlay(this.game);
+    }
+
     // Overlays on top: storms, then moa indicators (hunger bars / halos), then the
     // nest-raid hover cue (tint + success%) so it reads above the foliage.
     this._billboardList(this.placeables, 80, p => p.type === 'Storm', inView, lift, 'render');
@@ -2091,10 +2149,10 @@ class Simulation {
     this._billboardList(this.nestingSites, 100, s => s._raidHover, inView, lift, 'renderRaidOverlay');
   }
 
-  // Highlighted (outlined) moa under a storm's clouds are drawn again over the storms, outline
-  // and all (Moa.renderOverStorm), so the player can still see where they are. A storm's
-  // clouds spread to about 1.3x its radius. `lift` widens the cull in the 3D view, where the
-  // birds stand on the relief.
+  // Moa under a storm's clouds get their outline drawn over the storms (Moa.renderOverStorm):
+  // a silhouette of the hidden bird, so the player can still see where it is. A storm's clouds
+  // spread to about 1.3x its radius. `lift` widens the cull in the 3D view, where the birds
+  // stand on the relief.
   _renderOverStorms(inView, lift) {
     const storms = this._stormScratch || (this._stormScratch = []);
     storms.length = 0;
@@ -2104,19 +2162,20 @@ class Simulation {
     const moas = this.moas;
     for (let i = 0; i < moas.length; i++) {
       const m = moas[i];
-      if (!m.alive || !m.hasOutline || !inView(m.pos.x, m.pos.y, lift)) continue;
-      let under = false;
+      if (!m.alive || !m.renderOverStorm || !inView(m.pos.x, m.pos.y, lift)) continue;
+      let under = null;
       for (const s of storms) {
         const q = s._dragPos || s.pos, r = (s.radius || 56) * 1.3;
         const dx = q.x - m.pos.x, dy = q.y - m.pos.y;
-        if (dx * dx + dy * dy < r * r) { under = true; break; }
+        if (dx * dx + dy * dy < r * r) { under = s; break; }
       }
-      if (!under || !m.hasOutline()) continue;
+      if (!under) continue;
       if (relief) {
+        // (No 2D clip in the 3D view: the storm's circle isn't where it's drawn on the relief.)
         const elev = this.terrain.getElevationAt(m.pos.x, m.pos.y);
         this._drawLifted(m, Projection.groundY(m.pos.y, elev) - m.pos.y, 'renderOverStorm');
       } else {
-        m.renderOverStorm();
+        m.renderOverStorm(under);
       }
     }
   }

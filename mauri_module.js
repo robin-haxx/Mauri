@@ -81,7 +81,14 @@ const MODULE_STORY_DEFAULTS = {
     goalReach: 26,         // this close to the end of the walk counts as there
     restSec: 2,            // they pause this long under each storm on the way
     waitSec: 8,            // under a storm with none ahead, they wait this long before going on alone
-    speed: 1.4             // walking pace, as a multiple of the moa's normal speed
+    speed: 1.4,            // walking pace, as a multiple of the moa's normal speed
+    // The leader waits for the column once its last walker is further back than the line would
+    // naturally be (tailGap a walker, plus tailSlack) by tailFar, until it's back within that
+    // (but no longer than tailWaitSec at a time).
+    tailGap: 14, tailSlack: 15, tailFar: 35, tailWaitSec: 6,
+    // Going on alone, down: Module 0's story sends them the wrong way first (to sites.decoy);
+    // otherwise (false) they walk down the trail, as they walk up it in spring.
+    wrongWay: false
   },
   eagle: {
     spotRange: 140,        // the eagle sees the family from this far
@@ -102,12 +109,17 @@ const MODULE_STORY_DEFAULTS = {
     autumnChase2Progress: 0.45,  // second attack once they are this far along...
     autumnChase2GapSec: 10,      // ...or this long after the first, whichever comes first
     winterFirstPassSec: 8, // winter: first visit, then one every winterPassEverySec
-    winterPassEverySec: 14,
+    winterPassEverySec: 10,
+    // Winter, hungry: between attacks it stalks the family, circling close and quick over
+    // them, and any bird out of cover within pounceRange of it is seen at once (no waiting for
+    // the next pass), pounceGapSec after its last attack. A family hiding under a storm it
+    // circles for searchSec before it gives up.
+    winterStalk: { patrolRadius: 90, patrolTurn: 0.014, pounceRange: 120, pounceGapSec: 3, searchSec: 8 },
     springChaseSec: 10     // spring: one attack this long into the walk home
   },
-  // After the egg hatches (Module 0): the clouds down the mountain clear (all but the nest's
-  // own; autumn gathers one there again if it was moved off), and the eagle flies off the map
-  // until autumn's storm path is under way (see _calmAfterHatch, _eagleReturns).
+  // After the egg hatches (Module 0): the eagle flies off the map until autumn's storm path is
+  // under way, and every storm clears, the nest's too (autumn gathers one there again; see
+  // _calmAfterHatch, _beginAutumn, _eagleReturns).
   calmAfterHatch: false,
   // The autumn storm down the trail starts as a wisp this share of its size, and swells to
   // full over swellSec when it's pointed out (swellAutumnStorm).
@@ -126,7 +138,7 @@ const MODULE_STORY_DEFAULTS = {
   outroDir: 'north',       // which way the family walks off the map: 'north' or 'south'
   lockedTools: {},         // tools greyed out until a story moment: { Storm: 'new_storm' }
   // The worn trail along the way down: how wide, how light, and in which seasons it shows.
-  trail: { width: 13, endWidth: 28, amount: 0.7, seasons: ['autumn', 'spring'] },
+  trail: { width: 13, endWidth: 28, amount: 0.85, seasons: ['autumn', 'spring'] },
   goals: {}                // per-season goal lists: { summer: [{ id, name, reward? }], ... }
 };
 
@@ -624,6 +636,9 @@ class ModuleDirector {
   // follows; a later module adds a second family with its own group).
   _spawnMoa(x, y, female, role, opts = {}) {
     const sim = this.game.simulation;
+    // Never on scree, ice or snow: a bird set down there can't walk off it (see _walkableNear).
+    const p = this._walkableNear(x, y);
+    if (p) { x = p.x; y = p.y; }
     const m = sim._createFromRegistry('moa', 'upland_moa', x, y, Moa);
     m.isFemale = female;
     const bySex = m.speciesConfig.sizeBySex;   // sizes set per sex (see Moa.updateAge)
@@ -645,6 +660,23 @@ class ModuleDirector {
     return m;
   }
 
+  // The nearest point to (x, y) a moa can stand on now (walkable, seasonal snow included, and at
+  // least `edge` in from the map's edges), searched in rings out to maxR; (x, y) itself when it
+  // already is; null if none.
+  _walkableNear(x, y, maxR = 80, edge = 4) {
+    const t = this.game.terrain, W = t.mapWidth, H = t.mapHeight;
+    const ok = (px, py) => px > edge && py > edge && px < W - edge && py < H - edge && t.isWalkable(px, py);
+    if (ok(x, y)) return { x, y };
+    for (let r = 3; r <= maxR; r += 3) {
+      const n = Math.max(8, Math.round(r * 1.5));
+      for (let k = 0; k < n; k++) {
+        const a = k / n * Math.PI * 2, px = x + Math.cos(a) * r, py = y + Math.sin(a) * r;
+        if (ok(px, py)) return { x: px, y: py };
+      }
+    }
+    return null;
+  }
+
   // The eagle, circling its lookout (sites.eyrie). It starts on its way over from there,
   // eagle.summerStartDist from `near` (toward the lookout), so a summer attack always takes
   // about as long to arrive.
@@ -664,7 +696,8 @@ class ModuleDirector {
     return e;
   }
 
-  // Plant `count` of a plant type around a point.
+  // Plant `count` of a plant type around a point. (Pātōtara the story plants comes up in fruit:
+  // only the wild and the player's grown pātōtara need sprouting; see Plant.sproutsByHand.)
   _sow(type, at, count, radius, growth = 0.9) {
     const g = this.game, t = g.terrain;
     let placed = 0;
@@ -673,6 +706,7 @@ class ModuleDirector {
       const x = at.x + Math.cos(a) * d, y = at.y + Math.sin(a) * d;
       if (!t.isWalkable(x, y)) continue;
       const p = new Plant(x, y, type, t, t.getBiomeAt(x, y).key);
+      if (p.unsprouted) p.sprout();
       p.growth = growth;
       p.isSpawned = true;
       g.simulation.addPlant(p);
@@ -851,9 +885,11 @@ class ModuleDirector {
     this.autumnStorm = this._trailStorm();
     if (this.autumnStorm) this.autumnStorm.swellTo(this.cfg.stormRadius * this.cfg.autumnStormStart, 1);
     // After the summer's clear skies (calmAfterHatch), the weather gathers over the nest again
-    // if its storm was moved off: they set out from under cover.
+    // (unless a storm has been set there since, not one still fading from the summer's clear
+    // skies): they set out from under cover.
     const sim = this.game.simulation, n = this.sites.nest;
-    if (this.cfg.calmAfterHatch && !sim.placeables.some(p => p.alive && p.type === 'Storm' && this._overNest(p))) {
+    if (this.cfg.calmAfterHatch &&
+        !sim.placeables.some(p => p.alive && p.type === 'Storm' && !p.fading && this._overNest(p))) {
       const s = sim.addStandingStorm(n.x, n.y, this.cfg.stormRadius);
       s.swellTo(this.cfg.stormRadius * 0.3, 1);
       s.swellTo(this.cfg.stormRadius, this._sec(3));
@@ -899,8 +935,30 @@ class ModuleDirector {
       if (p.alive && p.standing && p.type === 'Storm') p.fadeOver(this.cfg.winterStormLifeSec, false);
     }
     this._nextPass = this._sec(this.cfg.eagle.winterFirstPassSec);
+    this._stalk(true);
     this._settleAtTarn();
     this._beat('winter');
+  }
+
+  // Winter's hungry Pouākai (eagle.winterStalk): circling close and quick round the family
+  // between attacks; off again in spring.
+  _stalk(on) {
+    const el = this.eagle && this.eagle.lifeScript, W = this.cfg.eagle.winterStalk;
+    if (!el || !W) return;
+    if (on && !this._patrolWas) this._patrolWas = { r: el.patrolRadius, turn: el.patrolTurn, patrol: el.patrol };
+    const was = this._patrolWas || { r: 160, turn: 0.006, patrol: el.patrol };
+    el.patrolRadius = on ? W.patrolRadius : was.r;
+    el.patrolTurn = on ? W.patrolTurn : was.turn;
+    el.patrol = on ? true : was.patrol;
+    // (Circling its lookout, it comes over to the family now.)
+    if (on && (el.mode === 'soar' || el.mode === 'leave')) el.mode = 'patrol';
+    if (!on) this._patrolWas = null;
+  }
+
+  // How long the eagle circles a hidden family before giving up (longer while it stalks in winter).
+  _searchSec() {
+    const E = this.cfg.eagle;
+    return (this.stage === 'winter' && E.winterStalk) ? E.winterStalk.searchSec : E.searchSec;
   }
 
   _beginSpring() {
@@ -908,6 +966,7 @@ class ModuleDirector {
     for (const p of this.game.simulation.placeables) {
       if (p.alive && p.standing && p.fading) { p.fading = false; p.life = p.maxLife = 1; }
     }
+    this._stalk(false);
     this._journeyAt = this._sec(this.cfg.journey.springDelaySec);
     this.game._stormCooldownUntil = 0;   // no recharge this season (stormCooldownFree)
     this.clutchThisYear = false;   // a new breeding season
@@ -995,12 +1054,12 @@ class ModuleDirector {
     this._beat('hatched');
   }
 
-  // The chick is out and the view pulls back (story.calmAfterHatch): the weather down the
-  // mountain clears (every storm but the one over the nest shrinks and fades away) and the
-  // eagle flies off the map. It comes back in autumn (see _eagleReturns).
+  // The chick is out and the view pulls back (story.calmAfterHatch): the eagle flies off the
+  // map and, with nothing to hide from, the weather clears (every storm, the nest's too,
+  // shrinks and fades away). Both come back in autumn (see _beginAutumn, _eagleReturns).
   _calmAfterHatch() {
     for (const p of this.game.simulation.placeables) {
-      if (!p.alive || p.type !== 'Storm' || this._overNest(p)) continue;
+      if (!p.alive || p.type !== 'Storm') continue;
       p.swellTo(p.radius * 0.3, this._sec(3));
       p.fadeOver(3, false);
     }
@@ -1084,8 +1143,16 @@ class ModuleDirector {
   }
 
   _updateWinter() {
-    const b = this.beats, E = this.cfg.eagle;
-    if (!this.chase && this.stageTime >= this._nextPass) {
+    const b = this.beats, E = this.cfg.eagle, W = E.winterStalk;
+    if (this.chase) this._lastChaseT = this.stageTime;
+    // Stalking (after its first pass): a bird out of cover close under it is seen at once.
+    let pounce = false;
+    if (!this.chase && W && b.firstPass && this.stageTime - (this._lastChaseT || 0) >= this._sec(W.pounceGapSec)) {
+      const e = this.eagle.pos;
+      pounce = this._living().some(m => !this.isHidden(m) &&
+        Math.hypot(m.pos.x - e.x, m.pos.y - e.y) < W.pounceRange);
+    }
+    if (!this.chase && (pounce || this.stageTime >= this._nextPass)) {
       this._startChase('winter', this._living(), {
         graceSec: E.winterGraceSec, prompt: b.firstPass ? 'last_chance' : 'winter_pass'
       });
@@ -1216,6 +1283,7 @@ class ModuleDirector {
     const lead = this._leader();
     if (!lead) return;
     const J = this.cfg.journey, ls = lead.lifeScript;
+    if (!j.visited) this._prepareJourney(j);
     j.time += dt;
     const dGoal = Math.hypot(lead.pos.x - j.goal.x, lead.pos.y - j.goal.y);
     j.progress = Math.max(0, Math.min(1, 1 - dGoal / j.startDist));
@@ -1236,13 +1304,109 @@ class ModuleDirector {
       if (j.waited >= this._sec(J.waitSec)) j.goAlone = true;
       return;
     }
-    ls.goTo(wp.x, wp.y, J.speed);
+    // The column keeps together: the leader waits for the last of them to catch up (not for
+    // ever: one held up a long way back is left to follow on).
+    const lag = this._columnLag(lead), tailGo = J.tailGap * (this._living().length - 1) + J.tailSlack;
+    if (j.tailWait ? lag > tailGo : lag > tailGo + J.tailFar) {
+      j.tailWait = (j.tailWait || 0) + dt;
+      if (j.tailWait < this._sec(J.tailWaitSec)) { ls.stay(lead.pos.x, lead.pos.y, 4); return; }
+    } else {
+      j.tailWait = 0;
+    }
+    // Along its route (round the high ground) to where it's going.
+    let tx = wp.x, ty = wp.y;
+    if (wp.route) {
+      const r = wp.route;
+      while (wp.idx < r.length - 1 && Math.hypot(r[wp.idx].x - lead.pos.x, r[wp.idx].y - lead.pos.y) < 12) wp.idx++;
+      tx = r[wp.idx].x; ty = r[wp.idx].y;
+    }
+    ls.goTo(tx, ty, J.speed);
     if (wp.storm && Math.hypot(lead.pos.x - wp.x, lead.pos.y - wp.y) < 10) {
       j.restUntil = this.stageTime + this._sec(J.restSec);   // arrived under a storm: rest
+      j.visited.add(wp.storm);                                // ...and on from it, never back to it
       j.waypoint = null;
       j.waited = 0;
       j.goAlone = false;
     }
+  }
+
+  // A walk's working state, set up as it begins: the storms already rested under (never walked
+  // back to), and how far there is to walk to the goal from every cell of the planning grid
+  // over the ground as it is now (j.field), so storms are judged by the walk, not the crow's
+  // flight: a storm over a ridge is as far as the way round it.
+  _prepareJourney(j) {
+    j.visited = new Set();
+    j.tailWait = 0;
+    j.field = this._walkField(j.goal);
+  }
+
+  // Walking distance to `to` from every cell of the planning grid (Infinity where it can't be
+  // walked to), over the live walkable ground (seasonal snow included). Dijkstra, 8-way.
+  _walkField(to) {
+    const G = this._grid, t = this.game.terrain;
+    if (!G) return null;
+    const cols = G.cols, rows = G.rows, step = G.step, N = cols * rows;
+    const ok = new Uint8Array(N);
+    for (let i = 0; i < N; i++) {
+      ok[i] = G.walk[i] && t.isWalkable(((i % cols) + 0.5) * step, (((i / cols) | 0) + 0.5) * step) ? 1 : 0;
+    }
+    const goal = this._cellOf(to);
+    ok[goal] = 1;
+    const dist = new Float32Array(N).fill(Infinity), heap = new _ModuleHeap();
+    dist[goal] = 0;
+    heap.push(0, goal);
+    while (heap.size) {
+      const cur = heap.pop();
+      const cc = cur % cols, cr = (cur / cols) | 0, d0 = dist[cur];
+      for (let dr = -1; dr <= 1; dr++) {
+        for (let dc = -1; dc <= 1; dc++) {
+          if (!dr && !dc) continue;
+          const nc = cc + dc, nr = cr + dr;
+          if (nc < 0 || nr < 0 || nc >= cols || nr >= rows) continue;
+          const n = nr * cols + nc;
+          if (!ok[n]) continue;
+          const nd = d0 + ((dr && dc) ? 1.414 : 1) * step;
+          if (nd < dist[n]) { dist[n] = nd; heap.push(nd, n); }
+        }
+      }
+    }
+    return dist;
+  }
+
+  _cellOf(p) {
+    const G = this._grid;
+    return Math.max(0, Math.min(G.rows - 1, (p.y / G.step) | 0)) * G.cols +
+           Math.max(0, Math.min(G.cols - 1, (p.x / G.step) | 0));
+  }
+
+  // The walk still to go from p (the field, else as the crow flies). A point on a cell that
+  // can't be walked (a storm's edge over scree) takes its best walkable neighbour's.
+  _walkLeft(j, p) {
+    const f = j.field;
+    if (!f) return Math.hypot(p.x - j.goal.x, p.y - j.goal.y);
+    const G = this._grid, i = this._cellOf(p);
+    if (f[i] < Infinity) return f[i];
+    let best = Infinity;
+    const c = i % G.cols, r = (i / G.cols) | 0;
+    for (let dr = -2; dr <= 2; dr++) {
+      for (let dc = -2; dc <= 2; dc++) {
+        const nc = c + dc, nr = r + dr;
+        if (nc < 0 || nr < 0 || nc >= G.cols || nr >= G.rows) continue;
+        const v = f[nr * G.cols + nc] + Math.hypot(dr, dc) * G.step;
+        if (v < best) best = v;
+      }
+    }
+    return best;
+  }
+
+  // How far the furthest of the walkers is from the leader.
+  _columnLag(lead) {
+    let lag = 0;
+    for (const m of this._living()) {
+      if (m === lead || (m.lifeScript && m.lifeScript.offMap)) continue;
+      lag = Math.max(lag, Math.hypot(m.pos.x - lead.pos.x, m.pos.y - lead.pos.y));
+    }
+    return lag;
   }
 
   _nextWaypoint(lead, j) {
@@ -1250,35 +1414,53 @@ class ModuleDirector {
     const here = lead.pos;
     const dGoal = Math.hypot(here.x - j.goal.x, here.y - j.goal.y);
     if (dGoal < J.goalReach * 2) return { x: j.goal.x, y: j.goal.y };
-    // Having gone the wrong way (all the way to the decoy), they know better: from here on any
-    // storm toward the tarn will do, uphill or not, and alone they take the trail.
+    // Where they're going is in reach itself: straight there (no waiting for a storm first).
+    if (this._walkLeft(j, here) <= J.hopReach) {
+      return (j.waypoint && j.waypoint.final) ? j.waypoint : this._routeTo(lead, { x: j.goal.x, y: j.goal.y, final: true });
+    }
+    // (Module 0's story: having gone the wrong way, all the way to the decoy, they know better.)
     const decoy = this.sites.decoy;
-    if (j.dir === 'down' && decoy && Math.hypot(here.x - decoy.x, here.y - decoy.y) < 25) j.lost = true;
+    if (J.wrongWay && j.dir === 'down' && decoy && Math.hypot(here.x - decoy.x, here.y - decoy.y) < 25) j.lost = true;
 
-    // The best storm in reach that brings them closer (by at least 20) to where they're going.
-    const hereE = t.getElevationAt(here.x, here.y);
-    let best = null, bestScore = -Infinity;
+    // The best storm in reach that shortens the walk still to go (by at least 20), one not
+    // already rested under. The one it's heading for is kept unless another is clearly better,
+    // so the leader doesn't dither between two.
+    const leftHere = this._walkLeft(j, here);
+    const cur = j.waypoint && j.waypoint.storm;
+    let best = null, bestScore = -Infinity, bestPt = null;
     for (const p of sim.placeables) {
-      if (!p.alive || p.type !== 'Storm') continue;
+      if (!p.alive || p.type !== 'Storm' || j.visited.has(p)) continue;
       const d = Math.hypot(p.pos.x - here.x, p.pos.y - here.y);
       if (d > J.hopReach) continue;
-      const gain = dGoal - Math.hypot(p.pos.x - j.goal.x, p.pos.y - j.goal.y);
+      // Aim a little inside the storm on the far side, toward the goal (on ground it can stand on).
+      const gx = j.goal.x - p.pos.x, gy = j.goal.y - p.pos.y, gl = Math.hypot(gx, gy) || 1;
+      let pt = { x: p.pos.x + gx / gl * p.radius * 0.25, y: p.pos.y + gy / gl * p.radius * 0.25 };
+      if (!t.isWalkable(pt.x, pt.y)) pt = this._walkableNear(p.pos.x, p.pos.y, p.radius * 0.5);
+      if (!pt) continue;
+      const gain = leftHere - this._walkLeft(j, pt);
       if (gain < 20) continue;
-      if (j.dir === 'down' && !j.lost && t.getElevationAt(p.pos.x, p.pos.y) > hereE + 0.02) continue;
-      const score = gain - d * 0.3;
-      if (score > bestScore) { bestScore = score; best = p; }
+      const score = gain - d * 0.3 + (p === cur ? 15 : 0);
+      if (score > bestScore) { bestScore = score; best = p; bestPt = pt; }
     }
     if (best) {
-      // Aim a little inside the storm on the far side, toward the goal.
-      const gx = j.goal.x - best.pos.x, gy = j.goal.y - best.pos.y, gl = Math.hypot(gx, gy) || 1;
-      let x = best.pos.x + gx / gl * best.radius * 0.25, y = best.pos.y + gy / gl * best.radius * 0.25;
-      if (!t.isWalkable(x, y)) { x = best.pos.x; y = best.pos.y; }
-      if (t.isWalkable(x, y)) return { x, y, storm: best };
+      if (cur === best) return j.waypoint;   // (keeping its route)
+      return this._routeTo(lead, { x: bestPt.x, y: bestPt.y, storm: best });
     }
-    // No storm ahead: wait under this one for a while, then go on alone.
+    // No storm ahead: wait under this one for a while, then go on alone, along the trail: down
+    // in autumn, up in spring. (Module 0's story sends them the wrong way first: wrongWay.)
     if (!j.goAlone && this.isHidden(lead)) return 'wait';
-    if (j.dir === 'down' && !j.lost) return { x: this.sites.decoy.x, y: this.sites.decoy.y };
+    if (J.wrongWay && j.dir === 'down' && !j.lost && decoy) return this._routeTo(lead, { x: decoy.x, y: decoy.y });
     return this._pathPointAhead(here, j.dir === 'down' ? this.sites.path : this.sites.pathUp);
+  }
+
+  // A waypoint with a walkable route to it from where the leader is (round any high ground in
+  // the way), or just the waypoint if there's no planning grid or no way round.
+  _routeTo(lead, wp) {
+    const t = this.game.terrain;
+    const path = this._grid ? this._findPath({ x: lead.pos.x, y: lead.pos.y }, { x: wp.x, y: wp.y },
+      (x, y) => !t.isWalkable(x, y)) : null;
+    if (path && path.length > 2) { wp.route = this._smoothPath(path); wp.idx = 1; }
+    return wp;
   }
 
   // A point a little further along `path` than the point nearest to `pos`.
@@ -1363,7 +1545,7 @@ class ModuleDirector {
           this._beat(c.prompt);
         } else {
           c.phase = 'search';                    // "they won't be seen at first"
-          c.searchLeft = this._sec(E.searchSec);
+          c.searchLeft = this._sec(this._searchSec());
           el.search(centre);
           this._beat('unseen');
         }
@@ -1372,7 +1554,7 @@ class ModuleDirector {
       c.holdFamily = true;
       if (!exposed.length) {
         c.phase = 'search';
-        c.searchLeft = this._sec(E.searchSec);
+        c.searchLeft = this._sec(this._searchSec());
         el.search(centre);
         this._beat('hidden');
         return;
@@ -1388,7 +1570,7 @@ class ModuleDirector {
     } else if (c.phase === 'strike') {
       if (this.isHidden(c.victim)) {             // covered at the last moment
         c.phase = 'search';
-        c.searchLeft = this._sec(E.searchSec);
+        c.searchLeft = this._sec(this._searchSec());
         el.search(centre);
         this._beat('hidden');
       } else if (Math.hypot(eagle.pos.x - c.victim.pos.x, eagle.pos.y - c.victim.pos.y) < eagle.catchRadius + 2) {
@@ -1512,6 +1694,36 @@ class ModuleDirector {
     this.eagle.lifeScript.leave(true);   // home to its lookout (no following them off the map)
     for (const m of this._living()) m.lifeScript.walkOff(this.cfg.outroDir === 'south' ? 1 : -1, this.sites.exitPath);
     g.cameraTo({ zoom: 1 }, 90);
+  }
+
+  // Whether the win screen should offer "Continue" into another level on the same land and
+  // area (story.continueTo: e.g. Module 1 into the Free Play years), with no walk-off or pan.
+  hasContinue() {
+    const id = this.cfg.continueTo;
+    return this.won && !this._continuing && !!id && typeof LEVEL_REGISTRY !== 'undefined' && !!LEVEL_REGISTRY.get(id);
+  }
+
+  // "Continue" (story.continueTo): load that level here, on the same land, carrying over the
+  // sites, both families, the storms and food patches on the map, and the mauri. The load runs
+  // behind a still of this frame (Game.startModuleHandoff), so it fades straight in.
+  beginContinue() {
+    const g = this.game, t = g.terrain, sim = g.simulation;
+    this._continuing = true;
+    g.state = GAME_STATE.PLAYING;   // the card goes; the still is taken at the end of this frame
+    if (g.tutorial) { g.tutorial.enabled = false; g.tutorial.active = false; g.tutorial.currentTip = null; }
+    const friends = this.friends || [];
+    const moa = [...this.family, ...friends].filter(m => m.alive)
+      .map(m => ({ group: friends.includes(m) ? 'friends' : 'ours', role: m.lifeScript.role, female: m.isFemale }));
+    const placed = sim.placeables.filter(p => p.alive && (p.type === 'Storm' || p.type === 'patotara' || p.type === 'wharariki'))
+      .map(p => ({ type: p.type, x: p.pos.x, y: p.pos.y, radius: p.radius, sprouted: !p.unsprouted }));
+    g.startModuleHandoff({
+      levelId: this.cfg.continueTo,
+      seed: t.seed,
+      elevFit: t._elevFit ? Object.assign({}, t._elevFit) : null,
+      sites: JSON.parse(JSON.stringify(this.sites)),
+      moa, placed,
+      mauri: g.mauri ? g.mauri.mauri : null
+    });
   }
 
   // Whether the player's input is switched off (during the outro).
@@ -1670,6 +1882,7 @@ class ModuleDirector {
     const s = this.sites, g = this.game;
     if (!s || this.outroDone || (this.outro && this.outro.phase !== 'walk')) return;
     push();
+    this._renderWaterReach();
     noStroke();
 
     // The nest: a ring of twigs. (A module whose nests are nesting sites, drawn by the
@@ -1710,9 +1923,77 @@ class ModuleDirector {
     pop();
   }
 
-  // Drawn over the birds, in the world view (after the simulation). Nothing here; a later
-  // module draws its markers (e.g. a nest's defence) here.
-  renderOver() {}
+  // The waterhole's reach (waterAt: the tarn's edge + water.reach), where a bird's hunger
+  // slows: a steady water-blue ring with a soft glow, laid over the ground (it follows the
+  // relief in the 3D view). Performance mode drops the glow, as the tool rings do.
+  _renderWaterReach() {
+    const s = this.sites, g = this.game;
+    if (!s || !s.tarn || !this.cfg.water) return;
+    const R = s.tarnR + this.cfg.water.reach, cx = s.tarn.x, cy = s.tarn.y;
+    const dc = drawingContext, glow = !(typeof CONFIG !== 'undefined' && CONFIG.perfMode);
+    const zoom = (typeof CONFIG !== 'undefined' && CONFIG.viewZoom) || 1;
+    if (glow) {
+      dc.shadowBlur = 6 * (dc.getTransform ? (dc.getTransform().a || 1) : 1);
+      dc.shadowColor = 'rgba(120, 200, 240, 0.55)';
+    }
+    noFill();
+    stroke(165, 222, 248, 190);
+    strokeWeight(Math.max(1.3, 2 / zoom));
+    beginShape();
+    for (let i = 0; i < 64; i++) {
+      const a = i / 64 * TWO_PI, x = cx + Math.cos(a) * R, y = cy + Math.sin(a) * R;
+      vertex(x, g._groundPaintY(x, y));
+    }
+    endShape(CLOSE);
+    if (glow) { dc.shadowBlur = 0; dc.shadowColor = 'rgba(0,0,0,0)'; }
+  }
+
+  // Drawn over the birds, in the world view (after the simulation): the walk's guide. A later
+  // module adds its markers (e.g. a nest's defence), after this.
+  renderOver() { this._renderJourneyGuide(); }
+
+  // On a walk, where the family is going next: a flowing dotted line from the leader to the
+  // storm it's making for (along its route); waiting under a storm with none in reach, a faint
+  // dotted ring as far as it can see one (journey.hopReach), so the player sees where to put it.
+  _renderJourneyGuide() {
+    const j = this.journey, g = this.game;
+    if (!j || !j.active || this.chase) return;
+    const lead = this._leader();
+    if (!lead) return;
+    const px = 1 / CONFIG.viewZoom, dc = drawingContext;
+    const gy = (x, y) => g._groundPaintY(x, y);
+    push();
+    noFill();
+    strokeCap(ROUND);
+    strokeJoin(ROUND);
+    if (j.waypoint === 'wait') {
+      const R = this.cfg.journey.hopReach;
+      stroke(235, 245, 255, 110);
+      strokeWeight(2 * px);
+      dc.setLineDash([6 * px, 8 * px]);
+      dc.lineDashOffset = -(frameCount * 0.5 % 14) * px;
+      beginShape();
+      for (let i = 0; i < 64; i++) {
+        const a = i / 64 * Math.PI * 2, x = lead.pos.x + Math.cos(a) * R, y = lead.pos.y + Math.sin(a) * R;
+        vertex(x, gy(x, y));
+      }
+      endShape(CLOSE);
+    } else if (j.waypoint && j.waypoint.storm) {
+      const wp = j.waypoint;
+      const pts = [{ x: lead.pos.x, y: lead.pos.y }];
+      if (wp.route) for (let i = wp.idx; i < wp.route.length; i++) pts.push(wp.route[i]);
+      else pts.push({ x: wp.x, y: wp.y });
+      stroke(255, 250, 215, 200);
+      strokeWeight(3 * px);
+      dc.setLineDash([10 * px, 10 * px]);
+      dc.lineDashOffset = -(frameCount * 0.9 % 20) * px;
+      beginShape();
+      for (const p of pts) vertex(p.x, gy(p.x, p.y));
+      endShape();
+    }
+    dc.setLineDash([]);
+    pop();
+  }
 
   // ==========================================================================
   // SMALL HELPERS
@@ -1768,6 +2049,22 @@ class ModuleDirector {
 // attacking (ModuleDirector.chaseRole), a bird under a storm keeps still and hidden, and a
 // bird in the open runs, its safety draining.
 class MoaLife {
+  static EAT_AT = 25;   // hunger at which a bird eats a plant in reach (or goes to a tapped one)
+  // The orders a tapped plant may draw a hungry bird away from (any but hiding, running or
+  // walking off the map: a family on its walk stops to eat, then carries on).
+  static LURE_MODES = new Set(['stay', 'graze', 'follow', 'route', 'go']);
+  // A tapped plant feeds a bird that gets to it over a little time (feedPerSec hunger a second),
+  // until it's down to FULL_AT, and isn't used up (PLANT_LURE): a moment's effort saves it.
+  static FULL_AT = 12;
+  // Getting stuck on the way (see _watchProgress): watched in windows of STUCK_WINDOW frames; a
+  // window counts as slow if it closed in by under STUCK_GAIN × its base pace, and STUCK_WINDOWS
+  // slow ones in a row (~4 s) plan a detour round the high ground. A detour is dropped once the
+  // goal moves more than DETOUR_DRIFT from where it was planned to.
+  static STUCK_WINDOW = 120;
+  static STUCK_WINDOWS = 2;
+  static STUCK_GAIN = 0.08;
+  static DETOUR_DRIFT = 40;
+
   constructor(moa, director, role, group = null) {
     this.moa = moa;
     this.dir = director;
@@ -1786,9 +2083,15 @@ class MoaLife {
   }
 
   // ---- Orders ----
-  stay(x, y, radius = 8)  { this.mode = 'stay'; this.spot.x = x; this.spot.y = y; this.radius = radius; }
-  graze(x, y, radius = 24) { this.mode = 'graze'; this.spot.x = x; this.spot.y = y; this.radius = radius; }
-  goTo(x, y, speed = 1)   { this.mode = 'go'; this.spot.x = x; this.spot.y = y; this.speed = speed; }
+  stay(x, y, radius = 8)  { this.mode = 'stay'; this._setSpot(x, y); this.radius = radius; }
+  graze(x, y, radius = 24) { this.mode = 'graze'; this._setSpot(x, y); this.radius = radius; }
+  goTo(x, y, speed = 1)   { this.mode = 'go'; this._setSpot(x, y); this.speed = speed; }
+  // Where it stays, grazes or walks to: on ground it can stand on (a spot on scree or snow is
+  // moved to the nearest that isn't, or it would walk back onto it).
+  _setSpot(x, y) {
+    const p = this.offMap ? null : this.dir._walkableNear(x, y, 40);
+    this.spot.x = p ? p.x : x; this.spot.y = p ? p.y : y;
+  }
   follow(leader, gap = 10) { this.mode = 'follow'; this.leader = leader; this.gap = gap; }
   // Walk off the map: along `route` (a list of points to the map's edge) if there is one,
   // then straight on past the edge (dir 1 = south, -1 = north).
@@ -1807,6 +2110,7 @@ class MoaLife {
   behave(sim, mauri, seasonManager, dt) {
     const m = this.moa, base = m.baseSpeed;
     m.animTime += dt;
+    this._travelling = false;   // set by _travel if it heads anywhere this frame
     this._hunger(dt);
     if (!this.offMap) this._feed(sim, mauri, dt);
 
@@ -1818,8 +2122,23 @@ class MoaLife {
     const mode = role === 'hide' ? 'hold' : (role === 'flee' ? 'flee' : this.mode);
     const dx = this.spot.x - m.pos.x, dy = this.spot.y - m.pos.y;
     const dSpot = Math.hypot(dx, dy);
+    // A plant the player tapped close by draws a hungry bird over to eat it (not one hiding,
+    // running, or on an errand: see LURE_MODES).
+    const lure = (MoaLife.LURE_MODES.has(mode) && !this.offMap) ? this._luredPlant(sim) : null;
 
-    if (mode === 'hold') {
+    if (lure) {
+      if (Math.hypot(lure.pos.x - m.pos.x, lure.pos.y - m.pos.y) < 10) {
+        // At it: feeding (head down, barely moving), the plant left standing.
+        if (!this._lureEating) mauri.earnFromEating(mauri.onMoaEat, m.pos.x, m.pos.y);
+        this._lureEating = true;
+        m.maxSpeed = base * 0.05;
+        m.vel.mult(0.8);
+        m.hunger = Math.max(0, m.hunger - PLANT_LURE.feedPerSec / 60 * dt);
+      } else {
+        m.maxSpeed = base * 1.2;   // hurrying to food
+        this._travel(lure.pos.x, lure.pos.y, 0.9, 6, dt);
+      }
+    } else if (mode === 'hold') {
       m.maxSpeed = base * 0.05;
       m.vel.mult(0.85);                            // crouch where it stands
     } else if (mode === 'flee') {
@@ -1828,7 +2147,7 @@ class MoaLife {
       const grazing = mode === 'graze';
       m.maxSpeed = base * (grazing ? 0.6 : 0.45);
       if (dSpot > this.radius) {
-        m.applyForce(m.seekPoint(this.spot.x, this.spot.y, 0.6, this.radius));
+        this._travel(this.spot.x, this.spot.y, 0.6, this.radius, dt);
       } else {
         const w = m.wander();
         w.mult(grazing ? 0.3 : 0.12);
@@ -1836,7 +2155,7 @@ class MoaLife {
       }
     } else if (mode === 'go') {
       m.maxSpeed = base * this.speed;
-      m.applyForce(m.seekPoint(this.spot.x, this.spot.y, 0.9, 12));
+      this._travel(this.spot.x, this.spot.y, 0.9, 12, dt);
     } else if (mode === 'follow') {
       const L = this.leader;
       if (L && L.alive) {
@@ -1844,7 +2163,7 @@ class MoaLife {
         const leadSpeed = (L.lifeScript && L.lifeScript.mode === 'go') ? L.lifeScript.speed : 0.6;
         m.maxSpeed = base * Math.max(0.6, leadSpeed * 1.15);
         const d = Math.hypot(L.pos.x - m.pos.x, L.pos.y - m.pos.y);
-        if (d > this.gap) m.applyForce(m.seekPoint(L.pos.x, L.pos.y, 0.9, this.gap));
+        if (d > this.gap) this._travel(L.pos.x, L.pos.y, 0.9, this.gap, dt);
         else { const w = m.wander(); w.mult(0.1); m.applyForce(w); }
       }
     } else if (mode === 'route') {
@@ -1857,25 +2176,94 @@ class MoaLife {
         const end = p || m.pos;
         this.graze(end.x, end.y, this.radius);   // there: settle and feed
       } else {
-        m.applyForce(m.seekPoint(p.x, p.y, 0.9, 12));
+        this._travel(p.x, p.y, 0.9, 12, dt);
       }
     } else if (mode === 'walkOff') {
       m.maxSpeed = base * 1.6;
       const r = this.route;
       while (r && this.routeIdx < r.length && Math.hypot(r[this.routeIdx].x - m.pos.x, r[this.routeIdx].y - m.pos.y) < 12) this.routeIdx++;
-      if (r && this.routeIdx < r.length) m.applyForce(m.seekPoint(r[this.routeIdx].x, r[this.routeIdx].y, 0.9));
+      if (r && this.routeIdx < r.length) this._travel(r[this.routeIdx].x, r[this.routeIdx].y, 0.9, 0, dt);
       else m.applyForce(m.seekPoint(m.pos.x, this.offDir > 0 ? m.terrain.mapHeight + 200 : -200, 0.9));
     }
 
+    // Not heading anywhere this frame (settled, hiding, running): start the next watch afresh.
+    if (!this._travelling) { this._detour = null; this._prog = null; }
+
     this._keepSpace();
-    const avoid = m.avoidUnwalkable();
-    avoid.mult(2);
-    m.applyForce(avoid);
+    if (!this.offMap && !m.terrain.isWalkable(m.pos.x, m.pos.y)) {
+      // Standing on scree, ice or snow (set down there, jostled on, or the snow came down
+      // round it): every way the avoidance looks is blocked, so it would only turn it back and
+      // forth. Make for the nearest ground it can stand on instead.
+      const e = this._escape;
+      if (!e || Math.hypot(e.x - m.pos.x, e.y - m.pos.y) < 2 || !m.terrain.isWalkable(e.x, e.y)) {
+        // (Clear of the map's edge margin, where Boid.edges would only push it back.)
+        this._escape = this.dir._walkableNear(m.pos.x, m.pos.y, 80, 28) || this.dir._walkableNear(m.pos.x, m.pos.y, 80);
+      }
+      if (this._escape) {
+        m.maxSpeed = Math.max(m.maxSpeed, base * 0.8);
+        m.applyForce(m.seekPoint(this._escape.x, this._escape.y, 1.4));
+      }
+    } else {
+      this._escape = null;
+      const avoid = m.avoidUnwalkable();
+      avoid.mult(2);
+      m.applyForce(avoid);
+    }
     if (!this.offMap) m.edges();
     // Slopes slow a walker (up much more than down); a purposeful walk is slowed less.
     const tm = m.getTerrainSpeedMultiplier();
     if (mode === 'go' || mode === 'follow' || mode === 'route') m.maxSpeed *= Math.max(0.6, tm);
     else if (mode !== 'walkOff') m.maxSpeed *= tm;
+  }
+
+  // Head for (x, y), easing in over `arrive`. Steering is straight at it, with avoidUnwalkable
+  // nudging round scree and ice as it goes; that can stall against a mountain top that lies
+  // across the way. So the walk is watched (_watchProgress), and a bird that has barely closed
+  // in for a while is given a detour: a route round the high ground on the director's planning
+  // grid (_planDetour), which it follows before carrying on as before.
+  _travel(x, y, strength, arrive, dt) {
+    const m = this.moa;
+    this._travelling = true;
+    let tx = x, ty = y, ar = arrive;
+    const d = this._detour;
+    if (d) {
+      if (Math.hypot(d.gx - x, d.gy - y) > MoaLife.DETOUR_DRIFT) this._detour = null;   // going elsewhere now
+      else {
+        const pts = d.pts;
+        while (d.i < pts.length - 1 && Math.hypot(pts[d.i].x - m.pos.x, pts[d.i].y - m.pos.y) < 10) d.i++;
+        if (d.i >= pts.length - 1) this._detour = null;   // round it: straight on from here
+        else { tx = pts[d.i].x; ty = pts[d.i].y; ar = 0; }
+      }
+    }
+    m.applyForce(m.seekPoint(tx, ty, strength, ar));
+    this._watchProgress(tx, ty, x, y, arrive, dt);
+  }
+
+  // How much closer the bird gets to what it's steering at, over windows of STUCK_WINDOW
+  // frames (a target that jumps, the next route point say, isn't counted as progress or loss).
+  // STUCK_WINDOWS slow windows in a row (well under STUCK_GAIN of its walking pace) while still
+  // short of the goal (gx, gy) plan a detour.
+  _watchProgress(tx, ty, gx, gy, arrive, dt) {
+    const m = this.moa, d = Math.hypot(tx - m.pos.x, ty - m.pos.y);
+    const w = this._prog || (this._prog = { tx, ty, d, t: 0, gain: 0, slow: 0 });
+    if (Math.abs(tx - w.tx) + Math.abs(ty - w.ty) < 3) w.gain += w.d - d;   // same target as last frame
+    w.tx = tx; w.ty = ty; w.d = d;
+    if (Math.hypot(gx - m.pos.x, gy - m.pos.y) <= arrive + 4) { w.t = 0; w.gain = 0; w.slow = 0; return; }
+    w.t += dt;
+    if (w.t < MoaLife.STUCK_WINDOW) return;
+    w.slow = (w.gain < w.t * m.baseSpeed * MoaLife.STUCK_GAIN) ? w.slow + 1 : 0;
+    w.t = 0; w.gain = 0;
+    if (w.slow >= MoaLife.STUCK_WINDOWS) { w.slow = 0; this._planDetour(gx, gy); }
+  }
+
+  // A route from here to (gx, gy) over the walkable ground as it is now (the planning grid,
+  // less any cell under seasonal snow), smoothed. None if there's no way round.
+  _planDetour(gx, gy) {
+    const dir = this.dir, m = this.moa, t = m.terrain;
+    if (!dir._grid || !dir._findPath) return;
+    const path = dir._findPath({ x: m.pos.x, y: m.pos.y }, { x: gx, y: gy }, (x, y) => !t.isWalkable(x, y));
+    if (!path || path.length < 3) return;
+    this._detour = { pts: dir._smoothPath(path), i: 1, gx, gy };
   }
 
   // Run from the eagle: straight away from it, or into a storm if it is already at the edge of
@@ -1908,11 +2296,43 @@ class MoaLife {
     if (this._eatTimer > 0) return;
     this._eatTimer = 60 + random(40);
     const m = this.moa;
-    if (m.hunger < 25) return;
-    const p = sim.getClosestPlant(m.pos.x, m.pos.y, 16, pl => pl.alive && pl.growth > 0.3 && !pl.dormant && !pl.matured);
-    if (!p) return;
-    m.hunger = Math.max(0, m.hunger - p.consume() * 0.8);
+    if (m.hunger < MoaLife.EAT_AT) return;
+    // (Not a tapped plant one of them is feeding at: that one isn't to be used up; _luredPlant.)
+    const p = sim.getClosestPlant(m.pos.x, m.pos.y, 16, pl => pl.alive && pl.growth > 0.3 && !pl.dormant && !pl.unsprouted && !pl.matured && !(pl._heldBy && pl._heldBy.alive));
+    if (p) this._eat(p, mauri);
+  }
+
+  _eat(p, mauri) {
+    const m = this.moa;
+    // How much of the plant's food a bite yields (a director can make wild browse poorer).
+    const k = this.dir.biteValue ? this.dir.biteValue(p) : 0.8;
+    m.hunger = Math.max(0, m.hunger - p.consume() * k);
     mauri.earnFromEating(mauri.onMoaEat, m.pos.x, m.pos.y);
+  }
+
+  // The nearest plant the player has tapped (Simulation.lurePlant) within PLANT_LURE.range, if
+  // this bird is hungry enough to eat; else null.
+  // Once it has set off for one, it keeps to it (the tap's lure may run out on the way: these
+  // birds are slow) until it has eaten its fill there or the plant is gone.
+  _luredPlant(sim) {
+    const m = this.moa, held = this._lureTarget;
+    if (held) {
+      if (held.hasFood() && m.hunger > MoaLife.FULL_AT) return held;
+      if (held._heldBy === m) held._heldBy = null;
+      this._lureTarget = null;
+      this._lureEating = false;
+      return null;
+    }
+    const lures = sim.lures;
+    if (!lures || !lures.length || m.hunger < MoaLife.EAT_AT) return null;
+    let best = null, bestD = PLANT_LURE.range;
+    for (const l of lures) {
+      const d = Math.hypot(l.plant.pos.x - m.pos.x, l.plant.pos.y - m.pos.y);
+      if (d < bestD) { bestD = d; best = l.plant; }
+    }
+    this._lureTarget = best;
+    if (best) best._heldBy = m;   // (left for it: see _feed)
+    return best;
   }
 
   // Family members keep a little room between them (much closer than strangers would).
@@ -1938,6 +2358,9 @@ class MoaLife {
 // (flyAway) and bring it back (comeBack); once back it patrols round the family instead of
 // going home after an attack.
 class EagleLife {
+  static FADE_DIST = 140;        // flying away, it fades out over this last stretch (px)...
+  static FADE_IN_FRAMES = 50;    // ...and back in over this long on its return
+
   constructor(eagle, director, home) {
     this.e = eagle;
     this.dir = director;
@@ -1950,7 +2373,12 @@ class EagleLife {
     this.angle = random(TWO_PI);
     this.patrol = false;       // leaving an attack, it circles the family (patrolRadius) rather than going home
     this.patrolRadius = 160;
+    this.patrolTurn = 0.006;   // how fast it circles the family (quicker while stalking in winter)
     this.offMap = false;       // it may be off the edge of the map (flying away, gone, coming back)
+    // How visible it is, 0..1 (HaastsEagle.render draws at this alpha). Flying away it fades
+    // out over its last stretch to the edge, stays unseen while gone, and fades back in on its
+    // way back (see _updateFade).
+    this.fade = 1;
   }
 
   // ---- Orders ----
@@ -1986,6 +2414,7 @@ class EagleLife {
     const e = this.e;
     e.animTime += dt;
     let hunting = false;
+    this._updateFade(dt);
 
     // Back over the map (coming back, or sent straight at the family): kept to it again.
     const t = e.terrain;
@@ -2033,7 +2462,7 @@ class EagleLife {
       // Round and round the family, keeping an eye on them.
       e.maxSpeed = e.baseSpeed * 0.8;
       const c = this.dir.patrolCentre();
-      this._orbit(c.x, c.y, this.patrolRadius, 0.006, dt);
+      this._orbit(c.x, c.y, this.patrolRadius, this.patrolTurn, dt);
     }
 
     // Sprite pose and the tutorial spotlight read these.
@@ -2055,6 +2484,20 @@ class EagleLife {
     e.maxSpeed = e.baseSpeed * 1.1;
     e.applyForce(e.seekPoint(this.point.x, this.point.y, 1));
     if (this.mode === 'away' && Math.hypot(e.pos.x - this.point.x, e.pos.y - this.point.y) < 20) this.mode = 'gone';
+  }
+
+  // Flying away it fades out over the last FADE_DIST px to its point off the map (so it never
+  // hangs at the screen's edge), is unseen while gone, and fades in over FADE_IN_FRAMES once it
+  // heads back (or is given any other order).
+  _updateFade(dt) {
+    const e = this.e;
+    if (this.mode === 'gone') { this.fade = 0; return; }
+    if (this.mode === 'away') {
+      const d = Math.hypot(e.pos.x - this.point.x, e.pos.y - this.point.y);
+      this.fade = Math.min(this.fade, Math.max(0, Math.min(1, (d - 20) / EagleLife.FADE_DIST)));
+      return;
+    }
+    if (this.fade < 1) this.fade = Math.min(1, this.fade + dt / EagleLife.FADE_IN_FRAMES);
   }
 
   // Fly round (cx, cy) at radius r.

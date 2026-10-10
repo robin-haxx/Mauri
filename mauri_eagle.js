@@ -846,12 +846,17 @@ class HaastsEagle extends Boid {
   }
 
   render() {
+    // A module's scripted eagle fades out as it flies off the map and is unseen while it's
+    // away (EagleLife.fade).
+    const fade = (this.lifeScript && this.lifeScript.fade != null) ? this.lifeScript.fade : 1;
+    if (fade <= 0) return;
     const isActiveHunt = this.hunting && this.target !== null;
     const spriteState = isActiveHunt ? 'hunting' : (this.state === 'resting' ? 'resting' : 'flying');
     const sprite = EntitySprites.getEagleSprite(this.animTime, spriteState);
-    
+
     if (sprite) {
       push();
+      if (fade < 1) drawingContext.globalAlpha *= fade;   // restored by pop()
       translate(this.pos.x, this.pos.y);
 
       // Species highlight + field-guide selection share one sprite-shaped outline, emitted
@@ -871,8 +876,10 @@ class HaastsEagle extends Boid {
       imageMode(CENTER);
       const _eW = this.wingspan * 2.8, _eH = this.wingspan * 2.1;
       // Highlight outline: field-guide selection or the player's species toggle (ember default).
-      const _olCol = (typeof highlightOutlineColor !== 'undefined')
-        ? highlightOutlineColor(this.speciesKey, (this.config && this.config.highlightColor) || [255, 145, 90]) : null;
+      // Free Play flags its eagle (redWhenHunting): outlined red while it hunts.
+      const _olCol = (this.redWhenHunting && this.hunting) ? [235, 45, 35]
+        : (typeof highlightOutlineColor !== 'undefined')
+          ? highlightOutlineColor(this.speciesKey, (this.config && this.config.highlightColor) || [255, 145, 90]) : null;
       if (_olCol) EntitySprites.drawSpriteOutline(sprite, _eW, _eH, _olCol);
       image(sprite, 0, 0, _eW, _eH);
 

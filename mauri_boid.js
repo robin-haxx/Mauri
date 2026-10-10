@@ -387,4 +387,10 @@ class Boid {
     const fk = FLIP_SPEED * dt;
     this._flip += (this._faceDir - this._flip) * (fk > 1 ? 1 : fk);
   }
+
+  // Finish any in-progress turn-around at once, so a frozen frame (a tutorial tip pausing
+  // the game) never holds the sprite squashed edge-on mid-flip.
+  settleFacing() {
+    this._flip = this._faceDir;
+  }
 }

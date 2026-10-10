@@ -33,6 +33,20 @@ const FOREST_TREES = new Set(['beech', 'rimu', 'fern']);
 const PLANT_CLIMATE_EDIBILITY_EROSION = 0.8;   // how hard coldIndex erodes the floor
 const PLANT_INEDIBLE_THRESHOLD = 3;            // nutrition below this => skipped as food
 
+// A plant the player taps (Game._tapPlant) rustles, shakes, and for a few seconds draws the
+// hungry plant-eaters near it a little (Simulation.lurePlant): their food search weighs it as
+// if it were nearer (a moa's score times `pull`, a fruit bird's distance² times pull²), and a
+// module family member within `range` walks over to eat it (MoaLife._luredPlant), feeding there
+// at feedPerSec hunger a second without using the plant up.
+const PLANT_LURE = { sec: 5, range: 90, pull: 0.5, feedPerSec: 30 };
+const PLANT_SHAKE_FRAMES = 30;                 // how long a tapped plant shakes
+
+// A pātōtara sprouted by hand comes into leaf (its 'mature' sprite) and then, this many frames
+// later (plus up to FRUIT_JITTER, so a patch ripples), into fruit ('thriving', in summer).
+// Each change crossfades over ~30 frames (see _renderSprite).
+const PLANT_FRUIT_DELAY = 45;
+const PLANT_FRUIT_JITTER = 15;
+
 // Sprite reference - initialized from mauri_sketch.js
 let PLANT_SPRITES = null;
 
@@ -43,6 +57,11 @@ function initPlantSprites(sprites) {
 // Portrait-sprite plants: 2 alternate sprites each, one picked at random, anchored at
 // bottom-centre (the base sits on the ground point), via a dedicated render path.
 const PORTRAIT_PLANTS = new Set(['rimu', 'beech', 'dracophyllum', 'matagouri']);
+
+// Trees' cast shadows (EntitySprites.drawTreeShadow): every portrait plant, plus the square-
+// sprite trees listed here. squash: the shadow's length over the tree's height; lean: its
+// sideways slant per unit of that length.
+const TREE_SHADOW = { squash: 0.42, lean: 0.45, square: new Set(['lancewood']) };
 let PORTRAIT_PLANT_SPRITES = null;
 
 function initPortraitPlantSprites(sprites) {
@@ -255,7 +274,14 @@ class Plant {
     // never go dormant.
     this.evergreen = !!(typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.evergreenPlants &&
                         LEVEL_MECHANICS.evergreenPlants.includes(type));
-    
+    // A level with mechanics.sproutPatotara (the modules): pātōtara starts unsprouted (its
+    // dormant look, no berries, nothing for a bird to eat) until the player sprouts it, by
+    // pressing and holding on it (Game._sprout). Sprouted, it looks thriving in summer and mature
+    // in spring and autumn (see _getSpriteState).
+    this.unsprouted = Plant.sproutsByHand(type);
+    this.sprouted = false;
+    this._seasonKey = null;
+
     // Pre-calculate visual variation
     this.visualOffset = random(-1, 1);
     this.swayPhase = random(TWO_PI);
@@ -264,7 +290,40 @@ class Plant {
     this._lastSpriteState = 'mature';
   }
   
+  // Whether this level's `type` plants start unsprouted (see the constructor).
+  static sproutsByHand(type) {
+    return type === 'patotara' && typeof LEVEL_MECHANICS !== 'undefined' && !!LEVEL_MECHANICS.sproutPatotara;
+  }
+
+  // Bring out its berries (a press and hold on it; see Game._sprout). `staged` (the player's
+  // sprouting) shows it in leaf for a moment before the fruit (PLANT_FRUIT_DELAY); timed on
+  // the render clock, so it plays while a prompt has the game paused too.
+  sprout(staged = false) {
+    this.unsprouted = false;
+    this.sprouted = true;
+    if (this.alive && this.growth < 0.8) this.growth = 0.8;
+    if (staged) this._fruitAt = frameCount + PLANT_FRUIT_DELAY + random(PLANT_FRUIT_JITTER);
+  }
+
+  // Whether there's anything on it for a browser to eat now (what a tap's lure needs).
+  hasFood() {
+    return this.alive && !this.dormant && !this.unsprouted && !this.matured && this.growth >= 0.3;
+  }
+
+  // A tap on it (Game._tapPlant): a quick side-to-side shake on top of the sway. It runs on
+  // the render clock, so it plays while a prompt has the game paused too.
+  shake() { this._shakeStart = frameCount; }
+
+  // The shake's x offset this frame, for a sprite `half` wide (0 when not shaking).
+  _shakeX(half) {
+    if (this._shakeStart == null) return 0;
+    const t = frameCount - this._shakeStart;
+    if (t >= PLANT_SHAKE_FRAMES || t < 0) { this._shakeStart = null; return 0; }
+    return Math.sin(t * 1.0) * (1 - t / PLANT_SHAKE_FRAMES) * half * 0.2;
+  }
+
   update(seasonManager) {
+    this._seasonKey = seasonManager.currentKey;
     if (this.isSpawned && this.parentPlaceable) {
       if (!this.parentPlaceable.alive) {
         this.alive = false;
@@ -415,7 +474,7 @@ class Plant {
   }
 
   consume() {
-    if (this.dormant) return 0;
+    if (this.dormant || this.unsprouted) return 0;
     
     const nutritionGained = this.nutrition;
     this.alive = false;
@@ -437,6 +496,16 @@ class Plant {
     // Dormant plants use wilting sprite
     if (this.dormant) {
       return 'dormant';
+    }
+    // Pātōtara waiting to be sprouted shows bare; sprouted, it's in fruit in summer (thriving)
+    // and in leaf in spring and autumn (mature). See sprout().
+    if (this.unsprouted) return 'dormant';
+    if (this.sprouted) {
+      if (this._fruitAt != null) {
+        if (frameCount < this._fruitAt) return 'mature';   // just sprouted: in leaf first
+        this._fruitAt = null;
+      }
+      return this._seasonKey === 'summer' ? 'thriving' : 'mature';
     }
     // Free Play: winter-inedible plants stand frosted/wilted (present, not gone).
     if (this.winterInedible) {
@@ -463,8 +532,9 @@ class Plant {
     
     const px = this.pos.x;
     const py = this.pos.y;
-    const dormant = this.dormant;
-    const dormantMult = dormant ? 0.5 : 1;
+    // (An unsprouted pātōtara draws as dormant does, but nearly full size and with no frost.)
+    const dormant = this.dormant || this.unsprouted;
+    const dormantMult = this.dormant ? 0.5 : (this.unsprouted ? 0.9 : 1);
     const displaySize = this.size * this.growth * dormantMult;
     
     if (displaySize < 2) return;
@@ -525,12 +595,6 @@ class Plant {
       if (fadeT >= 1) { this._fadeSprite = null; fadeT = 1; }
     }
 
-    // Shadow; sprite-shaped on GL (bake-free silhouette), ellipse blob on 2D. Skipped in
-    // performance mode (see PlantStatics.shadows).
-    // Positional args (alpha, squash, wide, mirror, fbW, fbH) — no per-frame options object.
-    if (PlantStatics.shadows()) EntitySprites.drawSpriteShadow(sprite, px + 1, py + 1, displaySize, displaySize,
-      dormant ? 0.05 : 0.10, 0.5, 0.82, null, displaySize * 1.2, displaySize * 0.6);
-
     // Calculate sprite size for growing plants
     let spriteSize = displaySize;
     if (this.growth < 0.5) {
@@ -539,12 +603,24 @@ class Plant {
 
     const halfSize = spriteSize * 0.5;
 
+    // Shadow; sprite-shaped on GL (bake-free silhouette), ellipse blob on 2D. Skipped in
+    // performance mode (see PlantStatics.shadows). A tree's is cast from its trunk's foot
+    // (the sprite's bottom-centre); a clump's pools under its middle.
+    // Positional args (alpha, squash, wide, mirror, fbW, fbH) — no per-frame options object.
+    if (PlantStatics.shadows()) {
+      if (TREE_SHADOW.square.has(this.type)) EntitySprites.drawTreeShadow(sprite, px, py + halfSize,
+        spriteSize, spriteSize, dormant ? 0.05 : 0.10, TREE_SHADOW.squash, TREE_SHADOW.lean, spriteSize * 0.9);
+      else EntitySprites.drawSpriteShadow(sprite, px + 1, py + 1, displaySize, displaySize,
+        dormant ? 0.05 : 0.10, 0.5, 0.82, null, displaySize * 1.2, displaySize * 0.6);
+    }
+
     // Sway as a cheap sub-pixel x-offset rather than a per-plant push/rotate/pop, which
     // was the dominant render cost with thousands of plants on screen.
     let drawX = px - halfSize;
     if (!dormant && this.seasonalModifier > 0.1) {
       drawX += PlantStatics.getSway(frameCount, this.swayPhase, this.seasonalModifier) * halfSize;
     }
+    if (this._shakeStart != null) drawX += this._shakeX(halfSize);
     const dy = py - halfSize;
     if (this._fadeSprite && fadeT < 1) {
       // Outgoing sprite fades out beneath the incoming one (a true crossfade).
@@ -557,8 +633,8 @@ class Plant {
       image(sprite, drawX, dy, spriteSize, spriteSize);
     }
 
-    // Dormant indicator
-    if (dormant) {
+    // Dormant indicator (the frost of a winter's dormancy, not an unsprouted plant's)
+    if (this.dormant) {
       this._drawDormantIndicator(px, py - displaySize * 0.5);
     }
   }
@@ -577,10 +653,6 @@ class Plant {
       return;
     }
 
-    // Shadow at the base; sprite-shaped on GL, ellipse on 2D.
-    if (PlantStatics.shadows()) EntitySprites.drawSpriteShadow(sprite, px + 1, py + 1, displaySize, displaySize,
-      dormant ? 0.05 : 0.10, 0.5, 0.82, null, displaySize * 1.2, displaySize * 0.6);
-
     // Width follows displaySize; height follows the sprite's aspect ratio.
     let spriteW = displaySize;
     if (this.growth < 0.5) {
@@ -590,11 +662,16 @@ class Plant {
     const spriteH = spriteW * aspect;
     const halfW = spriteW * 0.5;
 
+    // Cast shadow from the trunk's foot (the sprite's bottom-centre, px, py).
+    if (PlantStatics.shadows()) EntitySprites.drawTreeShadow(sprite, px, py, spriteW, spriteH,
+      dormant ? 0.05 : 0.10, TREE_SHADOW.squash, TREE_SHADOW.lean, spriteW * 0.9);
+
     // Cheap sub-pixel sway offset (see _renderSprite); no per-plant matrix ops.
     let drawX = px - halfW;
     if (!dormant && this.seasonalModifier > 0.1) {
       drawX += PlantStatics.getSway(frameCount, this.swayPhase, this.seasonalModifier) * halfW;
     }
+    if (this._shakeStart != null) drawX += this._shakeX(halfW);
     // Bottom of the sprite sits on the ground point (py).
     image(sprite, drawX, py - spriteH, spriteW, spriteH);
 
@@ -622,6 +699,7 @@ class Plant {
     if (!dormant && this.seasonalModifier > 0.1) {
       drawX += PlantStatics.getSway(frameCount, this.swayPhase, this.seasonalModifier) * halfSize;
     }
+    if (this._shakeStart != null) drawX += this._shakeX(halfSize);
     image(buffer, drawX, py - halfSize, displaySize, displaySize);
     
     // Dormant indicator
@@ -649,6 +727,7 @@ class Plant {
     noStroke();
     fill(0, 0, 0, dormant ? 10 : 20);
     ellipse(px + 1, py + 1, displaySize * 1.2, displaySize * 0.6);
+    if (this._shakeStart != null) px += this._shakeX(displaySize * 0.5);
     fill(r, g, b, alpha);
     ellipse(px, py, displaySize, displaySize * 0.9);
     fill(r + 30, g + 30, b + 20, alpha * 0.5);

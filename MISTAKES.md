@@ -6,17 +6,29 @@ entries at the top.
 
 Each entry: what happened · root cause · consequence · the rule that prevents a
 repeat. The rule is the part that also lives at the call site (as a short guard
-comment) and, where general, in `OVERVIEW.md`.
-
-> **Status.** This log opens as a *seed* for the Free Play mode (see
-> `FREEPLAY_PLAN.md`), which is not built yet. The entries below are of two honest
-> kinds, each labelled: **[verified]**; a trap confirmed by reading the *current*
-> Mauri code, which a Free Play implementer will hit; and **[inherited]**; a rule
-> paid for in blood in the Te Manawa fork (`TeManawa/MISTAKES.md`) that applies
-> directly here because the engines share a lineage. Real Mauri incidents get added
-> on top as they happen.
+comment) and, where general, in `OVERVIEW.md`. Tags: **[fixed]** a real incident, now
+fixed; **[process]** a testing trap, not a bug; **[rule]** a design guardrail, built in;
+**[inherited]** a rule paid for in the Te Manawa fork, which shares this engine's lineage.
 
 ---
+
+## [fixed] Forest birds starved in a small window: three steering traps
+
+- **What happened.** In the modules' free play (a 425×317 window), kererū, kākā and kōkako
+  starved at full hunger with trees all around them.
+- **Root cause.** Three steering rules written for Free Play's big map, each a trap in a small
+  one. (1) `_fleeStorm` flew straight away from a storm, clamped to land; against the map's edge
+  that point was no further away, so the bird hovered there, flushed, never feeding. (2) The
+  storm flush ring (1.6× the radius) plus `_landward`'s 60-unit edge margin left almost no forest
+  the birds could stay in: 95% of the forest cells sat within 60 of an edge. (3) `Boid.edges`
+  turns a bird back 25 units from the edge with a force six times its own steering, so a tree
+  nearer the edge than that can never be reached; the bird chased it until it starved.
+  `mauri_kereru.js`, `mauri_kaka.js`.
+- **Rule.** A flee or homing target must make real progress (`_fleeStorm` now fans round for a
+  point that gets clear, and gives up if there is none). Birds never pick a tree under a storm
+  or within 18 of the edge. Edge margin and flush ring are level knobs
+  (`flyerEdgeMargin`, `stormFlushMult`; defaults unchanged). When birds starve "with food
+  everywhere", log where each one dies: here every death was at the same point.
 
 ## [process] "The plants didn't spawn"; a stale spatial grid, not a bug
 
@@ -30,7 +42,7 @@ comment) and, where general, in `OVERVIEW.md`.
   `update()` before verifying via a `getNearby*` query; or read the list directly. Don't conclude
   "spawn failed" from a same-tick grid read.
 
-## [verified] disperseSeed can't EXPAND the forest; it refuses non-forest biomes
+## [rule] disperseSeed can't EXPAND the forest; it refuses non-forest biomes
 
 - **What happened.** Building habitat expansion (grow podocarp forest downslope), the obvious reuse
  ; `disperseSeed`; did nothing in shrubland/flats.
@@ -74,8 +86,8 @@ comment) and, where general, in `OVERVIEW.md`.
 
 ## [fixed] A new prey species eagles couldn't ever catch; the population cache was moa-only
 
-- **What happened.** Building LINK 4 (eagles opportunistically hunt kea), the eagle would lock
-  onto a kea but the catch always failed; kea read as permanently "protected".
+- **What happened.** When eagles first hunted kea, the eagle would lock onto a kea but the catch
+  always failed; kea read as permanently "protected".
 - **Root cause.** `Simulation.handleEagleCatchKea` guards with `isSpeciesProtected(key)`, which
   reads `getCachedSpeciesCount(key)`. `_ensurePopulationCache()` only walked `this.moas`, so the
   per-species map had no entry for `kea` → `getCachedSpeciesCount('kea')` returned 0 →
@@ -87,161 +99,85 @@ comment) and, where general, in `OVERVIEW.md`.
   `moaCount`). Live `getSpeciesCount()` always counted others; the *cache* did not; don't assume
   the cache mirrors the live scan.
 
-## [process] Don't read "0 raids" in a short passive run as "raiding is broken"
+## [process] Don't read "nothing happened" in a short passive run as "it's broken"
 
-- **What happened.** After LINK 1, a 700-tick passive Year-1 run showed `eggsRaided: 0` and no
-  disturbances; looked like the raid code didn't work.
-- **Root cause.** Two innocent reasons, not a bug: (a) at 1-min seasons moa breeding is slow, so
-  **no moa eggs existed yet** in that window; and (b) kea and moa nests only overlap once a lure
-  pulls kea onto a nesting patch; by design. A deterministic test (seed a cluster of moa eggs
-  beside the kea) immediately showed 4/6 robbed.
-- **Consequence.** Nearly chased a non-bug.
-- **Rule.** For emergent couplings that depend on two populations *meeting*, verify the mechanism
-  by seeding the meeting deterministically; only judge the *emergent rate* over long runs (or once
-  the player-facing lever that creates the meeting; here the kea lure; exists.)
-
-## [verified] The cascade needs kea and moa nests to co-locate; that's the player's job
-
-- **What happened (design, not a defect).** With links 1–4 in, the forest doesn't clear on its
-  own in Year 1: kea forage at the forest edge, moa breed slowly and elsewhere, so raids are rare.
-- **Root cause.** The trophic cascade only runs where kea overlap moa nests. Nothing yet brings
-  them together each year.
-- **Rule.** The per-year **kea-lure/cache** interaction is not optional polish; it is the input
-  that fires the whole cascade. Build the per-year palette before judging Year-1 balance. Keep
-  `moaDisturbanceAvoidance` as the focusing lever if the emergent thinning is too gentle.
+- **What happened.** Testing the (since retired) kea auto-raid, a 700-tick passive run showed
+  `eggsRaided: 0`; it looked like the raid code didn't work.
+- **Root cause.** Not a bug: no moa eggs existed yet in that window, and kea only meet moa nests
+  where something brings them together. Seeding a cluster of moa eggs beside the kea showed 4/6
+  robbed at once.
+- **Rule.** For couplings that depend on two populations *meeting*, verify the mechanism by
+  seeding the meeting deterministically; judge the *rate* only over long runs.
 
 ## [fixed] Other-entity spatial grid crashed on the first tick; a rename missed the constructor
 
 - **What happened.** Driving the Free Play level (which seeds kererū and kōkako via the
   `otherEntities` path), the first unpaused `update()` threw
   `TypeError: Cannot read properties of undefined (reading 'kereru')` in
-  `Simulation.updateSpatialGrids`; before any Free Play code ran.
+  `Simulation.updateSpatialGrids`.
 - **Root cause.** The constructor initialised `this.dynamicGrids = {}` (no underscore)
-  but every consumer reads `this._dynamicGrids` (`updateSpatialGrids`, and the
-  per-type grid getter). So `this._dynamicGrids` was `undefined`, and
-  `this._dynamicGrids[type]` threw the moment `otherEntities` had any key. A rename
-  that updated the uses but not the one initialiser. `mauri_simulation.js`.
-- **Consequence.** Any level that seeds other-entities; the shipped glacial level as
-  well as Free Play; crashes on the first frame of actual play. It hid behind the
-  start-of-level tutorial PAUSE (a paused `update()` returns before reaching
-  `updateSpatialGrids`), so it only surfaced when the sim actually ran.
-- **Rule.** One name: the grids are `this._dynamicGrids`, initialised in the
-  constructor beside `_movingGridPairs`/`_staticGridPairs`. When you rename a field,
-  grep the whole file for BOTH spellings; an initialiser that still uses the old name
-  fails silently until the collection is non-empty. (Found by running the game headless
-  in the browser and pumping `update()`; `node --check` cannot catch a runtime typo.)
+  but every consumer reads `this._dynamicGrids`. A rename that updated the uses but not the
+  one initialiser. It hid behind the start-of-level tutorial PAUSE (a paused `update()`
+  returns before reaching `updateSpatialGrids`). `mauri_simulation.js`.
+- **Consequence.** Any level seeding other-entities crashed on the first frame of actual play.
+- **Rule.** When you rename a field, grep the whole file for BOTH spellings; an initialiser that
+  still uses the old name fails silently until the collection is non-empty. `node --check` can't
+  catch a runtime typo: run the game and pump `update()`.
 
-## [verified] An endless level with empty goals wins on frame one
+## [fixed] An endless level with empty goals wins on frame one
 
-- **What happened.** The obvious way to build a no-objective sandbox; a level with
-  `goals: []`, no `phases`, no `timeLimit`; sets `GAME_STATE.WON` on the very first
-  update, before the player does anything.
-- **Root cause.** `Game.checkGoals()` (`mauri_sketch.js`) computes
-  `allAchieved = goals.every(g => g.achieved)`; for an empty array `every()` returns
-  `true`. With no `timeLimit`, the branch `!this.timeLimit && allAchieved` is
-  satisfied immediately, so the level is won with zero goals met. The shipped glacial
-  level dodges this only because it sets `phases`, which routes `checkGoals()` to
-  `_checkPhases()` before the empty-array test is ever reached.
-- **Consequence.** An endless mode built the intuitive way is unplayable; it
-  completes instantly.
-- **Rule.** Give the mode a first-class `endless: true` on the level def and
-  short-circuit at the top of `checkGoals()`: `if (this.currentLevel?.endless)
-  return;`. Do **not** fake it with a never-true goal (it would still pollute the
-  goals panel and the score tally). Loss stays with the existing last-moa check in
-  `update()`. `mauri_sketch.js`.
+- **What happened.** A level with `goals: []`, no `phases` and no `timeLimit` sets
+  `GAME_STATE.WON` on the very first update.
+- **Root cause.** `Game.checkGoals()` computes `goals.every(g => g.achieved)`, and `every()` on
+  an empty array is `true`.
+- **Rule.** An endless level says so (`endless: true`), and `checkGoals()` hands it to the year
+  engine before the win check. Don't fake it with a never-true goal (it pollutes the goals
+  panel and the score). `mauri_sketch.js`.
 
-## [verified/anticipated] Modelling winter by removing plants churns the map bare
+## [rule] Cold zeroes food value, never existence
 
-- **What happened (anticipated).** The tempting way to make winter bite is to delete
-  or force-dormant the flora when the cold arrives. In Kahurangi; an evergreen
-  landscape; that is both a visual lie and a churn bug: the ground goes bare, then
-  slowly regrows every spring, the exact die-off-and-recover cycle the Free Play brief
-  says to avoid.
-- **Root cause.** In `mauri_plant.js` a plant only truly leaves the world through
-  `consume()` (grazing), which sets `alive = false` and starts a regrowth timer.
-  Dormancy and forest-suppression, by contrast, set `nutrition = 0` but keep
-  `alive = true` and keep drawing the plant. Winter food scarcity belongs on the
-  *nutrition* axis, not the *existence* axis; but a naive "winter kills plants"
-  change would put it on the wrong one, and heavy grazing of a slow-regrowing winter
-  patch already tends toward bare ground on its own.
-- **Consequence (if built wrong).** A bare, flickering map that contradicts the
-  evergreen ecology and manufactures a regrowth churn every cycle.
-- **Rule.** Cold zeroes **food value, never existence.** Winter drops a plant's
-  `nutrition` to its `winterEdibility` floor (and foragers skip it like a dormant
-  plant), but `alive` stays `true` and it renders frosted. Only grazing removes a
-  plant. Guard this with a benchmark assertion: the count of `alive` plants after a
-  simulated deep winter is unchanged by cold alone. `mauri_plant.js`,
-  `mauri_moa.js`. (See `FREEPLAY_PLAN.md` §4.2.)
+- **The trap.** The tempting way to make winter bite is to delete or force-dormant the flora.
+  In an evergreen landscape that is a visual lie and a churn bug: the ground goes bare, then
+  slowly regrows every spring.
+- **Rule.** Winter drops a plant's `nutrition` to its `winterEdibility` floor (foragers skip a
+  `winterInedible` plant, which renders frosted), but `alive` stays `true`. Only grazing
+  removes a plant. `mauri_plant.js`, `mauri_moa.js`. (See `FREEPLAY_PLAN.md` §3.2.)
+
+## [rule] The winter edibility floor replaces the squared winter term
+
+- **The trap.** `Plant.handleGrowth()` already applies the season twice
+  (`maxNutrition = base × seasonalModifier`, then `nutrition = maxNutrition × seasonalModifier ×
+  typeModifier`), so winter food is ≈ 0.01× base before anything else. A third winter factor
+  on top pins every plant to zero and erases the beech-vs-rimu distinction.
+- **Rule.** `_applyWinterEdibility` blends toward a value computed from `baseNutrition`
+  (`base × growth × winterEdibility × …`), not from the already-squared nutrition, so the floor
+  is what a winter plant is worth. Check a beech plant's winter `nutrition` against a rimu's
+  after touching either path. `mauri_plant.js`.
 
 ## [inherited] A per-run climate scalar written back to CONFIG/SEASONS compounds
 
-- **What happened.** In the Te Manawa fork, a per-run terrain adjustment written back
-  onto `CONFIG` compounded across every regeneration and drifted the world away from
-  its authored look. The identical trap is waiting for Free Play's climate drift: the
-  natural-but-wrong move is to deepen winter by mutating the `SEASONS` table or
-  `CONFIG` winter modifiers in place as `coldIndex` rises.
-- **Root cause.** `applyLevelToConfig()` copies a level's authored values onto the
-  shared, mutable `CONFIG` at load; `SEASONS` is a single shared table. Soft restarts
-  and reseeds re-read those. Any value mutated *in place* by a per-frame or per-cycle
-  system is not reset between runs, so it accumulates.
-- **Consequence.** The whole game creeps permanently colder across restarts;
-  invisible in a single session, corrupting over many.
-- **Rule.** `coldIndex` modulates seasonal numbers **at read time, on the instance**;
-  pass it into `SeasonManager.update(dt, coldIndex)` and fold it into the getters'
-  return values. Never write it back into `SEASONS`, `CONFIG`, or a plant's base
-  fields. Modulate, don't mutate. `mauri_seasons.js`, `mauri_sketch.js`.
+- **What happened (in Te Manawa).** A per-run terrain adjustment written back onto `CONFIG`
+  compounded across every regeneration and drifted the world away from its authored look.
+- **Root cause.** `applyLevelToConfig()` copies a level's values onto the shared, mutable
+  `CONFIG`; `SEASONS` is one shared table. Anything mutated in place isn't reset between runs.
+- **Rule.** `coldIndex` (and the mast year) modulate seasonal numbers **at read time, on the
+  instance**. Never write them back into `SEASONS`, `CONFIG`, or a plant's base fields.
+  Modulate, don't mutate. `mauri_seasons.js`, `mauri_sketch.js`.
 
-## [verified/inherited] The season lerp helper allocates two closures per call
+## [fixed/inherited] A closure-taking lerp helper on a hot path
 
-- **What happened.** `SeasonManager._lerpSeasonal(getCurrentVal, getNextVal)`
-  (`mauri_seasons.js`) is called by every seasonal getter; plant modifiers, hunger,
-  migration strength, snow line; and each call passes two fresh arrow functions
-  (`() => this.current.x`, `() => this.next.x`). These getters run per entity per
-  frame. In the Te Manawa fork the identical helper was measured as the sim's single
-  largest GC source (~1,400 short-lived closures/frame) and was inlined away. Mauri
-  still carries the pre-fix version.
-- **Root cause.** A closure-taking helper on a hot per-frame path allocates on every
-  call by construction.
-- **Consequence.** Steady per-frame garbage and GC pressure; and Free Play makes it
-  worse, adding `coldIndex` folding and a per-type edibility read to the same hot
-  getters.
-- **Rule.** Inline the current→next blend directly in each seasonal getter (a plain
-  `if (transitionProgress > 0) return lerp(cur, nxt, t); return cur;`) **before**
-  adding Free Play's load. Don't route hot-path blends through a closure-taking
-  helper. `mauri_seasons.js`.
-
-## [anticipated] Layering an edibility floor on the already-squared winter modifier
-
-- **What happened (anticipated).** Free Play adds a `winterEdibility` floor to winter
-  food value. Added naively as a third multiplier, it overshoots to ~zero and the
-  floor does nothing; because winter is *already* applied twice.
-- **Root cause.** `Plant.handleGrowth()` (`mauri_plant.js`) computes
-  `maxNutrition = baseNutrition * seasonalModifier` and then, the same frame,
-  `nutrition = maxNutrition * seasonalModifier * typeModifier`; so a full-grown
-  plant's winter food value is scaled by `seasonalModifier` **squared** before any
-  edibility factor is applied. In deep winter (`seasonalModifier ≈ 0.1`) that is
-  already `≈ 0.01×` base; a third winter factor on top pins it to zero for every
-  plant, erasing the beech-vs-rimu distinction the floor is meant to create.
-- **Consequence (if built wrong).** The carefully-authored per-plant winter larder
-  becomes uniformly worthless, and the forest-refuge lifeline never materialises.
-- **Rule.** Decide deliberately whether `winterEdibility` **replaces** the squared
-  winter term in the winter branch or **multiplies** a single (non-squared) one.
-  Verify with a benchmark read of a beech plant's winter `nutrition` before/after the
-  change; the floor must leave beech meaningfully above rimu. Whether the existing
-  double-application is itself intended is a separate question to resolve first, not
-  to build on top of blind. `mauri_plant.js`. (See `FREEPLAY_PLAN.md` §4.2.)
+- **What happened.** `SeasonManager._lerpSeasonal(getCur, getNext)` took two fresh arrow functions
+  per call, from every seasonal getter, per entity, per frame. In Te Manawa the identical helper
+  was the sim's largest GC source (~1,400 closures/frame).
+- **Rule.** Inline the current→next blend in each getter (done in `mauri_seasons.js`). Don't route
+  hot-path blends through a closure-taking helper.
 
 ## [inherited] Climate as a sine wave; and when a parametric curve is fine
 
-- **What happened.** In the Te Manawa fork the glacial cycle was first a generic
-  ~100 kyr sinusoid over `yearsBP`; real cycles are strongly asymmetric and
-  irregular, so it put the last interglacial mid-glacial and missed the LGM. The fix
-  there was a table of anchor points, smoothstepped and auditable one line at a time.
-- **Root cause.** No closed form reproduces a *real* paleoclimate sequence.
-- **Consequence (there).** Checkable facts came out wrong.
-- **Rule (inverted for Free Play).** Free Play's `ClimateDrift` is a *game difficulty
-  curve*, not a paleoclimate; so a parametric ramp/oscillation is not just
-  acceptable, it is the right choice: tunable, legible, and keyed to game cycles
-  rather than real years. Keep the Te Manawa lesson in your pocket for one case only:
-  if the mode is ever asked to replay a *real* sequence of glacials, switch to a
-  table, don't reach for a wave. `mauri_climate_drift.js` (planned).
+- **What happened (in Te Manawa).** A generic ~100 kyr sinusoid over `yearsBP` put the last
+  interglacial mid-glacial and missed the LGM; real cycles are irregular. The fix there was a
+  table of anchor points.
+- **Rule.** Free Play's `ClimateDrift` is a *game difficulty curve*, not a paleoclimate, so a
+  parametric oscillation is the right choice: tunable and legible. If the game is ever asked to
+  replay a *real* sequence of glacials, use an anchor table, not a wave.
+  `mauri_climate_drift.js`.

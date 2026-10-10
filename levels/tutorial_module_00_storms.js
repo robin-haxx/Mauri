@@ -12,7 +12,7 @@
 //   food_home      summer: the mother is back at the nest with food (the egg hatches next)
 //   hatched        the egg has hatched
 //   chick_peep     ...and the chick has been out a moment (its first words); then the view
-//                  pulls back, the clouds down the mountain clear and the eagle flies off
+//                  pulls back, the eagle flies off and every storm clears (till autumn)
 //   autumn_path    autumn has begun: the view pulls back, the trail down shows, and a new
 //                  storm gathers a little way down it (data.storm; a wisp until pointed out)
 //   eagle_back     the eagle, back once the storm path is under way, is near the family (from
@@ -120,7 +120,7 @@ const TIPS = Object.assign({},
   ]),
 
   scene('food_home', onBeat('food_home'), [
-    ['mama', "Look, big lovely pātōtara berries.. And just in time, look at my little egg!", {
+    ['mama', "Lovely, orange pātōtara berries.. And just in time, look at my little egg!", {
       // The parents, and the egg in the nest ringed.
       renderAboveOverlay: (game) => game.module && game.renderSpotlightAboveUI({
         species: ['upland_moa'], at: game.module.sites.nest

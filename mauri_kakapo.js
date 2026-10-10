@@ -189,8 +189,10 @@ class Kakapo extends Kereru {
     let best = null, bestSq = Infinity;
     for (let i = 0; i < plants.length; i++) {
       const p = plants[i];
-      if (!p.alive || p._consumed || p.dormant || p.growth < 0.5) continue;
-      const dx = p.pos.x - px, dy = p.pos.y - py, dSq = dx * dx + dy * dy;
+      if (!p.alive || p._consumed || p.dormant || p.unsprouted || p.growth < 0.5) continue;
+      const dx = p.pos.x - px, dy = p.pos.y - py;
+      let dSq = dx * dx + dy * dy;
+      if (p._lured) dSq *= PLANT_LURE.pull * PLANT_LURE.pull;   // tapped by the player (Simulation.lurePlant)
       if (dSq < bestSq) { bestSq = dSq; best = p; }
     }
     return best;

@@ -71,6 +71,10 @@ class PlaceableObject {
     this.pulsePhase = random(TWO_PI);
     this.feedingParticles = [];
     
+    // A pātōtara patch in the modules starts unsprouted, its plants bare, until the player
+    // sprouts it by pressing and holding on it (see sprout, Plant.sproutsByHand).
+    this.unsprouted = typeof Plant !== 'undefined' && Plant.sproutsByHand(type);
+
     // Spawn plants if applicable
     this.spawnedPlants = [];
     if (this.def.plantSpawnCount) {
@@ -306,6 +310,8 @@ class PlaceableObject {
         const plant = new Plant(px, py, plantType, this.terrain, biome.key);
         plant.isSpawned = true;
         plant.parentPlaceable = this;
+        // (A patch's plants share its sprouting: bare till it's sprouted, in fruit after.)
+        if (plant.unsprouted && !this.unsprouted) plant.sprout();
         plant.favouredSpecies = this.def.favouredSpecies || null;
         plant.growth = 0.8;
         if (this.matured) plant.mature();   // a moved mature stand regrows as mature trees
@@ -503,6 +509,12 @@ class PlaceableObject {
     for (const plant of this.spawnedPlants) plant.alive = false;
   }
 
+  // An unsprouted pātōtara patch brought into fruit (a press and hold on it; Game._sprout).
+  sprout(staged = false) {
+    this.unsprouted = false;
+    for (const plant of this.spawnedPlants) plant.sprout(staged);
+  }
+
   // Free Play LGM: the first winter frost-kills a kawakawa grove gradually. Its plants
   // wilt and stop feeding at once, and its life is capped to a short wither window. One-shot.
   frostKill() {
@@ -635,11 +647,14 @@ class PlaceableObject {
       // Steady ring at the true effect radius; the glow (not the line) breathes.
       // Berry Cache: the rendered ring is the larger coverage radius (in berry-mauve), not
       // the tight cultivation radius. The wide kea-draw radius stays invisible.
+      // A pātōtara patch's ring is fainter (its berries are the visual).
       const _cover = this.def.coverRadius;
+      const _k = this.type === 'patotara' ? 0.45 : 1;
       if (_cover) {
-        this._drawRadiusRing([176, 132, 214], 110, 1.4, 0.5, lifeRatio, _cover);
+        this._drawRadiusRing([176, 132, 214], 110 * _k, 1.4, 0.5 * _k, lifeRatio, _cover);
       } else {
-        this._drawRadiusRing(rc, isFeeding ? 150 : 95, isFeeding ? 2 : 1.25, isFeeding ? 0.7 : 0.45, lifeRatio);
+        this._drawRadiusRing(rc, (isFeeding ? 150 : 95) * _k, isFeeding ? 2 : 1.25,
+          (isFeeding ? 0.7 : 0.45) * _k, lifeRatio);
       }
 
       // Inner glow when feeding (a filled disc; fine on the GL layer).

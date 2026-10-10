@@ -243,7 +243,7 @@ class Kea extends Kereru {
     let best = null, bestScore = -Infinity;
     for (let i = 0; i < trees.length; i++) {
       const p = trees[i];
-      if (!p.alive || p._consumed || p.dormant || p.growth < 0.5 || !isForest.has(p.type)) continue;
+      if (!p.alive || p._consumed || p.dormant || p.unsprouted || p.growth < 0.5 || !isForest.has(p.type)) continue;
       const near = sim.getNearbyPlants(p.pos.x, p.pos.y, 60);
       let food = 0;
       for (let j = 0; j < near.length; j++) {
@@ -376,7 +376,7 @@ class Kea extends Kereru {
     let food = 0;
     for (let i = 0; i < near.length; i++) {
       const q = near[i];
-      if (!q.alive || q._consumed || q.dormant || q.growth < 0.4) continue;
+      if (!q.alive || q._consumed || q.dormant || q.unsprouted || q.growth < 0.4) continue;
       // Count the cache's berries and forest fruit, so a cache in any habitat draws the flock.
       if (KEA_BERRY_PLANTS.has(q.type) || (isForest && isForest.has(q.type))) food++;
     }
@@ -492,8 +492,10 @@ class Kea extends Kereru {
     let bestIn = null, bestInSq = Infinity, bestOut = null, bestOutSq = Infinity;
     for (let i = 0; i < plants.length; i++) {
       const p = plants[i];
-      if (!p.alive || p._consumed || p.dormant || p.growth < 0.5) continue;
-      const dx = p.pos.x - px, dy = p.pos.y - py, dSq = dx * dx + dy * dy;
+      if (!p.alive || p._consumed || p.dormant || p.unsprouted || p.growth < 0.5) continue;
+      const dx = p.pos.x - px, dy = p.pos.y - py;
+      let dSq = dx * dx + dy * dy;
+      if (p._lured) dSq *= PLANT_LURE.pull * PLANT_LURE.pull;   // tapped by the player (Simulation.lurePlant)
       let inBand = true;
       if (canElev) { const e = t.getElevationAt(p.pos.x, p.pos.y); inBand = (e >= band.lo && e <= band.hi); }
       if (inBand) { if (dSq < bestInSq) { bestInSq = dSq; bestIn = p; } }

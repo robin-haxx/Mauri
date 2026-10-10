@@ -190,7 +190,7 @@ function preload(){
 // ============================================
 const CONFIG = {
   // ===== ENGINE CONSTANTS (never change between levels) =====
-  version: 'alpha 2.1.4',
+  version: 'alpha 2.2 (VERTICAL SLICE)',
 
   // The SHORT edge of the canvas is always 1080 (referenceHeight is kept as the name for
   // backwards compatibility). In landscape the short edge is the height; in portrait it is the
@@ -234,8 +234,8 @@ const CONFIG = {
 
   pixelScale: 1,
   terrainDetail: 2,  // render-only: 1 = single-res terrain buffers (fast gen), 2 = double-res
-                     // bake (crisper terrain, ~2-3x slower gen). 2x is the default (the '2x'
-                     // end of the menu's TERRAIN RESOLUTION slider).
+                     // bake (crisper terrain, ~2-3x slower gen), 4 = quad-res (the slider's
+                     // top end; heavy). 2x is the default.
 
   // WebGL renderer preference: the GPU path (entity batch + GPU terrain/water). false =
   // Classic 2D. Set by setRenderGL (menu toggle, persisted) or a ?render override.
@@ -549,10 +549,15 @@ const DRAG_SLOP_PX = 12;
 // Low resolutions coarsen the terrain cells (pixelScale) rather than
 // shrinking the baked buffer, so pixels stay crisp instead of blurring.
 const TERRAIN_DETAIL_OPTIONS = [
+  { label: '4x',   pixelScale: 1, detail: 4 },
   { label: '2x',   pixelScale: 1, detail: 2 },
   { label: '1x',   pixelScale: 1, detail: 1 },
   { label: '0.5x', pixelScale: 2, detail: 1 }
 ];
+
+// The Pouākai's head in sprites/eagle_fly_1.png (480×480): the square (x, y, side s), in
+// that image's pixels, cropped for its talking portrait (Game._eagleHeadSprite).
+const EAGLE_HEAD_CROP = { x: 158, y: 40, s: 165 };
 
 // ============================================
 // PLACEABLE ITEMS
@@ -597,8 +602,9 @@ const PLACEABLES = {
     blocksEagleVision: true,
     minSpacing: 30,
     ignoresSpacing: false,
-    feedingRate: 0.05,
-    baseFeedingRate: 0.05,
+    // Cover, not a larder: a sheltering moa still grows hungry, just a little slower.
+    feedingRate: 0.015,
+    baseFeedingRate: 0.015,
     seasonalBonus: { summer: 1.0, autumn: 1.0, winter: 1.3, spring: 1.0 }
   },
   
@@ -722,8 +728,9 @@ const PLACEABLES = {
     matureAfterYears: 1,
     minSpacing: 30,
     ignoresSpacing: false,
-    feedingRate: 0.15,
-    baseFeedingRate: 0.15,
+    // Modest food (less than pātōtara): a favoured stand's worth is founding its moa's nests.
+    feedingRate: 0.08,
+    baseFeedingRate: 0.08,
     plantSpawnCount: 4,
     plantType: 'lancewood',
     favouredSpecies: 'little_bush_moa',
@@ -747,8 +754,8 @@ const PLACEABLES = {
     duration: 2400,
     minSpacing: 30,
     ignoresSpacing: false,
-    feedingRate: 0.15,
-    baseFeedingRate: 0.15,
+    feedingRate: 0.08,         // modest food, as lancewood
+    baseFeedingRate: 0.08,
     plantSpawnCount: 4,
     plantType: 'speargrass',
     favouredSpecies: 'upland_moa',
@@ -758,8 +765,10 @@ const PLACEABLES = {
     attractionStrength: 1.4
   },
 
-  // Module levels: patches of food the story puts down for the player to move (press and hold),
-  // not on the toolbar. The director makes them standing (they don't wear out).
+  // Module levels: patches of food the story puts down for the player to move (press and hold);
+  // the director makes them standing (they don't wear out). Module 1 also grows pātōtara from
+  // the toolbar. Richer food than the favoured stands, for any moa, but its berries draw kea
+  // and it bears nothing in winter.
   patotara: {
     name: "Pātōtara Patch",
     description: "Sweet orange berries of the open tops",
@@ -774,8 +783,8 @@ const PLACEABLES = {
     duration: 3600,
     minSpacing: 30,
     ignoresSpacing: false,
-    feedingRate: 0.12,
-    baseFeedingRate: 0.12,
+    feedingRate: 0.18,
+    baseFeedingRate: 0.18,
     plantSpawnCount: 4,
     plantType: 'patotara',
     seasonalBonus: { summer: 1.3, autumn: 0.8, winter: 0.2, spring: 0.9 },
@@ -1034,7 +1043,8 @@ const PLANT_TYPES = {
     winterEdibility: 0.35, description: "Tawhai: produces mast seed in good years" },
   kawakawa: { name: "Kawakawa", nutrition: 40, color: '#3d9a5e', size: 22, growthTime: 150,
     winterEdibility: 0.15, description: "Heart-shaped leaves with peppery fruit" },
-  patotara: { name: "Pātōtara", nutrition: 35, color: '#c94c5a', size: 28, growthTime: 160,
+  // Rich summer berries (more than the favoured plants below), but they draw kea, and none in winter.
+  patotara: { name: "Pātōtara", nutrition: 42, color: '#c94c5a', size: 28, growthTime: 160,
     winterEdibility: 0.0, description: "Alpine shrub with summer berries" },
 
   // --- Glacial-flora (LGM) additions. Coprosma & dracophyllum are sprite-rendered;
@@ -1051,9 +1061,10 @@ const PLANT_TYPES = {
     winterEdibility: 0.18, description: "Wiry scrambling Muehlenbeckia of the glacial scrub and outwash" },
 
   // --- Favoured, browse-resistant plants (planted via the palette) ---
-  lancewood: { name: "Juvenile Lancewood", nutrition: 34, color: '#6a5a33', size: 30, growthTime: 300,
+  // Modest food, kept below pātōtara: their worth is drawing one species and founding its nests.
+  lancewood: { name: "Juvenile Lancewood", nutrition: 26, color: '#6a5a33', size: 30, growthTime: 300,
     winterEdibility: 0.25, description: "Horoeka: tough and spiky when growing." },
-  speargrass: { name: "Speargrass", nutrition: 30, color: '#8f9a55', size: 26, growthTime: 260,
+  speargrass: { name: "Speargrass", nutrition: 24, color: '#8f9a55', size: 26, growthTime: 260,
     winterEdibility: 0.25, description: "Taramea: spiny herb of the hills" }
 };
 
@@ -1946,7 +1957,10 @@ class Game {
   
   update(dt = 1) {
     if (this.state !== GAME_STATE.PLAYING && this.state !== GAME_STATE.PAUSED) return;
-      
+    // A module's "moment" (Free Play: a hatching, a catch) holds the whole world still while it
+    // plays: no sim, no clock, no tips; only the moment's own timeline runs.
+    if (this.module && this.module.moment) { this.module.updateMoment(dt); return; }
+
     if (this.tutorial) this.tutorial.update(dt);
     this.updateHoldToMove(dt);   // like placement, works while paused
     if (this.state !== GAME_STATE.PLAYING) return;
@@ -3723,6 +3737,29 @@ class Game {
     this.state = GAME_STATE.LEVEL_SELECT;
   }
 
+  // The player's pause (Esc / Space / P, the HUD's pause button, the card's Resume). While a
+  // tutorial tip has the game paused, it opens (and closes) the pause card over the tip
+  // instead (_pauseMenu), leaving the game paused for the tip.
+  togglePause() {
+    const tipPaused = this.state === GAME_STATE.PAUSED && this.tutorial && this.tutorial._pausedByTutorial;
+    if (tipPaused) this._pauseMenu = !this._pauseMenu;
+    else if (this.state === GAME_STATE.PAUSED) this.state = GAME_STATE.PLAYING;
+    else if (this.state === GAME_STATE.PLAYING) this.state = GAME_STATE.PAUSED;
+  }
+
+  // Whether the PAUSED card shows: a pause the player asked for (a tip's own pause shows just
+  // the tip, unless the player opened the card over it).
+  _pauseCardUp() {
+    if (this.state !== GAME_STATE.PAUSED) return false;
+    return !(this.tutorial && this.tutorial._pausedByTutorial) || !!this._pauseMenu;
+  }
+
+  // A tip (or a module's big words) is on screen: the pause card then draws over it.
+  _tipOnScreen() {
+    return !!((this.module && this.module.moment) ||
+              (this.tutorial && this.tutorial.active && this.tutorial.currentTip));
+  }
+
   // Restart the current level from the top (pause screen's "Restart" button, and the R key).
   _restartLevel() {
     if (!this.currentLevel) return;
@@ -3835,10 +3872,26 @@ class Game {
     hc.heldFrames += dt;
     if (hc.heldFrames >= 60) {   // ~1 second
       this._holdCandidate = null;
+      if (hc.action === 'sprout') { this._sprout(hc.p); return; }
       this._beginMove(hc.p);
       // Still held: dragging on from here and letting go sets it down there (handleRelease).
       if (this.movingPlaceable === hc.p) this._moveDrag = { p: hc.p, x0: mouseX, y0: mouseY };
     }
+  }
+
+  // A press and hold on an unsprouted pātōtara (a patch, or a wild plant; the modules'
+  // mechanics.sproutPatotara) brings out its berries. Not in winter: pātōtara fruits in the
+  // warm months. A module hears of both (onSprouted, onSproutRefused). It comes into leaf first
+  // and into fruit a moment later (Plant.sprout's `staged`), quietly: no rustle.
+  _sprout(t) {
+    if (!t || !t.alive || !t.unsprouted) return;
+    if (this.seasonManager && this.seasonManager.currentKey === 'winter') {
+      this.addNotification("Pātōtara has no berries to sprout in winter.", 'info');
+      if (this.module && this.module.onSproutRefused) this.module.onSproutRefused(t);
+      return;
+    }
+    t.sprout(true);
+    if (this.module && this.module.onSprouted) this.module.onSprouted(t);
   }
 
   _beginMove(p) {
@@ -3872,6 +3925,7 @@ class Game {
   // The press is over: if it travelled off its start onto open map, drop the dragged tool or
   // lifted item there. (mx, my) in canvas px.
   handleRelease(mx, my) {
+    if (this._detailSliderDrag) { this._endDetailSliderDrag(mx); return; }
     const tool = this._toolDrag, lift = this._moveDrag;
     this._toolDrag = null;
     this._moveDrag = null;
@@ -3938,6 +3992,7 @@ class Game {
     }
 
     p.moveTo(x, y);
+    this._lastPlacedMs = millis();
     if (p.type === 'nest') this.simulation._nestCacheValid = false;
     if (p.type === 'Storm') this.simulation.stats.stormsMoved = (this.simulation.stats.stormsMoved || 0) + 1;
     this.movingPlaceable = null;
@@ -4058,8 +4113,9 @@ class Game {
     if (audioManager) {
       this.selectedPlaceable === 'Storm' ? audioManager.playBoltStrike() : audioManager.playPlantRustle();
     }
-    
+
     if (!keyIsDown(SHIFT)) this.selectedPlaceable = null;
+    this._lastPlacedMs = millis();   // (a quick second tap isn't a plant tap; see handleClick)
     return true;
   }
 
@@ -4236,6 +4292,7 @@ class Game {
     // through; clear() instead of an opaque background().
     const _domGL = (typeof GLBatch !== 'undefined' && GLBatch.domStack);
     if (_domGL) clear(); else background(20, 30, 25);
+    if (this.state !== GAME_STATE.PAUSED) this._pauseMenu = false;   // (a card opened over a tip)
 
     if (this.state === GAME_STATE.LEVEL_SELECT){
       this.renderLevelSelect();
@@ -4397,7 +4454,9 @@ class Game {
       else this._drawScreenShot(this._handoffShot, 1 - hf.t / hf.frames);
     }
 
-    if (this.tutorial) {
+    if (this.module && this.module.moment) {
+      this.module.renderMoment();   // its big words, in place of any tip
+    } else if (this.tutorial) {
       this.tutorial.render();
       // Tips flagged ringsAboveUI (e.g. "Say hello to the new Moa!") re-draw
       // the vulnerable-founder rings above the tutorial overlay so the player
@@ -4422,36 +4481,18 @@ class Game {
       }
     }
 
+    // The pause card over a tip (Esc while a tip is up), so the tip can't cover its buttons.
+    if (this._pauseCardUp() && this._tipOnScreen()) this._renderPauseCard();
+
     // A module hand-off waits for the end of this frame, so its still shows this frame whole.
     if (this._handoffPending) this._beginPendingHandoff();
   }
 
   // The card over the game for the paused / won / lost states (see render).
   _renderStateOverlay() {
-    // A tutorial-tip pause shows only the tip (its own overlay dims the
-    // world); the PAUSED dialog is for pauses the player asked for.
-    const _tutorialPause = this.tutorial && this.tutorial._pausedByTutorial;
-
-    if (this.state === GAME_STATE.PAUSED && !_tutorialPause) {
-      // Free Play: an "End Run" button ends the run to the final-stats screen (with export).
-      const _endless = !!(this.currentLevel && this.currentLevel.endless);
-      // Every action is a button (touch has no keyboard); the keys stay as a small hint.
-      const _pauseButtons = [
-        { label: "Resume", action: () => { this.state = GAME_STATE.PLAYING; } },
-        { label: "Restart", action: () => this._restartLevel() },
-        { label: "Exit to Menu", action: () => this._exitToMenu() }
-      ];
-      if (_endless) _pauseButtons.splice(2, 0, { label: "End Run", action: () => this._endFreeplayRun() });
-      this._renderOverlay(...CONFIG.col_UI.slice(0,3), 100, {
-        title: "PAUSED",
-        titleColor: [255, 255, 255],
-        lines: [
-          { text: "Keys: P / SPACE resume  ·  R restart", color: [150, 170, 150], size: 14 }
-        ],
-        boxColor: [30, 45, 35, 240],
-        strokeColor: [70, 110, 80],
-        buttons: _pauseButtons
-      });
+    if (this.state === GAME_STATE.PAUSED) {
+      // (Over a tip, the card is drawn after the tip instead; see render.)
+      if (this._pauseCardUp() && !this._tipOnScreen()) this._renderPauseCard();
     } else if (this.state === GAME_STATE.WON && this.module) {
       // Module levels: the family made it home. "Continue" walks them off the map and pans
       // on to the next area; once that has played, the card points on to the next module.
@@ -4460,6 +4501,7 @@ class Game {
       const m = this.module, done = m.outroDone;
       const buttons = [];
       if (m.hasOutro()) buttons.push({ label: "Continue", action: () => m.beginOutro() });
+      else if (m.hasContinue && m.hasContinue()) buttons.push({ label: "Continue", action: () => m.beginContinue() });
       buttons.push({ label: "Back to Menu", action: () => this._returnToMenuFromEnd() });
       const next = !done && m.nextModuleDef ? m.nextModuleDef() : null;
       const item = next && next.menu && next.menu.focusItem;
@@ -4533,6 +4575,29 @@ class Game {
         ]
       });
     }
+  }
+
+  // The PAUSED card: a pause the player asked for (see _pauseCardUp).
+  _renderPauseCard() {
+    // Free Play: an "End Run" button ends the run to the final-stats screen (with export).
+    const _endless = !!(this.currentLevel && this.currentLevel.endless);
+    // Every action is a button (touch has no keyboard); the keys stay as a small hint.
+    const _pauseButtons = [
+      { label: "Resume", action: () => this.togglePause() },
+      { label: "Restart", action: () => this._restartLevel() },
+      { label: "Exit to Menu", action: () => this._exitToMenu() }
+    ];
+    if (_endless) _pauseButtons.splice(2, 0, { label: "End Run", action: () => this._endFreeplayRun() });
+    this._renderOverlay(...CONFIG.col_UI.slice(0,3), 100, {
+      title: "PAUSED",
+      titleColor: [255, 255, 255],
+      lines: [
+        { text: "ESC/ SPACE/ P resumes", color: [150, 170, 150], size: 14 }
+      ],
+      boxColor: [30, 45, 35, 240],
+      strokeColor: [70, 110, 80],
+      buttons: _pauseButtons
+    });
   }
 
   // Re-draws every moa of a highlighted species (outline + sprite) in world
@@ -4710,13 +4775,46 @@ class Game {
     pop();
   }
 
+  // The Pouākai's talking portrait: its head, cropped close from the first flight frame
+  // (where it points up) and turned a quarter-turn anticlockwise. Baked once the frame loads
+  // (until then the whole frame stands in).
+  _eagleHeadSprite() {
+    if (this._eagleHead) return this._eagleHead;
+    const src = EntitySprites.getEagleSprite(0, 'patrol');
+    if (!src) return null;
+    const atlas = !!src.__atlas;   // a sprite-atlas frame: crop from its page
+    const img = atlas ? src.__page : src;
+    if (!img || !img.width) return src;
+    const k = (atlas ? src.sw : src.width) / 480;   // the crop is authored on the 480px frame
+    const ox = atlas ? src.sx : 0, oy = atlas ? src.sy : 0;
+    const s = Math.round(EAGLE_HEAD_CROP.s * k);
+    const g = createGraphics(s, s);
+    g.pixelDensity(1);
+    g.imageMode(CENTER);
+    g.translate(s / 2, s / 2);
+    g.rotate(-HALF_PI);
+    g.image(img, 0, 0, s, s, ox + EAGLE_HEAD_CROP.x * k, oy + EAGLE_HEAD_CROP.y * k, s, s);
+    // Feather the neck (the crop's cut edge, now on the right) out to nothing.
+    const c = g.drawingContext;
+    c.setTransform(1, 0, 0, 1, 0, 0);
+    const fade = c.createLinearGradient(c.canvas.width * 0.68, 0, c.canvas.width, 0);
+    fade.addColorStop(0, 'rgba(0, 0, 0, 1)');
+    fade.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    c.globalCompositeOperation = 'destination-in';
+    c.fillStyle = fade;
+    c.fillRect(0, 0, c.canvas.width, c.canvas.height);
+    c.globalCompositeOperation = 'source-over';
+    this._eagleHead = g;
+    return g;
+  }
+
   _getGuideSprite(spriteKey){
     const spriteMap = {
       'mantis_talk': tutorialMantisSprite,
       'kea': EntitySprites.getKeaSprite(),   // Free Play's kea-voiced tips
       // Module 0's speakers: the moa family and the Pouākai
       'upland_moa': EntitySprites.moaVariants?.upland?.walk?.[0],
-      'haasts_eagle': EntitySprites.getEagleSprite(0, 'patrol'),
+      'haasts_eagle': this._eagleHeadSprite(),
       // The Pouākai on the hunt: the "stop it!" prompts (a module's banners)
       'haasts_eagle_hunt': EntitySprites.isValid(EntitySprites.eagle.hunt)
         ? EntitySprites.eagle.hunt : EntitySprites.getEagleSprite(0, 'hunting')
@@ -4757,6 +4855,27 @@ class Game {
     text(item.name || (def && def.name) || '', cx, top + 166);
   }
 
+  // The gap between an overlay card's top and the tops of its title's letters, drawn centred
+  // `off` below the top at `size` in FreckleFace (p5 sets a centred line's baseline half an
+  // ascent below its y). Measured once per title.
+  _overlayTitleGap(title, size, off) {
+    const cache = this._titleGaps || (this._titleGaps = new Map());
+    const key = `${title}|${size}|${off}`;
+    if (cache.has(key)) return cache.get(key);
+    let gap = off - size * 0.36;   // (until the font has loaded)
+    if (typeof FreckleFace !== 'undefined' && FreckleFace && FreckleFace.textBounds && FreckleFace.font) {
+      push();
+      textFont(FreckleFace);
+      textSize(size);
+      textAlign(LEFT, BASELINE);
+      const tb = FreckleFace.textBounds(String(title), 0, 0, size);
+      gap = off + textAscent() / 2 + tb.y;   // tb.y: the letters' top, from the baseline (< 0)
+      pop();
+      cache.set(key, gap);
+    }
+    return gap;
+  }
+
   _renderOverlay(r, g, b, a, opts) {
     const cw = CONFIG.fullscreen ? CONFIG.canvasWidth : CONFIG.gameAreaWidth;
     const ch = CONFIG.fullscreen ? CONFIG.canvasHeight : CONFIG.gameAreaHeight;
@@ -4773,8 +4892,17 @@ class Game {
     const buttons = opts.buttons || (opts.button ? [opts.button] : []);
     // opts.art: { h, draw(centerX, top) }, a picture between the lines and the buttons.
     const art = opts.art || null;
-    // Box (reserve extra height for any picture and buttons so they sit inside the panel)
-    const boxH = 60 + opts.lines.length * 40 + (art ? art.h : 0) + (buttons.length ? 20 + buttons.length * 56 : 0);
+    // Box: as tall as its contents, framed evenly: the gap from the box's top to the title's
+    // letters is left again under the last button (or line, or picture).
+    const titleSize = 42, titleOff = 40;            // the title's centre, below the box top
+    const topGap = this._overlayTitleGap(opts.title, titleSize, titleOff);
+    const bw = 220, bh = 46, gap = 10;              // the stacked buttons
+    let contentH = titleOff + 50;                   // where the first line's centre sits
+    let lastBottom = titleOff;
+    for (const line of opts.lines) { lastBottom = contentH + line.size / 2; contentH += line.size + 10; }
+    if (art) { contentH += art.h; lastBottom = contentH; }
+    if (buttons.length) lastBottom = contentH + 12 + buttons.length * bh + (buttons.length - 1) * gap;
+    const boxH = Math.round(lastBottom + topGap);
     const boxW = Math.max(300, 400);
     
     push();
@@ -4789,10 +4917,10 @@ class Game {
     
     // Title
     fill(...opts.titleColor);
-    textSize(42);
+    textSize(titleSize);
     push();
     textFont(FreckleFace);
-    const titleY = centerY - boxH / 2 + 40;
+    const titleY = centerY - boxH / 2 + titleOff;
     text(opts.title, centerX, titleY);
     pop();
     
@@ -4815,7 +4943,6 @@ class Game {
     // stored in canvas space (accounting for the translate) on this._overlayBtns, and
     // hit-tested in handleClick.
     if (buttons.length) {
-      const bw = 220, bh = 46, gap = 10;
       const bx = centerX - bw / 2;
       const rects = [];
       let by = lineY + 12;
@@ -4845,9 +4972,21 @@ class Game {
     const opts = TERRAIN_DETAIL_OPTIONS;
     const sliderX = cx - w / 2, sliderW = w, sliderY = topY;
     const trackPad = 16, trackY = sliderY + 22;
-    let selIdx = 1;
+    const stepW = (sliderW - trackPad * 2) / (opts.length - 1);
+    this._detailSliderBounds = { x: sliderX, y: sliderY, w: sliderW, h: trackY + 12 - sliderY, trackPad, stepW };
+    let selIdx = opts.findIndex(o => o.pixelScale === 1 && o.detail === 2);
     for (let i = 0; i < opts.length; i++) {
       if (CONFIG.pixelScale === opts[i].pixelScale && CONFIG.terrainDetail === opts[i].detail) selIdx = i;
+    }
+    // Being dragged: the handle follows the pointer along the track, and the stop it would
+    // snap to lights up (it snaps there on release; see _endDetailSliderDrag).
+    let dragT = null;
+    if (this._detailSliderDrag) {
+      if (!mouseIsPressed) this._endDetailSliderDrag(mouseX / spriteSS());   // let go unseen
+      else {
+        dragT = Math.max(0, Math.min(opts.length - 1, (mouseX / spriteSS() - (sliderX + trackPad)) / stepW));
+        selIdx = Math.round(dragT);
+      }
     }
     push();
     textAlign(CENTER, CENTER);
@@ -4855,16 +4994,15 @@ class Game {
     text("[TERRAIN RESOLUTION]", cx, sliderY + 4);
     stroke(CACHED_COLORS.btnStroke); strokeWeight(3);
     line(sliderX + trackPad, trackY, sliderX + sliderW - trackPad, trackY);
-    const stepW = (sliderW - trackPad * 2) / (opts.length - 1);
     for (let i = 0; i < opts.length; i++) {
       const tx = sliderX + trackPad + i * stepW;
       stroke(CACHED_COLORS.btnStroke); strokeWeight(2); line(tx, trackY - 5, tx, trackY + 5);
       noStroke(); fill(i === selIdx ? [200, 240, 210] : CACHED_COLORS.menuText); smallTextSize(12);
       text(opts[i].label, tx, trackY + 18);
     }
-    const hx = sliderX + trackPad + selIdx * stepW;
-    fill(CACHED_COLORS.btnNormal); stroke(200, 240, 210); strokeWeight(2); ellipse(hx, trackY, 16, 16); noStroke();
-    this._detailSliderBounds = { x: sliderX, y: sliderY, w: sliderW, h: trackY + 12 - sliderY, trackPad, stepW };
+    const hx = sliderX + trackPad + (dragT != null ? dragT : selIdx) * stepW;
+    const hd = dragT != null ? 20 : 16;
+    fill(CACHED_COLORS.btnNormal); stroke(200, 240, 210); strokeWeight(2); ellipse(hx, trackY, hd, hd); noStroke();
 
     // The Classic-2D / Enhanced-3D graphics toggle was removed: GL is the sole path, renders
     // at native 1080p, and the 2D renderer survives only as an automatic fallback when WebGL
@@ -4891,115 +5029,205 @@ class Game {
     fill(235, 245, 238);
     ellipse(on ? swX + swW - swH / 2 : swX + swH / 2, swY + swH / 2, swH - 6, swH - 6);
     fill(CACHED_COLORS.menuHint);
-    smallTextSize(10);
-    textAlign(CENTER, TOP);
-    text(on ? "Lighter terrain and effects, for integrated graphics and tablets"
-            : "Full-detail terrain and effects", cx, tgY + tgH + 8);
     this._perfToggleBounds = { x: tgX, y: tgY, w: tgW, h: tgH };
     pop();
     return tgY + tgH + 30;
   }
 
-  // The module levels' row on the level select: small buttons, each a numbered badge and the
-  // tool it teaches (level.menu.moduleLabel), centred with their bottom edge at bottomY.
-  // Pushes each button's bounds onto _levelCardBounds, so a click loads it like a card.
-  _renderModuleRow(modules, centerX, bottomY) {
-    const btnW = 190, btnH = 56, gap = 18;
-    const totalW = modules.length * btnW + (modules.length - 1) * gap;
-    const y = bottomY - btnH;
-    let x = centerX - totalW / 2;
-
+  // A module's card on the level select: a square, in the challenge cards' style, with its
+  // number (∞ for the free play after the modules) over the tool it teaches and its name.
+  // Pushes its bounds onto _levelCardBounds, so a click loads it.
+  _renderModuleCard(level, x, y, s) {
+    const unlocked = PROGRESS.isUnlocked(level.id);
+    const completed = PROGRESS.isCompleted(level.id);
+    const hover = unlocked && mouseX > x && mouseX < x + s && mouseY > y && mouseY < y + s;
     push();
     textAlign(CENTER, CENTER);
-    fill(CACHED_COLORS.menuSubtitle);
-    smallTextSize(12);
-    text("LEARN A TOOL", centerX, y - 16);
-
-    for (const level of modules) {
-      const unlocked = PROGRESS.isUnlocked(level.id);
-      const completed = PROGRESS.isCompleted(level.id);
-      const hover = unlocked && mouseX > x && mouseX < x + btnW && mouseY > y && mouseY < y + btnH;
-
-      if (!unlocked) { fill(30, 30, 35, 200); stroke(50, 50, 55); }
-      else if (hover) { fill(40, 65, 45, 240); stroke(100, 160, 110); }
-      else { fill(30, 50, 35, 240); stroke(70, 110, 80); }
-      strokeWeight(completed ? 3 : 2);
-      rect(x, y, btnW, btnH, btnH / 2);
-
-      // Numbered badge (green once completed).
-      const bx = x + btnH / 2, by = y + btnH / 2;
-      noStroke();
-      fill(completed ? [80, 180, 100] : (unlocked ? [55, 90, 65] : [45, 45, 50]));
-      ellipse(bx, by, btnH - 16, btnH - 16);
+    this._cardFrame(x, y, s, s, unlocked, hover, completed);
+    // The module's sprite on a disc (green once completed): the tool it teaches (its
+    // menu.focusItem), or an egg for the free play.
+    const bx = x + s / 2, by = y + s * 0.33, br = s * 0.46;
+    noStroke();
+    fill(completed ? [80, 180, 100] : (unlocked ? [55, 90, 65] : [45, 45, 50]));
+    ellipse(bx, by, br, br);
+    const ui = this.ui || GameUI.prototype;   // (the icon painters keep no state of their own)
+    const iconA = unlocked ? 255 : 90;
+    const item = level.menu && level.menu.focusItem;
+    const def = item && typeof PLACEABLES !== 'undefined' ? PLACEABLES[item.placeable] : null;
+    push();
+    if (level.freePlay) ui._drawToolIcon('egg', bx, by + s * 0.01, s * 0.34, iconA);
+    else if (def) ui.renderPlaceableIcon(def, bx, by, s * 0.36, s * 0.2, iconA);
+    else {
       fill(unlocked ? [225, 245, 230] : [90, 90, 95]);
-      textSize(18);
-      push(); textFont(FreckleFace);
+      textFont(FreckleFace); textSize(s * 0.15);
       text(String(level.moduleIndex ?? ''), bx, by + 1);
-      pop();
-
-      // Tool name over the level's name.
-      const tx = x + btnH + (btnW - btnH - 14) / 2;
-      fill(unlocked ? [200, 240, 210] : [80, 80, 85]);
-      textSize(18);
-      push(); textFont(FreckleFace);
-      text((level.menu && level.menu.moduleLabel) || level.name, tx, by - 8);
-      pop();
-      fill(unlocked ? [140, 180, 150] : [60, 60, 65]);
-      smallTextSize(11);
-      text(unlocked ? level.name : 'Locked', tx, by + 13);
-
-      this._levelCardBounds.push({ x, y, w: btnW, h: btnH, levelId: level.id, unlocked, module: true });
-      x += btnW + gap;
     }
     pop();
+    fill(unlocked ? [200, 240, 210] : [80, 80, 85]);
+    push(); textFont(FreckleFace); textSize(s * 0.11);
+    text((level.menu && level.menu.moduleLabel) || level.name, bx, y + s * 0.66);
+    pop();
+    fill(unlocked ? [140, 180, 150] : [60, 60, 65]);
+    smallTextSize(13);
+    text(unlocked ? level.name : '🔒', bx, y + s * 0.82);
+    pop();
+    this._levelCardBounds.push({ x, y, w: s, h: s, levelId: level.id, unlocked, module: true });
   }
 
-    renderLevelSelect() {
+  // A level card's body: a rounded, bevelled panel (lit top-left rim, shaded bottom-right) in
+  // the menu's greens; brighter on hover, thicker-edged once completed, grey while locked.
+  _cardFrame(x, y, w, h, unlocked, hover, completed) {
+    if (!unlocked) { fill(30, 30, 35, 200); stroke(50, 50, 55); }
+    else if (hover) { fill(40, 65, 45, 240); stroke(100, 160, 110); }
+    else { fill(30, 50, 35, 240); stroke(70, 110, 80); }
+    strokeWeight(completed ? 3 : 2);
+    rect(x, y, w, h, 12);
+    // The bevel: a lit rim along the top and left, a shadow along the bottom and right.
+    noFill();
+    strokeWeight(2);
+    stroke(255, 255, 255, unlocked ? 26 : 10);
+    line(x + 12, y + 4, x + w - 12, y + 4);
+    line(x + 4, y + 12, x + 4, y + h - 12);
+    stroke(0, 0, 0, 60);
+    line(x + 12, y + h - 4, x + w - 12, y + h - 4);
+    line(x + w - 4, y + 12, x + w - 4, y + h - 12);
+    noStroke();
+  }
+
+  // The level select: the title and three boxes that open in place, one at a time (_menuOpen):
+  // "Learn About Te Taiao!" (the modules), "Try a challenge!" (the prototype levels) and
+  // "Settings" (terrain resolution, performance mode). Each box's contents slide open under it.
+  renderLevelSelect() {
     const cw = CONFIG.canvasWidth;
     const ch = CONFIG.canvasHeight;
     const centerX = cw * 0.5;
 
-    fill(CACHED_COLORS.menuBg);
-    noStroke();
-    rect(0, 0, cw, ch);
+    MenuStyle.drawBackground(cw, ch);
 
     textAlign(CENTER, CENTER);
-    fill(CACHED_COLORS.menuTitle);
+    noStroke();
     textSize(52);
     push(); textFont(FreckleFace);
+    fill(0, 0, 0, 150);
+    text("Avian Age", centerX + 2, 104);
+    fill(CACHED_COLORS.menuTitle);
     text("Avian Age", centerX, 100);
     pop();
 
-    fill(CACHED_COLORS.menuSubtitle);
-    textSize(18);
-    text("Select a habitat...", centerX, 150);
-
-    // Responsive card layout. Module levels (one-tool lessons, `module: true`) aren't cards;
-    // they sit above the cards as a row of smaller buttons (_renderModuleRow).
     const allLevels = LEVEL_REGISTRY.getAll();
     const levels = allLevels.filter(l => !l.module);
     const modules = allLevels.filter(l => l.module);
-    const maxCardW = 320;
-    const minCardW = 200;
-    const cardH = 200;
-    const cardSpacing = 40;
-    const availableW = cw - 120;  // 60px padding each side
+    this._levelCardBounds = [];
+    this._menuHeaderBounds = [];
+    // (Settings' controls only take clicks while showing; see _renderRenderSettings.)
+    this._detailSliderBounds = this._perfToggleBounds = null;
 
-    // Calculate card width that fits all cards
+    // Each section: a stone slab (its header) standing `depth` px up off the ground at most,
+    // over a recessed tray its contents slide open in.
+    const boxW = Math.min(1000, cw - 120), boxX = centerX - boxW / 2, headH = 72, gap = 18;
+    const depth = 9, trayInset = 14;
+    const mx = mouseX / spriteSS(), my = mouseY / spriteSS();
+    const sections = [
+      { key: 'learn', label: "[ VERTICAL SLICE ]  Learn About Te Taiao!", bodyH: 250,
+        draw: (top) => this._renderModuleCards(modules, centerX, top + 25, boxW - 40) },
+      { key: 'challenge', label: "Try a challenge!", bodyH: 250,
+        draw: (top) => this._renderChallengeCards(levels, centerX, top + 25, boxW - 40) },
+      { key: 'settings', label: "Settings", bodyH: 170,
+        draw: (top) => this._renderRenderSettings(centerX, top + 28, 300) }
+    ];
+    // Per-section springs: `open` (0 shut … 1 open, with a little overshoot as the tray lands)
+    // and `lift` (the slab's height off the ground: up under the pointer, flat while pressed,
+    // sitting low while its section is open).
+    const anim = this._menuAnim || (this._menuAnim = {});
+    const spring = (st, want, pull, damp) => {
+      st.v = (st.v + (want - st.x) * pull) * damp;
+      st.x += st.v;
+      if (Math.abs(want - st.x) < 0.002 && Math.abs(st.v) < 0.002) { st.x = want; st.v = 0; }
+      return st.x;
+    };
+    let y = 180;
+    for (const s of sections) {
+      const a = anim[s.key] || (anim[s.key] = { open: { x: 0, v: 0 }, lift: { x: depth * 0.6, v: 0 } });
+      const isOpen = this._menuOpen === s.key;
+      const k = Math.max(0, spring(a.open, isOpen ? 1 : 0, 0.16, 0.62));
+      const bodyH = s.bodyH * k;
+      const hover = mx > boxX && mx < boxX + boxW && my > y && my < y + headH + depth;
+      const pressed = hover && mouseIsPressed;
+      const wantLift = pressed ? 1 : (hover ? depth : (isOpen ? depth * 0.35 : depth * 0.6));
+      const lift = Math.max(0, Math.min(depth + 2, spring(a.lift, wantLift, 0.3, 0.55)));
+
+      // The tray, under the slab's lower half, reaching down as the section opens.
+      const trayTop = y + headH * 0.5, trayH = headH * 0.5 + depth + bodyH + (k > 0.01 ? 12 : 0);
+      if (k > 0.01) MenuStyle.drawTray(boxX + trayInset, trayTop, boxW - trayInset * 2, trayH, 14);
+
+      // The slab and its label, painted on the stone (a dark under-stroke so it sits in it).
+      const faceY = MenuStyle.drawSlab(s.key, boxX, y, boxW, headH, lift, depth);
+      push();
+      textAlign(CENTER, CENTER);
+      textFont(FreckleFace); textSize(30);
+      fill(20, 26, 20, 170);
+      text(s.label, centerX + 1, faceY + headH / 2 + 2);
+      fill(hover || isOpen ? [250, 244, 222] : [232, 226, 204]);
+      text(s.label, centerX, faceY + headH / 2);
+      // An open/closed chevron at the right, cut into the stone.
+      translate(boxX + boxW - 44, faceY + headH / 2);
+      rotate(Math.min(1, k) * Math.PI);
+      noFill(); strokeWeight(4);
+      stroke(240, 236, 216, 70); line(-9, -3, 0, 6); line(0, 6, 9, -3);
+      stroke(26, 32, 26, 220); strokeWeight(3); line(-9, -4, 0, 5); line(0, 5, 9, -4);
+      pop();
+      this._menuHeaderBounds.push({ x: boxX, y, w: boxW, h: headH + depth, key: s.key });
+
+      // The contents, revealed as the tray opens (clipped to it; clickable once fully open).
+      const bodyTop = y + headH + depth;
+      if (k > 0.01) {
+        push();
+        drawingContext.save();
+        drawingContext.beginPath();
+        drawingContext.rect(boxX + trayInset, bodyTop, boxW - trayInset * 2, bodyH + 12);
+        drawingContext.clip();
+        const cards = this._levelCardBounds.length;
+        s.draw(bodyTop);
+        drawingContext.restore();
+        pop();
+        if (k < 0.98) {   // still sliding: nothing in it takes a click yet
+          this._levelCardBounds.length = cards;
+          if (s.key === 'settings') this._detailSliderBounds = this._perfToggleBounds = null;
+        }
+      }
+      y += headH + depth + bodyH + gap;
+    }
+
+    fill(CACHED_COLORS.menuFooter);
+    smallTextSize(11);
+    textAlign(CENTER, CENTER);
+    text(`Version: ${CONFIG.version}`, centerX, ch - 40);
+  }
+
+  // The modules, as square cards in a centred row (wrapping if the screen is narrow).
+  _renderModuleCards(modules, centerX, top, maxW) {
+    const s = 200, gap = 32;
+    const perRow = Math.max(1, Math.min(modules.length, Math.floor((maxW + gap) / (s + gap))));
+    modules.forEach((level, i) => {
+      const row = Math.floor(i / perRow), col = i % perRow;
+      const n = Math.min(perRow, modules.length - row * perRow);
+      const x = centerX - (n * s + (n - 1) * gap) / 2 + col * (s + gap);
+      this._renderModuleCard(level, x, top + row * (s + gap), s);
+    });
+  }
+
+  // The prototype levels' cards, in a centred row sized to fit.
+  _renderChallengeCards(levels, centerX, cardY, availableW) {
+    const maxCardW = 320, minCardW = 200, cardH = 200, cardSpacing = 32;
     let cardW = maxCardW;
     let totalW = levels.length * cardW + (levels.length - 1) * cardSpacing;
     if (totalW > availableW && levels.length > 1) {
-      cardW = Math.max(minCardW,
-        (availableW - (levels.length - 1) * cardSpacing) / levels.length
-      );
+      cardW = Math.max(minCardW, (availableW - (levels.length - 1) * cardSpacing) / levels.length);
       totalW = levels.length * cardW + (levels.length - 1) * cardSpacing;
     }
-
     const startX = centerX - totalW / 2;
-    const cardY = ch / 2 - cardH / 2;
-
-    this._levelCardBounds = [];
-
+    push();
+    textAlign(CENTER, CENTER);
     for (let i = 0; i < levels.length; i++) {
       const level = levels[i];
       const x = startX + i * (cardW + cardSpacing);
@@ -5008,20 +5236,7 @@ class Game {
       const hover = unlocked && mouseX > x && mouseX < x + cardW
                              && mouseY > cardY && mouseY < cardY + cardH;
 
-      // Card background
-      if (!unlocked) {
-        fill(30, 30, 35, 200);
-        stroke(50, 50, 55);
-      } else if (hover) {
-        fill(40, 65, 45, 240);
-        stroke(100, 160, 110);
-      } else {
-        fill(30, 50, 35, 240);
-        stroke(70, 110, 80);
-      }
-      strokeWeight(completed ? 3 : 2);
-      rect(x, cardY, cardW, cardH, 12);
-      noStroke();
+      this._cardFrame(x, cardY, cardW, cardH, unlocked, hover, completed);
 
       // Completion badge
       if (completed) {
@@ -5073,17 +5288,7 @@ class Game {
         levelId: level.id, unlocked
       });
     }
-
-    // Module buttons, above the cards (their bounds join _levelCardBounds for handleClick).
-    if (modules.length) this._renderModuleRow(modules, centerX, cardY - 34);
-
-    // Render settings (terrain resolution), below the cards.
-    this._renderRenderSettings(centerX, cardY + cardH + 34, 240);
-
-    fill(CACHED_COLORS.menuFooter);
-    smallTextSize(11);
-    textAlign(CENTER, CENTER);
-    text(`Version: ${CONFIG.version}`, centerX, ch - 40);
+    pop();
   }
 
   renderLoading() {
@@ -5491,14 +5696,17 @@ class Game {
     const hc = this._holdCandidate;
     if (hc && hc.p.alive) {
       const prog = constrain(hc.heldFrames / 60, 0, 1);
+      // (Sprouting a pātōtara fills in berry orange; a move, in green.)
+      const sprout = hc.action === 'sprout', d = sprout && !hc.p.spawnedPlants ? 26 : 34;
       push();
       translate(hc.p.pos.x, this._groundPaintY(hc.p.pos.x, hc.p.pos.y));
       noFill();
       stroke(255, 255, 255, 90);
       strokeWeight(3);
-      ellipse(0, 0, 34, 34);
-      stroke(180, 240, 200, 230);
-      arc(0, 0, 34, 34, -HALF_PI, -HALF_PI + prog * TWO_PI);
+      ellipse(0, 0, d, d);
+      if (sprout) stroke(255, 165, 70, 235);
+      else stroke(180, 240, 200, 230);
+      arc(0, 0, d, d, -HALF_PI, -HALF_PI + prog * TWO_PI);
       pop();
       return;
     }
@@ -5691,14 +5899,23 @@ class Game {
     if (this._detailSliderBounds) {
       const s = this._detailSliderBounds;
       if (mx > s.x && mx < s.x + s.w && my > s.y && my < s.y + s.h) {
-        const t = (mx - (s.x + s.trackPad)) / s.stepW;
-        const idx = Math.max(0, Math.min(TERRAIN_DETAIL_OPTIONS.length - 1, Math.round(t)));
-        CONFIG.pixelScale = TERRAIN_DETAIL_OPTIONS[idx].pixelScale;
-        CONFIG.terrainDetail = TERRAIN_DETAIL_OPTIONS[idx].detail;
+        // The press takes hold of the handle; it follows the pointer until let go.
+        this._detailSliderDrag = true;
         return true;
       }
     }
     return false;
+  }
+
+  // The terrain-resolution handle is let go at canvas x `mx`: snap to the nearest stop.
+  _endDetailSliderDrag(mx) {
+    this._detailSliderDrag = false;
+    const s = this._detailSliderBounds;
+    if (!s) return;
+    const t = (mx - (s.x + s.trackPad)) / s.stepW;
+    const idx = Math.max(0, Math.min(TERRAIN_DETAIL_OPTIONS.length - 1, Math.round(t)));
+    CONFIG.pixelScale = TERRAIN_DETAIL_OPTIONS[idx].pixelScale;
+    CONFIG.terrainDetail = TERRAIN_DETAIL_OPTIONS[idx].detail;
   }
 
   handleClick(mx, my) {
@@ -5719,6 +5936,13 @@ class Game {
         }
       }
       if (this._handleRenderSettingsClick(mx, my)) return;
+      // A box's header opens it (closing the one that was open), or closes it if it's open.
+      for (const h of (this._menuHeaderBounds || [])) {
+        if (mx > h.x && mx < h.x + h.w && my > h.y && my < h.y + h.h) {
+          this._menuOpen = this._menuOpen === h.key ? null : h.key;
+          return;
+        }
+      }
       return;
     }
     
@@ -5771,6 +5995,9 @@ class Game {
       }
     }
 
+    // The pause card is up over a tip: nothing behind it takes the click.
+    if (this._pauseCardUp() && this._tipOnScreen()) return;
+
     if (this.tutorial && this.tutorial.active && this.tutorial.handleClick(mx, my)) return;
 
     if (this.state === GAME_STATE.PLAYING || this.state === GAME_STATE.PAUSED) {
@@ -5789,21 +6016,107 @@ class Game {
       const { x: tx, y: ty } = this._pointerWorld(mx, my);
 
       if (this.movingPlaceable) { this.tryDropMove(tx, ty); return; }
-      if (this.selectedPlaceable) { this.tryPlace(tx, ty); return; }
+      const sim = this.simulation;
+      // (A direct search, not the placeable grid: that's only rebuilt while the game runs, and a
+      // patch planted while a prompt has it paused must be found at once.)
+      const bareAt = () => {
+        let best = null, bestD = 26;
+        if (sim) for (const pl of sim.placeables) {
+          if (!pl.alive || !pl.unsprouted) continue;
+          const dd = Math.hypot(pl.pos.x - tx, pl.pos.y - ty);
+          if (dd < bestD) { bestD = dd; best = pl; }
+        }
+        return best;
+      };
+      if (this.selectedPlaceable) {
+        // Pressing on a bare pātōtara patch with a tool in hand (just after planting it, say)
+        // sprouts it: nothing could be planted on top of it anyway.
+        const bare = bareAt();
+        if (!bare) { this.tryPlace(tx, ty); return; }
+        this.selectedPlaceable = null;
+        this._holdCandidate = { p: bare, action: 'sprout', heldFrames: 0, startMX: mx, startMY: my };
+        return;
+      }
 
       // Nothing selected: pressing near a placed item's center arms a touch-and-hold;
       // held ~1s it becomes a move (see updateHoldToMove).
       // A storm is wide and has no solid centre, so it can be taken anywhere in its inner half.
-      const held = this.simulation &&
-        (this.simulation.getClosestPlaceable(tx, ty, 26, (pl) => pl.alive) ||
-         this.simulation.stormAt(tx, ty, 0, 0.5));
-      if (held) {
+      // An unsprouted pātōtara (a patch, or failing anything else, a wild one) is sprouted by
+      // the hold instead (see _sprout).
+      const sproutPatch = bareAt();
+      const held = !sproutPatch && sim &&
+        (sim.getClosestPlaceable(tx, ty, 26, (pl) => pl.alive) || sim.stormAt(tx, ty, 0, 0.5));
+      const wild = !sproutPatch && !held && sim &&
+        sim.getClosestPlant(tx, ty, 14, (pl) => pl.alive && pl.unsprouted && !pl.isSpawned);
+      if (sproutPatch || wild) {
+        this._holdCandidate = { p: sproutPatch || wild, action: 'sprout', heldFrames: 0, startMX: mx, startMY: my };
+      } else if (held) {
         this._holdCandidate = { p: held, heldFrames: 0, startMX: mx, startMY: my };
       }
+      // A tap on a plant rustles it (as well as arming a move above), unless it's a pātōtara
+      // being sprouted, or the press is on a storm (taking it up, or anywhere under its clouds)
+      // or just after placing or setting something down (a quick second tap meant for the tool).
+      const justPlaced = millis() - (this._lastPlacedMs || -1e9) < 500;
+      if (!sproutPatch && !wild && !justPlaced && !(held && held.type === 'Storm') &&
+          !(sim && sim.stormAt(tx, ty))) this._tapPlant(tx, ty);
     }
+  }
+
+  // The plant drawn under world point (tx, ty), if any: hit-tested against each plant's drawn
+  // body (a portrait tree stands up from its base point, so anywhere from base to crown counts),
+  // the nearest winning. (A direct search, not the plant grid: that's only built once the game
+  // has run, and the opening prompt pauses it before then.)
+  _plantAt(tx, ty) {
+    const sim = this.simulation;
+    if (!sim) return null;
+    const plants = sim.plants;
+    let best = null, bestD = Infinity;
+    for (let i = 0; i < plants.length; i++) {
+      const p = plants[i];
+      if (!p.alive || Math.abs(p.pos.x - tx) > 48 || Math.abs(p.pos.y - ty) > 48) continue;
+      const size = p.size * p.growth * (p.dormant ? 0.5 : 1);
+      const portrait = p.usesPortraitSprite && PORTRAIT_PLANT_SPRITES && PORTRAIT_PLANT_SPRITES[p.type];
+      const cy = portrait ? Math.min(p.pos.y, Math.max(p.pos.y - size * 1.2, ty)) : p.pos.y;
+      const d = Math.hypot(p.pos.x - tx, cy - ty);
+      if (d < Math.max(8, size * 0.5) && d < bestD) { bestD = d; best = p; }
+    }
+    return best;
+  }
+
+  // A tap on a plant: it rustles and shakes, and for a few seconds draws the hungry
+  // plant-eaters near it (Plant.shake, Simulation.lurePlant).
+  _tapPlant(tx, ty) {
+    const p = this._plantAt(tx, ty);
+    if (!p) return;
+    p.shake();
+    if (audioManager && audioManager.playPlantRustle) audioManager.playPlantRustle();
+    this.simulation.lurePlant(p);
   }
   
   handleKey(key) {
+
+    // The pause card is up: Esc / Space / P / Enter close it (back to play, or to the tip that
+    // paused the game) rather than reaching the tip or the world behind it.
+    if (this._pauseCardUp() &&
+        (key === 'Escape' || key === ' ' || key === 'p' || key === 'P' || key === 'Enter')) {
+      this.togglePause();
+      return;
+    }
+    // A tip has the game paused: Esc opens the pause card over it (resume / restart / exit).
+    if (key === 'Escape' && this.state === GAME_STATE.PAUSED && this.tutorial &&
+        this.tutorial._pausedByTutorial && !this.selectedPlaceable && !this.movingPlaceable) {
+      this.togglePause();
+      return;
+    }
+
+    // A box-style tutorial tip (not a banner, which closes itself) is advanced with Space or
+    // Enter, like its Next button, rather than Space pausing/unpausing the sim behind it.
+    const tut = this.tutorial;
+    if ((key === ' ' || key === 'Enter') && tut && tut.active && tut.currentTip &&
+        !tut.currentTip.banner) {
+      tut.dismissCurrentTip();
+      return;
+    }
 
       if (key === 'r' || key === 'R') {
       if (this.state === GAME_STATE.WON || this.state === GAME_STATE.LOST) {
@@ -5852,8 +6165,7 @@ class Game {
         this.selectPlaceable(paletteKeys[digit]);
       } else switch (key) {
         case 'p': case 'P': case ' ':
-          this.state = (this.state === GAME_STATE.PAUSED)
-            ? GAME_STATE.PLAYING : GAME_STATE.PAUSED;
+          this.togglePause();
           break;
         case 'Escape':
           // Esc clears an in-progress move/placement if there is one; otherwise it
@@ -5862,8 +6174,7 @@ class Game {
             this.cancelMove();
             this.cancelPlacement();
           } else {
-            this.state = (this.state === GAME_STATE.PAUSED)
-              ? GAME_STATE.PLAYING : GAME_STATE.PAUSED;
+            this.togglePause();
           }
           break;
         case 'h': case 'H':

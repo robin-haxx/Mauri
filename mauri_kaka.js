@@ -102,10 +102,17 @@ class Kaka extends Kereru {
     const isForest = (typeof FOREST_TREES !== 'undefined') ? FOREST_TREES : null;
     if (!isForest) return null;
     const near = sim.getNearbyPlants(cx, cy, this._forageRange);
+    // (Not a grove under a storm: the flock would only be flushed off it, over and over.)
+    const storms = (sim.placeables || []).filter(s => s.alive && s.type === 'Storm');
+    const flush = storms.length ? this._stormFlushMult() : 0;
     let best = null, bestSq = Infinity;
     for (let i = 0; i < near.length; i++) {
       const p = near[i];
       if (!p.alive || p._consumed || !isForest.has(p.type)) continue;
+      if (flush && storms.some(s => {
+        const r = s.radius * flush, ex = p.pos.x - s.pos.x, ey = p.pos.y - s.pos.y;
+        return ex * ex + ey * ey < r * r;
+      })) continue;
       const dx = p.pos.x - cx, dy = p.pos.y - cy, dSq = dx * dx + dy * dy;
       if (dSq < bestSq) { bestSq = dSq; best = p; }
     }

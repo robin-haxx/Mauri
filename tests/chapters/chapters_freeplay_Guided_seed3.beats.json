@@ -1,0 +1,1180 @@
+{
+ "level": "chapters_freeplay_guided",
+ "sketch": "Guided",
+ "seed": 3,
+ "result": "win",
+ "playTime": 900,
+ "csv": "seed,level,sketch,chapter,time_s,year,season,upland_moa,south_island_giant_moa,other_moa,total_moa,eagles,eggs,n_kea,n_kaka,n_kokako,placed_patotara,placed_Storm,event\n3,chapters_freeplay_guided,Guided,summer,0,1,summer,0,6,0,6,1,1,4,4,4,0,0,start\n3,chapters_freeplay_guided,Guided,summer,0,1,summer,0,6,0,6,1,1,4,4,4,0,0,reaction:stage:chapter_start\n3,chapters_freeplay_guided,Guided,summer,0,1,summer,0,6,0,6,1,1,4,4,4,0,0,nest:nestA:homeA\n3,chapters_freeplay_guided,Guided,summer,0,1,summer,0,6,0,6,1,1,4,4,4,0,0,nest:nestB:homeB\n3,chapters_freeplay_guided,Guided,summer,0,1,summer,2,6,0,8,1,1,4,4,4,0,0,spawn:upland_moa:2\n3,chapters_freeplay_guided,Guided,summer,0,1,summer,4,6,0,10,1,1,4,4,4,0,0,spawn:upland_moa:2\n3,chapters_freeplay_guided,Guided,summer,0,1,summer,4,6,0,10,1,1,4,4,4,0,0,cast:mama:adopted\n3,chapters_freeplay_guided,Guided,summer,0,1,summer,4,6,0,10,1,1,4,4,4,0,0,cast:papa:adopted\n3,chapters_freeplay_guided,Guided,summer,0,1,summer,4,6,0,10,1,1,4,4,4,0,0,cast:friendMama:adopted\n3,chapters_freeplay_guided,Guided,summer,0,1,summer,4,6,0,10,1,1,4,4,4,0,0,cast:friendPapa:adopted\n3,chapters_freeplay_guided,Guided,summer,0,1,summer,4,6,0,10,1,2,4,4,4,0,0,lay:upland_moa:1\n3,chapters_freeplay_guided,Guided,summer,0,1,summer,4,6,0,10,1,3,4,4,4,0,0,lay:upland_moa:1\n3,chapters_freeplay_guided,Guided,summer,0,1,summer,4,6,0,10,1,3,4,4,4,0,0,place:Storm:tops\n3,chapters_freeplay_guided,Guided,summer,0,1,summer,4,6,0,10,1,3,4,4,4,0,0,place:Storm:lookout\n3,chapters_freeplay_guided,Guided,summer,0,1,summer,4,6,0,10,1,3,4,4,4,0,0,place:waterhole:tarn\n3,chapters_freeplay_guided,Guided,summer,10,1,summer,4,6,0,10,1,4,4,4,4,0,0,sample\n3,chapters_freeplay_guided,Guided,summer,13.1,1,summer,4,6,0,10,1,5,4,4,4,0,0,reaction:raid_failed:nest_raid\n3,chapters_freeplay_guided,Guided,summer,18.1,1,summer,4,6,0,10,1,5,4,4,4,0,0,reaction:hungry_eagle:when\n3,chapters_freeplay_guided,Guided,summer,20,1,summer,4,6,0,10,1,5,4,4,4,0,0,sample\n3,chapters_freeplay_guided,Guided,summer,26.7,1,summer,6,6,0,12,1,3,4,4,4,0,0,reaction:hatch_pukepuke:egg_hatched\n3,chapters_freeplay_guided,Guided,summer,26.7,1,summer,6,6,0,12,1,3,4,4,4,0,0,moment:$moa:Pukepuke has hatched!\n3,chapters_freeplay_guided,Guided,summer,26.7,1,summer,6,6,0,12,1,3,4,4,4,0,0,cast:pukepuke:adopted\n3,chapters_freeplay_guided,Guided,summer,26.7,1,summer,6,6,0,12,1,3,4,4,4,0,0,reaction:hatch_koukou:egg_hatched\n3,chapters_freeplay_guided,Guided,summer,26.7,1,summer,6,6,0,12,1,3,4,4,4,0,0,moment:$moa:Koukou has hatched!\n3,chapters_freeplay_guided,Guided,summer,26.7,1,summer,6,6,0,12,1,3,4,4,4,0,0,cast:koukou:adopted\n3,chapters_freeplay_guided,Guided,summer,27.8,1,summer,6,6,0,12,1,3,4,4,4,0,0,reaction:cover:eagle_hunting\n3,chapters_freeplay_guided,Guided,summer,27.8,1,summer,6,6,0,12,1,3,4,4,4,0,0,reaction:cover_again:eagle_hunting\n3,chapters_freeplay_guided,Guided,summer,28,1,summer,6,6,0,12,1,3,4,4,4,0,0,player:cover:koukou\n3,chapters_freeplay_guided,Guided,summer,29,1,summer,6,6,0,12,1,3,4,4,4,0,0,player:cover:friendMama\n3,chapters_freeplay_guided,Guided,summer,30,1,summer,6,6,0,12,1,2,4,4,4,0,0,sample\n3,chapters_freeplay_guided,Guided,summer,40,1,summer,8,6,0,14,1,2,4,4,4,0,0,sample\n3,chapters_freeplay_guided,Guided,summer,44.6,1,summer,8,5,0,13,1,2,4,4,4,0,0,reaction:giant_taken:moa_killed\n3,chapters_freeplay_guided,Guided,summer,44.6,1,summer,8,5,0,13,1,2,4,4,4,0,0,reaction:taken_again:moa_killed\n3,chapters_freeplay_guided,Guided,summer,45,1,autumn,8,5,0,13,1,2,4,4,4,0,0,goal:summer_through\n3,chapters_freeplay_guided,Guided,summer,45,1,autumn,8,5,0,13,1,2,4,4,4,0,0,close:summer:-> autumn\n3,chapters_freeplay_guided,Guided,autumn,45,1,autumn,8,5,0,13,1,2,4,4,4,0,0,chapter:autumn\n3,chapters_freeplay_guided,Guided,autumn,45,1,autumn,8,5,0,13,1,2,4,4,4,0,0,fade:Storm:4\n3,chapters_freeplay_guided,Guided,autumn,48,1,autumn,8,5,0,13,1,2,4,4,4,0,0,reaction:storm_gone:placeable_expired\n3,chapters_freeplay_guided,Guided,autumn,50,1,autumn,8,5,0,13,1,2,4,4,4,0,0,sample\n3,chapters_freeplay_guided,Guided,autumn,50.7,1,autumn,8,5,0,13,1,2,4,4,4,0,0,reaction:raid_failed:nest_raid\n3,chapters_freeplay_guided,Guided,autumn,60,1,autumn,9,5,0,14,1,4,4,4,4,0,0,sample\n3,chapters_freeplay_guided,Guided,autumn,70,1,autumn,10,5,0,15,1,4,4,4,4,0,0,sample\n3,chapters_freeplay_guided,Guided,autumn,77.9,1,autumn,10,5,0,15,1,5,4,4,4,0,0,reaction:raid_won:nest_raid\n3,chapters_freeplay_guided,Guided,autumn,80,1,autumn,11,5,0,16,1,4,4,4,4,0,0,sample\n3,chapters_freeplay_guided,Guided,autumn,84.5,1,autumn,12,5,0,17,1,3,4,4,4,0,0,reaction:raid_failed:nest_raid\n3,chapters_freeplay_guided,Guided,autumn,90,1,winter,12,5,0,17,1,3,4,4,4,0,0,reaction:storm_gone:placeable_expired\n3,chapters_freeplay_guided,Guided,autumn,90,1,winter,12,5,0,17,1,3,4,4,4,0,0,close:autumn:-> winter\n3,chapters_freeplay_guided,Guided,winter,90,1,winter,12,5,0,17,1,3,4,4,4,0,0,chapter:winter\n3,chapters_freeplay_guided,Guided,winter,90,1,winter,12,5,0,17,1,3,4,4,4,0,0,fade:Storm:0\n3,chapters_freeplay_guided,Guided,winter,90,1,winter,12,5,0,17,1,3,4,4,4,0,0,sample\n3,chapters_freeplay_guided,Guided,winter,90,1,winter,12,5,0,17,1,3,4,4,4,0,0,player:flax:mama\n3,chapters_freeplay_guided,Guided,winter,97.5,1,winter,12,5,0,17,1,2,4,4,4,0,0,reaction:hungry_eagle:when\n3,chapters_freeplay_guided,Guided,winter,100,1,winter,12,5,0,17,1,2,4,4,4,0,0,sample\n3,chapters_freeplay_guided,Guided,winter,105,1,winter,12,5,0,17,1,0,4,4,4,0,0,player:flax:mama\n3,chapters_freeplay_guided,Guided,winter,105.8,1,winter,12,5,0,17,1,0,4,4,4,0,0,reaction:winter_press:when\n3,chapters_freeplay_guided,Guided,winter,105.8,1,winter,12,5,0,17,1,0,4,4,4,0,0,reaction:cover_again:eagle_hunting\n3,chapters_freeplay_guided,Guided,winter,106,1,winter,12,5,0,17,1,0,4,4,4,0,0,player:cover:friendPapa\n3,chapters_freeplay_guided,Guided,winter,110,1,winter,12,5,0,17,1,0,4,4,4,0,0,reaction:winter_food:when\n3,chapters_freeplay_guided,Guided,winter,110,1,winter,12,5,0,17,1,0,4,4,4,0,0,sample\n3,chapters_freeplay_guided,Guided,winter,113.8,1,winter,12,4,0,16,1,0,4,4,4,0,0,reaction:taken_again:moa_killed\n3,chapters_freeplay_guided,Guided,winter,120,1,winter,12,4,0,16,1,0,4,4,4,0,0,sample\n3,chapters_freeplay_guided,Guided,winter,130,1,winter,12,4,0,16,1,0,4,4,4,0,0,sample\n3,chapters_freeplay_guided,Guided,winter,135,1,spring,12,4,0,16,1,0,4,4,4,0,0,goal:winter_through\n3,chapters_freeplay_guided,Guided,winter,135,1,spring,12,4,0,16,1,0,4,4,4,0,0,close:winter:-> spring\n3,chapters_freeplay_guided,Guided,spring,135,1,spring,12,4,0,16,1,0,4,4,4,0,0,chapter:spring\n3,chapters_freeplay_guided,Guided,spring,135.1,1,spring,12,4,0,16,1,0,4,4,4,0,0,goal:home\n3,chapters_freeplay_guided,Guided,spring,140,1,spring,12,4,0,16,1,0,4,4,4,0,0,sample\n3,chapters_freeplay_guided,Guided,spring,150,1,spring,12,4,0,16,1,3,4,4,4,0,0,sample\n3,chapters_freeplay_guided,Guided,spring,160,1,spring,12,4,0,16,1,6,4,4,4,0,0,sample\n3,chapters_freeplay_guided,Guided,spring,160.6,1,spring,12,4,0,16,1,6,4,4,4,0,0,reaction:raid_failed:nest_raid\n3,chapters_freeplay_guided,Guided,spring,166.6,1,spring,12,4,0,16,1,6,4,4,4,0,0,reaction:hungry_eagle:when\n3,chapters_freeplay_guided,Guided,spring,168.8,1,spring,12,4,0,16,1,5,4,4,3,0,0,reaction:raid_won:nest_raid\n3,chapters_freeplay_guided,Guided,spring,170,1,spring,12,4,0,16,1,5,4,4,3,0,0,sample\n3,chapters_freeplay_guided,Guided,spring,176.3,1,spring,12,4,0,16,1,5,4,4,3,0,0,reaction:cover_again:eagle_hunting\n3,chapters_freeplay_guided,Guided,spring,176.5,1,spring,12,4,0,16,1,5,4,4,3,0,0,player:cover:friendMama\n3,chapters_freeplay_guided,Guided,spring,180,2,summer,12,4,0,16,1,5,4,4,3,0,0,reaction:new_year:season_change\n3,chapters_freeplay_guided,Guided,spring,180,2,summer,12,4,0,16,1,5,4,4,3,0,0,close:spring:-> summer\n3,chapters_freeplay_guided,Guided,summer,180,2,summer,12,4,0,16,1,5,4,4,3,0,0,chapter:summer\n3,chapters_freeplay_guided,Guided,summer,180,2,summer,12,4,0,16,1,5,4,4,3,0,0,sample\n3,chapters_freeplay_guided,Guided,summer,186.5,2,summer,12,4,0,16,1,2,4,4,6,0,0,reaction:first_kokako:bird_hatched\n3,chapters_freeplay_guided,Guided,summer,186.5,2,summer,12,4,0,16,1,2,4,4,6,0,0,moment:$bird:A kōkako chick: spring\n3,chapters_freeplay_guided,Guided,summer,186.5,2,summer,12,4,0,16,1,2,4,4,6,0,0,reaction:bird_hatch_again:bird_hatched\n3,chapters_freeplay_guided,Guided,summer,190,2,summer,12,4,0,16,1,2,4,4,6,0,0,sample\n3,chapters_freeplay_guided,Guided,summer,196.5,2,summer,12,4,0,16,1,2,4,4,6,0,0,reaction:storm_gone:placeable_expired\n3,chapters_freeplay_guided,Guided,summer,200,2,summer,12,4,0,16,1,0,4,4,8,0,0,sample\n3,chapters_freeplay_guided,Guided,summer,207.8,2,summer,12,3,0,15,1,0,4,4,8,0,0,reaction:taken_again:moa_killed\n3,chapters_freeplay_guided,Guided,summer,210,2,summer,12,3,0,15,1,0,4,4,8,0,0,sample\n3,chapters_freeplay_guided,Guided,summer,220,2,summer,12,3,0,15,1,0,4,4,8,0,0,sample\n3,chapters_freeplay_guided,Guided,summer,225,2,autumn,12,3,0,15,1,0,4,4,8,0,0,goal:summer_through\n3,chapters_freeplay_guided,Guided,summer,225,2,autumn,12,3,0,15,1,0,4,4,8,0,0,close:summer:-> autumn\n3,chapters_freeplay_guided,Guided,autumn,225,2,autumn,12,3,0,15,1,0,4,4,8,0,0,chapter:autumn\n3,chapters_freeplay_guided,Guided,autumn,225,2,autumn,12,3,0,15,1,0,4,4,8,0,0,fade:Storm:0\n3,chapters_freeplay_guided,Guided,autumn,230,2,autumn,12,3,0,15,1,0,4,4,8,0,0,sample\n3,chapters_freeplay_guided,Guided,autumn,240,2,autumn,12,3,0,15,1,0,4,4,8,0,0,sample\n3,chapters_freeplay_guided,Guided,autumn,250,2,autumn,12,3,0,15,1,0,4,4,8,0,0,sample\n3,chapters_freeplay_guided,Guided,autumn,260,2,autumn,12,3,0,15,1,0,4,4,8,0,0,sample\n3,chapters_freeplay_guided,Guided,autumn,260.6,2,autumn,12,3,0,15,1,0,4,4,8,0,0,reaction:hungry_eagle:when\n3,chapters_freeplay_guided,Guided,autumn,270,2,winter,12,3,0,15,1,0,4,4,8,0,0,close:autumn:-> winter\n3,chapters_freeplay_guided,Guided,winter,270,2,winter,12,3,0,15,1,0,4,4,8,0,0,chapter:winter\n3,chapters_freeplay_guided,Guided,winter,270,2,winter,12,3,0,15,1,0,4,4,8,0,0,fade:Storm:0\n3,chapters_freeplay_guided,Guided,winter,270,2,winter,12,3,0,15,1,0,4,4,8,0,0,sample\n3,chapters_freeplay_guided,Guided,winter,270,2,winter,12,3,0,15,1,0,4,4,8,0,0,player:flax:mama\n3,chapters_freeplay_guided,Guided,winter,270.1,2,winter,12,3,0,15,1,0,4,4,8,0,0,goal:fed\n3,chapters_freeplay_guided,Guided,winter,280,2,winter,12,3,0,15,1,0,4,4,8,0,0,sample\n3,chapters_freeplay_guided,Guided,winter,283.9,2,winter,12,2,0,14,1,0,4,4,8,0,0,reaction:taken_again:moa_killed\n3,chapters_freeplay_guided,Guided,winter,290,2,winter,12,2,0,14,1,0,4,4,8,0,0,sample\n3,chapters_freeplay_guided,Guided,winter,300,2,winter,12,2,0,14,1,0,4,4,8,0,0,sample\n3,chapters_freeplay_guided,Guided,winter,310,2,winter,12,2,0,14,1,0,4,4,7,0,0,sample\n3,chapters_freeplay_guided,Guided,winter,315,2,spring,12,2,0,14,1,0,4,4,7,0,0,goal:winter_through\n3,chapters_freeplay_guided,Guided,winter,315,2,spring,12,2,0,14,1,0,4,4,7,0,0,close:winter:-> spring\n3,chapters_freeplay_guided,Guided,spring,315,2,spring,12,2,0,14,1,0,4,4,7,0,0,chapter:spring\n3,chapters_freeplay_guided,Guided,spring,315.2,2,spring,12,2,0,14,1,0,4,4,7,0,0,goal:home\n3,chapters_freeplay_guided,Guided,spring,320,2,spring,12,2,0,14,1,0,4,4,7,0,0,sample\n3,chapters_freeplay_guided,Guided,spring,330,2,spring,12,2,0,14,1,0,4,4,7,0,0,sample\n3,chapters_freeplay_guided,Guided,spring,336.7,2,spring,12,2,0,14,1,2,4,4,7,0,0,reaction:hungry_eagle:when\n3,chapters_freeplay_guided,Guided,spring,340,2,spring,12,2,0,14,1,2,4,4,7,0,0,sample\n3,chapters_freeplay_guided,Guided,spring,346.4,2,spring,12,2,0,14,1,2,4,4,7,0,0,reaction:cover_again:eagle_hunting\n3,chapters_freeplay_guided,Guided,spring,350,2,spring,12,2,0,14,1,2,4,4,7,0,0,sample\n3,chapters_freeplay_guided,Guided,spring,355.7,2,spring,12,2,0,14,1,2,4,4,5,0,0,reaction:bird_taken:bird_killed\n3,chapters_freeplay_guided,Guided,spring,360,3,summer,12,2,0,14,1,2,4,4,5,0,0,reaction:new_year:season_change\n3,chapters_freeplay_guided,Guided,spring,360,3,summer,12,2,0,14,1,2,4,4,5,0,0,close:spring:-> summer\n3,chapters_freeplay_guided,Guided,summer,360,3,summer,12,2,0,14,1,2,4,4,5,0,0,chapter:summer\n3,chapters_freeplay_guided,Guided,summer,360,3,summer,12,2,0,14,1,2,4,4,5,0,0,sample\n3,chapters_freeplay_guided,Guided,summer,370,3,summer,12,2,0,14,1,2,4,4,5,0,0,sample\n3,chapters_freeplay_guided,Guided,summer,375.2,3,summer,12,2,0,14,1,0,4,4,7,0,0,reaction:bird_hatch_again:bird_hatched\n3,chapters_freeplay_guided,Guided,summer,380,3,summer,12,2,0,14,1,0,4,4,7,0,0,sample\n3,chapters_freeplay_guided,Guided,summer,390,3,summer,12,2,0,14,1,0,4,4,7,0,0,sample\n3,chapters_freeplay_guided,Guided,summer,400,3,summer,12,2,0,14,1,0,4,4,7,0,0,sample\n3,chapters_freeplay_guided,Guided,summer,405,3,autumn,12,2,0,14,1,0,4,4,7,0,0,goal:summer_through\n3,chapters_freeplay_guided,Guided,summer,405,3,autumn,12,2,0,14,1,0,4,4,7,0,0,close:summer:-> autumn\n3,chapters_freeplay_guided,Guided,autumn,405,3,autumn,12,2,0,14,1,0,4,4,7,0,0,chapter:autumn\n3,chapters_freeplay_guided,Guided,autumn,405,3,autumn,12,2,0,14,1,0,4,4,7,0,0,fade:Storm:0\n3,chapters_freeplay_guided,Guided,autumn,408.5,3,autumn,12,2,0,14,1,0,4,4,7,0,0,reaction:hungry_eagle:when\n3,chapters_freeplay_guided,Guided,autumn,410,3,autumn,12,2,0,14,1,0,4,4,7,0,0,sample\n3,chapters_freeplay_guided,Guided,autumn,418.2,3,autumn,12,2,0,14,1,0,4,4,7,0,0,reaction:cover_again:eagle_hunting\n3,chapters_freeplay_guided,Guided,autumn,420,3,autumn,12,2,0,14,1,0,4,4,7,0,0,sample\n3,chapters_freeplay_guided,Guided,autumn,430,3,autumn,12,2,0,14,1,0,4,4,7,0,0,sample\n3,chapters_freeplay_guided,Guided,autumn,440,3,autumn,12,2,0,14,1,0,4,4,7,0,0,sample\n3,chapters_freeplay_guided,Guided,autumn,450,3,winter,12,2,0,14,1,0,4,4,7,0,0,close:autumn:-> winter\n3,chapters_freeplay_guided,Guided,winter,450,3,winter,12,2,0,14,1,0,4,4,7,0,0,chapter:winter\n3,chapters_freeplay_guided,Guided,winter,450,3,winter,12,2,0,14,1,0,4,4,7,0,0,fade:Storm:0\n3,chapters_freeplay_guided,Guided,winter,450,3,winter,12,2,0,14,1,0,4,4,7,0,0,sample\n3,chapters_freeplay_guided,Guided,winter,450,3,winter,12,2,0,14,1,0,4,4,7,0,0,player:flax:mama\n3,chapters_freeplay_guided,Guided,winter,450.1,3,winter,12,2,0,14,1,0,4,4,7,0,0,goal:fed\n3,chapters_freeplay_guided,Guided,winter,460,3,winter,12,2,0,14,1,0,4,4,6,0,0,sample\n3,chapters_freeplay_guided,Guided,winter,470,3,winter,12,2,0,14,1,0,4,4,6,0,0,sample\n3,chapters_freeplay_guided,Guided,winter,480,3,winter,12,2,0,14,1,0,4,4,6,0,0,sample\n3,chapters_freeplay_guided,Guided,winter,480.5,3,winter,12,2,0,14,1,0,4,4,6,0,0,reaction:hungry_eagle:when\n3,chapters_freeplay_guided,Guided,winter,490,3,winter,12,2,0,14,1,0,4,4,6,0,0,sample\n3,chapters_freeplay_guided,Guided,winter,490.9,3,winter,12,2,0,14,1,0,4,4,6,0,0,reaction:cover_again:eagle_hunting\n3,chapters_freeplay_guided,Guided,winter,491,3,winter,12,2,0,14,1,0,4,4,6,0,0,player:cover:friendPapa\n3,chapters_freeplay_guided,Guided,winter,491.5,3,winter,12,2,0,14,1,0,4,4,6,0,0,player:cover:koukou\n3,chapters_freeplay_guided,Guided,winter,493,3,winter,12,2,0,14,1,0,4,4,6,0,0,player:cover:papa\n3,chapters_freeplay_guided,Guided,winter,495,3,spring,12,2,0,14,1,0,4,4,6,0,0,goal:winter_through\n3,chapters_freeplay_guided,Guided,winter,495,3,spring,12,2,0,14,1,0,4,4,6,0,0,close:winter:-> spring\n3,chapters_freeplay_guided,Guided,spring,495,3,spring,12,2,0,14,1,0,4,4,6,0,0,chapter:spring\n3,chapters_freeplay_guided,Guided,spring,495.1,3,spring,12,2,0,14,1,0,4,4,6,0,0,goal:home\n3,chapters_freeplay_guided,Guided,spring,499.2,3,spring,12,2,0,14,1,0,4,4,5,0,0,reaction:bird_taken:bird_killed\n3,chapters_freeplay_guided,Guided,spring,500,3,spring,12,2,0,14,1,0,4,4,5,0,0,sample\n3,chapters_freeplay_guided,Guided,spring,510,3,spring,12,2,0,14,1,3,4,4,5,0,0,sample\n3,chapters_freeplay_guided,Guided,spring,511,3,spring,12,2,0,14,1,3,4,4,5,0,0,reaction:storm_gone:placeable_expired\n3,chapters_freeplay_guided,Guided,spring,520,3,spring,12,2,0,14,1,5,4,4,5,0,0,sample\n3,chapters_freeplay_guided,Guided,spring,530,3,spring,12,2,0,14,1,5,4,4,5,0,0,sample\n3,chapters_freeplay_guided,Guided,spring,540,4,summer,12,2,0,14,1,5,4,4,5,0,0,reaction:new_year:season_change\n3,chapters_freeplay_guided,Guided,spring,540,4,summer,12,2,0,14,1,5,4,4,5,0,0,close:spring:-> summer\n3,chapters_freeplay_guided,Guided,summer,540,4,summer,12,2,0,14,1,5,4,4,5,0,0,chapter:summer\n3,chapters_freeplay_guided,Guided,summer,540,4,summer,12,2,0,14,1,5,4,4,5,0,0,sample\n3,chapters_freeplay_guided,Guided,summer,544.5,4,summer,12,2,0,14,1,2,4,7,5,0,0,reaction:first_kaka:bird_hatched\n3,chapters_freeplay_guided,Guided,summer,544.5,4,summer,12,2,0,14,1,2,4,7,5,0,0,moment:$bird:Kākā chicks: spring\n3,chapters_freeplay_guided,Guided,summer,544.5,4,summer,12,2,0,14,1,2,4,7,5,0,0,reaction:bird_hatch_again:bird_hatched\n3,chapters_freeplay_guided,Guided,summer,550,4,summer,12,2,0,14,1,2,4,7,5,0,0,sample\n3,chapters_freeplay_guided,Guided,summer,552,4,summer,12,2,0,14,1,2,4,7,5,0,0,reaction:hungry_eagle:when\n3,chapters_freeplay_guided,Guided,summer,560,4,summer,12,2,0,14,1,0,4,7,7,0,0,sample\n3,chapters_freeplay_guided,Guided,summer,561.7,4,summer,12,2,0,14,1,0,4,7,7,0,0,reaction:cover_again:eagle_hunting\n3,chapters_freeplay_guided,Guided,summer,570,4,summer,12,2,0,14,1,0,4,7,7,0,0,sample\n3,chapters_freeplay_guided,Guided,summer,580,4,summer,12,2,0,14,1,0,4,7,7,0,0,sample\n3,chapters_freeplay_guided,Guided,summer,585,4,autumn,12,2,0,14,1,0,4,7,7,0,0,goal:summer_through\n3,chapters_freeplay_guided,Guided,summer,585,4,autumn,12,2,0,14,1,0,4,7,7,0,0,close:summer:-> autumn\n3,chapters_freeplay_guided,Guided,autumn,585,4,autumn,12,2,0,14,1,0,4,7,7,0,0,chapter:autumn\n3,chapters_freeplay_guided,Guided,autumn,585,4,autumn,12,2,0,14,1,0,4,7,7,0,0,fade:Storm:0\n3,chapters_freeplay_guided,Guided,autumn,590,4,autumn,12,2,0,14,1,0,4,7,7,0,0,sample\n3,chapters_freeplay_guided,Guided,autumn,600,4,autumn,12,2,0,14,1,0,4,7,7,0,0,sample\n3,chapters_freeplay_guided,Guided,autumn,610,4,autumn,12,2,0,14,1,0,4,7,6,0,0,sample\n3,chapters_freeplay_guided,Guided,autumn,620,4,autumn,12,2,0,14,1,0,4,7,6,0,0,sample\n3,chapters_freeplay_guided,Guided,autumn,620.5,4,autumn,12,2,0,14,1,0,4,7,6,0,0,reaction:hungry_eagle:when\n3,chapters_freeplay_guided,Guided,autumn,630,4,winter,12,2,0,14,1,0,4,7,6,0,0,close:autumn:-> winter\n3,chapters_freeplay_guided,Guided,winter,630,4,winter,12,2,0,14,1,0,4,7,6,0,0,chapter:winter\n3,chapters_freeplay_guided,Guided,winter,630,4,winter,12,2,0,14,1,0,4,7,6,0,0,fade:Storm:0\n3,chapters_freeplay_guided,Guided,winter,630,4,winter,12,2,0,14,1,0,4,7,6,0,0,sample\n3,chapters_freeplay_guided,Guided,winter,630,4,winter,12,2,0,14,1,0,4,7,6,0,0,player:flax:mama\n3,chapters_freeplay_guided,Guided,winter,630.2,4,winter,12,2,0,14,1,0,4,7,6,0,0,reaction:cover_again:eagle_hunting\n3,chapters_freeplay_guided,Guided,winter,640,4,winter,12,2,0,14,1,0,4,7,6,0,0,sample\n3,chapters_freeplay_guided,Guided,winter,645.7,4,winter,12,2,0,14,1,0,4,7,6,0,0,goal:fed\n3,chapters_freeplay_guided,Guided,winter,650,4,winter,12,2,0,14,1,0,4,7,6,0,0,sample\n3,chapters_freeplay_guided,Guided,winter,660,4,winter,12,2,0,14,1,0,4,7,6,0,0,sample\n3,chapters_freeplay_guided,Guided,winter,670,4,winter,12,2,0,14,1,0,4,7,6,0,0,sample\n3,chapters_freeplay_guided,Guided,winter,675,4,spring,12,2,0,14,1,0,4,7,6,0,0,goal:winter_through\n3,chapters_freeplay_guided,Guided,winter,675,4,spring,12,2,0,14,1,0,4,7,6,0,0,close:winter:-> spring\n3,chapters_freeplay_guided,Guided,spring,675,4,spring,12,2,0,14,1,0,4,7,6,0,0,chapter:spring\n3,chapters_freeplay_guided,Guided,spring,675.1,4,spring,12,2,0,14,1,0,4,7,6,0,0,goal:home\n3,chapters_freeplay_guided,Guided,spring,680,4,spring,12,2,0,14,1,0,4,7,6,0,0,sample\n3,chapters_freeplay_guided,Guided,spring,690,4,spring,12,2,0,14,1,4,4,7,6,0,0,sample\n3,chapters_freeplay_guided,Guided,spring,692.7,4,spring,12,2,0,14,1,4,4,7,5,0,0,reaction:hungry_eagle:when\n3,chapters_freeplay_guided,Guided,spring,700,4,spring,12,2,0,14,1,4,4,7,5,0,0,sample\n3,chapters_freeplay_guided,Guided,spring,703,4,spring,12,2,0,14,1,4,4,7,5,0,0,reaction:cover_again:eagle_hunting\n3,chapters_freeplay_guided,Guided,spring,703.5,4,spring,12,2,0,14,1,4,4,7,5,0,0,player:cover:friendPapa\n3,chapters_freeplay_guided,Guided,spring,710,4,spring,12,2,0,14,1,4,4,7,5,0,0,sample\n3,chapters_freeplay_guided,Guided,spring,720,5,summer,11,2,0,13,1,4,4,7,4,0,0,reaction:new_year:season_change\n3,chapters_freeplay_guided,Guided,spring,720,5,summer,11,2,0,13,1,4,4,7,4,0,0,close:spring:-> summer\n3,chapters_freeplay_guided,Guided,summer,720,5,summer,11,2,0,13,1,4,4,7,4,0,0,chapter:summer\n3,chapters_freeplay_guided,Guided,summer,720,5,summer,11,2,0,13,1,4,4,7,4,0,0,sample\n3,chapters_freeplay_guided,Guided,summer,723.5,5,summer,11,2,0,13,1,5,4,7,4,0,0,reaction:storm_gone:placeable_expired\n3,chapters_freeplay_guided,Guided,summer,725.1,5,summer,11,2,0,13,1,6,4,7,4,0,0,reaction:raid_failed:nest_raid\n3,chapters_freeplay_guided,Guided,summer,729.4,5,summer,11,2,0,13,1,2,4,11,4,0,0,reaction:bird_hatch_again:bird_hatched\n3,chapters_freeplay_guided,Guided,summer,730,5,summer,11,2,0,13,1,2,4,11,4,0,0,sample\n3,chapters_freeplay_guided,Guided,summer,740,5,summer,11,2,0,13,1,4,4,11,4,0,0,sample\n3,chapters_freeplay_guided,Guided,summer,747.6,5,summer,11,2,0,13,1,6,4,11,4,0,0,reaction:raid_failed:nest_raid\n3,chapters_freeplay_guided,Guided,summer,750,5,summer,12,2,0,14,1,5,4,11,4,0,0,sample\n3,chapters_freeplay_guided,Guided,summer,760,5,summer,12,2,0,14,1,3,4,11,4,0,0,sample\n3,chapters_freeplay_guided,Guided,summer,765,5,autumn,12,2,0,14,1,2,4,11,4,0,0,goal:summer_through\n3,chapters_freeplay_guided,Guided,summer,765,5,autumn,12,2,0,14,1,2,4,11,4,0,0,close:summer:-> autumn\n3,chapters_freeplay_guided,Guided,autumn,765,5,autumn,12,2,0,14,1,2,4,11,4,0,0,chapter:autumn\n3,chapters_freeplay_guided,Guided,autumn,765,5,autumn,12,2,0,14,1,2,4,11,4,0,0,fade:Storm:0\n3,chapters_freeplay_guided,Guided,autumn,765.3,5,autumn,12,2,0,14,1,1,4,11,4,0,0,reaction:raid_won:nest_raid\n3,chapters_freeplay_guided,Guided,autumn,770,5,autumn,12,2,0,14,1,1,4,11,4,0,0,sample\n3,chapters_freeplay_guided,Guided,autumn,771.4,5,autumn,12,2,0,14,1,0,4,11,4,0,0,reaction:hungry_eagle:when\n3,chapters_freeplay_guided,Guided,autumn,780,5,autumn,12,2,0,14,1,0,4,11,4,0,0,sample\n3,chapters_freeplay_guided,Guided,autumn,782.4,5,autumn,12,2,0,14,1,0,4,11,4,0,0,reaction:cover_again:eagle_hunting\n3,chapters_freeplay_guided,Guided,autumn,790,5,autumn,12,2,0,14,1,0,4,11,4,0,0,sample\n3,chapters_freeplay_guided,Guided,autumn,800,5,autumn,12,2,0,14,1,0,4,11,4,0,0,sample\n3,chapters_freeplay_guided,Guided,autumn,810,5,winter,12,2,0,14,1,0,4,11,4,0,0,close:autumn:-> winter\n3,chapters_freeplay_guided,Guided,winter,810,5,winter,12,2,0,14,1,0,4,11,4,0,0,chapter:winter\n3,chapters_freeplay_guided,Guided,winter,810,5,winter,12,2,0,14,1,0,4,11,4,0,0,fade:Storm:0\n3,chapters_freeplay_guided,Guided,winter,810,5,winter,12,2,0,14,1,0,4,11,4,0,0,sample\n3,chapters_freeplay_guided,Guided,winter,810,5,winter,12,2,0,14,1,0,4,11,4,0,0,player:flax:mama\n3,chapters_freeplay_guided,Guided,winter,810.1,5,winter,12,2,0,14,1,0,4,11,4,0,0,goal:fed\n3,chapters_freeplay_guided,Guided,winter,820,5,winter,12,2,0,14,1,0,4,11,4,0,0,sample\n3,chapters_freeplay_guided,Guided,winter,830,5,winter,12,2,0,14,1,0,4,11,4,0,0,sample\n3,chapters_freeplay_guided,Guided,winter,840,5,winter,12,2,0,14,1,0,4,11,4,0,0,sample\n3,chapters_freeplay_guided,Guided,winter,844.9,5,winter,12,2,0,14,1,0,4,11,4,0,0,reaction:hungry_eagle:when\n3,chapters_freeplay_guided,Guided,winter,850,5,winter,12,2,0,14,1,0,4,11,4,0,0,sample\n3,chapters_freeplay_guided,Guided,winter,854.6,5,winter,12,2,0,14,1,0,4,11,4,0,0,reaction:cover_again:eagle_hunting\n3,chapters_freeplay_guided,Guided,winter,855,5,spring,12,2,0,14,1,0,4,11,4,0,0,goal:winter_through\n3,chapters_freeplay_guided,Guided,winter,855,5,spring,12,2,0,14,1,0,4,11,4,0,0,close:winter:-> spring\n3,chapters_freeplay_guided,Guided,spring,855,5,spring,12,2,0,14,1,0,4,11,4,0,0,chapter:spring\n3,chapters_freeplay_guided,Guided,spring,855.1,5,spring,12,2,0,14,1,0,4,11,4,0,0,goal:home\n3,chapters_freeplay_guided,Guided,spring,860,5,spring,12,2,0,14,1,0,4,11,4,0,0,sample\n3,chapters_freeplay_guided,Guided,spring,870,5,spring,12,2,0,14,1,0,4,11,4,0,0,sample\n3,chapters_freeplay_guided,Guided,spring,880,5,spring,12,2,0,14,1,3,4,11,4,0,0,sample\n3,chapters_freeplay_guided,Guided,spring,890,5,spring,12,2,0,14,1,3,4,11,4,0,0,sample\n3,chapters_freeplay_guided,Guided,spring,900,6,summer,12,2,0,14,1,3,4,11,4,0,0,reaction:new_year:season_change\n3,chapters_freeplay_guided,Guided,spring,900,6,summer,12,2,0,14,1,3,4,11,4,0,0,close:spring:-> finale\n3,chapters_freeplay_guided,Guided,finale,900,6,summer,12,2,0,14,1,3,4,11,4,0,0,chapter:finale\n3,chapters_freeplay_guided,Guided,finale,900,6,summer,12,2,0,14,1,3,4,11,4,0,0,moment:pukepuke:Grown up\n3,chapters_freeplay_guided,Guided,finale,900,6,summer,12,2,0,14,1,3,4,11,4,0,0,sample\n3,chapters_freeplay_guided,Guided,finale,900.1,6,summer,12,2,0,14,1,3,4,11,4,0,0,close:finale:-> win\n3,chapters_freeplay_guided,Guided,finale,900.1,6,summer,12,2,0,14,1,3,4,11,4,0,0,won:finale\n3,chapters_freeplay_guided,Guided,finale,900.1,6,summer,12,2,0,14,1,3,4,11,4,0,0,win",
+ "log": [
+  {
+   "t": 0,
+   "chapter": "summer",
+   "kind": "chapter",
+   "id": "summer",
+   "info": ""
+  },
+  {
+   "t": 0,
+   "chapter": "summer",
+   "kind": "reaction",
+   "id": "stage",
+   "info": "chapter_start"
+  },
+  {
+   "t": 0,
+   "chapter": "summer",
+   "kind": "nest",
+   "id": "nestA",
+   "info": "homeA"
+  },
+  {
+   "t": 0,
+   "chapter": "summer",
+   "kind": "nest",
+   "id": "nestB",
+   "info": "homeB"
+  },
+  {
+   "t": 0,
+   "chapter": "summer",
+   "kind": "spawn",
+   "id": "upland_moa",
+   "info": "2"
+  },
+  {
+   "t": 0,
+   "chapter": "summer",
+   "kind": "spawn",
+   "id": "upland_moa",
+   "info": "2"
+  },
+  {
+   "t": 0,
+   "chapter": "summer",
+   "kind": "cast",
+   "id": "mama",
+   "info": "adopted"
+  },
+  {
+   "t": 0,
+   "chapter": "summer",
+   "kind": "cast",
+   "id": "papa",
+   "info": "adopted"
+  },
+  {
+   "t": 0,
+   "chapter": "summer",
+   "kind": "cast",
+   "id": "friendMama",
+   "info": "adopted"
+  },
+  {
+   "t": 0,
+   "chapter": "summer",
+   "kind": "cast",
+   "id": "friendPapa",
+   "info": "adopted"
+  },
+  {
+   "t": 0,
+   "chapter": "summer",
+   "kind": "lay",
+   "id": "upland_moa",
+   "info": "1"
+  },
+  {
+   "t": 0,
+   "chapter": "summer",
+   "kind": "lay",
+   "id": "upland_moa",
+   "info": "1"
+  },
+  {
+   "t": 0,
+   "chapter": "summer",
+   "kind": "place",
+   "id": "Storm",
+   "info": "tops"
+  },
+  {
+   "t": 0,
+   "chapter": "summer",
+   "kind": "place",
+   "id": "Storm",
+   "info": "lookout"
+  },
+  {
+   "t": 0,
+   "chapter": "summer",
+   "kind": "place",
+   "id": "waterhole",
+   "info": "tarn"
+  },
+  {
+   "t": 13.1,
+   "chapter": "summer",
+   "kind": "reaction",
+   "id": "raid_failed",
+   "info": "nest_raid"
+  },
+  {
+   "t": 18.1,
+   "chapter": "summer",
+   "kind": "reaction",
+   "id": "hungry_eagle",
+   "info": "when"
+  },
+  {
+   "t": 26.7,
+   "chapter": "summer",
+   "kind": "reaction",
+   "id": "hatch_pukepuke",
+   "info": "egg_hatched"
+  },
+  {
+   "t": 26.7,
+   "chapter": "summer",
+   "kind": "moment",
+   "id": "$moa",
+   "info": "Pukepuke has hatched!"
+  },
+  {
+   "t": 26.7,
+   "chapter": "summer",
+   "kind": "cast",
+   "id": "pukepuke",
+   "info": "adopted"
+  },
+  {
+   "t": 26.7,
+   "chapter": "summer",
+   "kind": "reaction",
+   "id": "hatch_koukou",
+   "info": "egg_hatched"
+  },
+  {
+   "t": 26.7,
+   "chapter": "summer",
+   "kind": "moment",
+   "id": "$moa",
+   "info": "Koukou has hatched!"
+  },
+  {
+   "t": 26.7,
+   "chapter": "summer",
+   "kind": "cast",
+   "id": "koukou",
+   "info": "adopted"
+  },
+  {
+   "t": 27.8,
+   "chapter": "summer",
+   "kind": "reaction",
+   "id": "cover",
+   "info": "eagle_hunting"
+  },
+  {
+   "t": 27.8,
+   "chapter": "summer",
+   "kind": "reaction",
+   "id": "cover_again",
+   "info": "eagle_hunting"
+  },
+  {
+   "t": 28,
+   "chapter": "summer",
+   "kind": "player",
+   "id": "cover",
+   "info": "koukou"
+  },
+  {
+   "t": 29,
+   "chapter": "summer",
+   "kind": "player",
+   "id": "cover",
+   "info": "friendMama"
+  },
+  {
+   "t": 44.7,
+   "chapter": "summer",
+   "kind": "reaction",
+   "id": "giant_taken",
+   "info": "moa_killed"
+  },
+  {
+   "t": 44.7,
+   "chapter": "summer",
+   "kind": "reaction",
+   "id": "taken_again",
+   "info": "moa_killed"
+  },
+  {
+   "t": 45,
+   "chapter": "summer",
+   "kind": "goal",
+   "id": "summer_through",
+   "info": ""
+  },
+  {
+   "t": 45,
+   "chapter": "summer",
+   "kind": "close",
+   "id": "summer",
+   "info": "-> autumn"
+  },
+  {
+   "t": 45,
+   "chapter": "autumn",
+   "kind": "chapter",
+   "id": "autumn",
+   "info": ""
+  },
+  {
+   "t": 45,
+   "chapter": "autumn",
+   "kind": "fade",
+   "id": "Storm",
+   "info": "4"
+  },
+  {
+   "t": 48,
+   "chapter": "autumn",
+   "kind": "reaction",
+   "id": "storm_gone",
+   "info": "placeable_expired"
+  },
+  {
+   "t": 50.7,
+   "chapter": "autumn",
+   "kind": "reaction",
+   "id": "raid_failed",
+   "info": "nest_raid"
+  },
+  {
+   "t": 77.9,
+   "chapter": "autumn",
+   "kind": "reaction",
+   "id": "raid_won",
+   "info": "nest_raid"
+  },
+  {
+   "t": 84.5,
+   "chapter": "autumn",
+   "kind": "reaction",
+   "id": "raid_failed",
+   "info": "nest_raid"
+  },
+  {
+   "t": 90,
+   "chapter": "autumn",
+   "kind": "reaction",
+   "id": "storm_gone",
+   "info": "placeable_expired"
+  },
+  {
+   "t": 90,
+   "chapter": "autumn",
+   "kind": "close",
+   "id": "autumn",
+   "info": "-> winter"
+  },
+  {
+   "t": 90,
+   "chapter": "winter",
+   "kind": "chapter",
+   "id": "winter",
+   "info": ""
+  },
+  {
+   "t": 90,
+   "chapter": "winter",
+   "kind": "fade",
+   "id": "Storm",
+   "info": "0"
+  },
+  {
+   "t": 90,
+   "chapter": "winter",
+   "kind": "player",
+   "id": "flax",
+   "info": "mama"
+  },
+  {
+   "t": 97.5,
+   "chapter": "winter",
+   "kind": "reaction",
+   "id": "hungry_eagle",
+   "info": "when"
+  },
+  {
+   "t": 105,
+   "chapter": "winter",
+   "kind": "player",
+   "id": "flax",
+   "info": "mama"
+  },
+  {
+   "t": 105.8,
+   "chapter": "winter",
+   "kind": "reaction",
+   "id": "winter_press",
+   "info": "when"
+  },
+  {
+   "t": 105.8,
+   "chapter": "winter",
+   "kind": "reaction",
+   "id": "cover_again",
+   "info": "eagle_hunting"
+  },
+  {
+   "t": 106,
+   "chapter": "winter",
+   "kind": "player",
+   "id": "cover",
+   "info": "friendPapa"
+  },
+  {
+   "t": 110,
+   "chapter": "winter",
+   "kind": "reaction",
+   "id": "winter_food",
+   "info": "when"
+  },
+  {
+   "t": 113.8,
+   "chapter": "winter",
+   "kind": "reaction",
+   "id": "taken_again",
+   "info": "moa_killed"
+  },
+  {
+   "t": 135,
+   "chapter": "winter",
+   "kind": "goal",
+   "id": "winter_through",
+   "info": ""
+  },
+  {
+   "t": 135,
+   "chapter": "winter",
+   "kind": "close",
+   "id": "winter",
+   "info": "-> spring"
+  },
+  {
+   "t": 135,
+   "chapter": "spring",
+   "kind": "chapter",
+   "id": "spring",
+   "info": ""
+  },
+  {
+   "t": 135.1,
+   "chapter": "spring",
+   "kind": "goal",
+   "id": "home",
+   "info": ""
+  },
+  {
+   "t": 160.6,
+   "chapter": "spring",
+   "kind": "reaction",
+   "id": "raid_failed",
+   "info": "nest_raid"
+  },
+  {
+   "t": 166.6,
+   "chapter": "spring",
+   "kind": "reaction",
+   "id": "hungry_eagle",
+   "info": "when"
+  },
+  {
+   "t": 168.8,
+   "chapter": "spring",
+   "kind": "reaction",
+   "id": "raid_won",
+   "info": "nest_raid"
+  },
+  {
+   "t": 176.3,
+   "chapter": "spring",
+   "kind": "reaction",
+   "id": "cover_again",
+   "info": "eagle_hunting"
+  },
+  {
+   "t": 176.5,
+   "chapter": "spring",
+   "kind": "player",
+   "id": "cover",
+   "info": "friendMama"
+  },
+  {
+   "t": 180,
+   "chapter": "spring",
+   "kind": "reaction",
+   "id": "new_year",
+   "info": "season_change"
+  },
+  {
+   "t": 180,
+   "chapter": "spring",
+   "kind": "close",
+   "id": "spring",
+   "info": "-> summer"
+  },
+  {
+   "t": 180,
+   "chapter": "summer",
+   "kind": "chapter",
+   "id": "summer",
+   "info": ""
+  },
+  {
+   "t": 186.5,
+   "chapter": "summer",
+   "kind": "reaction",
+   "id": "first_kokako",
+   "info": "bird_hatched"
+  },
+  {
+   "t": 186.5,
+   "chapter": "summer",
+   "kind": "moment",
+   "id": "$bird",
+   "info": "A kōkako chick: spring"
+  },
+  {
+   "t": 186.5,
+   "chapter": "summer",
+   "kind": "reaction",
+   "id": "bird_hatch_again",
+   "info": "bird_hatched"
+  },
+  {
+   "t": 196.5,
+   "chapter": "summer",
+   "kind": "reaction",
+   "id": "storm_gone",
+   "info": "placeable_expired"
+  },
+  {
+   "t": 207.8,
+   "chapter": "summer",
+   "kind": "reaction",
+   "id": "taken_again",
+   "info": "moa_killed"
+  },
+  {
+   "t": 225,
+   "chapter": "summer",
+   "kind": "goal",
+   "id": "summer_through",
+   "info": ""
+  },
+  {
+   "t": 225,
+   "chapter": "summer",
+   "kind": "close",
+   "id": "summer",
+   "info": "-> autumn"
+  },
+  {
+   "t": 225,
+   "chapter": "autumn",
+   "kind": "chapter",
+   "id": "autumn",
+   "info": ""
+  },
+  {
+   "t": 225,
+   "chapter": "autumn",
+   "kind": "fade",
+   "id": "Storm",
+   "info": "0"
+  },
+  {
+   "t": 260.6,
+   "chapter": "autumn",
+   "kind": "reaction",
+   "id": "hungry_eagle",
+   "info": "when"
+  },
+  {
+   "t": 270,
+   "chapter": "autumn",
+   "kind": "close",
+   "id": "autumn",
+   "info": "-> winter"
+  },
+  {
+   "t": 270,
+   "chapter": "winter",
+   "kind": "chapter",
+   "id": "winter",
+   "info": ""
+  },
+  {
+   "t": 270,
+   "chapter": "winter",
+   "kind": "fade",
+   "id": "Storm",
+   "info": "0"
+  },
+  {
+   "t": 270,
+   "chapter": "winter",
+   "kind": "player",
+   "id": "flax",
+   "info": "mama"
+  },
+  {
+   "t": 270.1,
+   "chapter": "winter",
+   "kind": "goal",
+   "id": "fed",
+   "info": ""
+  },
+  {
+   "t": 283.9,
+   "chapter": "winter",
+   "kind": "reaction",
+   "id": "taken_again",
+   "info": "moa_killed"
+  },
+  {
+   "t": 315,
+   "chapter": "winter",
+   "kind": "goal",
+   "id": "winter_through",
+   "info": ""
+  },
+  {
+   "t": 315,
+   "chapter": "winter",
+   "kind": "close",
+   "id": "winter",
+   "info": "-> spring"
+  },
+  {
+   "t": 315,
+   "chapter": "spring",
+   "kind": "chapter",
+   "id": "spring",
+   "info": ""
+  },
+  {
+   "t": 315.2,
+   "chapter": "spring",
+   "kind": "goal",
+   "id": "home",
+   "info": ""
+  },
+  {
+   "t": 336.7,
+   "chapter": "spring",
+   "kind": "reaction",
+   "id": "hungry_eagle",
+   "info": "when"
+  },
+  {
+   "t": 346.4,
+   "chapter": "spring",
+   "kind": "reaction",
+   "id": "cover_again",
+   "info": "eagle_hunting"
+  },
+  {
+   "t": 355.7,
+   "chapter": "spring",
+   "kind": "reaction",
+   "id": "bird_taken",
+   "info": "bird_killed"
+  },
+  {
+   "t": 360,
+   "chapter": "spring",
+   "kind": "reaction",
+   "id": "new_year",
+   "info": "season_change"
+  },
+  {
+   "t": 360,
+   "chapter": "spring",
+   "kind": "close",
+   "id": "spring",
+   "info": "-> summer"
+  },
+  {
+   "t": 360,
+   "chapter": "summer",
+   "kind": "chapter",
+   "id": "summer",
+   "info": ""
+  },
+  {
+   "t": 375.2,
+   "chapter": "summer",
+   "kind": "reaction",
+   "id": "bird_hatch_again",
+   "info": "bird_hatched"
+  },
+  {
+   "t": 405,
+   "chapter": "summer",
+   "kind": "goal",
+   "id": "summer_through",
+   "info": ""
+  },
+  {
+   "t": 405,
+   "chapter": "summer",
+   "kind": "close",
+   "id": "summer",
+   "info": "-> autumn"
+  },
+  {
+   "t": 405,
+   "chapter": "autumn",
+   "kind": "chapter",
+   "id": "autumn",
+   "info": ""
+  },
+  {
+   "t": 405,
+   "chapter": "autumn",
+   "kind": "fade",
+   "id": "Storm",
+   "info": "0"
+  },
+  {
+   "t": 408.5,
+   "chapter": "autumn",
+   "kind": "reaction",
+   "id": "hungry_eagle",
+   "info": "when"
+  },
+  {
+   "t": 418.2,
+   "chapter": "autumn",
+   "kind": "reaction",
+   "id": "cover_again",
+   "info": "eagle_hunting"
+  },
+  {
+   "t": 450,
+   "chapter": "autumn",
+   "kind": "close",
+   "id": "autumn",
+   "info": "-> winter"
+  },
+  {
+   "t": 450,
+   "chapter": "winter",
+   "kind": "chapter",
+   "id": "winter",
+   "info": ""
+  },
+  {
+   "t": 450,
+   "chapter": "winter",
+   "kind": "fade",
+   "id": "Storm",
+   "info": "0"
+  },
+  {
+   "t": 450,
+   "chapter": "winter",
+   "kind": "player",
+   "id": "flax",
+   "info": "mama"
+  },
+  {
+   "t": 450.1,
+   "chapter": "winter",
+   "kind": "goal",
+   "id": "fed",
+   "info": ""
+  },
+  {
+   "t": 480.5,
+   "chapter": "winter",
+   "kind": "reaction",
+   "id": "hungry_eagle",
+   "info": "when"
+  },
+  {
+   "t": 490.9,
+   "chapter": "winter",
+   "kind": "reaction",
+   "id": "cover_again",
+   "info": "eagle_hunting"
+  },
+  {
+   "t": 491,
+   "chapter": "winter",
+   "kind": "player",
+   "id": "cover",
+   "info": "friendPapa"
+  },
+  {
+   "t": 491.5,
+   "chapter": "winter",
+   "kind": "player",
+   "id": "cover",
+   "info": "koukou"
+  },
+  {
+   "t": 493,
+   "chapter": "winter",
+   "kind": "player",
+   "id": "cover",
+   "info": "papa"
+  },
+  {
+   "t": 495,
+   "chapter": "winter",
+   "kind": "goal",
+   "id": "winter_through",
+   "info": ""
+  },
+  {
+   "t": 495,
+   "chapter": "winter",
+   "kind": "close",
+   "id": "winter",
+   "info": "-> spring"
+  },
+  {
+   "t": 495,
+   "chapter": "spring",
+   "kind": "chapter",
+   "id": "spring",
+   "info": ""
+  },
+  {
+   "t": 495.1,
+   "chapter": "spring",
+   "kind": "goal",
+   "id": "home",
+   "info": ""
+  },
+  {
+   "t": 499.2,
+   "chapter": "spring",
+   "kind": "reaction",
+   "id": "bird_taken",
+   "info": "bird_killed"
+  },
+  {
+   "t": 511,
+   "chapter": "spring",
+   "kind": "reaction",
+   "id": "storm_gone",
+   "info": "placeable_expired"
+  },
+  {
+   "t": 540,
+   "chapter": "spring",
+   "kind": "reaction",
+   "id": "new_year",
+   "info": "season_change"
+  },
+  {
+   "t": 540,
+   "chapter": "spring",
+   "kind": "close",
+   "id": "spring",
+   "info": "-> summer"
+  },
+  {
+   "t": 540,
+   "chapter": "summer",
+   "kind": "chapter",
+   "id": "summer",
+   "info": ""
+  },
+  {
+   "t": 544.5,
+   "chapter": "summer",
+   "kind": "reaction",
+   "id": "first_kaka",
+   "info": "bird_hatched"
+  },
+  {
+   "t": 544.5,
+   "chapter": "summer",
+   "kind": "moment",
+   "id": "$bird",
+   "info": "Kākā chicks: spring"
+  },
+  {
+   "t": 544.5,
+   "chapter": "summer",
+   "kind": "reaction",
+   "id": "bird_hatch_again",
+   "info": "bird_hatched"
+  },
+  {
+   "t": 552,
+   "chapter": "summer",
+   "kind": "reaction",
+   "id": "hungry_eagle",
+   "info": "when"
+  },
+  {
+   "t": 561.7,
+   "chapter": "summer",
+   "kind": "reaction",
+   "id": "cover_again",
+   "info": "eagle_hunting"
+  },
+  {
+   "t": 585,
+   "chapter": "summer",
+   "kind": "goal",
+   "id": "summer_through",
+   "info": ""
+  },
+  {
+   "t": 585,
+   "chapter": "summer",
+   "kind": "close",
+   "id": "summer",
+   "info": "-> autumn"
+  },
+  {
+   "t": 585,
+   "chapter": "autumn",
+   "kind": "chapter",
+   "id": "autumn",
+   "info": ""
+  },
+  {
+   "t": 585,
+   "chapter": "autumn",
+   "kind": "fade",
+   "id": "Storm",
+   "info": "0"
+  },
+  {
+   "t": 620.5,
+   "chapter": "autumn",
+   "kind": "reaction",
+   "id": "hungry_eagle",
+   "info": "when"
+  },
+  {
+   "t": 630,
+   "chapter": "autumn",
+   "kind": "close",
+   "id": "autumn",
+   "info": "-> winter"
+  },
+  {
+   "t": 630,
+   "chapter": "winter",
+   "kind": "chapter",
+   "id": "winter",
+   "info": ""
+  },
+  {
+   "t": 630,
+   "chapter": "winter",
+   "kind": "fade",
+   "id": "Storm",
+   "info": "0"
+  },
+  {
+   "t": 630,
+   "chapter": "winter",
+   "kind": "player",
+   "id": "flax",
+   "info": "mama"
+  },
+  {
+   "t": 630.2,
+   "chapter": "winter",
+   "kind": "reaction",
+   "id": "cover_again",
+   "info": "eagle_hunting"
+  },
+  {
+   "t": 645.7,
+   "chapter": "winter",
+   "kind": "goal",
+   "id": "fed",
+   "info": ""
+  },
+  {
+   "t": 675,
+   "chapter": "winter",
+   "kind": "goal",
+   "id": "winter_through",
+   "info": ""
+  },
+  {
+   "t": 675,
+   "chapter": "winter",
+   "kind": "close",
+   "id": "winter",
+   "info": "-> spring"
+  },
+  {
+   "t": 675,
+   "chapter": "spring",
+   "kind": "chapter",
+   "id": "spring",
+   "info": ""
+  },
+  {
+   "t": 675.1,
+   "chapter": "spring",
+   "kind": "goal",
+   "id": "home",
+   "info": ""
+  },
+  {
+   "t": 692.7,
+   "chapter": "spring",
+   "kind": "reaction",
+   "id": "hungry_eagle",
+   "info": "when"
+  },
+  {
+   "t": 703.1,
+   "chapter": "spring",
+   "kind": "reaction",
+   "id": "cover_again",
+   "info": "eagle_hunting"
+  },
+  {
+   "t": 703.5,
+   "chapter": "spring",
+   "kind": "player",
+   "id": "cover",
+   "info": "friendPapa"
+  },
+  {
+   "t": 720,
+   "chapter": "spring",
+   "kind": "reaction",
+   "id": "new_year",
+   "info": "season_change"
+  },
+  {
+   "t": 720,
+   "chapter": "spring",
+   "kind": "close",
+   "id": "spring",
+   "info": "-> summer"
+  },
+  {
+   "t": 720,
+   "chapter": "summer",
+   "kind": "chapter",
+   "id": "summer",
+   "info": ""
+  },
+  {
+   "t": 723.5,
+   "chapter": "summer",
+   "kind": "reaction",
+   "id": "storm_gone",
+   "info": "placeable_expired"
+  },
+  {
+   "t": 725.1,
+   "chapter": "summer",
+   "kind": "reaction",
+   "id": "raid_failed",
+   "info": "nest_raid"
+  },
+  {
+   "t": 729.4,
+   "chapter": "summer",
+   "kind": "reaction",
+   "id": "bird_hatch_again",
+   "info": "bird_hatched"
+  },
+  {
+   "t": 747.6,
+   "chapter": "summer",
+   "kind": "reaction",
+   "id": "raid_failed",
+   "info": "nest_raid"
+  },
+  {
+   "t": 765,
+   "chapter": "summer",
+   "kind": "goal",
+   "id": "summer_through",
+   "info": ""
+  },
+  {
+   "t": 765,
+   "chapter": "summer",
+   "kind": "close",
+   "id": "summer",
+   "info": "-> autumn"
+  },
+  {
+   "t": 765,
+   "chapter": "autumn",
+   "kind": "chapter",
+   "id": "autumn",
+   "info": ""
+  },
+  {
+   "t": 765,
+   "chapter": "autumn",
+   "kind": "fade",
+   "id": "Storm",
+   "info": "0"
+  },
+  {
+   "t": 765.3,
+   "chapter": "autumn",
+   "kind": "reaction",
+   "id": "raid_won",
+   "info": "nest_raid"
+  },
+  {
+   "t": 771.4,
+   "chapter": "autumn",
+   "kind": "reaction",
+   "id": "hungry_eagle",
+   "info": "when"
+  },
+  {
+   "t": 782.4,
+   "chapter": "autumn",
+   "kind": "reaction",
+   "id": "cover_again",
+   "info": "eagle_hunting"
+  },
+  {
+   "t": 810,
+   "chapter": "autumn",
+   "kind": "close",
+   "id": "autumn",
+   "info": "-> winter"
+  },
+  {
+   "t": 810,
+   "chapter": "winter",
+   "kind": "chapter",
+   "id": "winter",
+   "info": ""
+  },
+  {
+   "t": 810,
+   "chapter": "winter",
+   "kind": "fade",
+   "id": "Storm",
+   "info": "0"
+  },
+  {
+   "t": 810,
+   "chapter": "winter",
+   "kind": "player",
+   "id": "flax",
+   "info": "mama"
+  },
+  {
+   "t": 810.1,
+   "chapter": "winter",
+   "kind": "goal",
+   "id": "fed",
+   "info": ""
+  },
+  {
+   "t": 844.9,
+   "chapter": "winter",
+   "kind": "reaction",
+   "id": "hungry_eagle",
+   "info": "when"
+  },
+  {
+   "t": 854.6,
+   "chapter": "winter",
+   "kind": "reaction",
+   "id": "cover_again",
+   "info": "eagle_hunting"
+  },
+  {
+   "t": 855,
+   "chapter": "winter",
+   "kind": "goal",
+   "id": "winter_through",
+   "info": ""
+  },
+  {
+   "t": 855,
+   "chapter": "winter",
+   "kind": "close",
+   "id": "winter",
+   "info": "-> spring"
+  },
+  {
+   "t": 855,
+   "chapter": "spring",
+   "kind": "chapter",
+   "id": "spring",
+   "info": ""
+  },
+  {
+   "t": 855.1,
+   "chapter": "spring",
+   "kind": "goal",
+   "id": "home",
+   "info": ""
+  },
+  {
+   "t": 900,
+   "chapter": "spring",
+   "kind": "reaction",
+   "id": "new_year",
+   "info": "season_change"
+  },
+  {
+   "t": 900,
+   "chapter": "spring",
+   "kind": "close",
+   "id": "spring",
+   "info": "-> finale"
+  },
+  {
+   "t": 900,
+   "chapter": "finale",
+   "kind": "chapter",
+   "id": "finale",
+   "info": ""
+  },
+  {
+   "t": 900,
+   "chapter": "finale",
+   "kind": "moment",
+   "id": "pukepuke",
+   "info": "Grown up"
+  },
+  {
+   "t": 900.1,
+   "chapter": "finale",
+   "kind": "close",
+   "id": "finale",
+   "info": "-> win"
+  },
+  {
+   "t": 900.1,
+   "chapter": "finale",
+   "kind": "won",
+   "id": "finale",
+   "info": ""
+  }
+ ],
+ "beats": {}
+}

@@ -238,17 +238,43 @@ class Moa extends Boid {
   }
 
   isJuvenile() { return this.age < MOA_AGE.JUVENILE_MAX; }
-  canMateByAge() { return this.age >= this._matingAge; }
+
+  // The species' breeding calendar, when the level asks for one (seasonalBirdBreeding:
+  // 'calendar'; the giant moa has one): the laying season and window, years to come of age,
+  // years between clutches. null otherwise.
+  _calendar() {
+    if (!(typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS && LEVEL_MECHANICS.seasonalBirdBreeding === 'calendar')) return null;
+    return (this.speciesConfig && this.speciesConfig.calendar) || null;
+  }
+  _yearNow() { return Math.floor(((this._sim && this._sim.seasonTurns) || 0) / 4); }
+
+  canMateByAge() {
+    const cal = this._calendar();
+    // On the calendar a chick comes of age by the year (a founder, with no birth year, is grown).
+    if (cal) return this._bornYear == null || this._yearNow() - this._bornYear >= (cal.maturityYears || 1);
+    return this.age >= this._matingAge;
+  }
 
   // ============================================
   // MATING READINESS
   // ============================================
 
   isReadyToMate() {
-    return this.canMate && this.mateCooldown <= 0 && this.canMateByAge() && 
+    const ready = this.canMate && this.mateCooldown <= 0 && this.canMateByAge() && 
       !this.isPregnant && !this.matingPartner && 
       this.hunger < this.matingHungerThreshold && 
       this.securityTime >= this.securityTimeRequired * 0.5;
+    if (!ready) return false;
+    // On the calendar: only in the laying season's window, and not again until her next year.
+    const cal = this._calendar();
+    if (cal) {
+      const sm = this._sim && this._sim.seasonManager;
+      if (!sm || sm.currentKey !== cal.lay) return false;
+      const prog = sm.progress ?? 0;
+      if (prog < (cal.layFrom ?? 0) || prog > (cal.layTo ?? 1)) return false;
+      if ((this._nextClutchYear ?? -1) > this._yearNow()) return false;
+    }
+    return true;
   }
 
   canBeMate() {
@@ -284,6 +310,7 @@ class Moa extends Boid {
     // Module levels run their moa from a "life" script (MoaLife in mauri_module.js). When one
     // is attached it does everything, and none of the behaviour below runs.
     if (this.lifeScript) { this.lifeScript.behave(simulation, mauri, seasonManager, dt); return; }
+    this._sim = simulation;   // (for the calendar's year and season; see _calendar)
 
     this.updateAge(dt);
     this.animTime += dt;
@@ -805,6 +832,9 @@ class Moa extends Boid {
     const egg = simulation.addEgg(ex, ey);
     egg.speedBonus = Math.max(this.eggSpeedBonus, nestBonus);
     if (this.speciesKey) egg.parentSpecies = this.speciesKey;
+    // On the calendar, her next clutch is a year or more away.
+    const _cal = this._calendar();
+    if (_cal) { const ev = _cal.every || [1, 1]; this._nextClutchYear = this._yearNow() + ev[0] + Math.floor(random(ev[1] - ev[0] + 1)); }
 
     if (simulation.game?.tutorial) {
       if (aliveMoaEggs.length === 0) simulation.game.tutorial.fireEvent(TUTORIAL_EVENTS.FIRST_EGG, { egg });
@@ -889,8 +919,16 @@ class Moa extends Boid {
       f.sub(this.vel);
       f.limit(this.maxForce);
       
-      const mult = isMating ? 0.2 : 
+      let mult = isMating ? 0.2 : 
         (this.currentState === MOA_STATE.FLEEING ? 0.5 * this.flockTendency : 0.8 * (2 - this.flockTendency));
+      // A hungry bird crowds in: the hungrier it is, the nearer it will stand to a neighbour to
+      // reach food. At full strength this push is stronger than the pull toward a plant, so a
+      // chick would hover at arm's length from a parent feeding on a patch, held off the food
+      // by the parent's elbow, and starve there.
+      if (!isMating && this.currentState !== MOA_STATE.FLEEING && this.hunger > this.hungerThreshold) {
+        const span = Math.max(1, this.criticalHunger - this.hungerThreshold);
+        mult *= Math.max(0.3, 1 - 0.7 * (this.hunger - this.hungerThreshold) / span);
+      }
       f.mult(mult);
       this.applyForce(f);
     }
@@ -1090,7 +1128,16 @@ class Moa extends Boid {
       if (p.seasonalModifier < 0.3 && this.hunger < 70) continue;
       
       const dx = p.pos.x - this.pos.x, dy = p.pos.y - this.pos.y;
-      let score = Math.sqrt(dx * dx + dy * dy) / this.foragingBonus / p.seasonalModifier / (p.nutrition * 0.033);
+      let score;
+      if (this.hunger > this.criticalHunger) {
+        // Starving: the nearest plant that is a real meal, not the richest one in range. Weighing
+        // distance against nutrition sends a starving bird past the tussock at its feet toward a
+        // beech a hundred units off, up a slope, and it dies on the way. A plant with less than
+        // fifteen food left on it counts as proportionally further away.
+        score = Math.sqrt(dx * dx + dy * dy) / this.foragingBonus / Math.min(1, p.nutrition / 15);
+      } else {
+        score = Math.sqrt(dx * dx + dy * dy) / this.foragingBonus / p.seasonalModifier / (p.nutrition * 0.033);
+      }
       
       const hx = this.homeRange.x - p.pos.x, hy = this.homeRange.y - p.pos.y;
       if (hx * hx + hy * hy < this.homeRangeRadiusSq) score *= 0.7;

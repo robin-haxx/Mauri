@@ -35,7 +35,8 @@ const TUTORIAL_EVENTS = {
   MODULE_BEAT: 'module_beat',         // a module level's story moment, data: { beat, director, ... }
   STORY_BEAT: 'story_beat',           // a chapter level's line or banner (mauri_chapters.js), data: { cue }
   PLANT_SPROUTED: 'plant_sprouted',   // a pātōtara (patch or wild plant) sprouted by hand, data: { sprouted, type }
-  BIRD_HATCHED: 'bird_hatched'        // a flighted bird's (or kākāpō's) egg hatched, data: { egg, bird, speciesKey }
+  BIRD_HATCHED: 'bird_hatched',       // a flighted bird's (or kākāpō's) egg hatched, data: { egg, bird, speciesKey }
+  BIRD_KILLED: 'bird_killed'          // an eagle took a flighted bird, data: { bird, eagle, speciesKey }
 };
 
 // Named toolbar-button highlight targets → the placeable key each one shows.

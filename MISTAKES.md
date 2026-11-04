@@ -232,3 +232,39 @@ fixed; **[process]** a testing trap, not a bug; **[rule]** a design guardrail, b
   parametric oscillation is the right choice: tunable and legible. If the game is ever asked to
   replay a *real* sequence of glacials, use an anchor table, not a wave.
   `mauri_climate_drift.js`.
+
+## [fixed] The eagle could never catch a giant moa: its resist roll ran on every scan
+
+- **What happened.** In the five-year free play the eagle hunted the giant moa herd for four
+  minutes, got within a pixel of one, and starved to death without a catch; the chapters run
+  then ended with "the ecosystem lost its apex predator".
+- **Root cause.** The giant moa's `eagleResistance` (a 30% chance to shrug off an attack) was
+  rolled in the eagle's prey *scan*, once per moa per frame. In a herd the bird's pick flickered
+  between members from frame to frame, and under a chapter level's `coverBreaksLock` every
+  change of target counted as a fresh lock-on: a new wind-up, a new grace window, another
+  `eagle_hunting` event. No wind-up ever reached zero. (A lone giant moa in a classic level was
+  nearly uncatchable the same way: the one-second wind-up needs sixty unbroken frames and a
+  30% per-frame skip never allows them.)
+- **Rule.** A chance to resist is rolled *at the strike*, once per attempt (`Moa.resistEagleAttack`,
+  now called from `HaastsEagle.hunt`); on a shrug-off the bird breaks off and rests briefly. A
+  scan decides what the eagle can *see*; nothing in it may be random per frame for the bird it
+  is already chasing. And a "fresh lock" means the last target is gone from view (under cover or
+  dead), not that a nearer bird appeared. `mauri_eagle.js`.
+
+## [fixed] A chick starved at arm's length from its feeding parent; two more foraging traps
+
+- **What happened.** In the five-year free play Pukepuke hovered for seventy seconds at exactly
+  fifty units from a parent feeding on a wharariki patch, hunger climbing, and starved. In
+  spring it walked past tussock at its feet toward a beech a hundred units up a slope.
+- **Root cause.** Two rules of the open simulation, each fine alone. (1) The separation push
+  from a neighbour inside fifty units is stronger than the pull toward a plant (0.96 against at
+  most 0.9 of `maxForce`), so a bird whose food lies inside a neighbour's ring stands on the
+  ring. (2) Plant choice divides distance by nutrition, so a rich plant far off outscores a poor
+  one close by; a starving bird on a slope dies on the way to the richer one, then the stall
+  watch hands it the next far plant.
+- **Rule.** A hungry bird crowds in: above its hunger threshold the separation push scales down
+  toward 0.3 as hunger nears critical. A starving bird (past `criticalHunger`) takes the nearest
+  real meal (fifteen food or more on it), not the richest in range. Both in `mauri_moa.js`.
+  When a cast member starves beside food, run `tools/batch.js --trace <name>` first: the trace
+  prints the target plant, its distance and the stall counter once a second, and the fault is
+  usually visible in twenty rows.

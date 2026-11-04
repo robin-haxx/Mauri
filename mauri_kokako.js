@@ -249,6 +249,9 @@ const KOKAKO_SPECIES = {
 
   maturitySec:      22,
   eggCooldownSec:   42,
+  // The breeding year (seasonalBirdBreeding: 'calendar'): spring into summer, 2 to 3 eggs,
+  // breeding from about 2.
+  calendar: { lay: 'spring', layFrom: 0.25, layTo: 0.6, clutch: [2, 3], maturityYears: 2, every: [1, 1], success: 0.8 },
   mateRadius:       170,
   reproCheckSec:    3.5,
   maxPopulation:    10,

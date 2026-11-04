@@ -964,6 +964,7 @@ class Simulation {
     chick.age = 0;
     chick.mature = false;
     chick.hunger = 30;
+    chick._bornYear = Math.floor((this.seasonTurns || 0) / 4);   // (the calendar's years to come of age)
 
     // Sex-balance the hatchling: take the minority sex of its own living flock so a
     // small population keeps both sexes and stays able to pair within itself.
@@ -1119,6 +1120,9 @@ class Simulation {
 
     const name = (prey.species && prey.species.displayName) || (prey._label) || 'bird';
     if (this.game) this.game.addNotification(`An eagle seized a ${name}!`, 'error');
+    if (this.game && this.game.tutorial) {
+      this.game.tutorial.fireEvent(TUTORIAL_EVENTS.BIRD_KILLED, { bird: prey, eagle, speciesKey: key });
+    }
     this.stats.deaths++;
     this._invalidateCache();
   }
@@ -1891,6 +1895,7 @@ class Simulation {
             else if (_sm < _sf) newMoa.isFemale = false;
 
             newMoa.hunger = 35;
+            newMoa._bornYear = Math.floor((this.seasonTurns || 0) / 4);   // (a species on the calendar matures by the year)
             newMoa.size *= 0.6;
             newMoa._cacheSizeMultipliers();
             newMoa.homeRange.set(egg.pos.x, egg.pos.y);

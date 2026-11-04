@@ -443,7 +443,8 @@ class HaastsEagle extends Boid {
         const spotR = this.huntRadius * frac;
         if (frac <= 0 || dSq > spotR * spotR) continue;
       }
-      if (moa.eagleResistance > 0 && random() < moa.eagleResistance) continue;
+      // (A moa's eagleResistance is rolled at the strike, not here: rolled on every scan it made
+      // the bird's pick flicker between herd members, so no wind-up ever finished.)
       // Camouflage: chance the eagle doesn't spot this moa during a scan. Once it's the
       // current target camo no longer hides it (harder to find, not harder to chase).
       if (moa.camouflage > 0 && this.target !== moa && random() < moa.camouflage) continue;
@@ -498,9 +499,11 @@ class HaastsEagle extends Boid {
 
     if (target) {
       const hadNoTarget = this.target === null;
-      // Under coverBreaksLock a change of target (its last one got under cover) counts as a
-      // fresh lock: a new wind-up, and the hunt event again, so a lesson can answer it.
-      const retarget = !hadNoTarget && this.target !== target && !!_M.coverBreaksLock;
+      // Under coverBreaksLock a change of target because the last one is gone from view (under
+      // cover, or dead) counts as a fresh lock: a new wind-up, and the hunt event again, so a
+      // lesson can answer it. Turning to a nearer bird mid-chase is not: the dive carries on.
+      const retarget = !hadNoTarget && this.target !== target && !!_M.coverBreaksLock &&
+        (!this.target.alive || !!this.target.inShelter);
 
       this.state = 'hunting';
       this.hunting = true;
@@ -556,7 +559,14 @@ class HaastsEagle extends Boid {
         if (this.huntWindupTimer > 0) this.huntWindupTimer -= dt;
 
         if (targetDistSq < this.catchRadiusSq && !inGrace && this.huntWindupTimer <= 0) {
-          if (targetIsFlyer) simulation.handleEagleCatchFlyer(this, target);
+          if (!targetIsFlyer && typeof target.resistEagleAttack === 'function' && target.resistEagleAttack()) {
+            // The strike is shrugged off (a giant moa's size: its eagleResistance). The bird
+            // breaks off and rests a moment where it is before it hunts again.
+            this.hunting = false; this.target = null; this.huntSearchTimer = 0;
+            this.state = 'resting'; this.restTimer = Math.round(this.restDuration * 0.5);
+            this.vel.mult(0.3);
+          }
+          else if (targetIsFlyer) simulation.handleEagleCatchFlyer(this, target);
           else simulation.handleEagleCatch(this, target, mauri);
         }
       }

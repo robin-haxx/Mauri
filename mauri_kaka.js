@@ -195,6 +195,9 @@ const KAKA_SPECIES = {
 
   maturitySec:      27,
   eggCooldownSec:   48,     // grows fast, not many offspring
+  // The breeding year (seasonalBirdBreeding: 'calendar'): spring, 3 to 4 eggs, mostly in a
+  // beech or podocarp mast year; few pairs try in an ordinary one.
+  calendar: { lay: 'spring', layFrom: 0.2, layTo: 0.6, clutch: [3, 4], maturityYears: 3, every: [1, 2], success: 0.45, mastSuccess: 1 },
   mateRadius:       200,
   reproCheckSec:    2.2,    // sample the short crop>0 perch window more often so a near mate isn't missed
   maxPopulation:    14,

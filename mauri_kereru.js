@@ -137,7 +137,11 @@ class Kereru extends Boid {
     // year itself: it lays each species' clutches in its season and brings chicks of age
     // after so many years (see FreePlayDirector). Then the bird never lays on its own, and
     // never comes of age by the seconds.
-    this._seasonal = !!(typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS && LEVEL_MECHANICS.seasonalBirdBreeding);
+    this._seasonal = !!(typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS && LEVEL_MECHANICS.seasonalBirdBreeding === true);
+    // seasonalBirdBreeding: 'calendar' instead lets the bird keep its own breeding, by its
+    // species' calendar (sp.calendar: the laying season and window, clutch size, years to come
+    // of age, years between clutches, the share of pairs that lay): see _calendar, _tryReproduce.
+    this._sp = sp;
     // "In a flock" if a conspecific is within this radius. A bird with none nearby is restless:
     // it rests less and takes off to roam sooner, so solitary birds keep moving (and wandering)
     // until they find company / a mate instead of camping alone.
@@ -180,7 +184,13 @@ class Kereru extends Boid {
     // Age → maturity, and hunger (feeding pays it back below). A waterhole in reach draws the
     // bird's dispersal hops in (see _pickHop), and at the water it gets hungry more slowly.
     this.age += dt;
-    if (!this.mature && !this._seasonal && this.age >= this._maturityFrames) this.mature = true;
+    if (!this.mature && !this._seasonal) {
+      const cal = this._calendar();
+      if (cal) {   // by the year: a chick hatched in year y is grown in year y + maturityYears
+        const year = Math.floor((sim.seasonTurns || 0) / 4);
+        if (this._bornYear == null || year - this._bornYear >= (cal.maturityYears || 1)) this.mature = true;
+      } else if (this.age >= this._maturityFrames) this.mature = true;
+    }
     const pool = this._pool = this._nearestWaterhole(sim);
     const thirstMod = (pool && pool.isInRange(this.pos)) ? (pool.def.birdHungerSlowdown ?? 1) : 1;
     this.hunger = Math.min(this.hunger + this.hungerRate * thirstMod * dt, this.maxHunger);
@@ -584,6 +594,12 @@ class Kereru extends Boid {
 
   // Emergent reproduction: a mature, well-fed, off-cooldown female below the flock cap
   // with a mature mate nearby lays.
+  // The species' breeding calendar, when the level asks for one (seasonalBirdBreeding: 'calendar').
+  _calendar() {
+    if (!(typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS && LEVEL_MECHANICS.seasonalBirdBreeding === 'calendar')) return null;
+    return (this._sp && this._sp.calendar) || null;
+  }
+
   _tryReproduce(sim) {
     if (this._seasonal) return;   // the level lays clutches by the season (see constructor)
     if (!this.mature || !this.isFemale || this._eggCooldown > 0) return;
@@ -595,6 +611,37 @@ class Kereru extends Boid {
     if (!sim.getSpeciesCount || sim.getSpeciesCount(this.speciesKey) >= cap) return;
     if (!this._hasMateNear(sim)) return;
     if (!sim.addEgg) return;
+
+    // By the calendar: only in the laying season's window, a clutch at a time, every so many
+    // years, and only a share of the hens in an ordinary year (more in a mast year).
+    const cal = this._calendar();
+    if (cal) {
+      const sm = sim.seasonManager;
+      if (!sm || sm.currentKey !== cal.lay) return;
+      const prog = sm.progress ?? 0;
+      if (prog < (cal.layFrom ?? 0) || prog > (cal.layTo ?? 1)) return;
+      const year = Math.floor((sim.seasonTurns || 0) / 4);
+      if ((this._nextClutchYear ?? -1) > year) return;
+      const p = (mast && cal.mastSuccess != null) ? cal.mastSuccess : (cal.success ?? 1);
+      const every = cal.every || [1, 1];
+      this._nextClutchYear = year + every[0] + Math.floor(random(every[1] - every[0] + 1));
+      if (random() >= p) return;                            // not her year
+      const n = cal.clutch ? cal.clutch[0] + Math.floor(random(cal.clutch[1] - cal.clutch[0] + 1)) : 1;
+      for (let i = 0; i < n; i++) {
+        const a = random(TWO_PI), d = n > 1 ? random(2, 8) : 0;
+        const e = sim.addEgg(this.pos.x + Math.cos(a) * d, this.pos.y + Math.sin(a) * d);
+        e.offspringType = this.speciesKey;
+        e.parentSpecies = this.speciesKey;
+        if (sim.game && sim.game.tutorial && typeof TUTORIAL_EVENTS !== 'undefined') {
+          sim.game.tutorial.fireEvent(TUTORIAL_EVENTS.EGG_LAID, { egg: e, speciesKey: this.speciesKey });
+        }
+      }
+      this._eggCooldown = (typeof CONFIG !== 'undefined' && CONFIG.seasonDuration) || this._eggCooldownFrames;
+      this.crop = 0;
+      this._onLaid();
+      if (sim.game) sim.game.addNotification(`A ${this._label} lays ${n > 1 ? n + ' eggs' : 'an egg'}.`, 'info');
+      return;
+    }
 
     const egg = sim.addEgg(this.pos.x, this.pos.y);
     egg.offspringType = this.speciesKey;                   // breeds true (kererū / kōkako)

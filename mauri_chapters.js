@@ -51,7 +51,8 @@ const CHAPTER_EVENTS = {
   beat:            {},
   placeable_expired: { count: 'expired' },          // a placed item wore out: `type` (expired:Storm)
   plant_sprouted:  { count: 'sprouted' },           // a pātōtara sprouted by hand: `sprouted`, `type`
-  bird_hatched:    { subject: 'bird', count: 'hatched' }   // a flighted bird's egg hatched: `$bird`, `$egg`
+  bird_hatched:    { subject: 'bird', count: 'hatched' },  // a flighted bird's egg hatched: `$bird`, `$egg`
+  bird_killed:     { subject: 'bird', count: 'killed' }    // an eagle took a flighted bird: `$bird`, `$eagle` (counts with the moa under killed:<species>)
 };
 
 // Conditions that read the world as it is right now. A beat whose `until` is made only of these

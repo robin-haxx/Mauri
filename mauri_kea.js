@@ -657,6 +657,9 @@ const KEA_SPECIES = {
   // Reproduction; sexual, emergent (the Kereru loop).
   maturitySec:      30,
   eggCooldownSec:   45,
+  // The breeding year (seasonalBirdBreeding: 'calendar'): nest from late winter, 2 to 4 eggs,
+  // first breed at about 3; a hen lays every year or two.
+  calendar: { lay: 'winter', layFrom: 0.35, layTo: 0.6, clutch: [2, 4], maturityYears: 3, every: [1, 2], success: 1 },
   mateRadius:       220,
   reproCheckSec:    3.5,
   maxPopulation:    14,

@@ -5,7 +5,10 @@ module is an ordinary emergent level with a `chapters` list on top. The engine n
 wild animals: it sets the stage (levers), measures what happened (goals), and answers it
 (reactions, lines, banners).
 
-- Worked example: `levels/chapters_prototype.js`.
+- Worked example: `levels/chapters_prototype.js`. The three modules built this way:
+  `levels/chapters_storms.js`, `levels/chapters_patotara.js`, `levels/chapters_freeplay.js`
+  (what each teaches and how it plays: `CHAPTERS_MODULES.md`).
+- A copyable starting point: `levels/_template_chapters.js` (§18).
 - Design, build status and history: `MODULE_ENGINE_PLAN.md`.
 
 ---
@@ -103,6 +106,12 @@ The runner only runs while the game is playing. Moments and pausing tips hold it
 | `sites` | Named places, found when the level starts (§12). |
 | `lose` | `[{ when, reason }]`. Default: `[{ when: { extinct: 'focus' }, reason: "The {species} died out." }]`. `[]` turns it off. |
 | `devOnly` | `true`: listed only in debug mode. |
+| `module` | `true`: a lesson. It opens without the level splash, and the validator then requires a `claim`. |
+| `section` | The menu section that lists it: `'stories'`, `'chapters'`, `'endless'` or `'classic'` (`MENU_SECTIONS` in `mauri_sketch.js`; the labels there are placeholders). Default: chapter levels go in `chapters`, legacy `story` modules in `stories`. |
+| `claim` | One line: the rule of the simulation this module teaches ("A moa under cover can't be seen, so the eagle hunts what it can see."). Shown on the win card. It is what a teacher or partner reads first. |
+| `guide` | Field Guide entry ids the module rests on (`mauri_encyclopedia.js`). The `guide` action opens one. |
+| `sketch` | `{ of, label, dial }`: this level is one variant (one setting of the emergence dial) of a module family (§18). |
+| `nextLevel` | A level id: the win card's "Next module" button. |
 
 The game's own loss (every moa gone) still applies.
 
@@ -121,7 +130,7 @@ The game's own loss (every moa gone) still applies.
 | `reactions` | | Reactions that only run in this chapter. |
 | `beats` | | Guaranteed beats (§11). |
 | `until` | `{ seasons: 1 }` | When the chapter closes (a condition). |
-| `holdSeason` | | `{ until, at = 0.9 }`: the season clock waits at `at` of the way through until `until` holds. |
+| `holdSeason` | | `{ until, at = 0.9, maxSec }`: the season clock waits at `at` of the way through until `until` holds, or `maxSec` seconds have passed. The validator warns when there is no `maxSec`: a hold needs a way out. |
 | `next` | the following chapter, else `'win'` | `'id'`, `'win'`, `[[cond, 'id'], ..., [true, 'id']]` (the first that holds), or `{ if, then, else }`. |
 
 Any other key is flagged by the validator.
@@ -190,7 +199,12 @@ A condition is an object whose keys must **all** hold, or `true`, or a function
 | `hunted: ref` | An eagle is after that bird. |
 | `separated: [a, b]` | Two places or birds on land no bird can walk between. |
 | `regions: [species, op, n]` | How many separate stretches of land a species lives on (`'moa'`: any moa). |
-| `species`, `focus`, `cast`, `type`, `success` | Filters on the event a reaction answers: the subject's species, whether it's a focus species, whether it's that cast member, the placed type, a raid's result. |
+| `near: [a, b, dist]` | `a` is within `dist` of `b`. `a` can be a place, a bird, a species (any live one of them) or a placeable type (any live one: `['wharariki', 'mama', 90]` is "a wharariki within 90 of Mama"). `b` is a place or a bird. |
+| `seen: [event, filters?]` | The event has happened since the **scope** began, passing the filters if any (`['eagle_hunting', { species: 'upland_moa' }]`). It is recorded as the event fires, so a beat waiting on it cannot miss it between two polls. |
+| `year: [op, n]` | The level's year (1 for the first four seasons, 2 for the next four, ...). |
+| `eagleHunger: [op, n]` | The hungriest live eagle's hunger (0–100; they hunt from about 45). |
+| `stat: [ref, field, op, n]` | A bird's own number: `'hunger'` (0–100), `'age'` (seconds) or `'size'`. |
+| `species`, `focus`, `cast`, `type`, `success`, `cause` | Filters on the event a reaction answers: the subject's species (one or a list), whether it is a focus species, whether it is that cast member (one or a list), the placed type, a raid's result, and how a cast member died (`'eagle'`, `'starved'`, or `'unknown'`). |
 | `any: [...]`, `all: [...]`, `not: cond` | Combinations. |
 
 **Ops:** `>=` `<=` `>` `<` `==` `!=`.
@@ -201,8 +215,9 @@ A condition is an object whose keys must **all** hold, or `true`, or a function
 |---|---|---|
 | `mauri` | mauri earned | |
 | `nests` | nests founded | |
-| `laid`, `hatched`, `killed`, `hunts` | eggs, chicks, eagle catches, eagle hunts started | `:species` (`hatched:upland_moa`) |
+| `laid`, `hatched`, `killed`, `hunts` | eggs, chicks (moa and flighted birds), eagle catches (moa and flighted birds), eagle hunts started | `:species` (`hatched:upland_moa`, `killed:kea`) |
 | `placed`, `moved` | the player's placements and moves | `:type` (`placed:shelter`) |
+| `expired`, `sprouted` | placed items that wore out; pātōtara the player sprouted | `:type` (`expired:Storm`) |
 | `raids`, `raidsWon` | kea nest raids | |
 
 **Scope.** `gained`, `placed` and `after` count from the chapter's opening. Inside a banner's
@@ -229,8 +244,13 @@ An action is an object with **one** verb, or a function `(x) => {}`. Actions go 
 | `tools`, `unlock`, `lock` | The toolbar (key or keys) |
 | `place` | `{ type, at, standing }`: a placeable, free. `standing: true` never wears out. |
 | `sow` | `{ plant, at, count = 4, radius = 30, growth = 0.9, sprouted = true }` |
-| `spawn` | `{ type, at, count = 1, radius = 20 }`: adult moa or birds at a place |
-| `aim` | `{ at, which = 'nearest', sec = 20 }`: an eagle goes for that moa, whatever its hunger. It still can't see a moa in cover. `at` can be a list of fallbacks. |
+| `spawn` | `{ type, at, count = 1, radius = 20, sexes, female, hunger, age }`: adult moa or birds at a place. `sexes: 'pair'` alternates female, male, ...; `female: true` / `false` sets them all; `hunger` (0–100) is how hungry they start (a hungry pair goes out to feed at once); `age: 'juvenile'` makes a half-grown moa chick. |
+| `nest` | `{ at, radius = 40, hideClutch, reservedFor, as }`: an established nesting site at a place. `as` names it as a site, so later actions and conditions can say `at: 'home'`. |
+| `lay` | `{ species, at, count = 1, incubationSec }`: an egg, or a clutch, at a place. Scripted, so it is not counted as `laid`. |
+| `adopt` | `{ name: '$role' }` or `{ name: { species, near, female, pick } }`: binds a cast name to a live bird: the one the event names (`{ pukepuke: '$moa' }` on `egg_hatched`), or the nearest of a species to a place. The name must be in `cast` with `manual: true` (§13). |
+| `fade` | `{ type = 'Storm', sec = 20, refreshOnMove }`: every placed item of that type wears out within `sec` seconds, standing ones too. With `refreshOnMove`, moving one gives it its time again. |
+| `guide` | An entry id: opens the Field Guide at it. |
+| `aim` | `{ at, which = 'nearest', sec = 20 }`: an eagle goes for that moa, whatever its hunger. It still can't see a moa in cover; given a list, it takes the first that is alive and in the open. The validator warns when `aim` is used anywhere but a beat's `force`: it is a scripted attack, and only a forced beat is marked as such in the log. |
 | `flag`, `unflag` | A story flag name |
 | `reward` | Mauri |
 | `next` | A chapter id or `'win'`: closes this chapter at the next check |
@@ -270,7 +290,7 @@ anything else uses Te Whē's picture and the chime. `extras` can override any ti
 (`title`, `pauseGame: false`, `guidePosition`, `voices`, ...) and add `lit: [...]`.
 
 **Text tokens:** `{species}` (the event's species, or the one that died out), `{chapter}`
-(the chapter's title).
+(the chapter's title), `{year}` (the level's year).
 
 **`lit`** takes `$role`s, cast names, species (all of them), `'focus'` (every focus bird),
 `'nests'`, and placeable types (every one placed).
@@ -317,12 +337,16 @@ after the last line.
 | `egg_laid` | `$egg` (its species) |
 | `egg_hatched` | `$moa` (the chick), `$egg` |
 | `placement`, `placeable_moved` | `type` |
-| `nest_raid` | `$site`, `success` |
+| `nest_raid` | `$site`, `$kea`, `$egg`, `success` (a kea reached an egg: `success: false` means the moa nearby saw it off) |
+| `placeable_expired` | `type` (a placed item wore out) |
+| `plant_sprouted` | `type` (the player sprouted a pātōtara) |
+| `bird_hatched` | `$bird`, `$egg` (a flighted bird's, or a kākāpō's, egg hatched) |
+| `bird_killed` | `$bird`, `$eagle` (an eagle took a flighted bird) |
 | `season_change` | `seasonKey` |
 | `chapter_start` | `chapter` |
 | `goal_met`, `goal_failed` | `goal` |
 | `nest_founded` | `$site` (a nest the player's planting founded) |
-| `cast_lost` | `$entity`, `cast` (an adopted character died) |
+| `cast_lost` | `$entity`, `cast`, `cause` (an adopted character died: `'eagle'`, `'starved'`, or `'unknown'`) |
 | `beat` | `beat`, `forced` |
 
 ---
@@ -336,7 +360,7 @@ deadline. Beats belong to a chapter.
 beats: [
   { id: 'hunt_comes', when: { after: 8 },
     invite: [{ eagle: { watch: 'grazing', hunger: 55 } }],   // make it likely
-    until: { gained: ['hunts:upland_moa', '>=', 1] },        // the beat itself: an EVENT counted in the beat's scope
+    until: { seen: ['eagle_hunting', { species: 'upland_moa' }] },   // the beat itself: an EVENT, recorded as it fires
     by: 30, force: [{ aim: { at: ['matriarch', 'upland_moa'] } }],   // guarantee it
     notify: "The Pouākai has seen the flock." }               // when it's done
 ]
@@ -348,6 +372,7 @@ beats: [
 | `until` | Done when this holds (counted from the beat's start). |
 | `by`, `force` | If not done `by` seconds after starting, `force` runs. With no `until`, the beat is done then. |
 | `pinned` | Marks a beat whose outcome is fixed (shown in the inspector). |
+| `once` | `true`: in a level whose chapters come round again (the five years), the beat stays done instead of re-arming each time. A first-year lesson. |
 | own actions | Run when it's done. |
 
 With neither `until` nor `by`, a beat is a plain step: done as soon as it starts. Sequence
@@ -382,6 +407,8 @@ sites: {
   opens, after its levers.
 - A site can be `near` an earlier one.
 - Sites found `near` a place stay on its stretch of land, unless `anyRegion: true`.
+- A `nest` action's `as` name is a site too, from the moment it runs; the validator accepts it
+  wherever a place is expected.
 
 **A place** (`at`, `on`, `watch`, `near`, `separated`) can be:
 - a site name;
@@ -408,10 +435,12 @@ cast: { matriarch: { title: "The Matriarch", species: 'upland_moa', pick: 'oldes
 | `pick` | `'oldest'` (default), `'youngest'`, `'random'`. |
 | `female` | `true` / `false` to choose by sex. |
 | `recast` | `true`: when lost, another is adopted as the next chapter opens. |
+| `manual` | `true`: not adopted on its own. An `adopt` action binds it: a chick on the `egg_hatched` event, a pair spawned at a nest, the nearest female to a place. |
 | `title`, `sprite`, `sound`, `pitch`, `scale` | How it speaks. |
 
 The cast is adopted as the level starts, and checked again as each chapter opens. When an
-adopted bird dies, `cast_lost` fires (`if: { cast: 'matriarch' }`).
+adopted bird dies, `cast_lost` fires with how it died (`if: { cast: 'matriarch', cause: 'eagle' }`),
+so a lesson can answer a hunt and a famine with different words.
 
 ---
 
@@ -493,6 +522,20 @@ start: [{ place: { type: 'speargrass', at: 'grazing', standing: true } }]
 | Log | `game.chapters.log`, or `game.chapters.dump()` for a table. |
 | Jump | `game.chapters.jump('winter')`, or load with `?chapter=winter`. The season clock isn't moved. |
 | Lenses | **L** in debug mode: "Land regions (now / year-round)". |
+| The eagle | Tap an eagle: a label says in words how hungry it is and what it is doing (with `eagleTelegraph`, §19). |
+
+**From the command line.** Both tools drive a headless browser through Playwright
+(`tools/_headless.js`; `npm i -D playwright && npx playwright install chromium` where it isn't
+preinstalled).
+
+| Command | What |
+|---|---|
+| `node tools/validate.js` | The level-format checks on every level and the engine's checks on every chapter level, without playing. `--smoke` also starts each level and runs it 15 s, reporting any page or console error. `--only <id>` for one level. Exits non-zero on anything but a warning. |
+| `node tools/batch.js --level <id or family> --sketch <label> --seeds 1..10` | Research runs. Each seed plays headless until the level ends, `--years n` have passed, or `--seconds n` (300) of play. It writes `<name>.csv` (populations every 10 s, the story log in the `event` column) and `<name>.beats.json` (the log, each beat natural or forced, the result) into `--out` (`tests/`), and prints a line per run: the result, each beat, who the eagle took, any cast lost, and a replay hash (the same seed prints the same hash). `--player cover` stands in for a player who puts a Storm over any cast member an eagle is hunting; `--player basic` also sprouts bare pātōtara and sets wharariki by the family in winter. `--trace <cast>` prints that bird once a second: state, hunger, target plant and its distance, the stall counter. |
+
+**URL parameters** (`index.html?...`): `level=<id or family>`, `sketch=<label>`, `seed=<n>`
+(the land and every roll replay exactly for the same seed), `bench=1` (record from the first
+frame, no splash), `years=<n>` (end the run after that many), `chapter=<id>`, `render=2d`.
 
 Headless in the preview (the game's global is `game`):
 
@@ -514,6 +557,15 @@ game.chapters.dump();
   after that, leave it to the sim.
 - **A failure is a branch, not a reset.** Prefer `next` on an outcome to a `required` goal.
 - Use `holdSeason` sparingly. Used heavily, it's a rail.
+
+**What the validator enforces** (besides the format checks: unknown keys, verbs, conditions,
+species, tools, speakers, places, events, chapter ids and goal references)
+- A module (`module: true`) must have a `claim`.
+- `aim` anywhere but a beat's `force` warns.
+- A beat `until` made only of state conditions (`hunting`, `hunted`, `hidden`, `alive`, ...)
+  warns: put `seen` or a counter beside it.
+- A `holdSeason` with no `maxSec` warns.
+- `guide` ids must be Field Guide entries, `nextLevel` a level, `sketch.of` a registered family.
 
 **Gotchas**
 - **One verb per action.** `{ notify: 'x', unlock: 'y' }` is an error; split it.
@@ -537,5 +589,70 @@ game.chapters.dump();
   current snow line.
 - **Moa portraits.** Every moa speaks with the upland moa portrait (the only moa portrait
   the tip panel has).
-- **Not built yet:** ordering a cast member to walk somewhere (`order`). See
-  `MODULE_ENGINE_PLAN.md`, phase 2.
+- **Not built yet:** ordering a cast member to walk somewhere (`order`), and a `pacing` lever
+  (a tension curve on eagle hunger over a chapter, so fewer beats need a deadline). See
+  `MODULE_ENGINE_PLAN.md`.
+
+---
+
+## 18. Sketches, families and the template
+
+A module is written once, as a **factory** that takes a sketch name and returns the level, and
+is registered once per sketch. Each sketch is the same lesson at a different setting of the
+**emergence dial**: how much is guaranteed, how long the eagle's wind-up is, whether prompts
+pause play, how many eagles there are. Side by side in the menu, the sketches let a class or a
+study compare them; the beat log says how often each needed help.
+
+```js
+const STORM_SKETCHES = {
+  guided: { label: 'Guided', forced: true,  hold: true,  graceSec: 6,   pause: true },
+  open:   { label: 'Open',   forced: false, hold: false, graceSec: 3.5, pause: false }
+};
+function makeChaptersStorms(sketchKey) {
+  const D = STORM_SKETCHES[sketchKey];
+  return {
+    id: `chapters_storms_${sketchKey}`, module: true, section: 'chapters',
+    sketch: { of: 'chapters_storms', label: D.label, dial: D },
+    claim: "A moa under a storm can't be seen by the Pouākai.",
+    guide: ['haasts_eagle', 'upland_moa'],
+    // ...the level, reading the dial as D.<name>...
+  };
+}
+for (const key of Object.keys(STORM_SKETCHES)) LEVEL_REGISTRY.register(makeChaptersStorms(key));
+LEVEL_REGISTRY.registerFamily('chapters_storms', { label: "Storms", defaultSketch: 'chapters_storms_guided' });
+```
+
+- The menu's Chapters section draws one card per family with a small button per sketch
+  (its `label`). Progress and best scores are kept per sketch, since each has its own id.
+- `?level=<family>` opens the family's default sketch; `tools/batch.js --level <family>
+  --sketch <label>` picks one.
+- The dial is any object. Keep its keys few, and name them for what they change in play.
+- `levels/_template_chapters.js` is a copyable module with a claim, a guide list, two sketches,
+  one beat and a few reactions, with comments written for a first-time author. Copy it, rename
+  the family and the ids, add a `<script>` tag for it in `index.html` after the template's,
+  and run `node tools/validate.js --only <your id>`, then `tools/batch.js` across a few seeds.
+
+---
+
+## 19. Mechanics the modules switch on
+
+The chapters modules teach rules that live in the open simulation. Each is a flag in the level's
+`mechanics` (read behind a `typeof LEVEL_MECHANICS` guard, so other levels are untouched), or a
+per-level override of a placeable. The ones added for the modules, and the file that reads each:
+
+| Flag | What it does | Where |
+|---|---|---|
+| `availablePlaceables.Storm: { blocksEagleVision: true, distractsEagles: false }` (a level key, not a flag) | The Storm is cover, not a stun: a moa under it can't be seen. | `mauri_placeable.js` |
+| `coverBreaksLock: true` | An eagle loses a target that reaches full cover and turns to other prey, and a strike on a covered moa fails. A change of target because the last one is gone from view counts as a fresh hunt: a new wind-up, `eagle_hunting` again. | `mauri_eagle.js`, `mauri_simulation.js` |
+| `coverCalmsMoa: true` | A moa fully under cover holds still for an eagle that isn't on it, instead of bolting into the open. | `mauri_moa.js` |
+| `lureUnderStorm: true` | A tap on a plant under a storm lures moa as usual. | `mauri_sketch.js` |
+| `placeableQueryRadius: 100` | How far a moa notices placed items (80 otherwise; storms are wide). | `mauri_moa.js` |
+| `eagleTelegraph: { graceSec, warnBelow }` | The visible wind-up. Every fresh hunt opens with `graceSec` seconds in which the eagle chases slowly and can't strike, its "!" showing. Within `warnBelow` of its hunt threshold its hunger bar pulses amber. A tap on an eagle says in words how hungry it is and what it is doing. | `mauri_eagle.js`, `mauri_sketch.js` |
+| `eagleSurplusPreference: true`, with `eaglePreyPopThreshold` and `eagleScarcePreyPenalty` | To a hunting eagle a species with numbers to spare reads as nearer, and one at or under the threshold as further, so a bird kept from one moa turns to the herd. | `mauri_eagle.js` |
+| `keaRaidsEggs: 'odds'`, with `keaRaid: { baseSuccess, moaPenalty, minSuccess, moaRadius }` | A kea that reaches an egg at a nest rolls the raid odds, which fall with every moa within `moaRadius`; a failed raid shoos it off. Both outcomes fire `nest_raid`. | `mauri_kea.js`, `mauri_simulation.js` |
+| `keaBerryLureRadius: 400` | Sprouted pātōtara draws kea from that far. | `mauri_kea.js` |
+| `sproutPatotara: true`, `placedPlantsSeasonal: true` | A placed pātōtara patch is bare until the player sprouts it (press and hold), and the plants it grows follow the seasons: nothing to eat on them in winter, when the patch neither attracts nor feeds. | `mauri_sketch.js`, `mauri_plant.js`, `mauri_placeable.js` |
+| `seasonalBirdBreeding: 'calendar'` | Kea, kākā, kōkako, kākāpō and the giant moa breed by the `calendar` in their species data: `lay` (the season) with `layFrom`–`layTo` (how far through it), `clutch: [min, max]`, `every: [min, max]` years between clutches, `maturityYears`, `success` (the chance of a clutch in a given year; `mastSuccess` in a mast year). Species without a calendar breed as before. | `mauri_kereru.js`, `mauri_moa.js`, the species files |
+| `eagleHuntsFlyers: true`, with `eagleFlyerHungerGate`, `eagleFlyerPreyPenalty`, `eagleFlyerFeed` | A hungry eagle takes flighted birds too (an older flag; `bird_killed` now reports it). | `mauri_eagle.js` |
+| `hungerRateMult`, `juvenileHungerMult` | Scale how fast every moa, or a chick, gets hungry. A small land starves a family at the open rate. | `mauri_moa.js` |
+| `populationFloors: { species: n }` | A species the eagle can't take, and hunger can't kill, below `n`: the herd a lesson needs. | `mauri_simulation.js` |

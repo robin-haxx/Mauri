@@ -191,6 +191,7 @@ as it opens; any of them can also be used as an action mid-chapter.
 | `moment` | A set-piece: the world held still, the camera in on something, big words, back out. Shared with the Free Play years (`MomentPlayer`) | [done] |
 | `aim` | The force half of a guarantee: an eagle goes for a named moa from any distance, whatever its hunger, cutting short a rest (still blind to it under cover) | [done] |
 | `order` | A cast member walks, stays or follows for a while, then is handed back to its own behaviour | [later] |
+| `nest`, `lay`, `adopt`, `fade`, `guide` | An established nest at a place (named as a site with `as`), an egg or a clutch at a place, a cast name bound to a live bird (a chick on its hatch event, the nearest female to a nest), placed items wearing out, the Field Guide opened at an entry | [done 2026-11-04] |
 | `say`, `banner`, `notify`, `camera`, `flag`, `next`, `win`, `lose` | Words, camera, story state, flow | [done] |
 
 **Ecology toolbox**: levers on the simulation; the outcome is left to it.
@@ -202,7 +203,7 @@ as it opens; any of them can also be used as an action mid-chapter.
 | `eagle` | Pressure on the real eagles (`which`: all, the nearest, a role): `hunger`, `watch` (move its patrol over a site), `grace` (a "last chance": it chases but can't strike for a few seconds; the eagle's own `tutorialGraceTimer`) | [done] |
 | Goals, conditions, reactions | Measuring and answering the sim | [done] |
 | needs (`for` on a polled reaction) | Prompt only once something has stood unmet for N seconds (the Free Play years' `_updateNeeds`, generalised) | [done] |
-| Behaviours | A seasonal walk to a site from cover to cover; hungry birds walking to food the player grew; breeding when well fed (the Free Play years' `cond`) | [later] |
+| Behaviours | Built as substrate flags, not runner tools, as the review notes asked: storm as cover (`coverBreaksLock`, `coverCalmsMoa`), the eagle's visible wind-up (`eagleTelegraph`) and surplus preference, kea raids rolled against defending moa (`keaRaidsEggs: 'odds'`) and the berry lure, placed food following the seasons, the breeding calendar (`seasonalBirdBreeding: 'calendar'`). Hungry birds already walk to grown food; the seasonal walk is the moa's own drift. The table of flags: `MODULE_SCRIPTING.md` §19 | [done 2026-11-04] |
 | Eagle boldness | The Free Play years' eagle grows bolder (sees further, dives sooner) the longer it goes unfed | [later] |
 | Weather | How often storms gather on the tops | [later] (after the storm rework) |
 
@@ -344,7 +345,9 @@ steers a wild animal, every ecology verb lands on a sim API that already existed
 adopted, and `aim` is implemented inside `HaastsEagle` and logged. The "second simulation"
 risk the assessment raised for the legacy directors does not apply here. What came out of it:
 
-- **[next] Beat `until`s that mean "it happened" must be event-based.** `hunting: true` and
+- **[done 2026-11-04] Beat `until`s that mean "it happened" must be event-based.** (`seen:
+  [event, filters]` exists, scoped like `gained`; beat `until`s are also checked on the event
+  path; the validator warns on a state-only `until`.) The original note: `hunting: true` and
   `hunted: ref` are states polled every 6 frames; the eagle's lock can drop between polls. In
   one run the first-hunt beat was logged **forced** at 38 s although a natural hunt had fired
   `first_hunt` at 16.3 s; in another, four hunt events fired over 21 s while the state read
@@ -353,9 +356,9 @@ risk the assessment raised for the legacy directors does not apply here. What ca
   in the beat's scope. To do: evaluate beat `until`s on the event path too (in `_react`), or add
   a `seen: [event, filters]` condition scoped like `gained` (it would also cover a cast member,
   which a counter can't: the `hunted: 'mama'` example above).
-- **[next] `aim` outside a beat's `force` isn't marked.** Allowed in `start` / `do`, it is a
-  scripted attack that no log entry calls forced. Validator warning, or log it as `forced`.
-- **[later] Two level keys for partners:** `claim` (one line: the substrate rule the module
+- **[done 2026-11-04] `aim` outside a beat's `force` isn't marked.** Allowed in `start` / `do`,
+  it is a scripted attack that no log entry calls forced. Now a validator warning.
+- **[done 2026-11-04] Two level keys for partners:** `claim` (one line: the substrate rule the module
   teaches, e.g. "a moa under cover can't be seen"; validator-required) and `guide` (the Field
   Guide ids it unlocks). They are what a school or conservation partner reads first.
 - **Where the [later] behaviours should live.** Eagle boldness, hungry birds walking to grown
@@ -421,14 +424,27 @@ borrow, then return to its own behaviour), the behaviours (seasonal walk via cov
 for grown food, breeding by condition), eagle boldness. `aim` only targets moa so far (the
 eagle's flyer hunt doesn't read it).
 
-### Phase 3: Module 0 on the engine **[blocked: the storm rework]**
-Rebuild Module 0 as chapters per "Modules 0 and 1, reworked", with the family as adopted cast
-and the eagle left to hunt. Needs storm-as-cover in the open sim.
+### Phase 3: Module 0 on the engine **[done 2026-11-04, as a new module beside the legacy one]**
+`levels/chapters_storms.js` (Guided and Open sketches). The legacy Module 0 is kept unchanged
+as a Story. Storm-as-cover went into the open sim behind flags (`coverBreaksLock`,
+`coverCalmsMoa`, `lureUnderStorm`, and the level's own Storm definition). The family is spawned
+at a nest the stage sets and adopted; the chick is adopted on its hatch event; the eagle is left
+to hunt, with the first hunt a guaranteed beat in the Guided sketch only. See "The parallel
+modules" below.
 
-### Phase 4: Module 1 on the engine **[later]**
-As above; the summer raid stays pinned.
+### Phase 4: Module 1 on the engine **[done 2026-11-04, as a new module beside the legacy one]**
+`levels/chapters_patotara.js`. One decision changed from the table above: the summer raid is
+**not pinned**. It is rolled at real odds in both sketches (a kea that reaches the egg rolls
+`Simulation.raidSuccessChance`, which falls with every moa nearby); the Guided sketch lets the
+odds reach zero with enough moa near, the Open sketch floors them at one in twenty, and a lost
+egg is answered by the neighbours laying again rather than a reset. The arrival of kea at the
+sprouted patch is the guaranteed beat (Guided only).
 
-### Phase 5: Free Play parity **[later]**
+### Phase 5: Free Play parity **[later; a first free play on the engine is done]**
+`levels/chapters_freeplay.js` **[done 2026-11-04]** is the modules' five years (Pukepuke &
+Koukou) on the engine: four season chapters cycling on a `year` condition to a finale, the
+whole cast breeding by calendar, the eagle hunting birds and moa, need-style prompts only.
+Parity with the cycling Free Play's year engine remains:
 Express `level_freeplay_kahurangi`'s four-year loop as chapters, so the endless mode and the
 modules share one engine and the modules can grow into it.
 - An `area` lever (the world-grid area a chapter plays in; `_scrollWorldGrid`'s staged move).
@@ -443,8 +459,60 @@ Whatever they need that the toolboxes lack is the next set of tools.
 
 ### Phase 7: tooling **[later]**
 - Season-aligned jumps, and a snapshot at each chapter start to restart from.
-- A Node validator (`tools/`) so a level can be checked without the browser.
-- Reactions on more events as modules need them (e.g. a plant sprouted, kea stationed).
+- A Node validator (`tools/`) so a level can be checked without the browser. **[done
+  2026-11-04]**: `tools/validate.js` (with `--smoke`) and `tools/batch.js` (seeded headless runs
+  across seeds, the benchmark CSV and the beat log saved per run), both through Playwright.
+- Reactions on more events as modules need them. **[done 2026-11-04]** for `placeable_expired`,
+  `plant_sprouted`, `bird_hatched`, `bird_killed`, and `nest_raid` with its outcome; kea
+  stationed is still open.
+
+## The parallel modules (2026-11-04)
+
+The plan agreed in `ENGINE_ASSESSMENT.md` and the session plan was carried out: the two opening
+modules and the five years rebuilt on the engine as a parallel set, the legacy set kept as
+Stories, every substrate change behind a flag, and the research tooling built first. What a
+reader who hasn't seen the code needs is in `CHAPTERS_MODULES.md`; every key in
+`MODULE_SCRIPTING.md` (§18 sketches and the template, §19 the flags).
+
+**Landed.**
+- Menu sections from a table (`MENU_SECTIONS` in `mauri_sketch.js`: Stories, Chapters, Endless,
+  Classic; placeholder labels, renamable in one place) and a `section` key per level; the
+  Chapters section draws a card per family with a button per sketch; the win card has a "Next
+  module" button (`nextLevel`) and shows the `claim`.
+- Levels as factories with an emergence dial (`sketch: { of, label, dial }`,
+  `LEVEL_REGISTRY.registerFamily`); `levels/_template_chapters.js`.
+- Engine: conditions `near`, `seen`, `year`, `eagleHunger`, `stat`, the `cause` filter, list
+  filters; actions `nest`, `lay`, `adopt`, `fade`, `guide`; `spawn` with sexes, hunger and age;
+  beat `once`; `holdSeason.maxSec`; the `{year}` token; level keys `claim`, `guide`,
+  `sketch`, `nextLevel`, `section`; the validator rules listed in `MODULE_SCRIPTING.md` §17;
+  the runner's log also goes to the benchmark.
+- Substrate flags (`MODULE_SCRIPTING.md` §19) and simulation helpers (`addNestingSite`,
+  `addEggAt`, `raidSuccessChance`, `moaNear`, `seasonTurns`, `causeOfDeath`, `_bornYear`).
+- Seeds: `?seed=` seeds p5's generators before the land is built, the `Math.random` call
+  sites moved onto `random()`, and a run replays exactly (same seed, same CSV hash).
+- Benchmark: seed, level, sketch and chapter on every row, the story log in the `event`
+  column and in `<name>.beats.json`, URL arming (`?bench=1&years=n`), `BENCHMARK.lastRun`.
+
+**Verified** with `tools/batch.js` and a stand-in player (covers a hunted cast member, sprouts
+bare pātōtara, sets wharariki by the family in winter): the first-hunt and first-raid beats came
+naturally in 12 of 12 runs across both sketches of both lessons; the Storm lesson was won 5 of
+6, Pātōtara 5 of 6 (the losses: the family not home by spring, a chick hungry by the water: the
+tasks the stand-in doesn't attempt); the five years were won in all five runs (three Guided,
+two Open), with the eagle feeding on the giant moa, the families' wild descendants and a few
+birds, and no named bird lost. `node tools/validate.js --smoke` passes every level. The numbers
+are tabled in `CHAPTERS_MODULES.md`.
+
+**Found and fixed in the open simulation on the way** (each in `MISTAKES.md`): wild moa starving
+beside food (three foraging traps, then two more: a chick held on a parent's separation ring,
+and a starving bird choosing a rich far plant over a near one); the eagle unable to catch a
+giant moa because its resist roll ran on every scan; a fresh lock under `coverBreaksLock`
+counted on every change of target.
+
+**Still open**, in the order worth taking them: a `pacing` lever (a tension curve on eagle
+hunger over a chapter, so fewer beats need a deadline); `order` with hand-back; words
+separated from logic for partner editing; land hand-off between modules; Field Guide locks;
+phase 5 parity; the kōkako laying less often than its calendar allows (one clutch in five
+springs in the run checked).
 
 ## Open questions
 
@@ -565,3 +633,9 @@ was already within the eagle's hunt radius (nearer prey won otherwise).
 - **2026-10-28**: named characters are adopted from the simulation (`cast`), not spawned.
   The prototype is `devOnly` (listed in debug mode only) and avoids the Storm, which is
   being reworked separately; it uses fern cover instead.
+- **2026-11-04**: the legacy modules stay as they are, as the Stories section and the scripted
+  control condition for the research; the three opening experiences are rebuilt on the engine
+  as a parallel set in the Chapters section. Every sketch of a module is a visible variant
+  button. Substrate changes go behind flags. Seeds must replay exactly. Pātōtara's summer raid is
+  rolled at real odds, not pinned; a lost egg branches (the neighbours lay again). Menu section
+  labels are placeholders the owner will name.

@@ -546,3 +546,37 @@ to spec" rather than "used carefully":
 3. **The beat log is the research export**: add the seed, the level id, and every `nudge` /
    `force`, and write it out beside the benchmark CSV, so a batch of headless runs answers
    "how often did the lesson need help" without anyone watching.
+
+---
+
+## 15. Closing note (2026-11-04)
+
+What this assessment asked for has been built on the branch, as a parallel set beside the
+legacy modules rather than a replacement of them.
+
+- **The three opening experiences on the chapters engine:** `levels/chapters_storms.js`,
+  `levels/chapters_patotara.js`, `levels/chapters_freeplay.js`, each in a Guided and an Open
+  sketch. The plain-language account is `CHAPTERS_MODULES.md`; every key is in
+  `MODULE_SCRIPTING.md`.
+- **The substrate ports the ownership rules needed** (§11, "Still recommended"): storm as
+  cover, the eagle's visible wind-up and its preference for a species with a surplus, kea raids
+  rolled against the moa defending a nest, placed food that follows the seasons, the birds'
+  breeding calendar. All behind flags; the Stories, the classic levels and the cycling Free Play
+  play as before.
+- **The tool-you-can-trust items** (§14): the validator carries the design rules, there is a
+  template, a command-line validator and a batch runner, and the beat log is written beside the
+  benchmark CSV with the seed. Seeds replay exactly.
+- **§8's instrumentation:** seed, level, sketch and chapter on every CSV row; the story log in
+  its `event` column and in `.beats.json`.
+
+Verified by stand-in play across seeds (the numbers are tabled in `CHAPTERS_MODULES.md`): the
+first-hunt and first-raid beats came naturally in every run, Guided and Open; the eagle fed on
+the surplus herd first; the five years were won in all five runs. Three faults in the open
+simulation came out of the runs and are fixed and noted in `MISTAKES.md`: the eagle could never
+catch a giant moa, a chick starved on its parent's separation ring, and a starving moa walked
+past near food to a rich plant far off.
+
+Still open, in the order I would take them: a `pacing` lever (§14) so fewer beats need a
+deadline; `order` with hand-back; words separated from logic for partner editing; land
+hand-off between modules; Field Guide locks; porting the cycling Free Play's year engine to
+chapters.

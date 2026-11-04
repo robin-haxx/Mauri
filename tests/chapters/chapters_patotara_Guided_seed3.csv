@@ -6,11 +6,11 @@ seed,level,sketch,chapter,time_s,year,season,upland_moa,stout_legged_moa,other_m
 3,chapters_patotara_guided,Guided,summer,0.1,1,summer,5,7,0,12,1,2,3,0,0,goal:sprout
 3,chapters_patotara_guided,Guided,summer,0.7,1,summer,5,7,0,12,1,2,3,0,0,reaction:kea_near:when
 3,chapters_patotara_guided,Guided,summer,10,1,summer,5,7,0,12,1,2,3,0,0,sample
-3,chapters_patotara_guided,Guided,summer,17.6,1,summer,5,7,0,12,1,3,3,0,0,reaction:raid_failed:nest_raid
-3,chapters_patotara_guided,Guided,summer,17.6,1,summer,5,7,0,12,1,3,3,0,0,moment:$site:The moa drove the kea off!
-3,chapters_patotara_guided,Guided,summer,17.6,1,summer,5,7,0,12,1,3,3,0,0,reaction:raid_failed_again:nest_raid
-3,chapters_patotara_guided,Guided,summer,17.6,1,summer,5,7,0,12,1,3,3,0,0,beat:raid_comes:done
-3,chapters_patotara_guided,Guided,summer,17.6,1,summer,5,7,0,12,1,3,3,0,0,goal:defend
+3,chapters_patotara_guided,Guided,summer,17.1,1,summer,5,7,0,12,1,3,3,0,0,reaction:raid_failed:nest_raid
+3,chapters_patotara_guided,Guided,summer,17.1,1,summer,5,7,0,12,1,3,3,0,0,moment:$site:The moa drove the kea off!
+3,chapters_patotara_guided,Guided,summer,17.1,1,summer,5,7,0,12,1,3,3,0,0,reaction:raid_failed_again:nest_raid
+3,chapters_patotara_guided,Guided,summer,17.1,1,summer,5,7,0,12,1,3,3,0,0,beat:raid_comes:done
+3,chapters_patotara_guided,Guided,summer,17.1,1,summer,5,7,0,12,1,3,3,0,0,goal:defend
 3,chapters_patotara_guided,Guided,summer,18.1,1,summer,5,7,0,12,1,3,3,0,0,reaction:hungry_eagle:when
 3,chapters_patotara_guided,Guided,summer,20,1,summer,5,7,0,12,1,5,3,0,0,sample
 3,chapters_patotara_guided,Guided,summer,26.7,1,summer,6,7,0,13,1,6,3,0,0,reaction:koukou_hatched:egg_hatched
@@ -22,37 +22,45 @@ seed,level,sketch,chapter,time_s,year,season,upland_moa,stout_legged_moa,other_m
 3,chapters_patotara_guided,Guided,summer,28,1,summer,6,7,0,13,1,6,3,0,0,player:cover:koukou
 3,chapters_patotara_guided,Guided,summer,28.5,1,summer,6,7,0,13,1,6,3,0,0,player:cover:pukepuke
 3,chapters_patotara_guided,Guided,summer,30,1,summer,6,7,0,13,1,5,3,0,0,sample
-3,chapters_patotara_guided,Guided,summer,40,1,summer,6,7,0,13,1,8,3,0,0,sample
-3,chapters_patotara_guided,Guided,summer,43.8,1,summer,7,6,0,13,1,8,3,0,0,reaction:herd_taken:moa_killed
+3,chapters_patotara_guided,Guided,summer,31.5,1,summer,6,7,0,13,1,5,3,0,0,player:cover:friendPapa
+3,chapters_patotara_guided,Guided,summer,40,1,summer,6,7,0,13,1,9,3,0,0,sample
+3,chapters_patotara_guided,Guided,summer,42,1,summer,6,6,0,12,1,9,3,0,0,reaction:herd_taken:moa_killed
 3,chapters_patotara_guided,Guided,summer,45,1,autumn,7,6,0,13,1,8,3,0,0,close:summer:-> autumn
 3,chapters_patotara_guided,Guided,autumn,45,1,autumn,7,6,0,13,1,8,3,0,0,chapter:autumn
 3,chapters_patotara_guided,Guided,autumn,45,1,autumn,7,6,0,13,1,8,3,0,0,place:waterhole:tarn
-3,chapters_patotara_guided,Guided,autumn,45,1,autumn,7,6,0,13,1,8,3,0,0,fade:Storm:4
+3,chapters_patotara_guided,Guided,autumn,45,1,autumn,7,6,0,13,1,8,3,0,0,fade:Storm:5
 3,chapters_patotara_guided,Guided,autumn,48,1,autumn,8,6,0,14,1,9,3,0,0,reaction:storm_gone:placeable_expired
 3,chapters_patotara_guided,Guided,autumn,50,1,autumn,8,6,0,14,1,9,3,0,0,sample
 3,chapters_patotara_guided,Guided,autumn,50.4,1,autumn,8,6,0,14,1,9,3,0,0,reaction:raid_failed_again:nest_raid
-3,chapters_patotara_guided,Guided,autumn,60,1,autumn,8,7,0,15,1,8,3,0,0,sample
-3,chapters_patotara_guided,Guided,autumn,70,1,autumn,10,9,0,19,1,9,3,0,0,sample
-3,chapters_patotara_guided,Guided,autumn,74.5,1,autumn,11,11,0,22,1,8,3,0,0,reaction:raid_failed_again:nest_raid
-3,chapters_patotara_guided,Guided,autumn,80,1,autumn,11,12,0,23,1,8,3,0,0,sample
-3,chapters_patotara_guided,Guided,autumn,90,1,autumn,12,12,0,24,1,11,3,0,0,sample
-3,chapters_patotara_guided,Guided,autumn,96.6,1,autumn,14,11,0,25,1,13,3,0,0,reaction:hungry_eagle:when
-3,chapters_patotara_guided,Guided,autumn,98.7,1,autumn,15,11,0,26,1,13,3,0,0,reaction:raid_failed_again:nest_raid
-3,chapters_patotara_guided,Guided,autumn,100,1,autumn,15,11,0,26,1,13,3,0,0,sample
-3,chapters_patotara_guided,Guided,autumn,106.3,1,autumn,15,12,0,27,1,15,3,0,0,reaction:cover_again:eagle_hunting
-3,chapters_patotara_guided,Guided,autumn,110,1,autumn,16,13,0,29,1,16,3,0,0,sample
-3,chapters_patotara_guided,Guided,autumn,115.5,1,autumn,17,12,0,29,1,19,2,0,0,hold:autumn:released after maxSec
-3,chapters_patotara_guided,Guided,autumn,120,1,winter,19,14,0,33,1,18,2,0,0,close:autumn:-> winter
-3,chapters_patotara_guided,Guided,winter,120,1,winter,19,14,0,33,1,18,2,0,0,chapter:winter
-3,chapters_patotara_guided,Guided,winter,120,1,winter,19,14,0,33,1,18,2,0,0,fade:Storm:0
-3,chapters_patotara_guided,Guided,winter,120,1,winter,19,14,0,33,1,18,2,0,0,sample
-3,chapters_patotara_guided,Guided,winter,120,1,winter,19,14,0,33,1,18,2,0,0,player:flax:mama
-3,chapters_patotara_guided,Guided,winter,120.1,1,winter,19,14,0,33,1,18,2,0,0,goal:fed
-3,chapters_patotara_guided,Guided,winter,129.3,1,winter,19,15,0,34,1,18,2,0,0,reaction:raid_failed_again:nest_raid
-3,chapters_patotara_guided,Guided,winter,130,1,winter,19,15,0,34,1,19,2,0,0,sample
-3,chapters_patotara_guided,Guided,winter,135.8,1,winter,20,16,0,36,1,22,2,0,0,reaction:winter_press:when
-3,chapters_patotara_guided,Guided,winter,135.8,1,winter,20,16,0,36,1,22,2,0,0,reaction:cover_again:eagle_hunting
-3,chapters_patotara_guided,Guided,winter,138.5,1,winter,20,16,0,36,1,20,2,0,0,cast_lost:koukou:starved
-3,chapters_patotara_guided,Guided,winter,138.5,1,winter,20,16,0,36,1,20,2,0,0,reaction:koukou_starved:cast_lost
-3,chapters_patotara_guided,Guided,winter,138.5,1,winter,20,16,0,36,1,20,2,0,0,lost:winter:Koukou starved. In winter grow wharariki by the families; in the warm months; sprout pātōtara.
-3,chapters_patotara_guided,Guided,winter,138.5,1,winter,20,16,0,36,1,20,2,0,0,loss
+3,chapters_patotara_guided,Guided,autumn,60,1,autumn,8,7,0,15,1,9,3,0,0,sample
+3,chapters_patotara_guided,Guided,autumn,70,1,autumn,9,9,0,18,1,9,3,0,0,sample
+3,chapters_patotara_guided,Guided,autumn,74.4,1,autumn,10,10,0,20,1,10,3,0,0,reaction:raid_failed_again:nest_raid
+3,chapters_patotara_guided,Guided,autumn,80,1,autumn,10,12,0,22,1,8,3,0,0,sample
+3,chapters_patotara_guided,Guided,autumn,90,1,autumn,10,14,0,24,1,10,3,0,0,sample
+3,chapters_patotara_guided,Guided,autumn,94.8,1,autumn,11,14,0,25,1,11,3,0,0,reaction:hungry_eagle:when
+3,chapters_patotara_guided,Guided,autumn,100,1,autumn,14,15,0,29,1,13,3,0,0,sample
+3,chapters_patotara_guided,Guided,autumn,101.8,1,autumn,14,15,0,29,1,13,3,0,0,reaction:raid_failed_again:nest_raid
+3,chapters_patotara_guided,Guided,autumn,104.5,1,autumn,14,15,0,29,1,13,3,0,0,reaction:cover_again:eagle_hunting
+3,chapters_patotara_guided,Guided,autumn,105.3,1,autumn,12,15,0,27,1,13,3,0,0,cast_lost:mama:starved
+3,chapters_patotara_guided,Guided,autumn,105.3,1,autumn,12,15,0,27,1,13,3,0,0,reaction:parent_starved:cast_lost
+3,chapters_patotara_guided,Guided,autumn,110,1,autumn,12,14,0,26,1,15,3,0,0,sample
+3,chapters_patotara_guided,Guided,autumn,115.5,1,autumn,12,15,0,27,1,16,3,0,0,hold:autumn:released after maxSec
+3,chapters_patotara_guided,Guided,autumn,120,1,winter,13,14,0,27,1,17,3,0,0,close:autumn:-> winter
+3,chapters_patotara_guided,Guided,winter,120,1,winter,13,14,0,27,1,17,3,0,0,chapter:winter
+3,chapters_patotara_guided,Guided,winter,120,1,winter,13,14,0,27,1,17,3,0,0,fade:Storm:0
+3,chapters_patotara_guided,Guided,winter,120,1,winter,13,14,0,27,1,17,3,0,0,sample
+3,chapters_patotara_guided,Guided,winter,120,1,winter,13,14,0,27,1,17,3,0,0,player:flax:mama
+3,chapters_patotara_guided,Guided,winter,126.3,1,winter,13,15,0,28,1,16,3,0,0,reaction:raid_failed_again:nest_raid
+3,chapters_patotara_guided,Guided,winter,130,1,winter,13,15,0,28,1,17,3,0,0,sample
+3,chapters_patotara_guided,Guided,winter,135.8,1,winter,13,16,0,29,1,16,3,0,0,reaction:winter_press:when
+3,chapters_patotara_guided,Guided,winter,135.8,1,winter,13,16,0,29,1,16,3,0,0,reaction:cover_again:eagle_hunting
+3,chapters_patotara_guided,Guided,winter,135.9,1,winter,13,16,0,29,1,16,3,0,0,reaction:hungry_eagle:when
+3,chapters_patotara_guided,Guided,winter,140,1,winter,14,15,0,29,1,12,5,0,0,reaction:winter_food:when
+3,chapters_patotara_guided,Guided,winter,140,1,winter,14,15,0,29,1,12,5,0,0,sample
+3,chapters_patotara_guided,Guided,winter,146.9,1,winter,15,14,0,29,1,12,5,0,0,reaction:raid_failed_again:nest_raid
+3,chapters_patotara_guided,Guided,winter,147.8,1,winter,16,14,0,30,1,11,5,0,0,reaction:cover_again:eagle_hunting
+3,chapters_patotara_guided,Guided,winter,150,1,winter,17,15,0,32,1,8,5,0,0,sample
+3,chapters_patotara_guided,Guided,winter,154.2,1,winter,14,13,0,27,1,7,5,0,0,cast_lost:koukou:starved
+3,chapters_patotara_guided,Guided,winter,154.2,1,winter,14,13,0,27,1,7,5,0,0,reaction:koukou_starved:cast_lost
+3,chapters_patotara_guided,Guided,winter,154.2,1,winter,14,13,0,27,1,7,5,0,0,lost:winter:Koukou starved. In winter grow wharariki by the families; in the warm months; sprout pātōtara.
+3,chapters_patotara_guided,Guided,winter,154.2,1,winter,14,13,0,27,1,7,5,0,0,loss

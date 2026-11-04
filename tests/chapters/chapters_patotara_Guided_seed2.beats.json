@@ -4,7 +4,7 @@
  "seed": 2,
  "result": "win",
  "playTime": 210,
- "csv": "seed,level,sketch,chapter,time_s,year,season,upland_moa,stout_legged_moa,other_moa,total_moa,eagles,eggs,n_kea,placed_patotara,placed_Storm,event\n2,chapters_patotara_guided,Guided,summer,0,1,summer,5,7,0,12,1,2,3,0,0,start\n2,chapters_patotara_guided,Guided,summer,0,1,summer,5,7,0,12,1,2,3,0,0,player:sprout:patotara\n2,chapters_patotara_guided,Guided,summer,0,1,summer,5,7,0,12,1,2,3,0,0,reaction:sprouted:plant_sprouted\n2,chapters_patotara_guided,Guided,summer,0.1,1,summer,5,7,0,12,1,2,3,0,0,reaction:kea_near:when\n2,chapters_patotara_guided,Guided,summer,0.1,1,summer,5,7,0,12,1,2,3,0,0,beat:raid_comes:start\n2,chapters_patotara_guided,Guided,summer,0.1,1,summer,5,7,0,12,1,2,3,0,0,goal:sprout\n2,chapters_patotara_guided,Guided,summer,10,1,summer,5,7,0,12,1,4,3,0,0,sample\n2,chapters_patotara_guided,Guided,summer,18.1,1,summer,5,7,0,12,1,5,3,0,0,reaction:hungry_eagle:when\n2,chapters_patotara_guided,Guided,summer,20,1,summer,5,7,0,12,1,7,3,0,0,sample\n2,chapters_patotara_guided,Guided,summer,22.7,1,summer,5,7,0,12,1,7,3,0,0,reaction:raid_failed:nest_raid\n2,chapters_patotara_guided,Guided,summer,22.7,1,summer,5,7,0,12,1,7,3,0,0,moment:$site:The moa drove the kea off!\n2,chapters_patotara_guided,Guided,summer,22.7,1,summer,5,7,0,12,1,7,3,0,0,reaction:raid_failed_again:nest_raid\n2,chapters_patotara_guided,Guided,summer,22.7,1,summer,5,7,0,12,1,7,3,0,0,beat:raid_comes:done\n2,chapters_patotara_guided,Guided,summer,22.7,1,summer,5,7,0,12,1,7,3,0,0,goal:defend\n2,chapters_patotara_guided,Guided,summer,26.7,1,summer,6,7,0,13,1,6,3,0,0,reaction:koukou_hatched:egg_hatched\n2,chapters_patotara_guided,Guided,summer,26.7,1,summer,6,7,0,13,1,6,3,0,0,moment:$moa:Koukou has hatched!\n2,chapters_patotara_guided,Guided,summer,26.7,1,summer,6,7,0,13,1,6,3,0,0,cast:koukou:adopted\n2,chapters_patotara_guided,Guided,summer,26.7,1,summer,6,7,0,13,1,6,3,0,0,goal:koukou\n2,chapters_patotara_guided,Guided,summer,27.8,1,summer,6,7,0,13,1,6,3,0,0,reaction:cover:eagle_hunting\n2,chapters_patotara_guided,Guided,summer,27.8,1,summer,6,7,0,13,1,6,3,0,0,reaction:cover_again:eagle_hunting\n2,chapters_patotara_guided,Guided,summer,28,1,summer,6,7,0,13,1,6,3,0,0,player:cover:koukou\n2,chapters_patotara_guided,Guided,summer,28.5,1,summer,6,7,0,13,1,6,3,0,0,player:cover:pukepuke\n2,chapters_patotara_guided,Guided,summer,30,1,summer,6,7,0,13,1,5,3,0,0,sample\n2,chapters_patotara_guided,Guided,summer,40,1,summer,7,7,0,14,1,9,3,0,0,sample\n2,chapters_patotara_guided,Guided,summer,43.5,1,summer,8,6,0,14,1,8,3,0,0,reaction:herd_taken:moa_killed\n2,chapters_patotara_guided,Guided,summer,45,1,autumn,8,6,0,14,1,8,4,0,0,close:summer:-> autumn\n2,chapters_patotara_guided,Guided,autumn,45,1,autumn,8,6,0,14,1,8,4,0,0,chapter:autumn\n2,chapters_patotara_guided,Guided,autumn,45,1,autumn,8,6,0,14,1,8,4,0,0,place:waterhole:tarn\n2,chapters_patotara_guided,Guided,autumn,45,1,autumn,8,6,0,14,1,8,4,0,0,fade:Storm:4\n2,chapters_patotara_guided,Guided,autumn,48,1,autumn,8,6,0,14,1,8,4,0,0,reaction:storm_gone:placeable_expired\n2,chapters_patotara_guided,Guided,autumn,50,1,autumn,8,6,0,14,1,10,4,0,0,sample\n2,chapters_patotara_guided,Guided,autumn,50.3,1,autumn,8,6,0,14,1,10,4,0,0,reaction:raid_failed_again:nest_raid\n2,chapters_patotara_guided,Guided,autumn,60,1,autumn,9,8,0,17,1,10,4,0,0,sample\n2,chapters_patotara_guided,Guided,autumn,70,1,autumn,10,8,0,18,1,12,4,0,0,sample\n2,chapters_patotara_guided,Guided,autumn,80,1,autumn,11,11,0,22,1,14,4,0,0,reaction:raid_failed_again:nest_raid\n2,chapters_patotara_guided,Guided,autumn,80,1,autumn,11,11,0,22,1,14,4,0,0,sample\n2,chapters_patotara_guided,Guided,autumn,90,1,autumn,14,13,0,27,1,14,4,0,0,sample\n2,chapters_patotara_guided,Guided,autumn,96.3,1,autumn,14,13,0,27,1,15,4,0,0,reaction:hungry_eagle:when\n2,chapters_patotara_guided,Guided,autumn,100,1,autumn,15,14,0,29,1,16,4,0,0,sample\n2,chapters_patotara_guided,Guided,autumn,102.8,1,autumn,16,15,0,31,1,16,4,0,0,reaction:raid_failed_again:nest_raid\n2,chapters_patotara_guided,Guided,autumn,106,1,autumn,16,15,0,31,1,16,5,0,0,reaction:cover_again:eagle_hunting\n2,chapters_patotara_guided,Guided,autumn,106,1,autumn,16,15,0,31,1,16,5,0,0,player:cover:papa\n2,chapters_patotara_guided,Guided,autumn,110,1,autumn,18,15,0,33,1,15,5,0,0,sample\n2,chapters_patotara_guided,Guided,autumn,115.5,1,autumn,17,17,0,34,1,15,6,0,0,hold:autumn:released after maxSec\n2,chapters_patotara_guided,Guided,autumn,120,1,winter,18,18,0,36,1,15,6,0,0,close:autumn:-> winter\n2,chapters_patotara_guided,Guided,winter,120,1,winter,18,18,0,36,1,15,6,0,0,chapter:winter\n2,chapters_patotara_guided,Guided,winter,120,1,winter,18,18,0,36,1,15,6,0,0,fade:Storm:1\n2,chapters_patotara_guided,Guided,winter,120,1,winter,18,18,0,36,1,15,6,0,0,sample\n2,chapters_patotara_guided,Guided,winter,120,1,winter,18,18,0,36,1,15,6,0,0,player:flax:mama\n2,chapters_patotara_guided,Guided,winter,120.1,1,winter,18,18,0,36,1,15,6,0,0,goal:fed\n2,chapters_patotara_guided,Guided,winter,124,1,winter,20,19,0,39,1,14,6,0,0,reaction:raid_failed_again:nest_raid\n2,chapters_patotara_guided,Guided,winter,130,1,winter,21,19,0,40,1,12,6,0,0,sample\n2,chapters_patotara_guided,Guided,winter,135.8,1,winter,21,19,0,40,1,12,6,0,0,reaction:winter_press:when\n2,chapters_patotara_guided,Guided,winter,135.8,1,winter,21,19,0,40,1,12,6,0,0,reaction:cover_again:eagle_hunting\n2,chapters_patotara_guided,Guided,winter,140,1,winter,21,19,0,40,1,9,6,0,0,sample\n2,chapters_patotara_guided,Guided,winter,150,1,winter,23,16,0,39,1,8,6,0,0,sample\n2,chapters_patotara_guided,Guided,winter,151.3,1,winter,23,14,0,37,1,8,6,0,0,reaction:raid_failed_again:nest_raid\n2,chapters_patotara_guided,Guided,winter,160,1,winter,23,13,0,36,1,5,6,0,0,sample\n2,chapters_patotara_guided,Guided,winter,160.5,1,winter,22,13,0,35,1,5,6,0,0,player:flax:mama\n2,chapters_patotara_guided,Guided,winter,165,1,spring,22,14,0,36,1,4,6,0,0,goal:through\n2,chapters_patotara_guided,Guided,winter,165,1,spring,22,14,0,36,1,4,6,0,0,close:winter:-> spring\n2,chapters_patotara_guided,Guided,spring,165,1,spring,22,14,0,36,1,4,6,0,0,chapter:spring\n2,chapters_patotara_guided,Guided,spring,165.1,1,spring,22,14,0,36,1,4,6,0,0,goal:home\n2,chapters_patotara_guided,Guided,spring,165.1,1,spring,22,14,0,36,1,4,6,0,0,reaction:home_again:goal_met\n2,chapters_patotara_guided,Guided,spring,165.1,1,spring,22,14,0,36,1,4,6,0,0,moment:mama:Home again!\n2,chapters_patotara_guided,Guided,spring,170,1,spring,22,13,0,35,1,8,6,0,0,sample\n2,chapters_patotara_guided,Guided,spring,175.2,1,spring,22,12,0,34,1,11,7,0,0,reaction:raid_failed_again:nest_raid\n2,chapters_patotara_guided,Guided,spring,180,1,spring,23,11,0,34,1,11,7,0,0,sample\n2,chapters_patotara_guided,Guided,spring,190,1,spring,23,11,0,34,1,14,7,0,0,sample\n2,chapters_patotara_guided,Guided,spring,194.7,1,spring,24,11,0,35,1,16,7,0,0,reaction:hungry_eagle:when\n2,chapters_patotara_guided,Guided,spring,196.8,1,spring,26,11,0,37,1,14,7,0,0,reaction:raid_failed_again:nest_raid\n2,chapters_patotara_guided,Guided,spring,200,1,spring,27,11,0,38,1,16,7,0,0,sample\n2,chapters_patotara_guided,Guided,spring,210,2,summer,29,11,0,40,1,14,9,0,0,close:spring:-> win\n2,chapters_patotara_guided,Guided,spring,210,2,summer,29,11,0,40,1,14,9,0,0,won:spring\n2,chapters_patotara_guided,Guided,spring,210,2,summer,29,11,0,40,1,14,9,0,0,sample\n2,chapters_patotara_guided,Guided,spring,210,2,summer,29,11,0,40,1,14,9,0,0,win",
+ "csv": "seed,level,sketch,chapter,time_s,year,season,upland_moa,stout_legged_moa,other_moa,total_moa,eagles,eggs,n_kea,placed_patotara,placed_Storm,event\n2,chapters_patotara_guided,Guided,summer,0,1,summer,5,7,0,12,1,2,3,0,0,start\n2,chapters_patotara_guided,Guided,summer,0,1,summer,5,7,0,12,1,2,3,0,0,player:sprout:patotara\n2,chapters_patotara_guided,Guided,summer,0,1,summer,5,7,0,12,1,2,3,0,0,reaction:sprouted:plant_sprouted\n2,chapters_patotara_guided,Guided,summer,0.1,1,summer,5,7,0,12,1,2,3,0,0,reaction:kea_near:when\n2,chapters_patotara_guided,Guided,summer,0.1,1,summer,5,7,0,12,1,2,3,0,0,beat:raid_comes:start\n2,chapters_patotara_guided,Guided,summer,0.1,1,summer,5,7,0,12,1,2,3,0,0,goal:sprout\n2,chapters_patotara_guided,Guided,summer,10,1,summer,5,7,0,12,1,4,3,0,0,sample\n2,chapters_patotara_guided,Guided,summer,18.1,1,summer,5,7,0,12,1,5,3,0,0,reaction:hungry_eagle:when\n2,chapters_patotara_guided,Guided,summer,20,1,summer,5,7,0,12,1,7,3,0,0,sample\n2,chapters_patotara_guided,Guided,summer,22.7,1,summer,5,7,0,12,1,7,3,0,0,reaction:raid_failed:nest_raid\n2,chapters_patotara_guided,Guided,summer,22.7,1,summer,5,7,0,12,1,7,3,0,0,moment:$site:The moa drove the kea off!\n2,chapters_patotara_guided,Guided,summer,22.7,1,summer,5,7,0,12,1,7,3,0,0,reaction:raid_failed_again:nest_raid\n2,chapters_patotara_guided,Guided,summer,22.7,1,summer,5,7,0,12,1,7,3,0,0,beat:raid_comes:done\n2,chapters_patotara_guided,Guided,summer,22.7,1,summer,5,7,0,12,1,7,3,0,0,goal:defend\n2,chapters_patotara_guided,Guided,summer,26.7,1,summer,6,7,0,13,1,6,3,0,0,reaction:koukou_hatched:egg_hatched\n2,chapters_patotara_guided,Guided,summer,26.7,1,summer,6,7,0,13,1,6,3,0,0,moment:$moa:Koukou has hatched!\n2,chapters_patotara_guided,Guided,summer,26.7,1,summer,6,7,0,13,1,6,3,0,0,cast:koukou:adopted\n2,chapters_patotara_guided,Guided,summer,26.7,1,summer,6,7,0,13,1,6,3,0,0,goal:koukou\n2,chapters_patotara_guided,Guided,summer,27.8,1,summer,6,7,0,13,1,6,3,0,0,reaction:cover:eagle_hunting\n2,chapters_patotara_guided,Guided,summer,27.8,1,summer,6,7,0,13,1,6,3,0,0,reaction:cover_again:eagle_hunting\n2,chapters_patotara_guided,Guided,summer,28,1,summer,6,7,0,13,1,6,3,0,0,player:cover:friendMama\n2,chapters_patotara_guided,Guided,summer,28.5,1,summer,6,7,0,13,1,6,3,0,0,player:cover:mama\n2,chapters_patotara_guided,Guided,summer,30,1,summer,6,7,0,13,1,5,3,0,0,sample\n2,chapters_patotara_guided,Guided,summer,40,1,summer,7,7,0,14,1,9,3,0,0,sample\n2,chapters_patotara_guided,Guided,summer,42.8,1,summer,8,6,0,14,1,8,3,0,0,reaction:herd_taken:moa_killed\n2,chapters_patotara_guided,Guided,summer,45,1,autumn,8,6,0,14,1,7,4,0,0,close:summer:-> autumn\n2,chapters_patotara_guided,Guided,autumn,45,1,autumn,8,6,0,14,1,7,4,0,0,chapter:autumn\n2,chapters_patotara_guided,Guided,autumn,45,1,autumn,8,6,0,14,1,7,4,0,0,place:waterhole:tarn\n2,chapters_patotara_guided,Guided,autumn,45,1,autumn,8,6,0,14,1,7,4,0,0,fade:Storm:4\n2,chapters_patotara_guided,Guided,autumn,48,1,autumn,8,6,0,14,1,7,4,0,0,reaction:storm_gone:placeable_expired\n2,chapters_patotara_guided,Guided,autumn,50,1,autumn,8,5,0,13,1,8,4,0,0,sample\n2,chapters_patotara_guided,Guided,autumn,52.4,1,autumn,8,5,0,13,1,8,4,0,0,reaction:raid_failed_again:nest_raid\n2,chapters_patotara_guided,Guided,autumn,60,1,autumn,9,7,0,16,1,6,4,0,0,sample\n2,chapters_patotara_guided,Guided,autumn,70,1,autumn,10,7,0,17,1,9,4,0,0,sample\n2,chapters_patotara_guided,Guided,autumn,72.6,1,autumn,10,8,0,18,1,8,4,0,0,reaction:raid_failed_again:nest_raid\n2,chapters_patotara_guided,Guided,autumn,80,1,autumn,10,10,0,20,1,8,4,0,0,sample\n2,chapters_patotara_guided,Guided,autumn,90,1,autumn,12,10,0,22,1,9,4,0,0,sample\n2,chapters_patotara_guided,Guided,autumn,95.6,1,autumn,13,9,0,22,1,9,4,0,0,reaction:hungry_eagle:when\n2,chapters_patotara_guided,Guided,autumn,98.2,1,autumn,13,9,0,22,1,10,4,0,0,reaction:raid_failed_again:nest_raid\n2,chapters_patotara_guided,Guided,autumn,100,1,autumn,13,9,0,22,1,11,4,0,0,sample\n2,chapters_patotara_guided,Guided,autumn,105.3,1,autumn,13,10,0,23,1,11,5,0,0,reaction:cover_again:eagle_hunting\n2,chapters_patotara_guided,Guided,autumn,105.5,1,autumn,13,10,0,23,1,11,5,0,0,player:cover:pukepuke\n2,chapters_patotara_guided,Guided,autumn,110,1,autumn,14,10,0,24,1,11,5,0,0,sample\n2,chapters_patotara_guided,Guided,autumn,115.5,1,autumn,15,11,0,26,1,11,5,0,0,hold:autumn:released after maxSec\n2,chapters_patotara_guided,Guided,autumn,120,1,winter,15,11,0,26,1,12,5,0,0,close:autumn:-> winter\n2,chapters_patotara_guided,Guided,winter,120,1,winter,15,11,0,26,1,12,5,0,0,chapter:winter\n2,chapters_patotara_guided,Guided,winter,120,1,winter,15,11,0,26,1,12,5,0,0,fade:Storm:1\n2,chapters_patotara_guided,Guided,winter,120,1,winter,15,11,0,26,1,12,5,0,0,sample\n2,chapters_patotara_guided,Guided,winter,120,1,winter,15,11,0,26,1,12,5,0,0,player:flax:mama\n2,chapters_patotara_guided,Guided,winter,120.1,1,winter,15,11,0,26,1,12,5,0,0,goal:fed\n2,chapters_patotara_guided,Guided,winter,122,1,winter,15,11,0,26,1,12,5,0,0,reaction:raid_failed_again:nest_raid\n2,chapters_patotara_guided,Guided,winter,130,1,winter,15,11,0,26,1,13,5,0,0,sample\n2,chapters_patotara_guided,Guided,winter,135.8,1,winter,16,12,0,28,1,13,5,0,0,reaction:winter_press:when\n2,chapters_patotara_guided,Guided,winter,135.8,1,winter,16,12,0,28,1,13,5,0,0,reaction:cover_again:eagle_hunting\n2,chapters_patotara_guided,Guided,winter,135.9,1,winter,16,12,0,28,1,13,5,0,0,reaction:hungry_eagle:when\n2,chapters_patotara_guided,Guided,winter,136,1,winter,16,12,0,28,1,13,5,0,0,player:cover:mama\n2,chapters_patotara_guided,Guided,winter,140,1,winter,18,13,0,31,1,10,6,0,0,sample\n2,chapters_patotara_guided,Guided,winter,140.5,1,winter,18,13,0,31,1,10,6,0,0,player:flax:mama\n2,chapters_patotara_guided,Guided,winter,142.4,1,winter,18,12,0,30,1,10,6,0,0,reaction:raid_failed_again:nest_raid\n2,chapters_patotara_guided,Guided,winter,150,1,winter,17,11,0,28,1,8,6,0,0,sample\n2,chapters_patotara_guided,Guided,winter,160,1,winter,18,9,0,27,1,7,6,0,0,sample\n2,chapters_patotara_guided,Guided,winter,162.5,1,winter,18,10,0,28,1,6,6,0,0,player:flax:mama\n2,chapters_patotara_guided,Guided,winter,163.7,1,winter,18,10,0,28,1,6,6,0,0,reaction:raid_failed_again:nest_raid\n2,chapters_patotara_guided,Guided,winter,165,1,spring,18,10,0,28,1,6,6,0,0,goal:through\n2,chapters_patotara_guided,Guided,winter,165,1,spring,18,10,0,28,1,6,6,0,0,close:winter:-> spring\n2,chapters_patotara_guided,Guided,spring,165,1,spring,18,10,0,28,1,6,6,0,0,chapter:spring\n2,chapters_patotara_guided,Guided,spring,170,1,spring,19,11,0,30,1,8,6,0,0,sample\n2,chapters_patotara_guided,Guided,spring,180,1,spring,19,12,0,31,1,8,6,0,0,sample\n2,chapters_patotara_guided,Guided,spring,185.6,1,spring,19,12,0,31,1,12,6,0,0,reaction:raid_failed_again:nest_raid\n2,chapters_patotara_guided,Guided,spring,188.5,1,spring,19,13,0,32,1,11,6,0,0,goal:home\n2,chapters_patotara_guided,Guided,spring,188.5,1,spring,19,13,0,32,1,11,6,0,0,reaction:home_again:goal_met\n2,chapters_patotara_guided,Guided,spring,188.5,1,spring,19,13,0,32,1,11,6,0,0,moment:mama:Home again!\n2,chapters_patotara_guided,Guided,spring,190,1,spring,19,13,0,32,1,12,6,0,0,sample\n2,chapters_patotara_guided,Guided,spring,196.5,1,spring,21,13,0,34,1,12,6,0,0,reaction:hungry_eagle:when\n2,chapters_patotara_guided,Guided,spring,200,1,spring,21,13,0,34,1,14,6,0,0,sample\n2,chapters_patotara_guided,Guided,spring,205.8,1,spring,23,12,0,35,1,15,6,0,0,reaction:raid_failed_again:nest_raid\n2,chapters_patotara_guided,Guided,spring,210,2,summer,24,12,0,36,1,16,8,0,0,close:spring:-> win\n2,chapters_patotara_guided,Guided,spring,210,2,summer,24,12,0,36,1,16,8,0,0,won:spring\n2,chapters_patotara_guided,Guided,spring,210,2,summer,24,12,0,36,1,16,8,0,0,sample\n2,chapters_patotara_guided,Guided,spring,210,2,summer,24,12,0,36,1,16,8,0,0,win",
  "log": [
   {
    "t": 0,
@@ -235,17 +235,17 @@
    "chapter": "summer",
    "kind": "player",
    "id": "cover",
-   "info": "koukou"
+   "info": "friendMama"
   },
   {
    "t": 28.5,
    "chapter": "summer",
    "kind": "player",
    "id": "cover",
-   "info": "pukepuke"
+   "info": "mama"
   },
   {
-   "t": 43.5,
+   "t": 42.8,
    "chapter": "summer",
    "kind": "reaction",
    "id": "herd_taken",
@@ -287,46 +287,46 @@
    "info": "placeable_expired"
   },
   {
-   "t": 50.3,
+   "t": 52.4,
    "chapter": "autumn",
    "kind": "reaction",
    "id": "raid_failed_again",
    "info": "nest_raid"
   },
   {
-   "t": 80,
+   "t": 72.6,
    "chapter": "autumn",
    "kind": "reaction",
    "id": "raid_failed_again",
    "info": "nest_raid"
   },
   {
-   "t": 96.3,
+   "t": 95.6,
    "chapter": "autumn",
    "kind": "reaction",
    "id": "hungry_eagle",
    "info": "when"
   },
   {
-   "t": 102.8,
+   "t": 98.2,
    "chapter": "autumn",
    "kind": "reaction",
    "id": "raid_failed_again",
    "info": "nest_raid"
   },
   {
-   "t": 106,
+   "t": 105.3,
    "chapter": "autumn",
    "kind": "reaction",
    "id": "cover_again",
    "info": "eagle_hunting"
   },
   {
-   "t": 106,
+   "t": 105.5,
    "chapter": "autumn",
    "kind": "player",
    "id": "cover",
-   "info": "papa"
+   "info": "pukepuke"
   },
   {
    "t": 115.5,
@@ -371,7 +371,7 @@
    "info": ""
   },
   {
-   "t": 124,
+   "t": 122,
    "chapter": "winter",
    "kind": "reaction",
    "id": "raid_failed_again",
@@ -392,18 +392,46 @@
    "info": "eagle_hunting"
   },
   {
-   "t": 151.3,
+   "t": 135.9,
+   "chapter": "winter",
+   "kind": "reaction",
+   "id": "hungry_eagle",
+   "info": "when"
+  },
+  {
+   "t": 136,
+   "chapter": "winter",
+   "kind": "player",
+   "id": "cover",
+   "info": "mama"
+  },
+  {
+   "t": 140.5,
+   "chapter": "winter",
+   "kind": "player",
+   "id": "flax",
+   "info": "mama"
+  },
+  {
+   "t": 142.4,
    "chapter": "winter",
    "kind": "reaction",
    "id": "raid_failed_again",
    "info": "nest_raid"
   },
   {
-   "t": 160.5,
+   "t": 162.5,
    "chapter": "winter",
    "kind": "player",
    "id": "flax",
    "info": "mama"
+  },
+  {
+   "t": 163.7,
+   "chapter": "winter",
+   "kind": "reaction",
+   "id": "raid_failed_again",
+   "info": "nest_raid"
   },
   {
    "t": 165,
@@ -427,42 +455,42 @@
    "info": ""
   },
   {
-   "t": 165.1,
-   "chapter": "spring",
-   "kind": "goal",
-   "id": "home",
-   "info": ""
-  },
-  {
-   "t": 165.1,
-   "chapter": "spring",
-   "kind": "reaction",
-   "id": "home_again",
-   "info": "goal_met"
-  },
-  {
-   "t": 165.1,
-   "chapter": "spring",
-   "kind": "moment",
-   "id": "mama",
-   "info": "Home again!"
-  },
-  {
-   "t": 175.2,
+   "t": 185.6,
    "chapter": "spring",
    "kind": "reaction",
    "id": "raid_failed_again",
    "info": "nest_raid"
   },
   {
-   "t": 194.7,
+   "t": 188.5,
+   "chapter": "spring",
+   "kind": "goal",
+   "id": "home",
+   "info": ""
+  },
+  {
+   "t": 188.5,
+   "chapter": "spring",
+   "kind": "reaction",
+   "id": "home_again",
+   "info": "goal_met"
+  },
+  {
+   "t": 188.5,
+   "chapter": "spring",
+   "kind": "moment",
+   "id": "mama",
+   "info": "Home again!"
+  },
+  {
+   "t": 196.5,
    "chapter": "spring",
    "kind": "reaction",
    "id": "hungry_eagle",
    "info": "when"
   },
   {
-   "t": 196.8,
+   "t": 205.8,
    "chapter": "spring",
    "kind": "reaction",
    "id": "raid_failed_again",

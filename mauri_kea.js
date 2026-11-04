@@ -33,12 +33,12 @@ class Kea extends Kereru {
     this._raidRadius = M.keaRaidRadius ?? 95;
     this._raidNutrition = M.keaRaidNutrition ?? 46;
     this._raidCooldownFrames = (M.keaRaidCooldownSec ?? 5) * 60;
-    this._raidCooldown = Math.random() * this._raidCooldownFrames;
+    this._raidCooldown = random() * this._raidCooldownFrames;
 
     // Berry Cache choice (emergent flock spread): a kea commits to one cache for a beat,
     // chosen by relative nutrition-per-bird and distance (see _chooseLure).
     this._lureChoice = null;
-    this._lureChoiceTimer = Math.random() * 90;         // stagger the first pick across the flock
+    this._lureChoiceTimer = random() * 90;         // stagger the first pick across the flock
     this._lureChoiceFrames = (sp.lureChoiceSec ?? 2.5) * 60;
     this._lureBaseNutrition = sp.lureBaseNutrition ?? 6; // a placed cache attracts even before its berries grow
     this._lureCrowdWeight   = sp.lureCrowdWeight ?? 1.0; // ↑ = the flock spreads harder off a crowded cache
@@ -121,7 +121,7 @@ class Kea extends Kereru {
       if (!this._lureValid() || this._lureChoiceTimer <= 0) {
         const prev = this._lureChoice;
         this._lureChoice = this._chooseLure(sim);
-        this._lureChoiceTimer = this._lureChoiceFrames * (0.75 + Math.random() * 0.5);
+        this._lureChoiceTimer = this._lureChoiceFrames * (0.75 + random() * 0.5);
         // Newly committed to a (different) cache → drop the old perch so it re-homes near the cache.
         if (this._lureChoice && this._lureChoice !== prev) {
           this._perchTree = null;
@@ -272,7 +272,7 @@ class Kea extends Kereru {
         if (dx * dx + dy * dy < lureR2) lureBonus = this._perchLureBonus;
       }
       // Small jitter breaks ties so kea choosing at the same moment don't all land on one tree.
-      const score = food + siteBonus + lureBonus - crowd * this._perchCrowdWeight + Math.random() * 0.5;
+      const score = food + siteBonus + lureBonus - crowd * this._perchCrowdWeight + random() * 0.5;
       if (score > bestScore) { bestScore = score; best = p; }
     }
     if (best) this._perchTree = best;

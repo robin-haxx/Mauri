@@ -293,7 +293,13 @@ class Moa extends Boid {
     
     // Hunger (juveniles 30% faster)
     const hungerMod = this.speciesConfig.seasonalModifiers?.[sc.key]?.hungerRate || 1;
-    this.hungerRate = this.baseHungerRate * sc.hungerMod * hungerMod * (this.isJuvenile() ? 1.3 : 1);
+    // (juvenileHungerMult, a level knob: how much faster a chick gets hungry; 1.3 unless set.)
+    const _juv = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.juvenileHungerMult != null) ? LEVEL_MECHANICS.juvenileHungerMult : 1.3;
+    // (hungerRateMult, a level knob: how fast every moa gets hungry, 1 unless set. A small land
+    // with few plants starves a family that a big one feeds; the knob keeps the hunger honest
+    // without the plants having to be.)
+    const _hm = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.hungerRateMult != null) ? LEVEL_MECHANICS.hungerRateMult : 1;
+    this.hungerRate = this.baseHungerRate * sc.hungerMod * hungerMod * _hm * (this.isJuvenile() ? _juv : 1);
     this.hunger = Math.min(this.hunger + this.hungerRate * dt, this.maxHunger);
 
     // Vulnerable-founder highlight flag (drawn in render): active while below threshold.
@@ -356,7 +362,9 @@ class Moa extends Boid {
     
     // Get nearby entities
     const px = this.pos.x, py = this.pos.y;
-    const placeables = simulation.getNearbyPlaceables(px, py, 80);
+    // (placeableQueryRadius: a level with wide cover, a storm say, looks a little further.)
+    const placeables = simulation.getNearbyPlaceables(px, py,
+      Math.max(80, (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.placeableQueryRadius) || 0));
     const eagles = simulation.getNearbyEagles(px, py, this.fleeRadius * 1.5);
     // Widen the neighbour query when the favoured-plant bonus is active, so
     // the doubled mating radius actually has candidates to search over.
@@ -399,6 +407,7 @@ class Moa extends Boid {
         this.hunger = this.maxHunger * 0.9;
       } else {
         this.alive = false;
+        this.causeOfDeath = 'starved';   // (a chapter level's cast_lost says how: see ChapterRunner._watchCast)
       }
     }
     
@@ -414,8 +423,11 @@ class Moa extends Boid {
     
     for (let i = 0; i < eagles.length; i++) {
       const e = eagles[i];
-      if (this.inShelter && !e.isHunting()) continue;
       if (!e.isHunting()) continue;
+      // coverCalmsMoa (a chapter level's rule): a moa fully under cover knows it can't be seen
+      // and holds still for any eagle that isn't already on it, instead of bolting into the open.
+      if (this.inShelter && !(this.shelterSpotFrac > 0) && e.target !== this &&
+          typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.coverCalmsMoa) continue;
       
       const dx = e.pos.x - this.pos.x, dy = e.pos.y - this.pos.y;
       const dSq = dx * dx + dy * dy;

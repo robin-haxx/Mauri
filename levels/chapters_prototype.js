@@ -114,7 +114,7 @@ const CHAPTERS_PROTOTYPE = {
         { id: 'nest',  name: "Found a nest for the upland moa", done: { gained: ['nests', '>=', 1] }, reward: 20 },
         { id: 'flock', name: "Upland moa: {n}/{target}",        done: { count: ['upland_moa', '>=', 8] }, reward: 20 }
       ],
-      holdSeason: { until: { goal: 'nest' }, at: 0.9 }   // summer waits for the nest
+      holdSeason: { until: { goal: 'nest' }, at: 0.9, maxSec: 60 }   // summer waits for the nest (a minute at most)
     },
 
     { id: 'autumn', title: "Autumn: build up the flock",

@@ -276,7 +276,7 @@ class Kereru extends Boid {
     if (!storm) return false;
     let dx = this.pos.x - storm.pos.x, dy = this.pos.y - storm.pos.y;
     let m = Math.hypot(dx, dy);
-    if (m < 1) { const a = Math.random() * Math.PI * 2; dx = Math.cos(a); dy = Math.sin(a); m = 1; }  // dead-centre → any way out
+    if (m < 1) { const a = random() * Math.PI * 2; dx = Math.cos(a); dy = Math.sin(a); m = 1; }  // dead-centre → any way out
     // Where to fly: straight away from the storm, else fanning round from there, to the first
     // point (on land, inside the map's margins) that gets clear of it. With nowhere further
     // away to go (pinned against the map's edge or the sea), it stays under the cloud and
@@ -678,9 +678,9 @@ class Kereru extends Boid {
     const perched = this._isPerched();
     if (perched && !this._wasPerched) {
       const lo = this._perchAlt * 0.7, hi = Math.max(lo + 1, this._cruiseAlt * 0.8);
-      this._perchAltCur = lo + Math.random() * (hi - lo);
-      this._perchDX = (Math.random() * 2 - 1) * this.size * 1.1;
-      this._perchDY = (Math.random() * 2 - 1) * this.size * 0.5;
+      this._perchAltCur = lo + random() * (hi - lo);
+      this._perchDX = (random() * 2 - 1) * this.size * 1.1;
+      this._perchDY = (random() * 2 - 1) * this.size * 0.5;
     }
     this._wasPerched = perched;
     const targetAlt = perched ? this._perchAltCur : this._cruiseAlt;

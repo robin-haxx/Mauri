@@ -142,6 +142,10 @@ class HaastsEagle extends Boid {
     if (this.lifeScript) { this.lifeScript.behave(simulation, mauri, dt); return; }
 
     this.animTime += dt;
+    this._clock = (this._clock || 0) + dt;   // (its own frames; frameCount stands still in a headless run)
+    // (How long it has been without a target: a lock after a real gap is a new attempt, with
+    // its wind-up; one that flickers off and on within half a second is not. eagleTelegraph.)
+    this._noTargetFrames = this.target ? 0 : (this._noTargetFrames || 0) + dt;
     this.hunger = Math.min(this.hunger + this.hungerRate * dt, this.maxHunger);
 
     // A chapter level's `aim` (mauri_chapters.js): for a while this bird hunts a named moa
@@ -198,6 +202,7 @@ class HaastsEagle extends Boid {
       this.state = 'resting';
       this.restTimer -= dt;
       this._chaseLoop = null;
+      this._graceGiven = false;   // (the next hunt gets its wind-up again: eagleTelegraph)
       this.rest();
       return;
     }
@@ -230,6 +235,7 @@ class HaastsEagle extends Boid {
       }
     }
 
+    this._huntThreshEff = _huntThresh;   // (read by the telegraph cue in render)
     if (this.hunger > _huntThresh || this.aimAt) {
       this.hunt(simulation, mauri, dt);
     } else {
@@ -238,6 +244,7 @@ class HaastsEagle extends Boid {
       this.target = null;
       this.huntSearchTimer = 0;
       this._huntEventFired = false;
+      this._graceGiven = false;
       this._chaseLoop = null;
       this.patrol(dt);
     }
@@ -429,7 +436,9 @@ class HaastsEagle extends Boid {
 
       // Fern cover hides a moa from a fresh scan. A partial shelter (shelterSpotFrac > 0) only
       // hides it beyond that fraction of the hunt radius; up close the eagle still spots it.
-      if (moa.inShelter && this.target !== moa) {
+      // With coverBreaksLock (a chapter level's rule) the bird it is already chasing is tested
+      // like any other, so a moa that gets under a storm mid-chase is lost to it.
+      if (moa.inShelter && (this.target !== moa || _M.coverBreaksLock)) {
         const frac = moa.shelterSpotFrac || 0;
         const spotR = this.huntRadius * frac;
         if (frac <= 0 || dSq > spotR * spotR) continue;
@@ -442,9 +451,12 @@ class HaastsEagle extends Boid {
       // Prefer abundant prey: a species at/below the threshold feels much farther away, so
       // eagles crop common species and spare rare ones (breaks the moa death-spiral).
       let eff = dSq;
-      if (this.emergent && simulation.getCachedSpeciesCount &&
-          simulation.getCachedSpeciesCount(moa.speciesKey) <= _preyThreshold) {
-        eff *= _scarcePenalty;
+      if (this.emergent && simulation.getCachedSpeciesCount) {
+        const _n = simulation.getCachedSpeciesCount(moa.speciesKey);
+        if (_n <= _preyThreshold) eff *= _scarcePenalty;
+        // eagleSurplusPreference: a plentiful species reads as nearer, so a hungry bird turns to
+        // the herd with numbers to spare before the few it has been kept from.
+        else if (_M.eagleSurplusPreference) eff *= Math.max(0.5, _preyThreshold / _n);
       }
       if (moa === this.aimAt) eff = -1;   // (an aimed moa it can see comes first)
 
@@ -486,6 +498,9 @@ class HaastsEagle extends Boid {
 
     if (target) {
       const hadNoTarget = this.target === null;
+      // Under coverBreaksLock a change of target (its last one got under cover) counts as a
+      // fresh lock: a new wind-up, and the hunt event again, so a lesson can answer it.
+      const retarget = !hadNoTarget && this.target !== target && !!_M.coverBreaksLock;
 
       this.state = 'hunting';
       this.hunting = true;
@@ -494,9 +509,22 @@ class HaastsEagle extends Boid {
       this.lastTargetTime = frameCount;
 
       // Fresh lock-on: arm the strike windup so the catch can't land in the first moments.
-      if (hadNoTarget) this.huntWindupTimer = this.huntWindupDuration;
+      if (hadNoTarget || retarget) this.huntWindupTimer = this.huntWindupDuration;
 
-      if (hadNoTarget && !this._huntEventFired) {
+      // eagleTelegraph: a hunt opens with a grace window (the bird chases slowly and can't strike,
+      // its "!" showing): on a lock after at least half a second without a target, on a lock onto
+      // a different moa than last time, and on a change of target after cover; unless a
+      // tutorial has set one already. Not on a lock that flickers off and on within a moment.
+      const _T = _M.eagleTelegraph;
+      if (hadNoTarget || retarget) {
+        const fresh = retarget || (this._noTargetFrames || 0) >= 30 || target !== this._lastTarget;
+        this._lastTarget = target;
+        if (_T && fresh && this.tutorialGraceTimer <= 0) {
+          this.tutorialGraceTimer = Math.round((_T.graceSec ?? 4) * 60);
+        }
+      }
+
+      if ((hadNoTarget && !this._huntEventFired) || retarget) {
         simulation.onEagleStartHunt(this, this.target);
         this._huntEventFired = true;
         if (audioManager) audioManager.playEagleHunt();
@@ -506,7 +534,7 @@ class HaastsEagle extends Boid {
       // loop. A moa target ends any loop.
       if (targetIsFlyer) {
         if (hadNoTarget && !this._chaseLoop && !inGrace &&
-            this.tutorialGraceTimer <= 0 && Math.random() < this._chaseLoopChance) {
+            this.tutorialGraceTimer <= 0 && random() < this._chaseLoopChance) {
           this._startChaseLoop(target);
         }
       } else if (this._chaseLoop) {
@@ -922,7 +950,38 @@ class HaastsEagle extends Boid {
       text("→", this.pos.x, this.pos.y - this.wingspan - 2);
     }
     
-    if (CONFIG.showHungerBars) this.renderHungerBar();
+    // eagleTelegraph: as hunger nears the hunt threshold the bird gives it away (a pulsing amber
+    // ring), so a player can see a hunt coming and act before it starts.
+    const _T = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS) ? LEVEL_MECHANICS.eagleTelegraph : null;
+    if (_T && !this.hunting && this.state !== 'resting' && this.state !== 'distracted' &&
+        this.hunger >= (this._huntThreshEff ?? this.huntThreshold) - (_T.warnBelow ?? 10)) {
+      const pulse = 0.5 + 0.5 * Math.sin(this.animTime * 0.15);
+      noFill();
+      stroke(255, 190, 70, 120 + 100 * pulse);
+      strokeWeight(1.2);
+      ellipse(this.pos.x, this.pos.y, this.wingspan * (2.2 + 0.4 * pulse), this.wingspan * (1.4 + 0.25 * pulse));
+      noStroke();
+    }
+
+    if (CONFIG.showHungerBars || _T) this.renderHungerBar();
+  }
+
+  // How the bird is doing, in a few words (a chapter level's tap-to-inspect; Game._renderInspect).
+  describe(game) {
+    const thresh = this._huntThreshEff ?? this.huntThreshold;
+    const h = this.hunger;
+    const hungerWords = h < 25 ? 'well fed' : h < thresh - 10 ? 'getting peckish' : h < thresh ? 'hungry' : 'very hungry';
+    const name = (k) => (game && game._freeplaySpeciesName) ? game._freeplaySpeciesName(k).toLowerCase() : (k || 'prey');
+    let doing;
+    if (this.state === 'resting') doing = 'resting after a meal';
+    else if (this.state === 'distracted') doing = 'thrown off by the storm';
+    else if (this.hunting && this.target) {
+      const n = this.target.speciesKey ? name(this.target.speciesKey) : 'bird';
+      doing = `hunting ${/^[aeiouāēīōū]/i.test(n) ? 'an' : 'a'} ${n}`;
+    }
+    else if (this.hunting) doing = 'looking for prey';
+    else doing = 'circling its territory';
+    return `Pouākai · ${hungerWords} · ${doing}`;
   }
   
   renderHungerBar() {

@@ -5,6 +5,7 @@
 const LEVEL_REGISTRY = {
   _levels: {},
   _order: [],
+  _families: {},
   
   register(levelDef) {
     if (!levelDef.id) {
@@ -15,6 +16,18 @@ const LEVEL_REGISTRY = {
     if (!this._order.includes(levelDef.id)) {
       this._order.push(levelDef.id);
     }
+  },
+
+  // A family of sketches: several levels that are the same lesson at different settings
+  // (`sketch: { of: familyId, label }` on each). The level select draws one card per family
+  // with a button per sketch. info: { label, defaultSketch (a level id), menu? }.
+  registerFamily(id, info = {}) {
+    this._families[id] = Object.assign({ id }, info);
+  },
+  getFamily(id) { return this._families[id] || null; },
+  // The sketches of a family, in registration order.
+  sketchesOf(familyId) {
+    return this.getAll().filter(l => l.sketch && l.sketch.of === familyId);
   },
   
   get(id) {

@@ -37,7 +37,7 @@ class Kaka extends Kereru {
     this._seedAttractRange  = sp.seedAttractRange ?? 900;   // a Forest Seed draws the flock from this far (≈ whole view)
     this._forageTarget      = null;                          // {x,y} shared flock home (grove / Forest Seed), or null
     this._forageSearchFrames = (sp.forageSearchSec ?? 1.5) * 60;
-    this._forageTimer       = Math.random() * this._forageSearchFrames; // stagger the first search across the flock
+    this._forageTimer       = random() * this._forageSearchFrames; // stagger the first search across the flock
   }
 
   // Gregarious: the flock's centre of mass is the kākā's "home", so the base loop's post-feed

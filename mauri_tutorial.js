@@ -33,7 +33,9 @@ const TUTORIAL_EVENTS = {
   NEST_RAID: 'nest_raid',   // a kea raid was rolled on a nest, data: { site, success }
   PLACEABLE_MOVED: 'placeable_moved', // a touch-and-hold move set an item down, data: { type }
   MODULE_BEAT: 'module_beat',         // a module level's story moment, data: { beat, director, ... }
-  STORY_BEAT: 'story_beat'            // a chapter level's line or banner (mauri_chapters.js), data: { cue }
+  STORY_BEAT: 'story_beat',           // a chapter level's line or banner (mauri_chapters.js), data: { cue }
+  PLANT_SPROUTED: 'plant_sprouted',   // a pātōtara (patch or wild plant) sprouted by hand, data: { sprouted, type }
+  BIRD_HATCHED: 'bird_hatched'        // a flighted bird's (or kākāpō's) egg hatched, data: { egg, bird, speciesKey }
 };
 
 // Named toolbar-button highlight targets → the placeable key each one shows.

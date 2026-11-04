@@ -48,8 +48,18 @@ const CHAPTER_EVENTS = {
   goal_failed:     {},
   nest_founded:    { subject: 'site' },
   cast_lost:       { subject: 'entity' },
-  beat:            {}
+  beat:            {},
+  placeable_expired: { count: 'expired' },          // a placed item wore out: `type` (expired:Storm)
+  plant_sprouted:  { count: 'sprouted' },           // a pātōtara sprouted by hand: `sprouted`, `type`
+  bird_hatched:    { subject: 'bird', count: 'hatched' }   // a flighted bird's egg hatched: `$bird`, `$egg`
 };
+
+// Conditions that read the world as it is right now. A beat whose `until` is made only of these
+// can miss the moment it waits for (an eagle's lock can be gone between two polls), so the
+// validator asks for an event-counted one (gained, seen, placed) beside or instead of them.
+const CHAPTER_STATE_KEYS = new Set(['hunting', 'hunted', 'hidden', 'alive', 'season',
+  'seasonProgress', 'eagleHunger', 'stat', 'extinct', 'separated']);
+const CHAPTER_EVENT_KEYS = new Set(['gained', 'placed', 'seen', 'beat', 'since', 'goal', 'goalsMet', 'flag', 'after', 'seasons', 'year']);
 
 // Condition keys: (arg, compiler) => (x) => bool, where x is { runner, game, event, scope }
 // (scope: the chapter's, or a banner's since it showed). An object's keys must all hold.
@@ -84,16 +94,39 @@ const CHAPTER_CONDITIONS = {
     return !!p && !!q && !!x.game.terrain.connected && !x.game.terrain.connected(p, q);
   },
   regions: ([who, op, n]) => (x) => CHAPTER_OPS[op](x.runner.regionsOf(who), n),
+  // Two places or birds within `dist` of each other. `a` as a species key: any live one of them.
+  near:    ([a, b, dist]) => (x) => x.runner.nearCheck(a, b, dist, x.event),
+  // An event has happened since the scope began (the chapter, a beat, a banner), with optional
+  // filters on it (species, focus, cast, type, success, near...). Counted at the event, so a
+  // beat waiting on it can't miss it.
+  seen:    (arg, c) => {
+    const [name, filters] = Array.isArray(arg) ? arg : [arg, null];
+    const test = filters ? c.compile(filters) : null;
+    return (x) => x.runner.seenCheck(name, test, x.scope);
+  },
+  // The year of the level (1 in the first four seasons).
+  year:    ([op, n]) => (x) => CHAPTER_OPS[op](x.runner.yearNow(), n),
+  // The hungriest live eagle's hunger (0 to 100) compares.
+  eagleHunger: ([op, n]) => (x) => CHAPTER_OPS[op](x.runner.eagleHungerMax(), n),
+  // A bird's own number compares: stat: [ref, 'hunger' | 'age' | 'size', op, n].
+  stat:    ([ref, field, op, n]) => (x) => {
+    const e = x.runner.entity(ref, x.event);
+    return !!e && e.alive !== false && CHAPTER_OPS[op](x.runner.statOf(e, field), n);
+  },
   // Filters on the event a reaction answers.
   species: (keys) => (x) => [].concat(keys).includes(x.runner.subjectSpecies(x.event)),
   focus:   (want) => (x) => x.runner.isFocus(x.runner.subjectSpecies(x.event)) === !!want,
-  cast:    (name) => (x) => {
+  cast:    (names) => (x) => {   // one name, or a list of them
     if (!x.event) return false;
-    if (x.event.cast === name) return true;
-    const e = x.runner.castEnts[name];
-    return !!e && e === x.runner.subject(x.event);
+    for (const name of [].concat(names)) {
+      if (x.event.cast === name) return true;
+      const e = x.runner.castEnts[name];
+      if (e && e === x.runner.subject(x.event)) return true;
+    }
+    return false;
   },
   type:    (types) => (x) => !!x.event && [].concat(types).includes(x.event.type),
+  cause:   (c) => (x) => !!x.event && [].concat(c).includes(x.event.cause),
   success: (want) => (x) => !!x.event && !!x.event.success === !!want,
   any:     (list, c) => { const fs = list.map(s => c.compile(s)); return (x) => fs.some(f => f(x)); },
   all:     (list, c) => { const fs = list.map(s => c.compile(s)); return (x) => fs.every(f => f(x)); },
@@ -125,6 +158,11 @@ const CHAPTER_SCRIPT_TOOLS = {
   sow:       (spec, x) => x.runner.sow(spec, x.event),
   spawn:     (spec, x) => x.runner.spawn(spec, x.event),
   aim:       (spec, x) => x.runner.aim(spec, x.event),
+  nest:      (spec, x) => x.runner.nest(spec, x.event),
+  lay:       (spec, x) => x.runner.lay(spec, x.event),
+  adopt:     (spec, x) => x.runner.adopt(spec, x.event),
+  fade:      (spec, x) => x.runner.fade(spec),
+  guide:     (id, x) => x.runner.guideOpen(id),
   flag:      (name, x) => { x.runner.flags[name] = true; },
   unflag:    (name, x) => { delete x.runner.flags[name]; },
   reward:    (n, x) => x.game.mauri.earn(n, undefined, undefined, 'goal'),
@@ -176,6 +214,7 @@ class ChapterRunner {
     this.issues = [];
     this.tips = {};
     this.log = [];
+    this._seenLog = [];            // the run's events, for the `seen` condition (a ring of 512)
 
     this.flags = {};
     this.met = new Set();          // ids of every goal met so far (any chapter)
@@ -203,7 +242,8 @@ class ChapterRunner {
 
     this.castDefs = levelDef.cast || {};
     this._siteNames = new Set([...Object.keys(levelDef.sites || {}),
-      ...(levelDef.chapters || []).flatMap(c => Object.keys(c.sites || {}))]);
+      ...(levelDef.chapters || []).flatMap(c => Object.keys(c.sites || {})),
+      ...ChapterRunner._siteAliases(levelDef)]);
     this._speciesKeys = new Set([...((levelDef.species && levelDef.species.moa) || []),
       ...((levelDef.species && levelDef.species.eagle) || []), ...((levelDef.species && levelDef.species.other) || [])]);
 
@@ -223,6 +263,21 @@ class ChapterRunner {
 
   // The chapter checks without playing: the issues a level's chapters have.
   static validate(levelDef) { return new ChapterRunner(null, levelDef).issues; }
+
+  // The site names a level's actions make as they run (`nest: { as: 'home' }`), so a condition
+  // can name them before the action has run.
+  static _siteAliases(levelDef) {
+    const out = [];
+    const walk = (v, depth) => {
+      if (!v || typeof v !== 'object' || depth > 8) return;
+      if (Array.isArray(v)) { for (const x of v) walk(x, depth + 1); return; }
+      if (v.nest && typeof v.nest === 'object' && typeof v.nest.as === 'string') out.push(v.nest.as);
+      for (const k of Object.keys(v)) if (k !== 'sites' && k !== 'menu') walk(v[k], depth + 1);
+    };
+    walk(levelDef.chapters, 0);
+    walk(levelDef.reactions, 0);
+    return out;
+  }
 
   _issue(s) { if (!this.issues.includes(s)) this.issues.push(s); }
 
@@ -245,6 +300,22 @@ class ChapterRunner {
       if (!make) { this._issue(`unknown condition "${key}"`); parts.push(() => false); continue; }
       const arg = cond[key];
       if (key === 'separated') [].concat(arg).forEach(r => this._checkPoint(r, '"separated"'));
+      if (key === 'near') {
+        if (!Array.isArray(arg) || arg.length !== 3) this._issue(`"near" takes [a, b, distance]: ${JSON.stringify(arg)}`);
+        else { this._checkPoint(arg[0], '"near"'); this._checkPoint(arg[1], '"near"'); }
+      }
+      if (key === 'seen') {
+        const name = Array.isArray(arg) ? arg[0] : arg;
+        if (!CHAPTER_EVENTS[name]) this._issue(`"seen": unknown event "${name}"`);
+      }
+      if (key === 'stat') {
+        if (!(Array.isArray(arg) && arg.length === 4 && CHAPTER_OPS[arg[2]] && ['hunger', 'age', 'size'].includes(arg[1]))) {
+          this._issue(`"stat" takes [who, 'hunger' | 'age' | 'size', op, n]: ${JSON.stringify(arg)}`);
+        } else this._checkRef(arg[0], '"stat"');
+      }
+      if (['year', 'eagleHunger'].includes(key) && !(Array.isArray(arg) && CHAPTER_OPS[arg[0]])) {
+        this._issue(`"${key}" takes [op, n]: ${JSON.stringify(arg)}`);
+      }
       if (key === 'regions' && Array.isArray(arg) && arg[0] !== 'moa' && !this._speciesKeys.has(arg[0])) {
         this._issue(`"regions": "${arg[0]}" isn't in the level's species`);
       }
@@ -270,7 +341,11 @@ class ChapterRunner {
     if (new Set(ids).size !== ids.length) this._issue(`chapter "${id}" has two goals with the same id`);
     ch.start = this._compileActions(`${id}:start`, [].concat(def.start || []));
     ch.until = this.compile(def.until || { seasons: 1 });
-    ch.hold = def.holdSeason ? { until: this.compile(def.holdSeason.until), at: def.holdSeason.at ?? 0.9 } : null;
+    // holdSeason: { until, at = 0.9, maxSec }: the season waits at `at` until `until` holds, or
+    // for maxSec at most (a hold with no way out is a rail).
+    ch.hold = def.holdSeason ? { until: this.compile(def.holdSeason.until), at: def.holdSeason.at ?? 0.9,
+                                 maxSec: def.holdSeason.maxSec || 0 } : null;
+    if (def.holdSeason && !def.holdSeason.maxSec) this._issue(`warning: chapter "${id}" holds its season with no maxSec: give the hold a way out`);
     ch.reactions = (def.reactions || []).map((r, ri) => this._compileReaction(r, id, ri));
     ch.beats = (def.beats || []).map((b, bi) => this._compileBeat(b, id, bi));
     for (const key of Object.keys(def)) {
@@ -351,8 +426,14 @@ class ChapterRunner {
   _compileBeat(b, chapterId, i) {
     const id = b.id || `${chapterId}_beat_${i + 1}`;
     if (b.force && b.by == null) this._issue(`beat "${id}" has force but no by (the deadline it runs at)`);
+    if (b.until && typeof b.until === 'object' && !Array.isArray(b.until)) {
+      const keys = Object.keys(b.until);
+      if (keys.length && keys.every(k => CHAPTER_STATE_KEYS.has(k)) && !keys.some(k => CHAPTER_EVENT_KEYS.has(k))) {
+        this._issue(`warning: beat "${id}" waits on a state (${keys.join(', ')}) that can be missed between polls: prefer seen / gained`);
+      }
+    }
     return {
-      id, def: b, chapter: chapterId,
+      id, def: b, chapter: chapterId, once: !!b.once,
       when: b.when ? this.compile(b.when) : null,
       invite: this._compileActions(`beat:${id}:invite`, [].concat(b.invite || [])),
       until: b.until ? this.compile(b.until) : null,
@@ -535,7 +616,24 @@ class ChapterRunner {
       species(spec.type);
       this._checkPoint(spec.at, `${where}: spawn at`);
     } else if (verb === 'moment') this._checkPoint(spec.on, `${where}: moment on`);
-    else if (verb === 'aim') [].concat(spec.at || []).forEach(r => this._checkRef(r, `${where}: aim at`));
+    else if (verb === 'aim') {
+      [].concat(spec.at || []).forEach(r => this._checkRef(r, `${where}: aim at`));
+      // An aim is the force half of a guaranteed beat. Anywhere else it is a scripted attack that
+      // the log won't call forced: say so.
+      if (!/^beat:.*:force$/.test(where)) this._issue(`warning: ${where}: aim outside a beat's force is a scripted attack; prefer a beat with invite and force`);
+    }
+    else if (verb === 'nest') this._checkPoint(spec.at, `${where}: nest at`);
+    else if (verb === 'lay') { species(spec.species); this._checkPoint(spec.at, `${where}: lay at`); }
+    else if (verb === 'adopt') {
+      for (const name of Object.keys(spec || {})) {
+        if (!this.castDefs[name]) this._issue(`${where}: adopt "${name}", which isn't in the level's cast`);
+        const want = spec[name];
+        if (want && typeof want === 'object') { if (want.species) species(want.species); if (want.near) this._checkPoint(want.near, `${where}: adopt near`); }
+        else this._checkRef(want, `${where}: adopt`);
+      }
+    }
+    else if (verb === 'fade') { if (spec.type && typeof PLACEABLES !== 'undefined' && !PLACEABLES[spec.type]) this._issue(`${where}: unknown placeable "${spec.type}"`); }
+    else if (verb === 'guide') { if (typeof ENCYCLOPEDIA_BY_ID !== 'undefined' && !ENCYCLOPEDIA_BY_ID[arg]) this._issue(`${where}: no Field Guide entry "${arg}"`); }
     else if (verb === 'eagle') {
       if (spec.watch) this._checkPoint(spec.watch, `${where}: eagle watch`);
       if (spec.which && !['all', 'nearest'].includes(spec.which)) this._checkRef(spec.which, `${where}: eagle which`);
@@ -588,6 +686,22 @@ class ChapterRunner {
     }
     const sites = this.level.sites || {};
     for (const name of Object.keys(sites)) this._checkSiteSpec(sites[name], `site "${name}"`);
+    // The level's own keys: what a module teaches, what it unlocks, which family of sketches it
+    // belongs to, what comes next.
+    const L = this.level;
+    if (L.module && !(typeof L.claim === 'string' && L.claim.trim())) this._issue('a module needs a one-line `claim`: the rule it teaches');
+    for (const id of [].concat(L.guide || [])) {
+      if (typeof ENCYCLOPEDIA_BY_ID !== 'undefined' && !ENCYCLOPEDIA_BY_ID[id]) this._issue(`guide: no Field Guide entry "${id}"`);
+    }
+    if (L.sketch) {
+      if (!L.sketch.of || !L.sketch.label) this._issue('`sketch` needs { of: familyId, label }');
+      else if (typeof LEVEL_REGISTRY !== 'undefined' && LEVEL_REGISTRY.getFamily && !LEVEL_REGISTRY.getFamily(L.sketch.of)) {
+        this._issue(`warning: sketch.of "${L.sketch.of}" isn't a registered family (LEVEL_REGISTRY.registerFamily)`);
+      }
+    }
+    if (L.nextLevel && typeof LEVEL_REGISTRY !== 'undefined' && LEVEL_REGISTRY.get && !LEVEL_REGISTRY.get(L.nextLevel)) {
+      this._issue(`warning: nextLevel "${L.nextLevel}" isn't a registered level`);
+    }
   }
 
   // ==========================================================================
@@ -704,7 +818,8 @@ class ChapterRunner {
     if (typeof text !== 'string') return text;
     return text
       .replace(/\{species\}/g, () => this._name(this.subjectSpecies(ev) || this._extinctKey))
-      .replace(/\{chapter\}/g, () => (this.cur ? this.cur.title : ''));
+      .replace(/\{chapter\}/g, () => (this.cur ? this.cur.title : ''))
+      .replace(/\{year\}/g, () => String(this.yearNow()));
   }
 
   // The tutorial passes every event here first (TutorialManager.fireEvent): counted at once (a
@@ -715,6 +830,8 @@ class ChapterRunner {
     const ev = Object.assign({ name: type }, data);
     this._count(ev);
     if (type === 'season_change') this.seasonTurns++;
+    this._seenLog.push({ name: type, t: this.game ? this.game.playTime : 0, ev });
+    if (this._seenLog.length > 512) this._seenLog.shift();
     this._events.push(ev);
   }
 
@@ -761,9 +878,18 @@ class ChapterRunner {
   // `at` of the way through the season until its condition holds.
   seasonStep(dt) {
     const h = this.cur && this.cur.hold;
-    if (!h || this._ended || h.until(this._ctx())) return dt;
+    if (!h || this._ended || this._holdReleased || h.until(this._ctx())) return dt;
     const sm = this.game.seasonManager, holdAt = h.at * CONFIG.seasonDuration;
-    return Math.max(0, Math.min(dt, holdAt - sm.timer));
+    const step = Math.max(0, Math.min(dt, holdAt - sm.timer));
+    if (step < dt) {   // holding: count it, and let go after maxSec
+      this._heldFrames = (this._heldFrames || 0) + (dt - step);
+      if (h.maxSec && this._heldFrames >= h.maxSec * CHAPTER_FPS) {
+        this._holdReleased = true;
+        this._log('hold', this.cur.id, 'released after maxSec');
+        return dt;
+      }
+    }
+    return step;
   }
 
   // After the sim step (Game.update): react to this frame's events, then (every CHAPTER_POLL
@@ -825,8 +951,12 @@ class ChapterRunner {
     this._resolveSites(d.sites);
 
     // Its beats, fresh (a chapter visited again runs them again).
-    this.beatState = ch.beats.map(b => ({ b, phase: 'waiting', t0: 0, scope: null, forced: false }));
-    for (const b of ch.beats) this.beatsDone.delete(b.id);
+    // (A beat with once: true stays done when its chapter comes round again: a first-year lesson.)
+    const keep = (b) => b.once && this.beatsDone.has(b.id);
+    this.beatState = ch.beats.map(b => ({ b, phase: keep(b) ? 'done' : 'waiting', t0: 0, scope: null, forced: false }));
+    for (const b of ch.beats) if (!keep(b)) this.beatsDone.delete(b.id);
+    this._heldFrames = 0;
+    this._holdReleased = false;
 
     // Goals: the panel shows this chapter's.
     this.goals = ch.goals.map(cg => ({
@@ -923,6 +1053,12 @@ class ChapterRunner {
       if (rx.test && !rx.test(this._ctx(ev))) continue;
       this._fire(rx, ev);
       if (this._ended) return;
+    }
+    // A running beat whose `until` holds at this event is done now, not at the next poll: an
+    // eagle's lock (hunting, hunted) can be gone by then, and a `seen` is true from this event on.
+    for (const s of this.beatState) {
+      if (s.phase !== 'running' || !s.b.until) continue;
+      if (s.b.until(this._ctx(ev, s.scope))) { this._beatDone(s); if (this._ended) return; }
     }
   }
 
@@ -1074,7 +1210,8 @@ class ChapterRunner {
   // `sec` (20) seconds, whatever its hunger. It still can't see one under cover
   // (HaastsEagle.aimAt). `at` can list fallbacks: ['matriarch', 'upland_moa'] (the first alive).
   aim(spec, ev) {
-    const target = [].concat(spec.at).map(r => this.entity(r, ev)).find(e => e && e.alive && e.pos);
+    const cands = [].concat(spec.at).map(r => this.entity(r, ev)).filter(e => e && e.alive && e.pos);
+    const target = cands.find(e => !e.inShelter) || cands[0];   // (one in the open first: cover hides the rest)
     if (!target) { this._log('issue', 'aim', 'nothing to aim at'); return; }
     const [e] = this._eagles(Object.assign({ which: 'nearest' }, spec, { near: target }), ev);
     if (!e) return;
@@ -1082,6 +1219,124 @@ class ChapterRunner {
     e.aimTimer = (spec.sec || 20) * CHAPTER_FPS;
     e._relocateTerritory(target.pos.x, target.pos.y);
     this._log('aim', target.castName || target.speciesKey || '');
+  }
+
+  // ---- The new conditions' readings -------------------------------------------------
+  yearNow() { return Math.floor(((this.sim && this.sim.seasonTurns) || 0) / 4) + 1; }
+
+  eagleHungerMax() {
+    let h = -1;
+    for (const e of (this.sim.eagles || [])) if (e.alive && e.hunger > h) h = e.hunger;
+    return h;
+  }
+
+  statOf(e, field) {
+    if (field === 'hunger') return e.hunger || 0;
+    if (field === 'age') return (e.age || 0) / CHAPTER_FPS;
+    if (field === 'size') return e.size || 0;
+    return 0;
+  }
+
+  // near: [a, b, dist]. `a` as a species key means any live one of them; else both are places.
+  nearCheck(a, b, dist, ev) {
+    const q = this.point(b, ev);
+    if (!q) return false;
+    const d2 = dist * dist;
+    if (typeof a === 'string' && this._speciesKeys.has(a) && !this.castDefs[a] && !this.sites[a]) {
+      return this.allOf(a).some(e => { const dx = e.pos.x - q.x, dy = e.pos.y - q.y; return dx * dx + dy * dy <= d2; });
+    }
+    const p = this.point(a, ev);
+    if (!p) return false;
+    const dx = p.x - q.x, dy = p.y - q.y;
+    return dx * dx + dy * dy <= d2;
+  }
+
+  // seen: an event of that name since the scope began, passing `test` (compiled filters) if any.
+  seenCheck(name, test, scope) {
+    const s = scope || this.scopeCh, t0 = s ? s.t0 : 0;
+    for (let i = this._seenLog.length - 1; i >= 0; i--) {
+      const r = this._seenLog[i];
+      if (r.t < t0) break;
+      if (r.name !== name) continue;
+      if (!test || test({ runner: this, game: this.game, event: r.ev, scope: s })) return true;
+    }
+    return false;
+  }
+
+  // ---- The stage, continued: nests, eggs, named birds, storms wearing out, the guide --------
+  // { at, radius, reservedFor, hideClutch, as }: an established nest at a place
+  // (Simulation.addNestingSite). `as` names the site so later places can refer to it.
+  nest(spec, ev) {
+    const p = this.point(spec.at, ev);
+    if (!p || !this.sim.addNestingSite) { this._log('issue', 'nest', `no place "${spec.at}"`); return null; }
+    const site = this.sim.addNestingSite(p.x, p.y, { radius: spec.radius, reservedFor: spec.reservedFor, hideClutch: spec.hideClutch });
+    if (site && spec.as) this.sites[spec.as] = { x: p.x, y: p.y };
+    this._log('nest', typeof spec.at === 'string' ? spec.at : '', spec.as || '');
+    return site;
+  }
+
+  // { species, at, count = 1, incubationSec }: an egg (or a clutch) at a place. Scripted, so it
+  // is not counted as laid (the player's and the birds' own eggs are).
+  lay(spec, ev) {
+    const p = this.point(spec.at, ev);
+    if (!p || !this.sim.addEggAt) { this._log('issue', 'lay', `no place "${spec.at}"`); return; }
+    const n = spec.count || 1;
+    for (let i = 0; i < n; i++) {
+      const a = random(TWO_PI), d = n > 1 ? random(2, 10) : 0;
+      this.sim.addEggAt(p.x + Math.cos(a) * d, p.y + Math.sin(a) * d, spec.species,
+        { incubationFrames: spec.incubationSec != null ? spec.incubationSec * CHAPTER_FPS : undefined });
+    }
+    this._log('lay', spec.species, `${n}`);
+  }
+
+  // { name: ref } or { name: { species, near, female, pick } }: a cast name bound to a live bird
+  // (a $role from the event, a species' nearest to a place...). The name must be in `cast`
+  // (with manual: true, so it isn't adopted on its own as the level starts).
+  adopt(spec, ev) {
+    for (const name of Object.keys(spec || {})) {
+      const want = spec[name];
+      if (!this.castDefs[name]) { this.castDefs[name] = { title: name, manual: true }; this._log('issue', 'adopt', `"${name}" isn't in cast`); }
+      let e = null;
+      if (want && typeof want === 'object' && !want.pos) {
+        const near = want.near ? this.point(want.near, ev) : null;
+        let pool = this.allOf(want.species || (this.castDefs[name].species)).filter(b => b.alive !== false && b !== undefined);
+        if (want.female != null) pool = pool.filter(b => !!b.isFemale === !!want.female);
+        pool = pool.filter(b => !b.castName || b.castName === name);
+        if (want.pick === 'youngest') pool.sort((a, b) => (a.age || 0) - (b.age || 0));
+        else if (want.pick === 'oldest') pool.sort((a, b) => (b.age || 0) - (a.age || 0));
+        if (near) pool.sort((a, b) => Math.hypot(a.pos.x - near.x, a.pos.y - near.y) - Math.hypot(b.pos.x - near.x, b.pos.y - near.y));
+        e = pool[0] || null;
+      } else {
+        e = this.entity(want, ev);
+      }
+      if (!e || e.alive === false) { this._log('issue', 'adopt', `nothing to adopt as "${name}"`); continue; }
+      this.castEnts[name] = e;
+      e.castName = name;
+      this._log('cast', name, 'adopted');
+    }
+  }
+
+  // { type = 'Storm', sec, refreshOnMove }: every live standing one of `type` wears out over
+  // `sec` seconds (PlaceableObject.fadeOver); a placed one that would outlast that is cut short.
+  fade(spec) {
+    const type = (spec && spec.type) || 'Storm', sec = (spec && spec.sec) || 20;
+    let n = 0;
+    for (const p of this.sim.placeables) {
+      if (!p.alive || p.type !== type) continue;
+      if (p.standing) { if (p.fadeOver) p.fadeOver(sec, !!(spec && spec.refreshOnMove)); }
+      else if (p.life > sec * CHAPTER_FPS) { p.life = sec * CHAPTER_FPS; p.maxLife = Math.max(p.maxLife, p.life); }
+      n++;
+    }
+    this._log('fade', type, `${n}`);
+  }
+
+  // Open the Field Guide at an entry (there are no locks: every entry is always there).
+  guideOpen(id) {
+    const g = this.game, enc = g && g.encyclopedia;
+    if (!enc || typeof ENCYCLOPEDIA_BY_ID === 'undefined' || !ENCYCLOPEDIA_BY_ID[id]) { this._log('issue', 'guide', `no entry "${id}"`); return; }
+    enc.select(id);
+    if (enc.openGuide) enc.openGuide(g);
+    this._log('guide', id);
   }
 
   // ---- Sites: named places on the land ------------------------------------------------
@@ -1272,6 +1527,11 @@ class ChapterRunner {
       const p = this._walkableNear({ x: c.x + random(-radius, radius), y: c.y + random(-radius, radius) }, 120, c) || c;
       const e = sim._createFromRegistry(isMoa ? 'moa' : spec.type, spec.type, p.x, p.y, isMoa ? Moa : null);
       if (!e) continue;
+      // sexes: 'pair' alternates female, male...; female: true / false sets them all; hunger
+      // (0 to 100) is how hungry they start (a hungry pair goes out to feed at once).
+      if (spec.sexes === 'pair') e.isFemale = (n % 2 === 0);
+      else if (spec.female != null) e.isFemale = !!spec.female;
+      if (spec.hunger != null) e.hunger = spec.hunger;
       if (isMoa) {
         e.age = MOA_AGE.ADULT_MIN + 1;
         e.updateAge(0);
@@ -1345,12 +1605,13 @@ class ChapterRunner {
   _adoptCast() {
     for (const name in this.castDefs) {
       const c = this.castDefs[name], cur = this.castEnts[name];
+      if (c.manual) continue;          // (bound by an `adopt` action, not on its own)
       if (cur && cur.alive) continue;
       if (cur === null && !c.recast) continue;   // lost, and not to be replaced
       const pool = this.allOf(c.species).filter(e => c.female == null || !!e.isFemale === !!c.female);
       if (!pool.length) continue;
       if (c.pick === 'youngest') pool.sort((a, b) => (a.age || 0) - (b.age || 0));
-      else if (c.pick === 'random') pool.sort(() => Math.random() - 0.5);
+      else if (c.pick === 'random') pool.sort(() => random() - 0.5);
       else pool.sort((a, b) => (b.age || 0) - (a.age || 0));
       this.castEnts[name] = pool[0];
       pool[0].castName = name;
@@ -1363,8 +1624,11 @@ class ChapterRunner {
       const e = this.castEnts[name];
       if (!e || e.alive) continue;
       this.castEnts[name] = null;
-      this._log('cast_lost', name);
-      this._emit('cast_lost', { cast: name, entity: e });
+      // How it died, when the simulation says (Moa.causeOfDeath: 'eagle' or 'starved'), so a
+      // lesson can answer each differently (the `cause` filter).
+      const cause = e.causeOfDeath || (e.hunger >= (e.maxHunger || 100) ? 'starved' : 'unknown');
+      this._log('cast_lost', name, cause);
+      this._emit('cast_lost', { cast: name, entity: e, cause });
     }
   }
 
@@ -1401,6 +1665,8 @@ class ChapterRunner {
   _log(kind, id, info = '') {
     this.log.push({ t: Math.round(this.game.playTime / CHAPTER_FPS * 10) / 10,
                     chapter: this.cur ? this.cur.id : '', kind, id, info: info || '' });
+    // A research run records the story's log beside the populations (mauri_benchmark.js).
+    if (typeof BENCHMARK !== 'undefined' && BENCHMARK.active && BENCHMARK.event) BENCHMARK.event(this.game, kind, id, info);
   }
 
   // ==========================================================================

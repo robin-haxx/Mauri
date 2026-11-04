@@ -17,8 +17,9 @@ picking up future tasks. The other docs:
 - `YEARS_PLAN.md`: Free Play's year structure, kea cascade and world grid (the living plan).
 - `GL_PORT.md` / `PERF_ASSESSMENT.md`: the GPU renderer, and where frame time goes.
 - `MISTAKES.md`: things that went wrong, and the rule that stops a repeat.
-- `ENGINE_ASSESSMENT.md`: the module / endless split, and a proposed grammar (substrate,
-  direction, presentation) to reconcile the teaching build with the research build.
+- `ENGINE_ASSESSMENT.md`: the module / endless split, a proposed grammar (substrate, direction,
+  presentation) to reconcile the teaching build with the research build, and how that weighs
+  against the chapters engine, the legacy modules and new free play modes.
 
 ---
 

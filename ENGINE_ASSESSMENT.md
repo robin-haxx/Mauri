@@ -6,12 +6,14 @@ accessible, story-led lessons about Aotearoa's flora and fauna that schools and 
 groups could take up as targeted slices. Written against the code at commit `f967746`
 (2026-11-04).*
 
-> **Scope note.** No engine-plan document exists in this repository (the design docs are
-> `OVERVIEW.md`, `DEVBLOG_systems.md`, `FREEPLAY_PLAN.md`, `YEARS_PLAN.md`, `GL_PORT.md`,
-> `PERF_ASSESSMENT.md`, `MISTAKES.md`). So this is not an edit of the plan; it is a reading of
-> what the code already commits you to, a proposed grammar that fits it, and the questions
-> that need answering before the plan is "defined enough". Section 10 lists them. Once the
-> plan itself is in the repo (or pasted), this document should be folded into it.
+> **Scope note.** Sections 1 to 10 were written before the chapters engine existed in this
+> checkout: they read what the code at `f967746` commits you to, propose a grammar that fits
+> it, and list the questions that needed answering. The engine (the chapters runner,
+> `MODULE_ENGINE_PLAN.md`, `MODULE_SCRIPTING.md`, the storm rework) was then built in a
+> separate working copy that has not reached GitHub as of 2026-11-04, so sections 11 to 13
+> weigh this assessment against the engine *as described*, not as read. Once the engine
+> branch is pushed, sections 11 to 13 should be checked against the code and folded into
+> `MODULE_ENGINE_PLAN.md`.
 
 ---
 
@@ -41,6 +43,13 @@ groups could take up as targeted slices. Written against the code at commit `f96
    sim with the director removed.* Storm-as-cover is the first case: taught by Module 0,
    still a stun in the sim's own `Storm` placeable (`distractsEagles`), and only true in
    modules because `ModuleDirector.isHidden` says so.
+6. **The chapters engine and this assessment are the same move seen from two sides** (section
+   11): the engine makes *direction* and *presentation* data; this document says what the
+   *substrate* must own for that data to be true. The engine does not, by itself, retire the
+   second simulation; the substrate ports in section 6 still do that. The legacy modules
+   should stay playable as their own menu row and as the thesis's scripted control condition
+   (section 12), and new free play modes should be chapters over the cycling Free Play's
+   substrate (section 13).
 
 ---
 
@@ -290,8 +299,10 @@ against `lifeScript` today adds to the second simulation rather than the first.
 
 Answers to these change what the plan should say; the rest of this document stands without them.
 
-1. **Where is the engine plan?** It isn't in the repository. If it is a local file or a
-   conversation, commit or paste it and this document can be folded into it as edits.
+1. **Where is the engine plan?** Answered: it is `MODULE_ENGINE_PLAN.md` in a working copy
+   that has not been pushed. GitHub holds only `main`, the merged `claude/perf-tablets`, and
+   this branch (which carries this document and nothing else). Push it and section 11 can be
+   checked against the code.
 2. **What is the thesis's unit of evidence?** "Emergent sim produces more lifelike dynamics" is
    a simulation question (measure variance and lag across seeds). "Emergent sim teaches or
    engages better" is a learner study (needs participants, a scripted control, ethics). They
@@ -314,3 +325,133 @@ Answers to these change what the plan should say; the rest of this document stan
 8. **"Balance development"**: read here as balancing *effort* between the research build and
    the teaching build, not game balance. If you meant tuning, section 8's instrumentation is
    also the tuning tool, but the recommendations above would be reordered.
+
+---
+
+## 11. Weighed against the chapters engine
+
+The engine, as described: a module is a `story` of **chapters** (one per season or stage) with
+**levers** (the tools and when they unlock), **goals**, **conditions and counters**
+(`after`, `beat`, `near`, `hidden`, `gained`, `placed`, `stat`, `any`/`all`), **actions** in
+two toolboxes (a *scripting* toolbox: `stay`, `goTo`, `follow`, `chase`, `journey`, `camera`;
+an *ecology* toolbox: `sow`, `spawn`, floors, income, `unlockTool`), **lines and banners**
+delivered by the existing tip kit, **reactions** (sim events by role, answered with narration),
+**guaranteed beats**, **sites** found by solvers, **cast** declared once, and plain functions as
+the escape hatch; plus a validator, a story inspector, a beat log and jump-to-beat. Its stated
+default is emergence: the runner layers goals, unlocks and reactive narration onto the
+free-running sim rather than porting the scripted seasons.
+
+### Where the two agree (most of it)
+
+| This assessment | The engine |
+|---|---|
+| Substrate / direction / presentation | "Code decides how things behave; data decides when, who and what is said" |
+| Watched, not scripted | Emergence the default; reactions fire on sim events |
+| Beat (`_beat(name, data)`) | Beats and the beat log |
+| Need (a detector with patience) | Levers with goals and conditions; reminder banners |
+| Lever | Levers, `unlockTool`, the ecology toolbox |
+| Site, cast | Sites and solvers, cast declared once |
+| Stage clocks | Chapters with `holdUntil` and timed close |
+| Instrumentation (section 8) | Validator, inspector, beat log, jump, headless test snippet |
+| "Extract shared director code into the base class" | Superseded by systems plus data chapters, which is the better design; drop the suggestion |
+
+The slice template in section 7 is, in effect, the chapter-level key list. Two keys the
+template has that the described engine may not: **`claim`** (the substrate rule or flag the
+module teaches, stated in one line) and **`guide`** (the Field Guide entries it unlocks, with
+sources). Both are cheap data, and both are what a school or conservation partner reads first.
+Recommend adding them to the module header and having the validator require `claim`.
+
+### Where the engine needs a rule it may not yet have
+
+The engine makes direction and presentation declarative. It does not decide what the
+substrate owns, and a data vocabulary can carry the second simulation just as well as code
+can. Five rules close that gap; each is a validator check as much as a design rule.
+
+1. **A scripting action is a bounded stage direction.** `stay`, `goTo`, `follow`, `journey`
+   and `camera` must each have an end (`until`, `after`, `near`, a beat), and while one runs the
+   bird's hunger, feeding, cover and breeding stay with the sim. The validator should refuse a
+   scripting action with no end condition.
+2. **`chase` is a nudge, not a verb.** A `chase` action that drives the eagle at a named moa is
+   the scripted attack in data form. Prefer **pressure**: raise the eagle's hunger, narrow its
+   grace, place it over the trail, and let the `hunt` reaction fire when the substrate eagle
+   commits. If `chase` stays in the vocabulary, it should be written to the beat log as
+   `forced`, so a run can report how often the lesson needed forcing.
+3. **A guaranteed beat is pressure, a deadline, and a logged nudge.** Something like
+   `{ guarantee: 'first_hunt', pressure: { eagle: { hunger: +30, graceSec: 5 } }, within: 40,
+   then: 'force' }`. The deadline and the `force` fallback are explicit, and `nudge` / `force`
+   entries in the beat log are research data (section 8).
+4. **An ecology action calls a sim API the endless level also uses.** `sow`, `spawn`, floors
+   and income are fine as long as they go through `Simulation` and `MauriManager`, never through
+   runner-private state. The test: the same action, run in `level_freeplay_kahurangi`, must do
+   the same thing.
+5. **Cast brains default to the sim.** A cast entry's brain is the species' own behaviour
+   unless the module says otherwise, and a scripted brain (the legacy `MoaLife` / `EagleLife` /
+   `KeaLife`) is allowed only on a legacy module (section 12). The validator should warn when a
+   cast member in a chapters module names a legacy brain.
+
+### What the engine does not fix, and the order to fix it
+
+The two eagles, the two feeding models, the two breeding models and the three floor
+mechanisms (section 6) are untouched by making chapters declarative. They remain the
+prerequisite for the thesis claim, and they also decide how well new modules teach: until the
+legacy director's eagle design (hunger, look range, boldness, grace before the dive, away
+hunting) is ported into `HaastsEagle` as flags, a chapters module's `hunt` reactions fire from
+the energy-budget eagle, which is less legible than Module 0's. The storm rework is the first
+port and is under way. The order stands: storm cover, then the eagle, then family feeding,
+then `BIRD_CALENDAR` into the species data.
+
+---
+
+## 12. Retaining the legacy modules
+
+Keep Module 0, Module 1 and the modules' free play (Pukepuke & Koukou) playable from the main
+menu, as their own set, and freeze them.
+
+- **Files.** `mauri_module.js`, `mauri_module_patotara.js`, `mauri_module_freeplay.js`, the
+  three `levels/module_*.js` and their `levels/tutorial_module_*.js` scripts stay as they are.
+  Mark the three levels (e.g. `legacy: true`, or `engine: 'director'`), and have the level
+  select draw them as a second row of small buttons under the chapters modules, with its own
+  label ("Stories"). `Game._renderModuleRow` already draws modules by `moduleIndex`; a second
+  row grouped on the flag is a small change. "Continue" chains stay within the legacy set.
+- **Isolation.** The legacy birds run `lifeScript`, so they skip `Moa.behave`,
+  `HaastsEagle.behave` and `Kea.behave`; the substrate ports do not change how they play.
+  Storm cover in the legacy set stays `ModuleDirector.isHidden` reading `Simulation.stormAt`;
+  dropping `distractsEagles` from the base `Storm` touches nothing they read (only
+  `HaastsEagle.behave` reads it). When `BIRD_CALENDAR` moves into the species data, keep the
+  constant available under its current name (an alias is enough) so
+  `FreePlayDirector._scheduleBirdClutches` keeps working.
+- **Freeze.** New modules are written only on the chapters engine. The legacy set gets bug
+  fixes and nothing else, and the plan should say so; otherwise it drifts back into being the
+  second simulation.
+- **Why keep them beyond courtesy.** Legacy Module 0 is the *scripted* version of the lesson
+  a chapters Module 0 teaches *emergently*. That is the control condition the thesis wants:
+  the same lesson under both regimes, compared on beat-timing variance across seeds, nudges
+  and forces needed, and, with learners, outcomes. Retaining the old modules makes that
+  comparison free; make it part of the study design rather than a leftover.
+
+---
+
+## 13. New free play modes under the new rules
+
+The cycling Free Play (`level_freeplay_kahurangi`: the four-year focus loop, the 2×2 world
+grid, climate drift, winter edibility, emergent eagles, the kea cascade) is the substrate
+exemplar: it is the one level where every system runs in tandem, and the ten or so modules
+are meant to end up resembling it. So a new free play mode is a chapters level over that
+substrate:
+
+- **Chapters per year** replace the year engine in `mauri_sketch.js` (`freeplaySchedule`,
+  `_beginFreeplayYear`, `_checkFreeplayYear`, `_applyFreeplayYearPressure`): each year is a
+  chapter with its levers (that year's toolbar), goals (the focus species' targets), and
+  reactions (Te Whē on a hatch, a catch, a mast, a species at its floor). The world-grid pan
+  and the glacial re-bake stay as a system the chapter calls.
+- **Reactions replace the generic tips** in `levels/tutorial_freeplay_kahurangi.js`, and the
+  ecology blurbs move to the Field Guide (already an open follow-up in `FREEPLAY_PLAN.md`).
+- **The modules' free play becomes legacy** (section 12). Its better ideas (the eagle's
+  boldness and away cycle, `BIRD_CALENDAR`, the needs prompts with patience, the hatch and
+  catch moments) are ported into the substrate and the engine rather than kept as a second
+  mode.
+- **A first new mode worth building:** the cycling Free Play's year 1 (the kea cascade) as a
+  chapters level on fresh land, with `claim` lines for the two emergent rules it rests on
+  (eagles hunt what they can see; eagles follow the nests). If that mode plays as well as the
+  legacy free play with no scripting-toolbox actions at all, the vocabulary is complete enough
+  for the modules.

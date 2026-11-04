@@ -406,10 +406,20 @@ class PlaceableObject {
   // FEEDING
   // ============================================
   
+  // placedPlantsSeasonal: a patch that stands bare (unsprouted, or its plants without winter
+  // food) neither feeds nor draws a moa.
+  _bare() {
+    if (!(typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.placedPlantsSeasonal)) return false;
+    if (this.unsprouted) return true;
+    const ps = this.spawnedPlants;
+    return !!(ps && ps.length && ps.every(p => !p.alive || p.unsprouted || p.winterInedible));
+  }
+
   feedMoa(moa, dt = 1) {
     if (!this.def.feedingRate) return 0;
     if (this.frostDying) return 0;   // a frost-killed grove no longer feeds (see frostKill)
     if (this.matured) return 0;      // grown out of reach (see mature)
+    if (this._bare()) return 0;      // nothing on it this season (see _bare)
 
     // Species-selective feeders (lancewood, speargrass) nourish only their favoured
     // species; others are scaled by LEVEL_MECHANICS.unfavouredBrowsePenalty (0 = none).
@@ -457,7 +467,7 @@ class PlaceableObject {
   // ============================================
   
   getAttractionStrength(moa) {
-    if (!this.alive || this.matured) return 0;
+    if (!this.alive || this.matured || this._bare()) return 0;
     
     let strength = 0;
     

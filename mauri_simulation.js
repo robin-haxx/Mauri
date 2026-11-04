@@ -1165,6 +1165,32 @@ class Simulation {
     return site;
   }
 
+  // Moa within `radius` of a point.
+  moaNear(p, radius) {
+    const rSq = radius * radius;
+    let n = 0;
+    for (let i = 0; i < this.moas.length; i++) {
+      const m = this.moas[i];
+      if (!m.alive) continue;
+      const dx = m.pos.x - p.x, dy = m.pos.y - p.y;
+      if (dx * dx + dy * dy <= rSq) n++;
+    }
+    return n;
+  }
+
+  // The chance a kea raid on a nest succeeds right now: high with the moa away, falling with
+  // every moa close by (they drive the kea off). One formula for the player's Nest Raid and
+  // for kea raiding on their own (keaRaidsEggs: 'odds'); the numbers are mechanics.keaRaid.
+  // `at` stands in for a site when an egg lies in the open.
+  raidSuccessChance(site, at = null) {
+    const cfg = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.keaRaid) || {};
+    const p = site ? site.pos : at;
+    if (!p) return 1;
+    const moa = this.moaNear(p, cfg.moaRadius ?? 90);
+    const prob = (cfg.baseSuccess ?? 0.9) - (cfg.moaPenalty ?? 0.12) * moa;
+    return Math.max(cfg.minSuccess ?? 0.05, Math.min(1, prob));
+  }
+
   // A kea robs a moa nest: destroy the egg and seed a disturbance the moa avoid.
   // Only moa eggs are raidable.
   raidMoaEgg(egg, raider) {

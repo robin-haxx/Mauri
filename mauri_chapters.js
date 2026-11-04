@@ -646,6 +646,7 @@ class ChapterRunner {
     if (typeof ref !== 'string') { if (ref.find || ref.near) this._checkSiteSpec(ref, where); return; }
     if (this._siteNames.has(ref)) return;
     if (ref === 'guide' || ref.startsWith('$') || this.castDefs[ref] || this._speciesKeys.has(ref)) return;
+    if (/^"near"/.test(where) && typeof PLACEABLES !== 'undefined' && PLACEABLES[ref]) return;   // (a placeable type, in `near`)
     this._issue(`${where} "${ref}" is not a site, a $role, a cast name or one of the level's species`);
   }
 
@@ -1242,8 +1243,13 @@ class ChapterRunner {
     const q = this.point(b, ev);
     if (!q) return false;
     const d2 = dist * dist;
+    const within = (e) => { const dx = e.pos.x - q.x, dy = e.pos.y - q.y; return dx * dx + dy * dy <= d2; };
     if (typeof a === 'string' && this._speciesKeys.has(a) && !this.castDefs[a] && !this.sites[a]) {
-      return this.allOf(a).some(e => { const dx = e.pos.x - q.x, dy = e.pos.y - q.y; return dx * dx + dy * dy <= d2; });
+      return this.allOf(a).some(within);
+    }
+    // A placeable type: any live one of them (a wharariki by the family, say).
+    if (typeof a === 'string' && !this.sites[a] && !this.castDefs[a] && typeof PLACEABLES !== 'undefined' && PLACEABLES[a]) {
+      return this.sim.placeables.some(p => p.alive && p.type === a && within(p));
     }
     const p = this.point(a, ev);
     if (!p) return false;
@@ -1533,7 +1539,8 @@ class ChapterRunner {
       else if (spec.female != null) e.isFemale = !!spec.female;
       if (spec.hunger != null) e.hunger = spec.hunger;
       if (isMoa) {
-        e.age = MOA_AGE.ADULT_MIN + 1;
+        // Adults, unless age: 'juvenile' (a chick of last year, half grown).
+        e.age = spec.age === 'juvenile' ? Math.round(MOA_AGE.JUVENILE_MAX * 0.5) : MOA_AGE.ADULT_MIN + 1;
         e.updateAge(0);
         if (e.homeRange) e.homeRange.set(p.x, p.y);
         sim.moas.push(e);

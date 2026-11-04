@@ -3439,26 +3439,14 @@ class Game {
     return n;
   }
 
-  _moaNearSite(site, radius) {
-    const moas = this.simulation.moas;
-    const rSq = radius * radius;
-    let n = 0;
-    for (let i = 0; i < moas.length; i++) {
-      const m = moas[i];
-      if (!m.alive) continue;
-      const dx = m.pos.x - site.pos.x, dy = m.pos.y - site.pos.y;
-      if (dx * dx + dy * dy <= rSq) n++;
-    }
-    return n;
-  }
+  _moaNearSite(site, radius) { return this.simulation.moaNear(site.pos, radius); }
 
-  // Success chance of raiding a site right now: high when the moa have left, low
-  // while they're still crowding the nest (they drive the kea off).
+  // Success chance of raiding a site right now: high when the moa have left, low while
+  // they're still crowding the nest (they drive the kea off). The formula is the
+  // simulation's (Simulation.raidSuccessChance), shared with kea raiding on their own.
   _raidSuccessChance(site) {
     const cfg = this._keaRaidCfg(); if (!cfg) return 0;
-    const moa = this._moaNearSite(site, cfg.moaRadius ?? 90);
-    let p = (cfg.baseSuccess ?? 0.9) - (cfg.moaPenalty ?? 0.12) * moa;
-    return Math.max(cfg.minSuccess ?? 0.05, Math.min(1, p));
+    return this.simulation.raidSuccessChance(site);
   }
 
   // Attempt the raid: spend mauri, roll against the success chance, and on success

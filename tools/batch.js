@@ -52,9 +52,16 @@ function seedList(opt) {
         return game.state === GAME_STATE.PLAYING;
       });
       if (!started) { console.log(`seed ${seed}: the level did not start (is "${opt.level}" a level or family id?)`); await close(); continue; }
-      const run = await page.evaluate(async ({ maxFrames, player }) => {
+      const run = await page.evaluate(async ({ maxFrames, player, trace }) => {
         const sim = game.simulation;
         let frames = 0, nextPlayer = 0;
+        const traced = [];   // --trace <cast name>: that bird, once a second, for the printout
+        const traceRow = () => {
+          const ch = game.chapters, m = ch && ch.castEnts[trace];
+          if (!m) return;
+          const tp = m.targetPlant;
+          traced.push(`${(game.playTime / 60).toFixed(0)}s h=${m.hunger.toFixed(0)} ${m.alive ? m.currentState : 'DEAD'}${m.isFeeding ? '+feed' : ''}${m.inShelter ? ' hid' : ''} tgt=${tp ? tp.type + '@' + Math.hypot(tp.pos.x - m.pos.x, tp.pos.y - m.pos.y).toFixed(0) : '-'} el=${sim.terrain.getElevationAt(m.pos.x, m.pos.y).toFixed(2)} migr=${!!m.isMigrating} preg=${!!m.isPregnant}`);
+        };
         const coverCast = () => {   // the stand-in player: a Storm over a hunted cast member in the open
           const ch = game.chapters; if (!ch) return;
           for (const name in ch.castEnts) {
@@ -63,11 +70,24 @@ function seedList(opt) {
             const hunted = sim.eagles.some(e => e.alive && e.hunting && e.target === m);
             if (hunted) { sim.addPlaceable(m.pos.x, m.pos.y, 'Storm'); ch._log('player', 'cover', name); }
           }
+          if (player !== 'basic') return;
+          // ...and, with 'basic': sprout any bare patch, and in winter set flax by the family.
+          for (const p of sim.placeables) if (p.alive && p.unsprouted && game._sprout) { game._sprout(p); ch._log('player', 'sprout', p.type); }
+          if (game.seasonManager.currentKey === 'winter') {
+            const m = ch.castEnts.mama || ch.castEnts.papa;
+            if (m && m.alive && !sim.placeables.some(p => p.alive && p.type === 'wharariki' && Math.hypot(p.pos.x - m.pos.x, p.pos.y - m.pos.y) < 80) &&
+                typeof PLACEABLES !== 'undefined' && PLACEABLES.wharariki) {
+              sim.addPlaceable(m.pos.x + 20, m.pos.y, 'wharariki'); ch._log('player', 'flax', 'mama');
+            }
+          }
         };
+        // (frameCount is advanced by hand: with the page's loop stopped it would stand still, and
+        // the game times a few things by it, a moa's next search for food among them.)
         while (frames < maxFrames && game.state === GAME_STATE.PLAYING) {
           for (let i = 0; i < 300 && game.state === GAME_STATE.PLAYING; i++) {
-            game.update(1); frames++;
-            if (player === 'cover' && game.playTime >= nextPlayer) { coverCast(); nextPlayer = game.playTime + 30; }
+            frameCount++; game.update(1); frames++;
+            if (player && game.playTime >= nextPlayer) { coverCast(); nextPlayer = game.playTime + 30; }
+            if (trace && frames % 60 === 0) traceRow();
           }
           BENCHMARK.finishIfEnded(game);
           await new Promise(r => setTimeout(r, 0));
@@ -81,8 +101,9 @@ function seedList(opt) {
         // A short hash of the CSV: two runs of one seed should print the same (an exact replay).
         let h = 2166136261; for (let i = 0; i < (last.csv || '').length; i++) { h ^= last.csv.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; }
         return { result: last.result, playTime: last.playTime, beats: last.beats || {}, kills, castLost, csv: last.csv, json: last.log ? last : null,
-                 state: game.state, reason: game.gameOverReason || '', hash: h.toString(16) };
-      }, { maxFrames: seconds * 60, player: opt.player || null });
+                 state: game.state, reason: game.gameOverReason || '', hash: h.toString(16), traced };
+      }, { maxFrames: seconds * 60, player: opt.player || null, trace: opt.trace || null });
+      if (opt.trace && run.traced.length) { console.log(`  trace of ${opt.trace}:`); for (const r of run.traced.slice(-Number(opt.traceRows || 40))) console.log('   ' + r); }
       const seen = (tally.seedsSeen = tally.seedsSeen || {}); seen[seed] = (seen[seed] || 0) + 1;
       const base = `${opt.level}${opt.sketch ? '_' + opt.sketch : ''}_seed${seed}${seen[seed] > 1 ? '_r' + seen[seed] : ''}`;
       if (run.csv) fs.writeFileSync(path.join(outDir, base + '.csv'), run.csv);

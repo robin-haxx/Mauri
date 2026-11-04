@@ -57,7 +57,7 @@ const { serve, args, openGame } = require('./_headless');
             if (game.state === GAME_STATE.LOADING) return { ok: false, why: 'still loading' };
             if (game.tutorial) game.tutorial.skipTutorial();
             game.state = GAME_STATE.PLAYING;
-            for (let i = 0; i < 900; i++) { game.update(1); if (game.state !== GAME_STATE.PLAYING) break; }
+            for (let i = 0; i < 900; i++) { frameCount++; game.update(1); if (game.state !== GAME_STATE.PLAYING) break; }
             return { ok: true, state: game.state, moa: game.simulation.getMoaPopulation(), eagles: game.simulation.countAliveEagles(),
                      chapter: game.chapters && game.chapters.cur ? game.chapters.cur.id : '' };
           } catch (e) { return { ok: false, why: e.message }; }

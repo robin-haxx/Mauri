@@ -12,6 +12,39 @@ fixed; **[process]** a testing trap, not a bug; **[rule]** a design guardrail, b
 
 ---
 
+## [fixed] Wild moa starved beside food: three foraging traps, found by the first emergent module
+
+- **What happened.** In the chapters modules (`levels/chapters_storms.js`, `chapters_patotara.js`),
+  where the family are ordinary simulation moa rather than scripted ones, a parent or a chick
+  starved within a minute with forty plants in reach. The scripted modules never showed it:
+  their family moa fed through `MoaLife._feed`, not `Moa.forage`.
+- **Root cause.** Three traps in `mauri_moa.js`, each read from a headless trace of one bird
+  (`tools/batch.js --trace <cast name>`). (1) `findPlant` did not skip an **unsprouted** pātōtara
+  (a bare bush waiting for the player's hand): the moa walked to it and "ate" nothing from it,
+  frame after frame. (2) `seekAttractions` pre-empts `forage()` whenever a placed patch attracts
+  the moa, with no check that it is getting nearer; a slow bird on a steep slope was pulled at a
+  patch across a rock band until it died. (3) `forage()` kept a target plant it never reached
+  for the same reason (the distance swung between 30 and 70 units for forty seconds).
+- **Rule.** A forager skips what has nothing on it (`unsprouted`, `nutrition <= 0`, a plant it
+  gave up on), a critically hungry moa eats what is in reach before following a patch's pull,
+  and any pull or target that has made no progress for four seconds is given up for a while
+  (`_attrStall`, `_tgtStall`, `_unreachable`). The general rule, again: **anything a bird walks
+  at must be checked for progress, and dropped when there is none.** To find such a trap,
+  trace one bird once a second (state, hunger, target and its distance) rather than reading
+  population counts.
+
+## [process] A headless run must advance `frameCount` by hand
+
+- **What happened.** Driving the game from a script (`game.update(1)` in a loop with the draw
+  loop stopped), moa searched for food once and never again, and every family starved.
+- **Root cause.** `Moa.forage` backs off its next search to `frameCount + 20`, and p5's
+  `frameCount` only moves when `draw()` runs. A few other things are timed by it too (storm
+  swell, the kea's lure refresh, a plant's sprouting).
+- **Rule.** A harness that steps the simulation itself increments `frameCount` with every step
+  (`tools/batch.js`, `tools/validate.js --smoke`), and stops the page's own loop *before* the
+  level loads, or a few real-time frames reach the simulation and a seeded run stops being a
+  replay.
+
 ## [fixed] Module moa walked forever at goals over a ridge; sites picked by distance, not by land
 
 - **What happened.** In the modules, a moa told to go somewhere it couldn't reach kept trying:

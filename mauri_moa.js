@@ -529,7 +529,11 @@ class Moa extends Boid {
         
       case MOA_STATE.FORAGING:
         this.maxSpeed = this.baseSpeed * speedMod;
-        if (!this.seekAttractions(placeables)) this.forage(simulation, mauri);
+        // A placed patch draws a hungry moa, but not to the point of starving beside wild food:
+        // a critically hungry moa eats what is in reach first (a slow bird on a steep slope can
+        // take longer to reach a patch than it has).
+        if (this.hunger > this.criticalHunger) this.forage(simulation, mauri);
+        else if (!this.seekAttractions(placeables)) this.forage(simulation, mauri);
         break;
         
       case MOA_STATE.FEEDING:
@@ -934,6 +938,10 @@ class Moa extends Boid {
   }
 
   seekAttractions(placeables) {
+    // A pull it can't follow (a patch across a rock band, or uphill further than a hungry bird
+    // can manage) is given up after a few seconds without getting nearer, and left alone for a
+    // while, so the moa eats what's in reach instead of starving on the way (see _attrStall).
+    if (frameCount < (this._attrBlockUntil || 0)) return false;
     let best = null, bestScore = 10;
     
     for (let i = 0; i < placeables.length; i++) {
@@ -956,10 +964,20 @@ class Moa extends Boid {
       const dx = best.pos.x - this.pos.x, dy = best.pos.y - this.pos.y;
       const distSq = dx * dx + dy * dy;
       if (distSq > r * r) {
+        // Is it getting nearer? (Four seconds without progress: give the pull up for ten.)
+        const dist = Math.sqrt(distSq);
+        if (this._attrTarget !== best) { this._attrTarget = best; this._attrBestDist = dist; this._attrStall = 0; }
+        else if (dist < this._attrBestDist - 2) { this._attrBestDist = dist; this._attrStall = 0; }
+        else if (++this._attrStall > 240) {
+          this._attrBlockUntil = frameCount + 600;
+          this._attrTarget = null;
+          return false;
+        }
         // GUIDE phase: steer toward the patch at cruising speed with no arrival braking,
         // so the moa reaches it carrying momentum instead of rubber-banding onto the centre.
         this.applyForce(this.seek(best.pos, 0.8));
       } else {
+        this._attrTarget = null;
         // ACROSS phase: once inside the patch, stop pulling the moa to the centre. Preserve
         // its heading so it grazes across and out the far side, so a line of plants acts as a corridor.
         const vMagSq = this.vel.x * this.vel.x + this.vel.y * this.vel.y;
@@ -1027,8 +1045,23 @@ class Moa extends Boid {
         this.hunger = Math.max(0, this.hunger - gain);
         mauri.earnFromEating(mauri.onMoaEat, this.pos.x, this.pos.y);
         this.targetPlant = null;
+        this._tgtPlant = null;
         this.vel.mult(0.3);
       } else {
+        // Is it getting nearer? A plant it can't reach (across a rock band, or held off by the
+        // crowd round a nest) is given up after four seconds without progress and left alone
+        // for twenty, so the bird eats something else instead of starving on the way to it.
+        if (this._tgtPlant !== this.targetPlant) { this._tgtPlant = this.targetPlant; this._tgtBest = dSq; this._tgtStall = 0; }
+        else if (dSq < this._tgtBest - 16) { this._tgtBest = dSq; this._tgtStall = 0; }
+        else if (++this._tgtStall > 240) {
+          const bad = this._unreachable || (this._unreachable = new Map());
+          bad.set(this.targetPlant, frameCount + 1200);
+          if (bad.size > 24) { for (const [k, until] of bad) if (until <= frameCount) bad.delete(k); }
+          this.targetPlant = null;
+          this._tgtPlant = null;
+          this._nextForageSearch = 0;
+          return;
+        }
         this.applyForce(this.seek(this.targetPlant.pos, map(this.hunger, this.hungerThreshold, this.maxHunger, 0.5, 0.9), 10));
       }
     } else {
@@ -1045,6 +1078,11 @@ class Moa extends Boid {
     for (let i = 0; i < plants.length; i++) {
       const p = plants[i];
       if (!p.alive || p.growth < 0.5) continue;
+      // Nothing to eat on it: an unsprouted pātōtara (a bare bush waiting for the player's hand;
+      // consume() gives nothing), or a plant eaten down to nothing. Without this a wild moa
+      // stands at a bare bush beside its nest and starves.
+      if (p.unsprouted || !(p.nutrition > 0)) continue;
+      if (this._unreachable && this._unreachable.get(p) > frameCount) continue;   // (given up on, for now: see forage)
       // Free Play: a winter-inedible plant still stands (frosted) but has no food value;
       // skip it as forage, so the flock must seek the evergreen refuge.
       if (p.winterInedible) continue;

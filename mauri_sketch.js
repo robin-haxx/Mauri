@@ -1607,20 +1607,29 @@ class Game {
     // script registered for this level id, else the shared 'default' script.
     // Per-level scripts live in levels/tutorial_*.js (see TUTORIAL_REGISTRY).
     // Endless levels never fall back to the story's script: without their own, no tips.
+    // Chapter levels (a `chapters` list; mauri_chapters.js) don't fall back to it either.
     const _endlessLevel = !!(this.currentLevel && this.currentLevel.endless);
+    const _chapterLevel = !!(this.currentLevel && this.currentLevel.chapters);
     let _tips = this.currentLevel.tutorial?.tips ||
       TUTORIAL_REGISTRY.get(this.currentLevel.id) ||
-      (_endlessLevel ? null : TUTORIAL_REGISTRY.get('default'));
+      ((_endlessLevel || _chapterLevel) ? null : TUTORIAL_REGISTRY.get('default'));
     // Module levels all carry Te Whē's welcome and farewell (levels/tutorial_module_bookends.js);
     // the director decides which module shows which.
     const _bookends = this.module && TUTORIAL_REGISTRY.get('module_bookends');
     if (_bookends) _tips = Object.assign({}, _bookends, _tips || {});
+    // Chapter levels are run by a ChapterRunner, which compiles the level's lines and banners
+    // into tips of its own (see MODULE_ENGINE_PLAN.md).
+    this.chapters = (_chapterLevel && typeof ChapterRunner !== 'undefined')
+      ? new ChapterRunner(this, this.currentLevel) : null;
+    if (this.chapters) _tips = Object.assign({}, _tips || {}, this.chapters.tips);
     this.tutorial.setLevelTips(_tips);
     if (BENCHMARK.pending) this.tutorial.enabled = false;   // benchmark runs clean
     this.tutorial.init();
 
     // Module levels: place the family, egg, food, storms and eagle, and start the story.
     if (this.module) this.module.setup();
+    // Chapter levels: open the first chapter (its tools, focus, goals and opening words).
+    if (this.chapters) this.chapters.start();
 
     // Benchmark: start an armed run; a reload mid-run abandons the old one
     if (BENCHMARK.pending) BENCHMARK.start(this);
@@ -1962,7 +1971,9 @@ class Game {
     if (this.state !== GAME_STATE.PLAYING && this.state !== GAME_STATE.PAUSED) return;
     // A module's "moment" (Free Play: a hatching, a catch) holds the whole world still while it
     // plays: no sim, no clock, no tips; only the moment's own timeline runs.
-    if (this.module && this.module.moment) { this.module.updateMoment(dt); return; }
+    // (A chapter level's moments do the same: see _storyMoment.)
+    const _moment = this._storyMoment();
+    if (_moment) { _moment.updateMoment(dt); return; }
 
     if (this.tutorial) this.tutorial.update(dt);
     this.updateHoldToMove(dt);   // like placement, works while paused
@@ -1990,11 +2001,15 @@ class Game {
     this.seasonManager.mastYear = _mast;
     this.simulation.mastYear = _mast;
 
-    if (this.seasonManager.update(this.module ? this.module.seasonStep(dt) : dt)) this.onSeasonChange();
-    
+    // (A module, or a chapter's holdSeason, can keep the season waiting.)
+    const _seasonDt = this.module ? this.module.seasonStep(dt) : (this.chapters ? this.chapters.seasonStep(dt) : dt);
+    if (this.seasonManager.update(_seasonDt)) this.onSeasonChange();
+
     this.simulation.update(this.mauri, dt);
     // Module levels: the story moves on after the birds have moved.
     if (this.module) this.module.update(dt);
+    // Chapter levels: the chapter reacts to what the birds just did, and checks its goals.
+    if (this.chapters) this.chapters.update(dt);
     // Extended species voices: fade highlight tracks in/out and crossfade the kākāpō
     // ambience to match the flock (booming in a mast, territorial when males contest).
     if (audioManager && audioManager.update) audioManager.update(this.simulation, dt);
@@ -2149,7 +2164,8 @@ class Game {
 
   checkGoals() {
     // Module levels: the director sets each season's goals, ticks them, and decides the win.
-    if (this.module) return;
+    // Chapter levels: the same, by the ChapterRunner (in its update).
+    if (this.module || this.chapters) return;
     // Free Play is endless: rolling yearly goals, and NEVER a win (an empty goals array
     // would otherwise win on frame one). Loss stays with the all-moa-gone check in update().
     if (this.currentLevel && this.currentLevel.endless) { this._checkFreeplayYear(); return; }
@@ -3757,9 +3773,17 @@ class Game {
     return !(this.tutorial && this.tutorial._pausedByTutorial) || !!this._pauseMenu;
   }
 
+  // Whoever has a moment playing (a module's director, or a chapter level's runner), else null:
+  // while one plays the world stands still and its big words show (see MomentPlayer).
+  _storyMoment() {
+    if (this.module && this.module.moment) return this.module;
+    if (this.chapters && this.chapters.moment) return this.chapters;
+    return null;
+  }
+
   // A tip (or a module's big words) is on screen: the pause card then draws over it.
   _tipOnScreen() {
-    return !!((this.module && this.module.moment) ||
+    return !!(this._storyMoment() ||
               (this.tutorial && this.tutorial.active && this.tutorial.currentTip));
   }
 
@@ -3816,6 +3840,7 @@ class Game {
 
   selectPlaceable(type) {
     if (this.module && this.module.inputLocked()) return;   // a module's outro is hands-off
+    if (this.chapters && this.chapters.moment) return;      // (a chapter's moment, too)
     if (this.isToolLocked(type)) {
       this.addNotification("That isn't ready yet.", 'info');
       return;
@@ -4457,8 +4482,9 @@ class Game {
       else this._drawScreenShot(this._handoffShot, 1 - hf.t / hf.frames);
     }
 
-    if (this.module && this.module.moment) {
-      this.module.renderMoment();   // its big words, in place of any tip
+    const _moment = this._storyMoment();
+    if (_moment) {
+      _moment.renderMoment();   // its big words, in place of any tip
     } else if (this.tutorial) {
       this.tutorial.render();
       // Tips flagged ringsAboveUI (e.g. "Say hello to the new Moa!") re-draw
@@ -5118,7 +5144,8 @@ class Game {
     pop();
 
     const allLevels = LEVEL_REGISTRY.getAll();
-    const levels = allLevels.filter(l => !l.module);
+    // (devOnly levels, such as the chapters prototype, are listed only in debug mode.)
+    const levels = allLevels.filter(l => !l.module && (!l.devOnly || CONFIG.debugMode));
     const modules = allLevels.filter(l => l.module);
     this._levelCardBounds = [];
     this._menuHeaderBounds = [];
@@ -6014,6 +6041,7 @@ class Game {
 
     if (this.state !== GAME_STATE.PLAYING && this.state !== GAME_STATE.PAUSED) return;
     if (this.module && this.module.inputLocked()) return;   // a module's outro is hands-off
+    if (this.chapters && this.chapters.moment) return;      // (a chapter's moment, too)
 
     if (this.isInGameArea(mx, my)) {
       const { x: tx, y: ty } = this._pointerWorld(mx, my);
@@ -6131,6 +6159,12 @@ class Game {
     }
 
     if (key === 'd' || key === 'D') { CONFIG.debugMode = !CONFIG.debugMode; return; }
+
+    // Debug: J toggles a chapter level's inspector (see ChapterRunner.renderInspector).
+    if ((key === 'j' || key === 'J') && CONFIG.debugMode && this.chapters) {
+      this.addNotification(this.chapters.toggleInspector() ? 'Chapter inspector ON' : 'Chapter inspector OFF', 'info');
+      return;
+    }
 
     // Free Play: export this run's season-by-season stats (.txt + .json). Works during
     // play, while paused, and on the game-over screen.
@@ -6548,6 +6582,8 @@ function draw() {
 
   // Debug lenses: screen-space legend (clickable) + per-lens readouts, over the HUD.
   if (typeof Lens !== 'undefined' && game) Lens.renderScreen(game);
+  // A chapter level's inspector (debug mode, J), beside the lens legend.
+  if (game && game.chapters) game.chapters.renderInspector();
 
   if (_dbg) {
     // Feed the CPU-span EMAs so "Hidden" (the GPU/composite time the Update/Render

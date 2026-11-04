@@ -144,6 +144,12 @@ class HaastsEagle extends Boid {
     this.animTime += dt;
     this.hunger = Math.min(this.hunger + this.hungerRate * dt, this.maxHunger);
 
+    // A chapter level's `aim` (mauri_chapters.js): for a while this bird hunts a named moa
+    // first, whatever its hunger, cutting short a rest. It's still blind to it under cover
+    // (see hunt).
+    if (this.aimAt && (!this.aimAt.alive || (this.aimTimer -= dt) <= 0)) this.aimAt = null;
+    if (this.aimAt) this.restTimer = 0;
+
     // Emergent population model: age, maybe starve, and (when calm) maybe breed.
     if (this.emergent) {
       this.age += dt;
@@ -224,7 +230,7 @@ class HaastsEagle extends Boid {
       }
     }
 
-    if (this.hunger > _huntThresh) {
+    if (this.hunger > _huntThresh || this.aimAt) {
       this.hunt(simulation, mauri, dt);
     } else {
       this.state = 'patrol';
@@ -440,6 +446,7 @@ class HaastsEagle extends Boid {
           simulation.getCachedSpeciesCount(moa.speciesKey) <= _preyThreshold) {
         eff *= _scarcePenalty;
       }
+      if (moa === this.aimAt) eff = -1;   // (an aimed moa it can see comes first)
 
       if (eff < nearestEff) {
         nearestEff = eff;
@@ -467,6 +474,14 @@ class HaastsEagle extends Boid {
           if (eff < targetEff) { targetEff = eff; targetDistSq = dSq; target = b; targetIsFlyer = true; }
         }
       }
+    }
+
+    // An aimed moa out in the open (a chapter level's `aim`) is gone after from any distance,
+    // ahead of nearer prey. Under cover it can't be seen, so the scan above decides.
+    const aim = this.aimAt;
+    if (aim && aim.alive && !aim.inShelter && target !== aim) {
+      const dx = aim.pos.x - px, dy = aim.pos.y - py;
+      target = aim; targetDistSq = dx * dx + dy * dy; targetIsFlyer = false;
     }
 
     if (target) {

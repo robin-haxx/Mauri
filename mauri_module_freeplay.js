@@ -146,8 +146,8 @@ class FreePlayDirector extends PatotaraDirector {
       moment: Object.assign({}, d.moment, o.moment),
       eagle: Object.assign({}, d.eagle, o.eagle)
     });
-    this._moment = null;        // the moment playing (a hatching, a catch), see _startMoment
-    this._momentQueue = [];
+    // Its moments (a hatching, a catch; see _startMoment), none once the ending or a loss is under way.
+    this._moments = new MomentPlayer(game, this.fp.moment, () => !(this._ending || this._loseAt != null));
     this._hatchShownAt = {};    // species -> playTime its last hatching was shown
     this.year = 0;              // years since the free play began (the season dial shows year + 1)
     this.cycle = 0;
@@ -378,7 +378,7 @@ class FreePlayDirector extends PatotaraDirector {
     const food = this.game.simulation.placeables.filter(p => p.alive && p.type === 'wharariki');
     for (const off of [Math.PI, 2.7, -2.7, 2.3, -2.3, 1.9, -1.9]) {
       const want = { x: s.tarn.x + Math.cos(a0 + off) * r, y: s.tarn.y + Math.sin(a0 + off) * r };
-      const p = this._walkableNear(want.x, want.y, 12, 20);
+      const p = this._walkableNear(want.x, want.y, 12, 20, s.shore);   // (on the shore's side of the water)
       if (!p || Math.hypot(p.x - s.shore.x, p.y - s.shore.y) < this.fp.winterFeedReach + 6) continue;
       if (food.some(f => Math.hypot(f.pos.x - p.x, f.pos.y - p.y) < reach)) continue;
       return p;
@@ -492,7 +492,7 @@ class FreePlayDirector extends PatotaraDirector {
     return step;
   }
   clockStopped() { return !!this._ending || super.clockStopped(); }
-  inputLocked() { return !!this._ending || !!this._moment || super.inputLocked(); }
+  inputLocked() { return !!this._ending || !!this.moment || super.inputLocked(); }
 
   // Spring into summer: a new year, or, the five years up, the finale.
   onSeasonChange(key) {
@@ -1686,66 +1686,12 @@ class FreePlayDirector extends PatotaraDirector {
   // While one plays (Game.update / Game.render read `moment`), the world stands still: no sim,
   // no clock, no tips, no input. The camera eases in on it, big words say what happened, and
   // it eases back out once the world runs on. Each is { kind, at() (world point), dur
-  // (frames), text, tick(t, dt), end() }; a second one waits its turn.
-  get moment() { return this._moment; }
-
-  _startMoment(m) {
-    if (this._ending || this._loseAt != null) { if (m.end) m.end(); return; }
-    if (this._moment) { this._momentQueue.push(m); return; }
-    const g = this.game, M = this.fp.moment, c = g.camera;
-    // Back to where the view was going (a camera ease under way ends where it was headed).
-    const v = c ? (c.tween ? c.tween.to : c) : null;
-    m.view = v ? { zoom: v.zoom, cx: v.cx, cy: v.cy, ax: v.ax, ay: v.ay } : null;
-    m.t = 0;
-    const at = m.at();
-    g.cameraTo({ zoom: Math.max(M.zoom, v ? v.zoom : 1), cx: at.x, cy: g._groundPaintY(at.x, at.y), ax: 0.5, ay: 0.5 },
-      this._sec(M.inSec));
-    g.selectedPlaceable = null;
-    g.movingPlaceable = null;
-    g._holdCandidate = null;
-    for (const mo of g.simulation.moas) mo.settleFacing();
-    this._moment = m;
-  }
-
-  updateMoment(dt) {
-    const m = this._moment;
-    if (!m) return;
-    m.t += dt;
-    if (m.tick) m.tick(m.t, dt);
-    if (m.t < m.dur) return;
-    this._moment = null;
-    if (m.end) m.end();
-    // The next waiting moment (if what it shows is still there), else back out to the view.
-    while (this._momentQueue.length) {
-      const n = this._momentQueue.shift();
-      if (!n.valid || n.valid()) { n.view = null; this._startMoment(n); if (this._moment) this._moment.view = m.view; return; }
-      if (n.end) n.end();
-    }
-    if (m.view) this.game.cameraTo(m.view, this._sec(this.fp.moment.outSec));
-  }
-
-  // The words, big, over the top of the world (as a prompt's), fading in and out.
-  renderMoment() {
-    const m = this._moment, g = this.game;
-    if (!m || !m.text) return;
-    const fade = 18, a = 255 * Math.min(1, m.t / fade, (m.dur - m.t) / fade);
-    if (a <= 0) return;
-    const area = g.tutorial && g.tutorial.playArea ? g.tutorial.playArea()
-      : { x: 0, y: 0, w: CONFIG.canvasWidth, h: CONFIG.canvasHeight };
-    const size = 58 * (typeof TIP_PANEL_SCALE !== 'undefined' ? TIP_PANEL_SCALE : 1) * (CONFIG.portrait ? 0.8 : 1);
-    push();
-    if (typeof FreckleFace !== 'undefined') textFont(FreckleFace);
-    textSize(size);
-    textAlign(CENTER, CENTER);
-    translate(area.x + area.w * 0.5, area.y + area.h * 0.2);
-    scale(1 + 0.08 * Math.max(0, 1 - m.t / 12));   // a small pop as it appears
-    stroke(12, 22, 16, a * 0.9);
-    strokeWeight(size * 0.14);
-    strokeJoin(ROUND);
-    fill(m.kind === 'catch' ? color(255, 214, 196, a) : color(235, 250, 225, a));
-    text(m.text, 0, 0);
-    pop();
-  }
+  // (frames), text, tick(t, dt), end() }; a second one waits its turn. They're played by a
+  // MomentPlayer (mauri_chapters.js), which chapter levels share.
+  get moment() { return this._moments.current; }
+  _startMoment(m) { this._moments.start(m); }
+  updateMoment(dt) { this._moments.update(dt); }
+  renderMoment() { this._moments.render(); }
 
   // "A Kākā", "An Upland Moa".
   static _withArticle(name) { return (/^[aeiouāēīōū]/i.test(name) ? 'An ' : 'A ') + name; }
@@ -1756,7 +1702,7 @@ class FreePlayDirector extends PatotaraDirector {
     if (!ent || this._ending || this._loseAt != null) return;
     const now = this.game.playTime, last = this._hatchShownAt[type];
     if (last != null && now - last < this._sec(this.fp.moment.dupSec)) return;
-    if (this._momentQueue.some(q => q.kind === 'hatch' && q.type === type)) return;
+    if (this._moments.queue.some(q => q.kind === 'hatch' && q.type === type)) return;
     this._hatchShownAt[type] = now;
     const name = this._birdName(type);
     this._startMoment({

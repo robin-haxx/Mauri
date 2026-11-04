@@ -2297,10 +2297,17 @@ class GameUI {
         textSize(16);
         textAlign(CENTER, CENTER);
         text("✓", x + 19, goalY + 10);
+      } else if (goal.failed) {   // (a chapter level's goal that was missed: see ChapterRunner)
+        fill(200, 110, 100);
+        noStroke();
+        textSize(14);
+        textAlign(CENTER, CENTER);
+        text("✗", x + 19, goalY + 10);
       }
 
       // Goal text; truncate if panel is narrow
-      fill(goal.achieved ? 120 : 180, goal.achieved ? 150 : 210, goal.achieved ? 130 : 190);
+      if (goal.failed) fill(150, 120, 115);
+      else fill(goal.achieved ? 120 : 180, goal.achieved ? 150 : 210, goal.achieved ? 130 : 190);
       noStroke();
       textSize(16);
       textAlign(LEFT, CENTER);

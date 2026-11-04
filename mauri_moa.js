@@ -602,6 +602,7 @@ class Moa extends Boid {
       const dx = o.pos.x - px, dy = o.pos.y - py;
       const distSq = dx * dx + dy * dy;
       if (distSq > maxDistSq) continue;
+      if (!this._sameLand(o)) continue;
 
       let score = distSq;
       if (o.targetMate === this) score *= 0.1;
@@ -622,8 +623,19 @@ class Moa extends Boid {
     return bestCross;                   // otherwise cross-species is a last resort
   }
 
+  // Opt-in (mechanics.landRegionMates): whether `o` is on the same land as this moa, not over a
+  // ridge of scree, ice or snow it could never cross (TerrainGenerator.landRegions). Always true
+  // without the flag. (Kept apart, a species' populations on each stretch of land breed apart:
+  // the start of the clades a later module teaches.)
+  _sameLand(o) {
+    const t = this.terrain;
+    if (!(typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.landRegionMates) || !t || !t.regionNear) return true;
+    const here = t.regionNear(this.pos, 'now', 1);
+    return here < 0 || t.regionNear(o.pos, 'now', 1) === here;
+  }
+
   seekMate(moas, dt) {
-    if (!this.targetMate?.alive || !this.targetMate.canBeMate()) {
+    if (!this.targetMate?.alive || !this.targetMate.canBeMate() || !this._sameLand(this.targetMate)) {
       this.targetMate = this.findPotentialMate(moas);
       if (!this.targetMate) { this.currentState = MOA_STATE.IDLE; return; }
     }

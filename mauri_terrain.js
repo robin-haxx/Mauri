@@ -22,6 +22,40 @@ function releasePixels(g) {
   g.imageData = undefined;
 }
 
+// Land regions (TerrainGenerator.landRegions) are sampled this often, in world units: coarse
+// enough to label a whole window quickly, fine enough that a pass a moa could walk through
+// shows as one.
+const TERRAIN_REGION_STEP = 4;
+
+// Label the connected stretches of `walk` (a cols x rows grid of 1 = walkable): a 4-way flood
+// fill, so ground that only touches diagonally doesn't count as a way through. Returns { ids
+// (Int32Array: each cell's region, -1 where unwalkable), sizes (cells in each region), count,
+// largest (the biggest region's id, -1 if none) }. Shared by the terrain and the module
+// directors' planning grid.
+function labelLandRegions(walk, cols, rows) {
+  const N = cols * rows, ids = new Int32Array(N).fill(-1), sizes = [];
+  const stack = new Int32Array(N);   // (each cell is pushed at most once: it's labelled on push)
+  for (let s = 0; s < N; s++) {
+    if (!walk[s] || ids[s] !== -1) continue;
+    const id = sizes.length;
+    let top = 0, n = 0;
+    ids[s] = id;
+    stack[top++] = s;
+    while (top) {
+      const i = stack[--top], c = i % cols;
+      n++;
+      if (c > 0 && walk[i - 1] && ids[i - 1] === -1) { ids[i - 1] = id; stack[top++] = i - 1; }
+      if (c < cols - 1 && walk[i + 1] && ids[i + 1] === -1) { ids[i + 1] = id; stack[top++] = i + 1; }
+      if (i >= cols && walk[i - cols] && ids[i - cols] === -1) { ids[i - cols] = id; stack[top++] = i - cols; }
+      if (i + cols < N && walk[i + cols] && ids[i + cols] === -1) { ids[i + cols] = id; stack[top++] = i + cols; }
+    }
+    sizes.push(n);
+  }
+  let largest = -1;
+  for (let k = 0; k < sizes.length; k++) if (largest < 0 || sizes[k] > sizes[largest]) largest = k;
+  return { ids, sizes, count: sizes.length, largest };
+}
+
 class TerrainGenerator {
   constructor(config, biomes) {
     this.config = config;
@@ -566,6 +600,109 @@ class TerrainGenerator {
   
   isWalkable(x, y) {
     return this.getEffectiveBiomeAt(x, y).walkable;
+  }
+
+  // ============================================
+  // LAND REGIONS: which walkable ground connects to which
+  // ============================================
+  // The window's walkable ground, split wherever scree, ice, snow or water cuts it off: each
+  // connected stretch is a region (see labelLandRegions). A ridge of tops with no pass through
+  // it divides the land, and a bird on one side can never walk to the other. Regions follow the
+  // seasonal snow, which can close a pass: `snow` is 'now' (the snow line as it stands), 'year'
+  // (the lowest it comes all year, so only ground that stays open), 'none', or a snow-line
+  // height. Sampled every TERRAIN_REGION_STEP units (or the grid's own cell, if coarser), and
+  // cached until the land, the window or the snow line moves. Returns { step, cols, rows, ids
+  // (Int32Array: a region per cell, -1 off the land), sizes (cells), count, largest, line }.
+  landRegions(snow = 'now') {
+    const line = this._regionSnowLine(snow);
+    const cache = this._regionCache || (this._regionCache = {});
+    const key = typeof snow === 'number' ? 'line' : snow;
+    const c = cache[key];
+    if (c && c.hm === this.heightMap && c.bm === this.biomeIndexMap && c.w === this.mapWidth &&
+        c.h === this.mapHeight && c.ox === this._activeOriginX && c.oy === this._activeOriginY &&
+        (c.line === line || Math.abs(c.line - line) < 0.005)) return c.regions;
+
+    const step = Math.max(this.scale, TERRAIN_REGION_STEP);
+    const cols = Math.max(1, Math.ceil(this.mapWidth / step)), rows = Math.max(1, Math.ceil(this.mapHeight / step));
+    const walk = new Uint8Array(cols * rows), snowB = this._snowBiome;
+    for (let r = 0; r < rows; r++) {
+      for (let col = 0; col < cols; col++) {
+        const x = (col + 0.5) * step, y = (r + 0.5) * step;
+        // (As isWalkable: ground under the snow line is the snow biome.)
+        const b = (snowB && this.getElevationAt(x, y) >= line) ? snowB : this.getBiomeAt(x, y);
+        walk[r * cols + col] = b.walkable ? 1 : 0;
+      }
+    }
+    const regions = Object.assign({ step, cols, rows, line }, labelLandRegions(walk, cols, rows));
+    cache[key] = { hm: this.heightMap, bm: this.biomeIndexMap, w: this.mapWidth, h: this.mapHeight,
+                   ox: this._activeOriginX, oy: this._activeOriginY, line, regions };
+    return regions;
+  }
+
+  _regionSnowLine(snow) {
+    if (!this._snowBiome || snow === 'none') return Infinity;
+    if (typeof snow === 'number') return snow;
+    if (snow === 'year') {
+      const lines = Object.values(this.seasonSnowLines || {});
+      return lines.length ? Math.min(...lines) : this._snowBiome.minElevation;
+    }
+    return this.getSnowLineElevation();
+  }
+
+  // The region at (x, y), or -1 (off the land: scree, ice, snow, water, or off the map).
+  regionAt(x, y, snow = 'now') {
+    const R = this.landRegions(snow);
+    if (x < 0 || y < 0) return -1;
+    const c = (x / R.step) | 0, r = (y / R.step) | 0;
+    return (c < R.cols && r < R.rows) ? R.ids[r * R.cols + c] : -1;
+  }
+
+  // The region at p or, when p itself is off the land (a point at a ridge's foot, say), of the
+  // nearest walkable ground within `cells` of it; -1 if there's none that close.
+  regionNear(p, snow = 'now', cells = 3) {
+    const R = this.landRegions(snow);
+    const c0 = Math.floor(p.x / R.step), r0 = Math.floor(p.y / R.step);
+    for (let k = 0; k <= cells; k++) {
+      for (let dr = -k; dr <= k; dr++) {
+        for (let dc = -k; dc <= k; dc++) {
+          if (Math.max(Math.abs(dr), Math.abs(dc)) !== k) continue;   // (this ring only)
+          const c = c0 + dc, r = r0 + dr;
+          if (c < 0 || r < 0 || c >= R.cols || r >= R.rows) continue;
+          const id = R.ids[r * R.cols + c];
+          if (id >= 0) return id;
+        }
+      }
+    }
+    return -1;
+  }
+
+  // Whether a bird at `a` could walk to `b` (both { x, y }).
+  connected(a, b, snow = 'now') {
+    const ra = this.regionNear(a, snow);
+    return ra >= 0 && ra === this.regionNear(b, snow);
+  }
+
+  // The nearest point to p (a cell's centre) in region `id`, or null if it has none.
+  nearestInRegion(p, id, snow = 'now') {
+    const R = this.landRegions(snow);
+    if (id < 0 || id >= R.count) return null;
+    const c0 = Math.floor(p.x / R.step), r0 = Math.floor(p.y / R.step);
+    let best = null, bestD = Infinity;
+    for (let k = 0; k < Math.max(R.cols, R.rows); k++) {
+      // Rings outward; once one has a match, the next ring can't be nearer than k cells.
+      if (best && k * R.step > bestD) break;
+      for (let dr = -k; dr <= k; dr++) {
+        for (let dc = -k; dc <= k; dc++) {
+          if (Math.max(Math.abs(dr), Math.abs(dc)) !== k) continue;
+          const c = c0 + dc, r = r0 + dr;
+          if (c < 0 || r < 0 || c >= R.cols || r >= R.rows || R.ids[r * R.cols + c] !== id) continue;
+          const q = { x: (c + 0.5) * R.step, y: (r + 0.5) * R.step };
+          const d = Math.hypot(q.x - p.x, q.y - p.y);
+          if (d < bestD) { bestD = d; best = q; }
+        }
+      }
+    }
+    return best;
   }
 
   // Is this point open water (sea/lake)? Distinct from un-walkable: alpine scree/glacier are

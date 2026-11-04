@@ -12,6 +12,24 @@ fixed; **[process]** a testing trap, not a bug; **[rule]** a design guardrail, b
 
 ---
 
+## [fixed] Module moa walked forever at goals over a ridge; sites picked by distance, not by land
+
+- **What happened.** In the modules, a moa told to go somewhere it couldn't reach kept trying:
+  two moa started with an unbroken line of mountain tops between them, and a walk's goal sat
+  across a ridge.
+- **Root cause.** The directors pick their sites by distance on the planning grid (only the
+  tarn's and the friends' winter spot's routes were path-checked, and Module 1's way in fell
+  back to a straight line when there was no path). `_walkableNear` snapped a bird to the nearest
+  walkable ground even across a ridge. And `MoaLife`'s stuck-watcher re-planned a detour every
+  ~4 s to a goal no detour could reach. `mauri_module.js`, `mauri_module_patotara.js`.
+- **Rule.** Anything a bird walks between must be on one stretch of land: check it with land
+  regions (`TerrainGenerator.connected`, or the planning grid's `sameRegion` while the terrain
+  is still generating). Site pickers filter candidates to the home region, spawns pass an anchor
+  to `_walkableNear`, `_findPath` gives up at once between regions, and `MoaLife._travel` swaps a
+  goal it can't reach for the nearest ground on its own side. To test it, wrap
+  `TerrainGenerator.prototype.getElevation` to raise a glacier band across the window: real
+  seeds rarely split the land.
+
 ## [fixed] Forest birds starved in a small window: three steering traps
 
 - **What happened.** In the modules' free play (a 425×317 window), kererū, kākā and kōkako

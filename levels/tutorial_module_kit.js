@@ -104,11 +104,15 @@ const MODULE_TIP_KIT = (function () {
   // birds and world points (e.g. the speaker and the way they're talking about): the panel
   // takes the corner furthest from all of them. Held still while the camera moves, so it
   // doesn't hop sides mid-zoom.
-  const awayFrom = (who) => {
+  const awayFrom = (who) => awayFromAt((game) => game.module ? who(game.module) : null);
+
+  // The same for any items(game): birds and world points (a chapter level's speakers, which
+  // have no director; see mauri_chapters.js).
+  const awayFromAt = (items) => {
     let last = null;
     return (game) => {
       if (last && game.camera && game.camera.tween) return last;
-      const list = game.module ? [].concat(who(game.module) || []).filter(Boolean) : [];
+      const list = [].concat(items(game) || []).filter(Boolean);
       if (!list.length) return 'bottom';
       const clip = game.tutorial.playArea();
       const pts = list.map((e) => {
@@ -344,6 +348,6 @@ const MODULE_TIP_KIT = (function () {
   }
 
   return { onBeat, spot, placed, storms, family, stormsMoved, marker, inWorld, trail, rings, exposed,
-           awayFrom, sceneWith, banner, moveBanner, placeBanner, reachBanner, eagleAlert, eagleTips, broke, recharging,
+           awayFrom, awayFromAt, sceneWith, banner, moveBanner, placeBanner, reachBanner, eagleAlert, eagleTips, broke, recharging,
            unsproutedFood, SPROUT_WORDS, sproutBanner, sproutTips };
 })();

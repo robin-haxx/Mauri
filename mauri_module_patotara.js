@@ -111,20 +111,28 @@ class PatotaraDirector extends ModuleDirector {
   // ==========================================================================
   planTerrain(t) {
     const P = this._planningGrid(t), cfg = this.cfg, h = this.handoff;
-    const { W, H, N, cols, rows, elev, walk, centre, E, dist, inside, openness, toScree, topE } = P;
+    const { W, H, N, cols, rows, elev, walk, centre, E, dist, inside, openness, toScree,
+            region, mainRegion, regionNear, nearestIn } = P;
     const R = cfg.stormRadius;
 
     // ---- Where the family walks in: the south edge, below where they walked off Module 0's
-    // map (or the middle). ----
+    // map (or the middle), onto the biggest stretch of land if it reaches the edge (else any). ----
     const want = (h && h.entryX != null) ? h.entryX : W * 0.5;
-    let entry = null, bestD = Infinity;
-    for (let c = 0; c < cols; c++) {
-      const i = (rows - 1) * cols + c;
-      if (!walk[i]) continue;
-      const p = centre(i), d = Math.abs(p.x - want);
-      if (d < bestD) { bestD = d; entry = p; }
+    let entry = null;
+    for (const onMain of [true, false]) {
+      let bestD = Infinity;
+      for (let c = 0; c < cols; c++) {
+        const i = (rows - 1) * cols + c;
+        if (!walk[i] || (onMain && region[i] !== mainRegion)) continue;
+        const p = centre(i), d = Math.abs(p.x - want);
+        if (d < bestD) { bestD = d; entry = p; }
+      }
+      if (entry) break;
     }
     if (!entry) entry = { x: want, y: H - 6 };
+    // Every site the families walk between is on the land they walk in on.
+    const land = regionNear(entry);
+    const onLand = (i) => walk[i] && (land < 0 || region[i] === land);
 
     // ---- The friends' nest: high, open ground a short walk up from where the family comes in
     // (the meeting opens the level, so it shouldn't be a long trek). ----
@@ -132,13 +140,16 @@ class PatotaraDirector extends ModuleDirector {
     for (const far of [200, 260, 400]) {
       for (let i = 0; i < N; i++) {
         const p = centre(i), d = dist(p, entry);
-        if (!walk[i] || !inside(p, 55) || p.y > H - 90 || d < 100 || d > far) continue;
+        if (!onLand(i) || !inside(p, 55) || p.y > H - 90 || d < 100 || d > far) continue;
         const score = elev[i] * 10 + openness(p, 34) * 4 - Math.abs(d - 150) / 50;
         if (score > best) { best = score; friendNest = p; }
       }
       if (friendNest) break;
     }
-    if (!friendNest) friendNest = { x: entry.x, y: Math.max(60, entry.y - 150) };
+    if (!friendNest) {
+      const fallback = { x: entry.x, y: Math.max(60, entry.y - 150) };
+      friendNest = (land >= 0 && nearestIn(fallback, land)) || fallback;
+    }
 
     // ---- Where the family stays, next door (open ground, not a nest: they don't settle
     // here); and an empty nest further off. (`nest` is the base director's name for the
@@ -147,11 +158,12 @@ class PatotaraDirector extends ModuleDirector {
       let pick = null, bestS = -Infinity;
       for (let i = 0; i < N; i++) {
         const p = centre(i), d = dist(p, from);
-        if (!walk[i] || d < dMin || d > dMax || !inside(p, 45) || avoid.some(a => dist(a, p) < dMin)) continue;
+        if (!onLand(i) || d < dMin || d > dMax || !inside(p, 45) || avoid.some(a => dist(a, p) < dMin)) continue;
         const s = openness(p, 24) * 3 - Math.abs(elev[i] - E(from)) * 20 + random(0.2);
         if (s > bestS) { bestS = s; pick = p; }
       }
-      return pick || { x: Math.max(45, Math.min(W - 45, from.x + dMin)), y: from.y };
+      const fallback = { x: Math.max(45, Math.min(W - 45, from.x + dMin)), y: from.y };
+      return pick || (land >= 0 && nearestIn(fallback, land)) || fallback;
     };
     const nest = nestNear(friendNest, 60, 100, []);
     const thirdNest = nestNear(friendNest, 130, 220, [nest]);
@@ -160,7 +172,7 @@ class PatotaraDirector extends ModuleDirector {
     const toEntry = { x: entry.x - friendNest.x, y: entry.y - friendNest.y };
     const toEntryLen = Math.hypot(toEntry.x, toEntry.y) || 1;
     let meet = { x: friendNest.x + toEntry.x / toEntryLen * 45, y: friendNest.y + toEntry.y / toEntryLen * 45 };
-    if (!walk[P.cellAt(meet.x, meet.y)]) meet = { x: friendNest.x, y: friendNest.y + 30 };
+    if (!onLand(P.cellAt(meet.x, meet.y))) meet = (land >= 0 && nearestIn(meet, land)) || { x: friendNest.x, y: friendNest.y + 30 };
     const entryRoute = this._findPath(entry, meet);
     const entryPath = this._smoothPath(entryRoute || [entry, meet]);
 
@@ -171,7 +183,7 @@ class PatotaraDirector extends ModuleDirector {
     for (const clear of [24, 12, 0]) {
       for (let i = 0; i < N; i++) {
         const p = centre(i), d = dist(p, friendNest);
-        if (!walk[i] || d < pMin || d > pMax || !inside(p, 30) || dist(p, nest) < 40) continue;
+        if (!onLand(i) || d < pMin || d > pMax || !inside(p, 30) || dist(p, nest) < 40) continue;
         if (clear && P.toForest[i] < clear) continue;
         const s = openness(p, 16) * 3 - dist(p, entry) * 0.004 + random(0.3);
         if (s > best) { best = s; patch = p; }
@@ -187,7 +199,7 @@ class PatotaraDirector extends ModuleDirector {
     const defR = this.k.defence.radius;
     for (let i = 0; i < N; i++) {
       const p = centre(i), d = dist(p, friendNest);
-      if (!walk[i] || !inside(p, 40) || d < defR + 45 || d > defR + 110 || dist(p, patch) < 90) continue;
+      if (!onLand(i) || !inside(p, 40) || d < defR + 45 || d > defR + 110 || dist(p, patch) < 90) continue;
       const s = openness(p, 26) * 3 - dist(p, entry) * 0.004 - Math.abs(elev[i] - E(friendNest)) * 10;
       if (s > best) { best = s; forage = p; }
     }
@@ -212,7 +224,7 @@ class PatotaraDirector extends ModuleDirector {
     const spots = [];
     for (let i = 0; i < N; i += 2) {
       const p = centre(i), d = dist(p, friendNest);
-      if (!walk[i] || !inside(p, 45) || d < 150 || d > 380) continue;
+      if (!onLand(i) || !inside(p, 45) || d < 150 || d > 380) continue;
       if (dist(p, tarn) < 170 || dist(p, nest) < 120 || elev[i] > E(friendNest) - 0.04) continue;
       spots.push({ p, score: (E(friendNest) - elev[i]) * 20 + openness(p, 20) * 2 - Math.abs(d - 250) / 60 });
     }
@@ -238,7 +250,7 @@ class PatotaraDirector extends ModuleDirector {
       const nx = -(b.y - a.y), ny = b.x - a.x, nl = Math.hypot(nx, ny) || 1;
       for (const side of [1, -1]) {
         const p = { x: a.x + nx / nl * 38 * side, y: a.y + ny / nl * 38 * side };
-        if (inside(p, 30) && walk[P.cellAt(p.x, p.y)] && dist(p, tarn) > 120) { wharariki = p; break; }
+        if (inside(p, 30) && onLand(P.cellAt(p.x, p.y)) && dist(p, tarn) > 120) { wharariki = p; break; }
       }
       if (wharariki) break;
     }

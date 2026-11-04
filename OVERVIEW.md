@@ -15,6 +15,10 @@ picking up future tasks. The other docs:
 - `DEVBLOG_systems.md`: the ecology and behaviour, as a narrative "how it works".
 - `FREEPLAY_PLAN.md`: Free Play's design and its ecology grounding.
 - `YEARS_PLAN.md`: Free Play's year structure, kea cascade and world grid (the living plan).
+- `MODULE_ENGINE_PLAN.md`: the module engine ("chapters"): its format, vocabulary and build
+  plan (the living plan).
+- `MODULE_SCRIPTING.md`: how to script a module with it (the reference: every key, condition,
+  action and default, with recipes and debugging).
 - `GL_PORT.md` / `PERF_ASSESSMENT.md`: the GPU renderer, and where frame time goes.
 - `MISTAKES.md`: things that went wrong, and the rule that stops a repeat.
 - `ENGINE_ASSESSMENT.md`: the module / endless split, a proposed grammar (substrate, direction,
@@ -105,7 +109,12 @@ picking up future tasks. The other docs:
   noise, island falloff or lake basins), classifies each cell into an elevation-band
   biome, and exposes `getElevationAt / getBiomeAt / isWalkable / canPlace`. On a
   `worldGrid` level it generates one continuous land several windows wide and pans the
-  window across it (`panToArea`). Owns the dynamic **snow line**. Flat per-season images
+  window across it (`panToArea`). Owns the dynamic **snow line**, and the window's **land
+  regions** (`landRegions`, `regionAt`, `regionNear`, `connected`, `nearestInRegion`; labelled
+  by `labelLandRegions`): the connected stretches of walkable ground, split wherever scree, ice,
+  snow or water cuts the land, so code can tell whether a bird could ever walk from one place to
+  another. Module sites, spawns and walks, the chapter engine's sites, and (opt-in,
+  `mechanics.landRegionMates`) wild moa mating all respect them; the **L** lens draws them. Flat per-season images
   are baked only when the flat 2D view needs them.
 - **`mauri_seasons.js`**; `SEASONS` table + `SeasonManager`: advances the season
   clock, produces smoothly-lerped modifiers (per-biome plant growth, per-plant-type
@@ -158,6 +167,19 @@ picking up future tasks. The other docs:
   adds Module 1's `PatotaraDirector` and the scripted kea (`KeaLife`).
   **`mauri_module_freeplay.js`** adds `FreePlayDirector`, the five years after Module 1
   (see the module levels below), and `BIRD_CALENDAR`, each species' breeding year.
+- **`mauri_chapters.js`**; the module engine: `ChapterRunner` (`game.chapters`) runs any level
+  with a `chapters` list over the free-running sim. Its verbs come in two toolboxes: the
+  scripting toolbox (`CHAPTER_SCRIPT_TOOLS`: words, the toolbar and pacing, named `sites` and
+  things placed, sown or spawned at them, moments, and `aim`) and the ecology toolbox
+  (`CHAPTER_ECOLOGY_TOOLS`: focus, floors, nest founding, newcomers, a mechanics overlay, and
+  eagle pressure). Each chapter sets levers, measures goals on the sim, answers the sim's
+  events with lines and banners compiled into tutorial tips (`TUTORIAL_EVENTS.STORY_BEAT`), and
+  runs **guaranteed beats** (invite an event with ecology levers, force it with a script tool
+  by a deadline). Chapters advance on the season clock and branch on outcomes. Validator, debug
+  inspector (**J** in debug mode), log and jump. Also here: `MomentPlayer`, the moments (the
+  world held still, the camera in, big words) that the Free Play years' director plays its
+  hatchings and catches on too. `HaastsEagle` reads `aimAt` (a chapter's `aim`). Format and
+  plan: `MODULE_ENGINE_PLAN.md`.
 
 ### Rendering
 - **`mauri_projection.js`**; the plan-oblique "3D" mapping (world point + elevation →
@@ -199,6 +221,9 @@ picking up future tasks. The other docs:
 - **`levels/level_freeplay_kahurangi.js`**; Free Play (*Mutunga-kore*), the endless mode.
   A four-year loop of focus species across a 2×2 world grid, a deepening glacial climate,
   per-year toolbars. See `FREEPLAY_PLAN.md` and `YEARS_PLAN.md`.
+- **`levels/chapters_prototype.js`**; the module engine's worked example (`devOnly`: listed
+  only in debug mode). One year of upland moa on Level 2's land with Free Play's ecology,
+  four chapters that branch in spring on how the flock came through winter.
 - **`levels/tutorial_*.js`**; each level's tips. The modules share a kit
   (`tutorial_module_kit.js`: dialogue scenes, "do this" banners) and Te Whē's opening and
   closing words (`tutorial_module_bookends.js`).
@@ -275,7 +300,8 @@ extension pattern; add a flag, read it behind a
 `typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.x` guard.
 
 ### 4.3 Goals, phases, stories and years
-Module levels hand the whole job to their director (`checkGoals` returns early). Free
+Module levels hand the whole job to their director (`checkGoals` returns early), and chapter
+levels to their `ChapterRunner` (each chapter's goals, its end, the branch, the win). Free
 Play (`endless: true`) never wins: `_checkFreeplayYear` sets each year's goals for its
 focus species, and the run is lost when any focus species dies out.
 Classic levels list `goals` (each `{ name, condition(sim, game), reward }`); the level

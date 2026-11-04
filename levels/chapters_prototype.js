@@ -101,10 +101,13 @@ const CHAPTERS_PROTOTYPE = {
         // The first hunt of an upland moa comes in summer one way or another. The eagles are
         // drawn over the flock and made hungry; if none has gone for an upland moa by 30 s, the
         // nearest is sent after the matriarch (or any upland moa, if she's gone). The
-        // first_hunt reaction answers it either way.
+        // first_hunt reaction answers it either way. The beat is done on the hunt EVENT (a
+        // count in the beat's own scope), not on the polled state `hunting: true`: an eagle's
+        // lock can drop between polls, and in one headless run the state read false at every
+        // poll after a real hunt, so the beat was wrongly logged as forced (ENGINE_ASSESSMENT.md §11).
         { id: 'hunt_comes', when: { after: 8 },
           invite: [{ eagle: { watch: 'grazing', hunger: 55 } }],
-          until: { hunting: true },
+          until: { gained: ['hunts:upland_moa', '>=', 1] },
           by: 30, force: [{ aim: { at: ['matriarch', 'upland_moa'] } }] }
       ],
       goals: [

@@ -214,7 +214,7 @@ beats: [
   { id: 'mother_hunted',
     when: { after: 4 },                                    // starts 4 s into the chapter
     invite: [{ eagle: { watch: 'grove', hunger: 50 } }],   // ecology: make it likely
-    until: { hunted: 'mama' },                             // the beat itself
+    until: { hunted: 'mama' },                             // the beat itself (a state: see Review notes, an event form is safer)
     by: 12, force: [{ aim: { at: 'mama' } }],              // script: guarantee it by 12 s
     pinned: false,                                         // (true: the outcome itself is fixed; shown in the inspector)
     banner: { words: "Move a STORM over her", until: { hidden: 'mama' }, lit: ['mama'] } }   // on completion
@@ -335,6 +335,41 @@ two populations have been apart long enough to count as clades.
   `game.chapters.dump()` prints it as a table.
 - **Jump**: `game.chapters.jump('winter')` from the console, or `?chapter=winter` in the URL
   (starts the level there; the season clock is not moved yet).
+
+## Review notes (2026-11-04, from `ENGINE_ASSESSMENT.md` §11)
+
+The engine was checked against the ownership rules in `ENGINE_ASSESSMENT.md` and run headless
+(the prototype, 150 s; then the first beat 9 more times). Verdict: as built, the runner never
+steers a wild animal, every ecology verb lands on a sim API that already existed, the cast is
+adopted, and `aim` is implemented inside `HaastsEagle` and logged. The "second simulation"
+risk the assessment raised for the legacy directors does not apply here. What came out of it:
+
+- **[next] Beat `until`s that mean "it happened" must be event-based.** `hunting: true` and
+  `hunted: ref` are states polled every 6 frames; the eagle's lock can drop between polls. In
+  one run the first-hunt beat was logged **forced** at 38 s although a natural hunt had fired
+  `first_hunt` at 16.3 s; in another, four hunt events fired over 21 s while the state read
+  false at every poll. Natural-vs-forced is the research measure, so this matters. Done now:
+  the prototype and the `MODULE_SCRIPTING.md` example use `gained: ['hunts:<species>', '>=', 1]`
+  in the beat's scope. To do: evaluate beat `until`s on the event path too (in `_react`), or add
+  a `seen: [event, filters]` condition scoped like `gained` (it would also cover a cast member,
+  which a counter can't: the `hunted: 'mama'` example above).
+- **[next] `aim` outside a beat's `force` isn't marked.** Allowed in `start` / `do`, it is a
+  scripted attack that no log entry calls forced. Validator warning, or log it as `forced`.
+- **[later] Two level keys for partners:** `claim` (one line: the substrate rule the module
+  teaches, e.g. "a moa under cover can't be seen"; validator-required) and `guide` (the Field
+  Guide ids it unlocks). They are what a school or conservation partner reads first.
+- **Where the [later] behaviours should live.** Eagle boldness, hungry birds walking to grown
+  food, breeding by condition and `BIRD_CALENDAR` are listed above as runner tools. Build them
+  as substrate flags (`LEVEL_MECHANICS`, switched on by the `mechanics` lever), so the runner
+  never grows a brain and the endless level gets them for free. The same for `order` when it
+  lands: an end condition required, and hunger, feeding, cover and breeding left to the sim
+  while it runs.
+- **Phase order, given that Modules 0 and 1 stay as legacy** (`ENGINE_ASSESSMENT.md` §12):
+  phases 3 and 4 become optional (a *new* storm module on the engine is worth building as the
+  scripted-vs-emergent control for the thesis, but the legacy modules are not rebuilt), so
+  phase 5 (Free Play parity) and phase 6 (new modules) move up, and the storm rework blocks
+  only a new storm module. Pre-existing 404s seen while running: `sprites/moa_juvenile.png`,
+  `audio/call_little_bush_moa.mp3`, `audio/call_upland_moa.mp3`.
 
 ---
 

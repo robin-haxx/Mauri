@@ -9,11 +9,11 @@ groups could take up as targeted slices. Written against the code at commit `f96
 > **Scope note.** Sections 1 to 10 were written before the chapters engine existed in this
 > checkout: they read what the code at `f967746` commits you to, propose a grammar that fits
 > it, and list the questions that needed answering. The engine (the chapters runner,
-> `MODULE_ENGINE_PLAN.md`, `MODULE_SCRIPTING.md`, the storm rework) was then built in a
-> separate working copy that has not reached GitHub as of 2026-11-04, so sections 11 to 13
-> weigh this assessment against the engine *as described*, not as read. Once the engine
-> branch is pushed, sections 11 to 13 should be checked against the code and folded into
-> `MODULE_ENGINE_PLAN.md`.
+> `MODULE_ENGINE_PLAN.md`, `MODULE_SCRIPTING.md`) was built in parallel on
+> `claude/module-engine` (`f264c68`), now merged into this branch. Sections 11 to 13 were
+> first written against the engine as described, then checked against the code and by running
+> the prototype headless (2026-11-04); section 14 compares the approaches a module-scripting
+> grammar could take. The storm rework is not on GitHub yet.
 
 ---
 
@@ -43,13 +43,16 @@ groups could take up as targeted slices. Written against the code at commit `f96
    sim with the director removed.* Storm-as-cover is the first case: taught by Module 0,
    still a stun in the sim's own `Storm` placeable (`distractsEagles`), and only true in
    modules because `ModuleDirector.isHidden` says so.
-6. **The chapters engine and this assessment are the same move seen from two sides** (section
-   11): the engine makes *direction* and *presentation* data; this document says what the
-   *substrate* must own for that data to be true. The engine does not, by itself, retire the
-   second simulation; the substrate ports in section 6 still do that. The legacy modules
-   should stay playable as their own menu row and as the thesis's scripted control condition
-   (section 12), and new free play modes should be chapters over the cycling Free Play's
-   substrate (section 13).
+6. **The chapters engine, checked against the code, meets the ownership rules** (section 11):
+   it frames, measures and narrates a free-running sim, every ecology verb lands on an
+   existing sim API, the cast is adopted, and the one scripted verb (`aim`) lives inside the
+   eagle and is logged. One defect found by running it: a beat whose `until` is a polled state
+   can be logged as forced after the event it waits for has already happened (fixed in the
+   examples; an engine-side latch is recommended). The substrate ports in section 6 are still
+   what retires the legacy directors' second simulation. The legacy modules should stay
+   playable as their own menu row and as the thesis's scripted control condition (section
+   12), and new free play modes should be chapters over the cycling Free Play's substrate
+   (section 13). Section 14 compares the grammar approaches and why this one fits the spec.
 
 ---
 
@@ -328,77 +331,81 @@ Answers to these change what the plan should say; the rest of this document stan
 
 ---
 
-## 11. Weighed against the chapters engine
+## 11. Weighed against the chapters engine (checked against `f264c68`)
 
-The engine, as described: a module is a `story` of **chapters** (one per season or stage) with
-**levers** (the tools and when they unlock), **goals**, **conditions and counters**
-(`after`, `beat`, `near`, `hidden`, `gained`, `placed`, `stat`, `any`/`all`), **actions** in
-two toolboxes (a *scripting* toolbox: `stay`, `goTo`, `follow`, `chase`, `journey`, `camera`;
-an *ecology* toolbox: `sow`, `spawn`, floors, income, `unlockTool`), **lines and banners**
-delivered by the existing tip kit, **reactions** (sim events by role, answered with narration),
-**guaranteed beats**, **sites** found by solvers, **cast** declared once, and plain functions as
-the escape hatch; plus a validator, a story inspector, a beat log and jump-to-beat. Its stated
-default is emergence: the runner layers goals, unlocks and reactive narration onto the
-free-running sim rather than porting the scripted seasons.
+### What the engine is, as built
 
-### Where the two agree (most of it)
+`ChapterRunner` (`mauri_chapters.js`, created by `Game._initFinalize` for any level with a
+`chapters` list) runs beside the sim, never inside it. A chapter opens with **levers**
+(`mechanics` overlay, `tools`, `locked`, `focus`, `introduce`, `protect`, `nesting`), finds its
+**sites** (finders: `flock`, `nest`, `biome`, `high`, `low`, `open`, `edge`, all region-aware),
+arms its **beats**, shows its **goals** (`done` / `keep` / `survive`, `required`, `stretch`,
+`{n}/{target}` names) and runs its `start` actions. Every frame it answers the sim's events
+with **reactions** (`on` an event or `when` a polled condition, `for` to make a need, `if`
+filters by role, `once` / `cooldown` / `max`, `chapters` scope); every six frames it polls
+conditions, beats, goals, lose rules and `until`. Conditions: `count`, `gained`, `placed`,
+`mauri`, `after`, `seasons`, `season`, `seasonProgress`, `goal`, `goalsMet`, `beat`, `since`,
+`flag`, `extinct`, `alive`, `hidden`, `hunting`, `hunted`, `separated`, `regions`, event filters,
+`any` / `all` / `not`, or a function. Two toolboxes: **scripting** (`say`, `banner`, `notify`,
+`moment`, `camera`, `tools`, `unlock`, `lock`, `place`, `sow`, `spawn`, `aim`, `flag`, `unflag`,
+`reward`, `next`, `win`, `lose`) and **ecology** (`focus`, `protect`, `nesting`, `introduce`,
+`mechanics`, `eagle` with `hunger` / `watch` / `grace`). A **guaranteed beat** is `when` →
+`invite` (ecology) → `until`, with `by` + `force` (scripting) as the deadline, logged natural or
+forced. **Cast** is adopted from the sim (`pick`, `female`, `recast`); `cast_lost` fires when one
+dies. Lines and banners compile into tutorial tips (`STORY_BEAT`). Tooling: a validator (clean
+on the prototype), an inspector (**J**), a log, `jump` / `?chapter=`. `MomentPlayer` is shared
+with the legacy free play. Land regions (`labelLandRegions`, `connected`, `regionNear`) keep
+sites, spawns and (opt-in) mates on one stretch of land.
 
-| This assessment | The engine |
-|---|---|
-| Substrate / direction / presentation | "Code decides how things behave; data decides when, who and what is said" |
-| Watched, not scripted | Emergence the default; reactions fire on sim events |
-| Beat (`_beat(name, data)`) | Beats and the beat log |
-| Need (a detector with patience) | Levers with goals and conditions; reminder banners |
-| Lever | Levers, `unlockTool`, the ecology toolbox |
-| Site, cast | Sites and solvers, cast declared once |
-| Stage clocks | Chapters with `holdUntil` and timed close |
-| Instrumentation (section 8) | Validator, inspector, beat log, jump, headless test snippet |
-| "Extract shared director code into the base class" | Superseded by systems plus data chapters, which is the better design; drop the suggestion |
+### The five rules, against the code
 
-The slice template in section 7 is, in effect, the chapter-level key list. Two keys the
-template has that the described engine may not: **`claim`** (the substrate rule or flag the
-module teaches, stated in one line) and **`guide`** (the Field Guide entries it unlocks, with
-sources). Both are cheap data, and both are what a school or conservation partner reads first.
-Recommend adding them to the module header and having the validator require `claim`.
+| Rule (earlier draft) | In the code | Verdict |
+|---|---|---|
+| A scripting action that moves a bird must have an end, and leave hunger, feeding, cover and breeding to the sim | No walk verbs exist. `order` is [later] and the plan already promises hand-back | Met by omission. Make it a validator rule when `order` lands |
+| `chase` is a nudge, not a verb | There is no `chase`. `aim` is the force half of a beat: the eagle hunts a named moa for 20 s, implemented in `HaastsEagle.behave` / `hunt`, still blind to a moa in cover, logged | Met. Gap: `aim` is also allowed as a plain action in `start` / `do`, where nothing marks the run as forced |
+| A guaranteed beat is pressure, a deadline and a logged nudge | `invite` → `until` → `by` / `force`; the log and inspector say natural or forced; the `beat` event carries `forced` | Met, and verified running (below) |
+| An ecology action calls a sim API the endless level also uses | `protect` → `sim.dynamicFloors`; `nesting` → `sim.moaNestingWatch`; `introduce` → `Game._spawnFreeplaySpecies`; `eagle` → `hunger`, `_relocateTerritory`, `tutorialGraceTimer`; `place` / `sow` / `spawn` → `addPlaceable`, `addPlant`, `_createFromRegistry`; `mechanics` → an overlay restored on the next run. All exist on `main` | Met |
+| Cast brains default to the sim | The cast is adopted from live birds, never spawned or scripted | Met, more strongly than asked |
 
-### Where the engine needs a rule it may not yet have
+So the "second simulation" risk does not apply to the engine. What remains is unchanged from
+section 6 and now has a home: the legacy directors' better models (eagle boldness, hungry
+birds walking to grown food, breeding by condition, `BIRD_CALENDAR`) are listed in the plan as
+[later] *runner* behaviours. Build them as substrate flags that the `mechanics` lever switches
+on, so the runner never grows a brain and the endless level gets them for free. Storm cover is
+still `distractsEagles` on the branch; only a new storm module waits on it.
 
-The engine makes direction and presentation declarative. It does not decide what the
-substrate owns, and a data vocabulary can carry the second simulation just as well as code
-can. Five rules close that gap; each is a validator check as much as a design rule.
+### Verified by running it
 
-1. **A scripting action is a bounded stage direction.** `stay`, `goTo`, `follow`, `journey`
-   and `camera` must each have an end (`until`, `after`, `near`, a beat), and while one runs the
-   bird's hunger, feeding, cover and breeding stay with the sim. The validator should refuse a
-   scripting action with no end condition.
-2. **`chase` is a nudge, not a verb.** A `chase` action that drives the eagle at a named moa is
-   the scripted attack in data form. Prefer **pressure**: raise the eagle's hunger, narrow its
-   grace, place it over the trail, and let the `hunt` reaction fire when the substrate eagle
-   commits. If `chase` stays in the vocabulary, it should be written to the beat log as
-   `forced`, so a run can report how often the lesson needed forcing.
-3. **A guaranteed beat is pressure, a deadline, and a logged nudge.** Something like
-   `{ guarantee: 'first_hunt', pressure: { eagle: { hunger: +30, graceSec: 5 } }, within: 40,
-   then: 'force' }`. The deadline and the `force` fallback are explicit, and `nudge` / `force`
-   entries in the beat log are research data (section 8).
-4. **An ecology action calls a sim API the endless level also uses.** `sow`, `spawn`, floors
-   and income are fine as long as they go through `Simulation` and `MauriManager`, never through
-   runner-private state. The test: the same action, run in `level_freeplay_kahurangi`, must do
-   the same thing.
-5. **Cast brains default to the sim.** A cast entry's brain is the species' own behaviour
-   unless the module says otherwise, and a scripted brain (the legacy `MoaLife` / `EagleLife` /
-   `KeaLife`) is allowed only on a legacy module (section 12). The validator should warn when a
-   cast member in a chapters module names a legacy brain.
+Driven headless through Playwright on the merged branch, tips skipped, no player input:
 
-### What the engine does not fix, and the order to fix it
+- The prototype validates clean. Over 150 s: the matriarch adopted; a standing speargrass patch
+  placed at `grazing`; the `hunt_comes` beat started at 8 s; `first_hunt` fired on a natural
+  upland-moa hunt at 16.3 s; `first_egg`, `nest_need` (the need, at 25 s), `first_chick` with its
+  moment; the flock goal met at 66 s; `holdSeason` held summer at 90% for the missing nest; the
+  sim's eagle caught the matriarch at 77 s and `cast_lost` fired. No page errors.
+- **One defect.** In that run the beat was logged **forced** at 38 s although the natural hunt
+  had already fired `first_hunt`. Cause: `until: { hunting: true }` reads a *state* at each
+  6-frame poll (an eagle currently hunting a focus moa); the lock can drop between polls. Nine
+  more runs of the first beat: the state form reported correctly 4 of 4 times (so 1 misreport
+  in the 5 state-form runs seen); in one run four hunt *events* fired over 21 s while the state
+  read false at every poll. The counter form, `until: { gained: ['hunts:upland_moa', '>=', 1] }`
+  in the beat's own scope, reported natural every time a hunt happened. Changed on this branch:
+  the prototype's beat, the `MODULE_SCRIPTING.md` example and a gotcha. Recommended in the
+  engine: evaluate beat `until`s on the event path as well, or add a `seen: [event, filters]`
+  condition (which would also cover a cast member, as a counter cannot). This matters because
+  natural-versus-forced is the instrument for "does emergence teach without help".
+- Pre-existing 404s, not the engine's: `sprites/moa_juvenile.png`, `audio/call_little_bush_moa.mp3`,
+  `audio/call_upland_moa.mp3`.
 
-The two eagles, the two feeding models, the two breeding models and the three floor
-mechanisms (section 6) are untouched by making chapters declarative. They remain the
-prerequisite for the thesis claim, and they also decide how well new modules teach: until the
-legacy director's eagle design (hunger, look range, boldness, grace before the dive, away
-hunting) is ported into `HaastsEagle` as flags, a chapters module's `hunt` reactions fire from
-the energy-budget eagle, which is less legible than Module 0's. The storm rework is the first
-port and is under way. The order stands: storm cover, then the eagle, then family feeding,
-then `BIRD_CALENDAR` into the species data.
+### Still recommended
+
+- Two level keys: **`claim`** (one line, the substrate rule the module teaches; the validator
+  should require it) and **`guide`** (the Field Guide ids unlocked, with sources). Both are what
+  a school or conservation partner reads first (section 7).
+- A validator warning for `aim` outside a beat's `force`, or logging any `aim` as forced.
+- The plan's phase order, given the legacy decision below: phases 3 and 4 (rebuilding Modules
+  0 and 1) become optional; phase 5 (Free Play parity) and phase 6 (new modules) move up.
+  These notes are also in `MODULE_ENGINE_PLAN.md` ("Review notes").
 
 ---
 
@@ -409,25 +416,28 @@ menu, as their own set, and freeze them.
 
 - **Files.** `mauri_module.js`, `mauri_module_patotara.js`, `mauri_module_freeplay.js`, the
   three `levels/module_*.js` and their `levels/tutorial_module_*.js` scripts stay as they are.
-  Mark the three levels (e.g. `legacy: true`, or `engine: 'director'`), and have the level
-  select draw them as a second row of small buttons under the chapters modules, with its own
-  label ("Stories"). `Game._renderModuleRow` already draws modules by `moduleIndex`; a second
-  row grouped on the flag is a small change. "Continue" chains stay within the legacy set.
+  Mark the three levels (e.g. `legacy: true`), and have the level select draw them as a second
+  row of small buttons under the chapters modules, with its own label ("Stories").
+  `Game._renderModuleRow` already draws modules by `moduleIndex`, and the engine branch added
+  `devOnly` filtering beside it; a second row grouped on the flag is a small change, not yet
+  made on this branch. "Continue" chains stay within the legacy set. New chapters modules take
+  `module: true` and the main row.
 - **Isolation.** The legacy birds run `lifeScript`, so they skip `Moa.behave`,
   `HaastsEagle.behave` and `Kea.behave`; the substrate ports do not change how they play.
   Storm cover in the legacy set stays `ModuleDirector.isHidden` reading `Simulation.stormAt`;
   dropping `distractsEagles` from the base `Storm` touches nothing they read (only
-  `HaastsEagle.behave` reads it). When `BIRD_CALENDAR` moves into the species data, keep the
-  constant available under its current name (an alias is enough) so
-  `FreePlayDirector._scheduleBirdClutches` keeps working.
+  `HaastsEagle.behave` does). When `BIRD_CALENDAR` moves into the species data, keep the
+  constant available under its current name so `FreePlayDirector._scheduleBirdClutches` keeps
+  working. Shared *presentation* code is fine: the legacy free play already plays its moments
+  on the engine's `MomentPlayer`.
 - **Freeze.** New modules are written only on the chapters engine. The legacy set gets bug
   fixes and nothing else, and the plan should say so; otherwise it drifts back into being the
   second simulation.
 - **Why keep them beyond courtesy.** Legacy Module 0 is the *scripted* version of the lesson
-  a chapters Module 0 teaches *emergently*. That is the control condition the thesis wants:
+  a chapters storm module teaches *emergently*. That is the control condition the thesis wants:
   the same lesson under both regimes, compared on beat-timing variance across seeds, nudges
-  and forces needed, and, with learners, outcomes. Retaining the old modules makes that
-  comparison free; make it part of the study design rather than a leftover.
+  and forces needed (the beat log already records them), and, with learners, outcomes.
+  Retaining the old modules makes that comparison free; make it part of the study design.
 
 ---
 
@@ -436,22 +446,103 @@ menu, as their own set, and freeze them.
 The cycling Free Play (`level_freeplay_kahurangi`: the four-year focus loop, the 2×2 world
 grid, climate drift, winter edibility, emergent eagles, the kea cascade) is the substrate
 exemplar: it is the one level where every system runs in tandem, and the ten or so modules
-are meant to end up resembling it. So a new free play mode is a chapters level over that
-substrate:
+are meant to end up resembling it. The engine plan's phase 5 ("Free Play parity") is exactly
+this; the recommendation is to pull it ahead of rebuilding the legacy modules:
 
 - **Chapters per year** replace the year engine in `mauri_sketch.js` (`freeplaySchedule`,
   `_beginFreeplayYear`, `_checkFreeplayYear`, `_applyFreeplayYearPressure`): each year is a
   chapter with its levers (that year's toolbar), goals (the focus species' targets), and
-  reactions (Te Whē on a hatch, a catch, a mast, a species at its floor). The world-grid pan
-  and the glacial re-bake stay as a system the chapter calls.
+  reactions (Te Whē on a hatch, a catch, a mast, a species at its floor). The plan's list is
+  the spec: an `area` lever for the world-grid pan, the year-start resets as named systems,
+  `loop` on the chapter list, the mast goal as a branching `next`.
 - **Reactions replace the generic tips** in `levels/tutorial_freeplay_kahurangi.js`, and the
   ecology blurbs move to the Field Guide (already an open follow-up in `FREEPLAY_PLAN.md`).
 - **The modules' free play becomes legacy** (section 12). Its better ideas (the eagle's
   boldness and away cycle, `BIRD_CALENDAR`, the needs prompts with patience, the hatch and
   catch moments) are ported into the substrate and the engine rather than kept as a second
-  mode.
+  mode. The moments are already ported.
 - **A first new mode worth building:** the cycling Free Play's year 1 (the kea cascade) as a
   chapters level on fresh land, with `claim` lines for the two emergent rules it rests on
   (eagles hunt what they can see; eagles follow the nests). If that mode plays as well as the
-  legacy free play with no scripting-toolbox actions at all, the vocabulary is complete enough
-  for the modules.
+  legacy free play with no scripting-toolbox actions beyond words and moments, the vocabulary
+  is complete enough for the modules.
+
+---
+
+## 14. Approaches to a module-scripting grammar, compared
+
+The question behind "is this the right tool": what *kind* of grammar should a module be
+written in, given the spec. The spec, as this document and the plan state it:
+
+1. preserves emergence (never steers a wild animal; the outcome is the ecosystem's);
+2. can guarantee the *first* demonstration of a rule, and measure when it had to;
+3. is authorable by you in an afternoon, and later by a partner's educator for a slice;
+4. is debuggable and inspectable while a run plays;
+5. logs enough to be a research instrument (natural vs forced, variance across seeds);
+6. needs no build step, runs in p5 global mode on a tablet;
+7. scales to ten modules without each one becoming a pile of code;
+8. is legible to a thesis reader as a named formalism, not an ad-hoc script.
+
+### The families
+
+| Approach | Tradition | What a module looks like | Strong at | Weak at |
+|---|---|---|---|---|
+| **Rules over a free-running sim** (event → condition → action) | Drama managers and AI directors (Left 4 Dead's director; RimWorld's storytellers); trigger systems in strategy-game editors | A list of reactions and levers; the sim produces the events | 1, 5, 6; adapts to whatever the sim does | Sequencing and guarantees; "a bag of rules" interacts in ways no one authored once it grows (7, 8) |
+| **Sequenced beats / timeline** | Cutscene timelines; the legacy directors' `_updateX` seasons | Steps in order with waits and triggers | 2, 3; reads top to bottom | 1: every step is a rail unless each step only *invites*; brittle when the sim doesn't comply |
+| **Statecharts** (hierarchical state machines) | Harel statecharts; XState-style tooling | States with guarded transitions; nested states for seasons; parallel regions for per-character arcs | 7, 8: formal, visualisable, reachability can be checked; "which state am I in" is always answerable | Narration is verbose as transitions; parallel arcs get hard to read; still needs a vocabulary for what the sim means |
+| **Behaviour trees** | Game AI (Halo, Unreal) | A tree of selectors and sequences over conditions and actions; a guaranteed beat is a selector: try the invite until a deadline, else force | Composable, reusable subtrees; good debuggers exist | Re-ticks from the root every frame, so long-lived "once" narration needs decorators; not readable by non-programmers |
+| **Narrative DSLs** | Ink, Yarn Spinner | Text-first scripts with knots and diverts; the sim exposed as external functions and variables | 3 for writers; translation (te reo) and voice; branching dialogue | Needs a compiler and runtime; knows nothing of the sim, so every ecological condition is glue code; 6 (a build step) |
+| **Table-driven lesson cards** | Spreadsheet-authored content, compiled | Rows: beat, trigger, condition, words, what to light, Field Guide link | 3 for partners; diffable; translation-friendly | Expressiveness stops at what the columns allow; no functions; needs a compiler to the runtime format |
+| **Goal-directed drama manager** | Façade; utility-based pacing; adaptive tutoring | No script: a model of what the learner has seen and a policy that raises pressure toward the next lesson | 1, 5; adapts per player; research-rich | Hardest to author and to explain to a partner; opaque when it misfires; a thesis on its own |
+| **Scenario + storyteller** | RimWorld, Dwarf Fortress | A scenario (land, cast, mechanics, toolbar) and a pacing policy over incidents; no beats at all | 1 absolutely; cheap to author | 2: nothing is guaranteed; teaching depends on the player noticing |
+
+Representation is a separate axis: **JS objects** (comments, functions, no build; what the
+engine uses), **JSON** (tool-friendly, partner-safe, no functions), a **text DSL** (most
+readable for writers; needs a parser), or a **visual editor** (the most approachable; the most
+to build and maintain, and it still needs a textual format underneath).
+
+### Where the chapters engine sits
+
+It is the first family with the second embedded (beats chained by `when: { beat }`) and a flat
+version of the third (chapters as states, `next` as guarded transitions), in JS objects. That
+is the right core for the spec: 1, 2, 5 and 6 are met by construction, and 4 by the inspector
+and log. The known weakness of the family is 7 and 8: as modules grow, reactions interact, and
+"why did that line show" needs the log to answer. The engine already has the three mitigations
+that matter (reactions scoped to chapters, a validator, the inspector); two more are cheap:
+
+- **From statecharts:** reachability in the validator (a chapter no `next` reaches, a goal no
+  condition can ever meet given the chapter's levers, a reaction whose `chapters` never run),
+  and, later, named parallel *arcs* if per-character stories are wanted alongside the season
+  chapters.
+- **From storytellers:** a `pacing` lever (a tension curve on eagle hunger and weather over a
+  chapter) as the default way to make a lesson's moment likely, with per-beat `by` / `force`
+  kept for the one beat that must happen. Fewer deadlines, fewer forces, better numbers for
+  the thesis.
+- **From narrative DSLs and lesson cards:** separate the words from the logic. A `script`
+  block of lines keyed by id (reactions refer to the id), exportable to a sheet and back, lets
+  a writer, a translator or a partner edit text and Field Guide entries without touching a
+  condition. This is also the cheapest route to partner-authored slices before any editor.
+- **From behaviour trees:** nothing yet. From the goal-directed family: nothing to build, but
+  log what it would need (which rules the player has seen demonstrated, and when), so adaptive
+  pacing can be studied later from the same data.
+
+What would argue for a different core: if partners must author whole modules unaided,
+lesson cards compiled to chapters beat JS objects; if the modules turn out to be mostly
+dialogue with light ecology, Ink-style text with sim hooks reads better; if the research
+question becomes adaptivity, the goal-directed manager is the object of study. None of those
+is the spec today.
+
+### Making it a tool you can trust
+
+The spec is only enforced if the tool enforces it. Three small things make the engine "built
+to spec" rather than "used carefully":
+
+1. **The validator carries the design rules**: `aim` outside `force` warns; an `order` (when it
+   exists) without an end is an error; a module without a `claim` is an error; a beat `until`
+   that is a state rather than an event warns.
+2. **A module template and a Node validator** (plan phase 7): a new module starts from a file
+   that already has `claim`, `guide`, one chapter, one reaction and one beat, and can be
+   checked without the browser.
+3. **The beat log is the research export**: add the seed, the level id, and every `nudge` /
+   `force`, and write it out beside the benchmark CSV, so a batch of headless runs answers
+   "how often did the lesson need help" without anyone watching.

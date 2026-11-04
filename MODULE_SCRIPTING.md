@@ -336,7 +336,7 @@ deadline. Beats belong to a chapter.
 beats: [
   { id: 'hunt_comes', when: { after: 8 },
     invite: [{ eagle: { watch: 'grazing', hunger: 55 } }],   // make it likely
-    until: { hunting: true },                                 // the beat itself
+    until: { gained: ['hunts:upland_moa', '>=', 1] },        // the beat itself: an EVENT counted in the beat's scope
     by: 30, force: [{ aim: { at: ['matriarch', 'upland_moa'] } }],   // guarantee it
     notify: "The Pouākai has seen the flock." }               // when it's done
 ]
@@ -528,6 +528,11 @@ game.chapters.dump();
 - **Overlays persist.** `mechanics` overlays last across chapters; the level's values come back
   on the next run.
 - **`aim` targets moa only.**
+- **A beat's `until` should be an event, not a state.** `hunting: true` / `hunted: ref` read the
+  eagle *right now*, every 6 frames; a lock can drop between polls, so the state can read false
+  for seconds while hunt events fire, and the beat is then wrongly logged as forced (seen in
+  testing: 1 run in 5). Use a counter in the beat's scope (`gained: ['hunts:upland_moa', '>=', 1]`)
+  for "it happened"; keep the state forms for "it is happening now" (banners, reactions).
 - **Land checks use the snow as it is now.** `separated`, `regions` and `near` sites use the
   current snow line.
 - **Moa portraits.** Every moa speaks with the upland moa portrait (the only moa portrait

@@ -8,8 +8,15 @@
 // years on an endless level (Free Play). Default 1 year; set BENCHMARK.endlessYears
 // or arm via armBatch to record more.
 //
-// CSV columns: time_s, year, season, <one per moa species>, other_moa,
-// total_moa, eagles, eggs, n_<other entity types>, placed_<each placeable>, event
+// CSV columns: seed, level, sketch, chapter, time_s, year, season, <one per moa species>,
+// other_moa, total_moa, eagles, eggs, n_<other entity types>, placed_<each placeable>, event
+//
+// Research runs (ENGINE_ASSESSMENT.md §8): a chapter level's story log (chapters, goals, beats
+// natural or forced, cast lost...) is written into the `event` column as it happens
+// (BENCHMARK.event), and the whole log is kept with the CSV in `lastRun` (and saved beside it
+// as .beats.json) so a headless batch (tools/batch.js) can read both. The page can be opened as
+// ?level=<id>&seed=<n>&bench=<runs>&years=<n> to arm a run with no splash (Game.autoStartFromURL);
+// a batch's runs take seeds seedBase, seedBase + 1, ... (nextSeed).
 // ============================================
 
 const BENCHMARK = {
@@ -27,6 +34,12 @@ const BENCHMARK = {
 
   // Endless mode has no win: record this many in-game years, then finish + save.
   endlessYears: 1,
+  // Any level: stop after this many years (0 = only on a win or loss; from ?years=).
+  maxYears: 0,
+  // Seeds: a batch armed with seedBase gives run k the seed seedBase + k (Game._initTerrainAndSeason).
+  seedBase: null,
+  noDownload: false,     // (a headless batch reads lastRun instead of saving files)
+  lastRun: null,         // { level, sketch, seed, result, playTime, csv, log, beats } of the last finished run
 
   _rows: [],
   _moaKeys: [],
@@ -37,6 +50,12 @@ const BENCHMARK = {
   _levelId: '',
 
   arm() { this.armBatch(1); },
+
+  // The seed for the run about to start, or null: an armed batch with a seedBase.
+  nextSeed() {
+    if (!this.pending || this.seedBase == null) return null;
+    return this.seedBase + this.batchIndex;   // (batchIndex counts the runs started so far)
+  },
 
   // Arm a batch of n back-to-back runs
   armBatch(n) {
@@ -55,6 +74,8 @@ const BENCHMARK = {
     this._rows = [];
     this._nextSampleAt = this.SAMPLE_INTERVAL;
     this._levelId = (game.currentLevel && game.currentLevel.id) || 'level';
+    this._sketch = (game.currentLevel && game.currentLevel.sketch && game.currentLevel.sketch.label) || '';
+    this._seed = game.runSeed != null ? game.runSeed : '';
 
     // Fix the column set at run start from the level's own lists
     const species = game.simulation.activeSpecies || {};
@@ -98,11 +119,28 @@ const BENCHMARK = {
     if (deadline && game.playTime >= deadline) this.finish(game, 'year_end');
   },
 
-  // Frame count at which an endless run should stop, or 0 for a non-endless level.
+  // Frame count at which the run should stop on its own: maxYears for any level, else
+  // endlessYears for an endless one, else 0 (only a win or loss ends it).
   _endlessDeadline(game) {
-    if (!game.currentLevel || !game.currentLevel.endless) return 0;
     const seasonDur = (typeof CONFIG !== 'undefined' && CONFIG.seasonDuration) || 3600;
+    if (this.maxYears > 0) return this.maxYears * 4 * seasonDur;
+    if (!game.currentLevel || !game.currentLevel.endless) return 0;
     return Math.max(1, this.endlessYears) * 4 * seasonDur;
+  },
+
+  // A chapter level's story log entry (ChapterRunner._log): a row with the event named.
+  event(game, kind, id, info) {
+    if (!this.active || this.finished) return;
+    this.sample(game, `${kind}:${id}${info ? ':' + String(info).replace(/,/g, ';') : ''}`);
+  },
+
+  // The win or loss just reached ends the run (the draw loop and a headless harness both call
+  // this). True if it did.
+  finishIfEnded(game) {
+    if (!this.active || this.finished) return false;
+    if (game.state !== GAME_STATE.WON && game.state !== GAME_STATE.LOST) return false;
+    this.finish(game, game.state === GAME_STATE.WON ? 'win' : 'loss');
+    return true;
   },
 
   sample(game, event) {
@@ -125,9 +163,11 @@ const BENCHMARK = {
     let eggs = 0;
     for (const e of sim.eggs) if (e.alive && !e.hatched) eggs++;
 
-    const row = { time_s: +(game.playTime / 60).toFixed(1) };
-    // Year/season markers for the population arc.
-    row.year = (game.cycle | 0) + 1;   // 1-based in-game year
+    const row = { seed: this._seed, level: this._levelId, sketch: this._sketch,
+                  chapter: (game.chapters && game.chapters.cur) ? game.chapters.cur.id : '',
+                  time_s: +(game.playTime / 60).toFixed(1) };
+    // Year/season markers for the population arc (a chapter level counts by season turns).
+    row.year = game.chapters ? game.chapters.yearNow() : (game.cycle | 0) + 1;   // 1-based in-game year
     row.season = (game.seasonManager && game.seasonManager.currentKey) || '';
     for (const k of this._moaKeys) row[k] = counts[k];
     row.other_moa = otherMoa;
@@ -154,7 +194,7 @@ const BENCHMARK = {
     if (!this.active || this.finished) return;
     this.finished = true;
     this.sample(game, event);
-    this._save();
+    this._save(game, event);
 
     if (this.batchIndex < this.batchTotal) {
       // More runs queued; auto-restart after a short delay.
@@ -187,15 +227,28 @@ const BENCHMARK = {
     this._rows = [];
   },
 
-  _save() {
+  _save(game, event) {
     if (!this._rows.length) return;
     const cols = Object.keys(this._rows[0]);
     const lines = [cols.join(',')];
     for (const r of this._rows) {
       lines.push(cols.map(c => (r[c] !== undefined ? r[c] : '')).join(','));
     }
+    // The story log beside the populations: every chapter, goal and beat, and whether each beat
+    // came naturally or had to be forced (the measure of how much help a lesson needed).
+    const log = (game && game.chapters) ? game.chapters.log.slice() : [];
+    const beats = {};
+    for (const l of log) if (l.kind === 'beat' && /^done/.test(l.info)) beats[l.id] = /forced/.test(l.info) ? 'forced' : 'natural';
+    this.lastRun = { level: this._levelId, sketch: this._sketch, seed: this._seed, result: event,
+                     playTime: game ? Math.round(game.playTime / 60) : 0, csv: lines.join('\n'), log, beats };
+    if (this.noDownload) return;
     const stamp = new Date().toISOString().replace(/[:T]/g, '-').slice(0, 19);
     const runTag = this.batchTotal > 1 ? `run${this.batchIndex}of${this.batchTotal}_` : '';
-    saveStrings(lines, `benchmark_${this._levelId}_${runTag}${stamp}.csv`);
+    const seedTag = this._seed !== '' ? `seed${this._seed}_` : '';
+    saveStrings(lines, `benchmark_${this._levelId}_${runTag}${seedTag}${stamp}.csv`);
+    if (log.length && typeof saveJSON === 'function') {
+      saveJSON({ level: this.lastRun.level, sketch: this.lastRun.sketch, seed: this.lastRun.seed, result: event,
+                 playTime: this.lastRun.playTime, beats, log }, `benchmark_${this._levelId}_${runTag}${seedTag}${stamp}.beats.json`);
+    }
   }
 };

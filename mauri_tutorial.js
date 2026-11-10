@@ -32,7 +32,11 @@ const TUTORIAL_EVENTS = {
   YEAR_START: 'year_start', // endless: a year's focus, palette + goals are set, data: { cycle }
   NEST_RAID: 'nest_raid',   // a kea raid was rolled on a nest, data: { site, success }
   PLACEABLE_MOVED: 'placeable_moved', // a touch-and-hold move set an item down, data: { type }
-  MODULE_BEAT: 'module_beat'          // a module level's story moment, data: { beat, director, ... }
+  MODULE_BEAT: 'module_beat',         // a module level's story moment, data: { beat, director, ... }
+  STORY_BEAT: 'story_beat',           // a chapter level's line or banner (mauri_chapters.js), data: { cue }
+  PLANT_SPROUTED: 'plant_sprouted',   // a pātōtara (patch or wild plant) sprouted by hand, data: { sprouted, type }
+  BIRD_HATCHED: 'bird_hatched',       // a flighted bird's (or kākāpō's) egg hatched, data: { egg, bird, speciesKey }
+  BIRD_KILLED: 'bird_killed'          // an eagle took a flighted bird, data: { bird, eagle, speciesKey }
 };
 
 // Named toolbar-button highlight targets → the placeable key each one shows.
@@ -322,6 +326,9 @@ class TutorialManager {
   // ============================================
   
   fireEvent(eventType, data = {}) {
+    // A chapter level's runner hears every event first: its goals and reactions don't wait on
+    // the tips being switched on (see ChapterRunner.onEvent).
+    if (this.game.chapters) this.game.chapters.onEvent(eventType, data);
     if (!this.enabled) return;
     
     if (this.active) {
@@ -490,11 +497,13 @@ class TutorialManager {
     if (!tip) return;
     
     this.currentTip = { ...tip, data };
-    // title / content / guidePosition / highlight may be (game, data) => value, resolved as
-    // the tip appears (e.g. words that name this year's focus, a panel placed clear of a
-    // nest, or this year's tool). A function highlight isn't read by the affordability gate
-    // (_tipPlaceable), so such a tip gates its item in its own trigger condition.
-    for (const k of ['title', 'content', 'guidePosition', 'highlight']) {
+    // title / content / guidePosition / highlight / guideSprite / speaker may be
+    // (game, data) => value, resolved as the tip appears (e.g. words that name this year's
+    // focus, a panel placed clear of a nest, this year's tool, or the picture and sound of
+    // whichever bird a chapter level's line is spoken by). A function highlight isn't read by
+    // the affordability gate (_tipPlaceable), so such a tip gates its item in its own trigger
+    // condition.
+    for (const k of ['title', 'content', 'guidePosition', 'highlight', 'guideSprite', 'speaker']) {
       if (typeof tip[k] !== 'function') continue;
       try {
         this.currentTip[k] = tip[k](this.game, data);
@@ -530,8 +539,9 @@ class TutorialManager {
         audioManager.playSpeciesCall(tip.call);
         voiced = true;
       }
-      if (!voiced && tip.speaker && audioManager.playSpeaker) {
-        voiced = audioManager.playSpeaker(tip.speaker, tip.speakerPitch || 1);
+      const speaker = this.currentTip.speaker;   // (resolved above)
+      if (!voiced && speaker && audioManager.playSpeaker) {
+        voiced = audioManager.playSpeaker(speaker, tip.speakerPitch || 1);
       }
       if (!voiced) audioManager.playTutorialTip();
     }

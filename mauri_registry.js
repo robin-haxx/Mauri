@@ -161,7 +161,7 @@ class EntityRegistry {
     });
     
     // Pick random based on weights
-    const roll = Math.random() * totalWeight;
+    const roll = random() * totalWeight;
     const selected = weightedSpecies.find(ws => roll <= ws.cumulative);
     
     return this.createAnimal(selected.species.key, x, y, terrain, gameConfig);

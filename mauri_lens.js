@@ -166,3 +166,64 @@ Lens.register({
     }
   }
 });
+
+// --------------------------------------------------------------------------------------
+// LENS: Land regions
+// --------------------------------------------------------------------------------------
+// The window's walkable ground, each connected stretch tinted its own colour (the biggest
+// green), with its number and share of the land at its middle (TerrainGenerator.landRegions).
+// Where scree, ice or snow cuts the land with no pass through, the two sides are different
+// regions: a bird can never walk from one to the other, and two populations there breed apart.
+// "now" is with the snow as it stands; "year-round" with the snow at its lowest, so a pass that
+// closes in winter shows as a split.
+function landRegionsLens(id, label, snow) {
+  return {
+    id, label,
+    drawWorld(game, z) {
+      const t = game.terrain;
+      if (!t || !t.landRegions) return;
+      const R = t.landRegions(snow);
+      if (this._for !== R) {   // (re-tinted only when the regions change)
+        const img = createImage(R.cols, R.rows);
+        const sx = new Float64Array(R.count), sy = new Float64Array(R.count);
+        img.loadPixels();
+        for (let i = 0; i < R.ids.length; i++) {
+          const rid = R.ids[i], o = i * 4;
+          if (rid < 0) { img.pixels[o + 3] = 0; continue; }
+          sx[rid] += i % R.cols; sy[rid] += (i / R.cols) | 0;
+          const col = rid === R.largest ? [120, 230, 140] : Lens.colOf(rid);
+          img.pixels[o] = col[0]; img.pixels[o + 1] = col[1]; img.pixels[o + 2] = col[2]; img.pixels[o + 3] = 90;
+        }
+        img.updatePixels();
+        const land = R.sizes.reduce((a, b) => a + b, 0) || 1;
+        this._img = img;
+        this._labels = [];
+        for (let k = 0; k < R.count; k++) {
+          const share = R.sizes[k] / land;
+          if (share < 0.01) continue;   // (specks of land between rocks aren't labelled)
+          this._labels.push({ k, share, x: (sx[k] / R.sizes[k] + 0.5) * R.step, y: (sy[k] / R.sizes[k] + 0.5) * R.step });
+        }
+        this._for = R;
+      }
+      image(this._img, 0, 0, R.cols * R.step, R.rows * R.step);
+      textAlign(CENTER, CENTER); textSize(13 / z); textStyle(BOLD);
+      for (const l of this._labels) {
+        stroke(10, 16, 20, 200); strokeWeight(3 / z); fill(240, 246, 240);
+        text(`#${l.k} · ${Math.round(l.share * 100)}%`, l.x, l.y);
+      }
+      textStyle(NORMAL);
+    },
+    drawScreen(game) {
+      const R = this._for;
+      if (!R) return;
+      const big = (this._labels || []).length;
+      noStroke(); fill(16, 22, 28, 212);
+      const x = 12, y = (CONFIG.viewY || 60) + 40 + Lens.registry.length * 19 + 40 + (snow === 'year' ? 26 : 0);
+      rect(x, y, 188, 22, 6);
+      fill(150, 220, 190); textAlign(LEFT, CENTER); textSize(11);
+      text(`${label}: ${R.count} regions (${big} big)`, x + 8, y + 11);
+    }
+  };
+}
+Lens.register(landRegionsLens('landNow', 'Land regions (now)', 'now'));
+Lens.register(landRegionsLens('landYear', 'Land regions (year-round)', 'year'));

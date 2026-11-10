@@ -238,17 +238,43 @@ class Moa extends Boid {
   }
 
   isJuvenile() { return this.age < MOA_AGE.JUVENILE_MAX; }
-  canMateByAge() { return this.age >= this._matingAge; }
+
+  // The species' breeding calendar, when the level asks for one (seasonalBirdBreeding:
+  // 'calendar'; the giant moa has one): the laying season and window, years to come of age,
+  // years between clutches. null otherwise.
+  _calendar() {
+    if (!(typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS && LEVEL_MECHANICS.seasonalBirdBreeding === 'calendar')) return null;
+    return (this.speciesConfig && this.speciesConfig.calendar) || null;
+  }
+  _yearNow() { return Math.floor(((this._sim && this._sim.seasonTurns) || 0) / 4); }
+
+  canMateByAge() {
+    const cal = this._calendar();
+    // On the calendar a chick comes of age by the year (a founder, with no birth year, is grown).
+    if (cal) return this._bornYear == null || this._yearNow() - this._bornYear >= (cal.maturityYears || 1);
+    return this.age >= this._matingAge;
+  }
 
   // ============================================
   // MATING READINESS
   // ============================================
 
   isReadyToMate() {
-    return this.canMate && this.mateCooldown <= 0 && this.canMateByAge() && 
+    const ready = this.canMate && this.mateCooldown <= 0 && this.canMateByAge() && 
       !this.isPregnant && !this.matingPartner && 
       this.hunger < this.matingHungerThreshold && 
       this.securityTime >= this.securityTimeRequired * 0.5;
+    if (!ready) return false;
+    // On the calendar: only in the laying season's window, and not again until her next year.
+    const cal = this._calendar();
+    if (cal) {
+      const sm = this._sim && this._sim.seasonManager;
+      if (!sm || sm.currentKey !== cal.lay) return false;
+      const prog = sm.progress ?? 0;
+      if (prog < (cal.layFrom ?? 0) || prog > (cal.layTo ?? 1)) return false;
+      if ((this._nextClutchYear ?? -1) > this._yearNow()) return false;
+    }
+    return true;
   }
 
   canBeMate() {
@@ -284,6 +310,7 @@ class Moa extends Boid {
     // Module levels run their moa from a "life" script (MoaLife in mauri_module.js). When one
     // is attached it does everything, and none of the behaviour below runs.
     if (this.lifeScript) { this.lifeScript.behave(simulation, mauri, seasonManager, dt); return; }
+    this._sim = simulation;   // (for the calendar's year and season; see _calendar)
 
     this.updateAge(dt);
     this.animTime += dt;
@@ -293,7 +320,13 @@ class Moa extends Boid {
     
     // Hunger (juveniles 30% faster)
     const hungerMod = this.speciesConfig.seasonalModifiers?.[sc.key]?.hungerRate || 1;
-    this.hungerRate = this.baseHungerRate * sc.hungerMod * hungerMod * (this.isJuvenile() ? 1.3 : 1);
+    // (juvenileHungerMult, a level knob: how much faster a chick gets hungry; 1.3 unless set.)
+    const _juv = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.juvenileHungerMult != null) ? LEVEL_MECHANICS.juvenileHungerMult : 1.3;
+    // (hungerRateMult, a level knob: how fast every moa gets hungry, 1 unless set. A small land
+    // with few plants starves a family that a big one feeds; the knob keeps the hunger honest
+    // without the plants having to be.)
+    const _hm = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.hungerRateMult != null) ? LEVEL_MECHANICS.hungerRateMult : 1;
+    this.hungerRate = this.baseHungerRate * sc.hungerMod * hungerMod * _hm * (this.isJuvenile() ? _juv : 1);
     this.hunger = Math.min(this.hunger + this.hungerRate * dt, this.maxHunger);
 
     // Vulnerable-founder highlight flag (drawn in render): active while below threshold.
@@ -356,7 +389,9 @@ class Moa extends Boid {
     
     // Get nearby entities
     const px = this.pos.x, py = this.pos.y;
-    const placeables = simulation.getNearbyPlaceables(px, py, 80);
+    // (placeableQueryRadius: a level with wide cover, a storm say, looks a little further.)
+    const placeables = simulation.getNearbyPlaceables(px, py,
+      Math.max(80, (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.placeableQueryRadius) || 0));
     const eagles = simulation.getNearbyEagles(px, py, this.fleeRadius * 1.5);
     // Widen the neighbour query when the favoured-plant bonus is active, so
     // the doubled mating radius actually has candidates to search over.
@@ -399,6 +434,7 @@ class Moa extends Boid {
         this.hunger = this.maxHunger * 0.9;
       } else {
         this.alive = false;
+        this.causeOfDeath = 'starved';   // (a chapter level's cast_lost says how: see ChapterRunner._watchCast)
       }
     }
     
@@ -414,8 +450,11 @@ class Moa extends Boid {
     
     for (let i = 0; i < eagles.length; i++) {
       const e = eagles[i];
-      if (this.inShelter && !e.isHunting()) continue;
       if (!e.isHunting()) continue;
+      // coverCalmsMoa (a chapter level's rule): a moa fully under cover knows it can't be seen
+      // and holds still for any eagle that isn't already on it, instead of bolting into the open.
+      if (this.inShelter && !(this.shelterSpotFrac > 0) && e.target !== this &&
+          typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.coverCalmsMoa) continue;
       
       const dx = e.pos.x - this.pos.x, dy = e.pos.y - this.pos.y;
       const dSq = dx * dx + dy * dy;
@@ -517,7 +556,11 @@ class Moa extends Boid {
         
       case MOA_STATE.FORAGING:
         this.maxSpeed = this.baseSpeed * speedMod;
-        if (!this.seekAttractions(placeables)) this.forage(simulation, mauri);
+        // A placed patch draws a hungry moa, but not to the point of starving beside wild food:
+        // a critically hungry moa eats what is in reach first (a slow bird on a steep slope can
+        // take longer to reach a patch than it has).
+        if (this.hunger > this.criticalHunger) this.forage(simulation, mauri);
+        else if (!this.seekAttractions(placeables)) this.forage(simulation, mauri);
         break;
         
       case MOA_STATE.FEEDING:
@@ -602,6 +645,7 @@ class Moa extends Boid {
       const dx = o.pos.x - px, dy = o.pos.y - py;
       const distSq = dx * dx + dy * dy;
       if (distSq > maxDistSq) continue;
+      if (!this._sameLand(o)) continue;
 
       let score = distSq;
       if (o.targetMate === this) score *= 0.1;
@@ -622,8 +666,19 @@ class Moa extends Boid {
     return bestCross;                   // otherwise cross-species is a last resort
   }
 
+  // Opt-in (mechanics.landRegionMates): whether `o` is on the same land as this moa, not over a
+  // ridge of scree, ice or snow it could never cross (TerrainGenerator.landRegions). Always true
+  // without the flag. (Kept apart, a species' populations on each stretch of land breed apart:
+  // the start of the clades a later module teaches.)
+  _sameLand(o) {
+    const t = this.terrain;
+    if (!(typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.landRegionMates) || !t || !t.regionNear) return true;
+    const here = t.regionNear(this.pos, 'now', 1);
+    return here < 0 || t.regionNear(o.pos, 'now', 1) === here;
+  }
+
   seekMate(moas, dt) {
-    if (!this.targetMate?.alive || !this.targetMate.canBeMate()) {
+    if (!this.targetMate?.alive || !this.targetMate.canBeMate() || !this._sameLand(this.targetMate)) {
       this.targetMate = this.findPotentialMate(moas);
       if (!this.targetMate) { this.currentState = MOA_STATE.IDLE; return; }
     }
@@ -777,6 +832,9 @@ class Moa extends Boid {
     const egg = simulation.addEgg(ex, ey);
     egg.speedBonus = Math.max(this.eggSpeedBonus, nestBonus);
     if (this.speciesKey) egg.parentSpecies = this.speciesKey;
+    // On the calendar, her next clutch is a year or more away.
+    const _cal = this._calendar();
+    if (_cal) { const ev = _cal.every || [1, 1]; this._nextClutchYear = this._yearNow() + ev[0] + Math.floor(random(ev[1] - ev[0] + 1)); }
 
     if (simulation.game?.tutorial) {
       if (aliveMoaEggs.length === 0) simulation.game.tutorial.fireEvent(TUTORIAL_EVENTS.FIRST_EGG, { egg });
@@ -861,8 +919,16 @@ class Moa extends Boid {
       f.sub(this.vel);
       f.limit(this.maxForce);
       
-      const mult = isMating ? 0.2 : 
+      let mult = isMating ? 0.2 : 
         (this.currentState === MOA_STATE.FLEEING ? 0.5 * this.flockTendency : 0.8 * (2 - this.flockTendency));
+      // A hungry bird crowds in: the hungrier it is, the nearer it will stand to a neighbour to
+      // reach food. At full strength this push is stronger than the pull toward a plant, so a
+      // chick would hover at arm's length from a parent feeding on a patch, held off the food
+      // by the parent's elbow, and starve there.
+      if (!isMating && this.currentState !== MOA_STATE.FLEEING && this.hunger > this.hungerThreshold) {
+        const span = Math.max(1, this.criticalHunger - this.hungerThreshold);
+        mult *= Math.max(0.3, 1 - 0.7 * (this.hunger - this.hungerThreshold) / span);
+      }
       f.mult(mult);
       this.applyForce(f);
     }
@@ -910,6 +976,10 @@ class Moa extends Boid {
   }
 
   seekAttractions(placeables) {
+    // A pull it can't follow (a patch across a rock band, or uphill further than a hungry bird
+    // can manage) is given up after a few seconds without getting nearer, and left alone for a
+    // while, so the moa eats what's in reach instead of starving on the way (see _attrStall).
+    if (frameCount < (this._attrBlockUntil || 0)) return false;
     let best = null, bestScore = 10;
     
     for (let i = 0; i < placeables.length; i++) {
@@ -932,10 +1002,20 @@ class Moa extends Boid {
       const dx = best.pos.x - this.pos.x, dy = best.pos.y - this.pos.y;
       const distSq = dx * dx + dy * dy;
       if (distSq > r * r) {
+        // Is it getting nearer? (Four seconds without progress: give the pull up for ten.)
+        const dist = Math.sqrt(distSq);
+        if (this._attrTarget !== best) { this._attrTarget = best; this._attrBestDist = dist; this._attrStall = 0; }
+        else if (dist < this._attrBestDist - 2) { this._attrBestDist = dist; this._attrStall = 0; }
+        else if (++this._attrStall > 240) {
+          this._attrBlockUntil = frameCount + 600;
+          this._attrTarget = null;
+          return false;
+        }
         // GUIDE phase: steer toward the patch at cruising speed with no arrival braking,
         // so the moa reaches it carrying momentum instead of rubber-banding onto the centre.
         this.applyForce(this.seek(best.pos, 0.8));
       } else {
+        this._attrTarget = null;
         // ACROSS phase: once inside the patch, stop pulling the moa to the centre. Preserve
         // its heading so it grazes across and out the far side, so a line of plants acts as a corridor.
         const vMagSq = this.vel.x * this.vel.x + this.vel.y * this.vel.y;
@@ -1003,8 +1083,23 @@ class Moa extends Boid {
         this.hunger = Math.max(0, this.hunger - gain);
         mauri.earnFromEating(mauri.onMoaEat, this.pos.x, this.pos.y);
         this.targetPlant = null;
+        this._tgtPlant = null;
         this.vel.mult(0.3);
       } else {
+        // Is it getting nearer? A plant it can't reach (across a rock band, or held off by the
+        // crowd round a nest) is given up after four seconds without progress and left alone
+        // for twenty, so the bird eats something else instead of starving on the way to it.
+        if (this._tgtPlant !== this.targetPlant) { this._tgtPlant = this.targetPlant; this._tgtBest = dSq; this._tgtStall = 0; }
+        else if (dSq < this._tgtBest - 16) { this._tgtBest = dSq; this._tgtStall = 0; }
+        else if (++this._tgtStall > 240) {
+          const bad = this._unreachable || (this._unreachable = new Map());
+          bad.set(this.targetPlant, frameCount + 1200);
+          if (bad.size > 24) { for (const [k, until] of bad) if (until <= frameCount) bad.delete(k); }
+          this.targetPlant = null;
+          this._tgtPlant = null;
+          this._nextForageSearch = 0;
+          return;
+        }
         this.applyForce(this.seek(this.targetPlant.pos, map(this.hunger, this.hungerThreshold, this.maxHunger, 0.5, 0.9), 10));
       }
     } else {
@@ -1021,6 +1116,11 @@ class Moa extends Boid {
     for (let i = 0; i < plants.length; i++) {
       const p = plants[i];
       if (!p.alive || p.growth < 0.5) continue;
+      // Nothing to eat on it: an unsprouted pātōtara (a bare bush waiting for the player's hand;
+      // consume() gives nothing), or a plant eaten down to nothing. Without this a wild moa
+      // stands at a bare bush beside its nest and starves.
+      if (p.unsprouted || !(p.nutrition > 0)) continue;
+      if (this._unreachable && this._unreachable.get(p) > frameCount) continue;   // (given up on, for now: see forage)
       // Free Play: a winter-inedible plant still stands (frosted) but has no food value;
       // skip it as forage, so the flock must seek the evergreen refuge.
       if (p.winterInedible) continue;
@@ -1028,7 +1128,16 @@ class Moa extends Boid {
       if (p.seasonalModifier < 0.3 && this.hunger < 70) continue;
       
       const dx = p.pos.x - this.pos.x, dy = p.pos.y - this.pos.y;
-      let score = Math.sqrt(dx * dx + dy * dy) / this.foragingBonus / p.seasonalModifier / (p.nutrition * 0.033);
+      let score;
+      if (this.hunger > this.criticalHunger) {
+        // Starving: the nearest plant that is a real meal, not the richest one in range. Weighing
+        // distance against nutrition sends a starving bird past the tussock at its feet toward a
+        // beech a hundred units off, up a slope, and it dies on the way. A plant with less than
+        // fifteen food left on it counts as proportionally further away.
+        score = Math.sqrt(dx * dx + dy * dy) / this.foragingBonus / Math.min(1, p.nutrition / 15);
+      } else {
+        score = Math.sqrt(dx * dx + dy * dy) / this.foragingBonus / p.seasonalModifier / (p.nutrition * 0.033);
+      }
       
       const hx = this.homeRange.x - p.pos.x, hy = this.homeRange.y - p.pos.y;
       if (hx * hx + hy * hy < this.homeRangeRadiusSq) score *= 0.7;

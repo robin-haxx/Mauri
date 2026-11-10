@@ -207,18 +207,21 @@ class ModuleDirector {
   // window coordinates. (A later module overrides this and builds from the same helpers.)
   planTerrain(t) {
     const P = this._planningGrid(t), cfg = this.cfg;
-    const { W, H, N, elev, walk, centre, E, dist, inside, openness, toForest, toScree, topE } = P;
+    const { W, H, N, elev, walk, centre, E, dist, inside, openness, toForest, toScree,
+            region, mainRegion, topMainE, regionNear, nearestIn } = P;
 
-    // ---- The nest: near the mountain top, with room around it and bush not far off. ----
+    // ---- The nest: near the top of the biggest stretch of land (not a peak cut off by scree,
+    // which the family could never walk off), with room around it and bush not far off. ----
     let nest = null, best = -Infinity;
     for (let i = 0; i < N; i++) {
       const p = centre(i);
-      if (!walk[i] || elev[i] < topE - 0.07 || !inside(p, 55)) continue;
+      if (!walk[i] || region[i] !== mainRegion || elev[i] < topMainE - 0.07 || !inside(p, 55)) continue;
       const score = elev[i] * 12 + openness(p, 30) * 3 +
         (toForest[i] < 150 ? 1.5 : 0) + (toScree[i] < 130 ? 1 : 0);
       if (score > best) { best = score; nest = p; }
     }
-    if (!nest) nest = { x: W * 0.7, y: H * 0.4 };
+    if (!nest) nest = nearestIn({ x: W * 0.7, y: H * 0.4 }, mainRegion) || { x: W * 0.7, y: H * 0.4 };
+    const home = regionNear(nest);   // (every site the family walks to is on this land)
 
     // ---- The tarn (low, open ground a good walk away, with a way down to it), and the wrong
     // way: downhill, but well away from the tarn. Without storms to follow, the family heads
@@ -235,7 +238,7 @@ class ModuleDirector {
     for (const drop of [0.04, 0.08, 1]) {
       for (let i = 0; i < N; i++) {
         const p = centre(i), d = dist(p, nest);
-        if (!walk[i] || d < R + 30 || d > R + 60 || !inside(p, 40) ||
+        if (!walk[i] || region[i] !== home || d < R + 30 || d > R + 60 || !inside(p, 40) ||
             elev[i] > E(nest) + 0.01 || elev[i] < E(nest) - drop) continue;
         const score = openness(p, 22) * 3 + toScree[i] * 0.002 + random(0.3) -
           (E(nest) - elev[i]) * 25 - (d - R - 30) * 0.02;
@@ -243,7 +246,7 @@ class ModuleDirector {
       }
       if (grove) break;
     }
-    if (!grove) grove = { x: nest.x - (R + 30), y: nest.y + 10 };
+    if (!grove) grove = nearestIn({ x: nest.x - (R + 30), y: nest.y + 10 }, home) || { x: nest.x - (R + 30), y: nest.y + 10 };
 
     // ---- Storms: one over the nest (the father and egg start hidden), the rest gathered on
     // the high ground above it: on the far side of the nest from the patch, and clear of the
@@ -298,13 +301,45 @@ class ModuleDirector {
         }
       }
     }
-    this._grid = { cols, rows, step, elev, walk, forest, nearWall, W, H };
+    // Which walkable ground connects to which (labelLandRegions, mauri_terrain.js): a ridge of
+    // scree or ice with no pass through it cuts the land into regions no bird can walk between.
+    // (The terrain's own regions aren't ready yet: this runs inside its generation.)
+    const land = labelLandRegions(walk, cols, rows);
+    this._grid = { cols, rows, step, elev, walk, forest, nearWall, W, H, region: land.ids };
 
     const cellAt = (x, y) => {
       const c = Math.max(0, Math.min(cols - 1, (x / step) | 0));
       const r = Math.max(0, Math.min(rows - 1, (y / step) | 0));
       return r * cols + c;
     };
+    // The region at p, or (p off the land) of the nearest walkable cell within 3; -1 if none.
+    const regionNear = (p) => {
+      const c0 = Math.floor(p.x / step), r0 = Math.floor(p.y / step);
+      for (let k = 0; k <= 3; k++) {
+        for (let dr = -k; dr <= k; dr++) {
+          for (let dc = -k; dc <= k; dc++) {
+            if (Math.max(Math.abs(dr), Math.abs(dc)) !== k) continue;
+            const c = c0 + dc, r = r0 + dr;
+            if (c >= 0 && r >= 0 && c < cols && r < rows && land.ids[r * cols + c] >= 0) return land.ids[r * cols + c];
+          }
+        }
+      }
+      return -1;
+    };
+    // Whether a bird could walk from a to b: the sites a bird walks between are kept in one region.
+    const sameRegion = (a, b) => { const ra = regionNear(a); return ra >= 0 && ra === regionNear(b); };
+    // The walkable cell nearest p in region `rid` (its centre), or null.
+    const nearestIn = (p, rid) => {
+      let best = null, bestD = Infinity;
+      for (let i = 0; i < N; i++) {
+        if (land.ids[i] !== rid) continue;
+        const q = { x: ((i % cols) + 0.5) * step, y: (((i / cols) | 0) + 0.5) * step };
+        const d = Math.hypot(q.x - p.x, q.y - p.y);
+        if (d < bestD) { bestD = d; best = q; }
+      }
+      return best;
+    };
+    this._grid.regionNear = regionNear;
     const centre = (i) => ({ x: ((i % cols) + 0.5) * step, y: (((i / cols) | 0) + 0.5) * step });
     const E = (p) => elev[cellAt(p.x, p.y)];
     const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
@@ -339,28 +374,32 @@ class ModuleDirector {
     const toForest = distanceTo(i => forest[i] && walk[i]);
     const toScree = distanceTo(i => !walk[i] && t.getBiomeFromElevation(elev[i]) !== t._waterBiome);
 
-    // Highest and lowest walkable ground well inside the window.
-    let topE = 0, lowE = 1;
+    // Highest and lowest walkable ground well inside the window (and the highest on the biggest
+    // stretch of land, mainRegion, where a family's home goes).
+    let topE = 0, lowE = 1, topMainE = 0;
     for (let i = 0; i < N; i++) {
       if (!walk[i] || !inside(centre(i), 50)) continue;
       if (elev[i] > topE) topE = elev[i];
       if (elev[i] < lowE) lowE = elev[i];
+      if (land.ids[i] === land.largest && elev[i] > topMainE) topMainE = elev[i];
     }
     return { t, W, H, ox, oy, step, cols, rows, N, elev, walk, forest, nearWall,
-             cellAt, centre, E, dist, inside, openness, distanceTo, toForest, toScree, topE, lowE };
+             cellAt, centre, E, dist, inside, openness, distanceTo, toForest, toScree, topE, lowE,
+             region: land.ids, mainRegion: land.largest, topMainE, regionNear, sameRegion, nearestIn };
   }
 
   // A tarn on low, open ground a good walk from `from`, with a walkable way down to it.
   // `ok(p)` can rule candidates out (e.g. too near another refuge). Returns { tarn, shore,
   // path }: the shore is the tarn's edge facing `from`, and the path runs from `from` to it.
   _findRefuge(P, from, ok = null) {
-    const { W, H, N, elev, walk, cellAt, centre, dist, inside, openness, lowE } = P;
+    const { W, H, N, elev, walk, cellAt, centre, dist, inside, openness, lowE, region, regionNear } = P;
     const ideal = Math.max(230, Math.min(380, W * 0.55));
     const tarnR = this.cfg.tarnRadius;
+    const home = regionNear(from);
     const cands = [];
     for (let i = 0; i < N; i++) {
       const p = centre(i);
-      if (!walk[i] || elev[i] > lowE + 0.06 || !inside(p, 55) || (ok && !ok(p))) continue;
+      if (!walk[i] || region[i] !== home || elev[i] > lowE + 0.06 || !inside(p, 55) || (ok && !ok(p))) continue;
       const d = dist(p, from);
       if (d < ideal * 0.6 || d > ideal * 1.4) continue;
       const open = openness(p, tarnR * 2.2);
@@ -375,21 +414,23 @@ class ModuleDirector {
       const route = this._findPath(from, s, (x, y) => Math.hypot(x - p.x, y - p.y) < tarnR + 4);
       if (route) return { tarn: p, shore: s, path: route };
     }
-    // Nowhere suitable: put it straight downhill and walk there regardless.
-    const tarn = { x: Math.max(60, Math.min(W - 60, from.x - ideal * 0.8)), y: Math.max(60, Math.min(H - 60, from.y + 40)) };
+    // Nowhere suitable: put it straight downhill (on their own land) and walk there regardless.
+    const want = { x: Math.max(60, Math.min(W - 60, from.x - ideal * 0.8)), y: Math.max(60, Math.min(H - 60, from.y + 40)) };
+    const tarn = P.nearestIn(want, home) || want;
     const shore = { x: tarn.x + tarnR + 12, y: tarn.y };
     return { tarn, shore, path: [from, shore] };
   }
 
   // The wrong way from `from`: downhill, but well away from the direction of `tarn`.
   _findDecoy(P, from, tarn) {
-    const { W, H, N, walk, elev, centre, E, dist, inside, openness } = P;
+    const { W, H, N, walk, elev, centre, E, dist, inside, openness, region, regionNear } = P;
     const toTarn = { x: tarn.x - from.x, y: tarn.y - from.y };
     const toTarnLen = Math.hypot(toTarn.x, toTarn.y) || 1;
+    const home = regionNear(from);   // (they walk there: on their own land)
     let decoy = null, best = -Infinity;
     for (let i = 0; i < N; i += 2) {
       const p = centre(i);
-      if (!walk[i] || !inside(p, 40) || elev[i] > E(from) - 0.05) continue;
+      if (!walk[i] || region[i] !== home || !inside(p, 40) || elev[i] > E(from) - 0.05) continue;
       const d = dist(p, from);
       if (d < 130 || d > toTarnLen * 0.85) continue;
       const cos = ((p.x - from.x) * toTarn.x + (p.y - from.y) * toTarn.y) / (d * toTarnLen);
@@ -399,8 +440,9 @@ class ModuleDirector {
     }
     if (!decoy) {
       const a = Math.atan2(toTarn.y, toTarn.x) + Math.PI * 0.6;
-      decoy = { x: Math.max(40, Math.min(W - 40, from.x + Math.cos(a) * 150)),
-                y: Math.max(40, Math.min(H - 40, from.y + Math.sin(a) * 150)) };
+      const want = { x: Math.max(40, Math.min(W - 40, from.x + Math.cos(a) * 150)),
+                     y: Math.max(40, Math.min(H - 40, from.y + Math.sin(a) * 150)) };
+      decoy = (home >= 0 && P.nearestIn(want, home)) || want;   // (still on their own land)
     }
     return decoy;
   }
@@ -447,10 +489,13 @@ class ModuleDirector {
   // The way out, for the "Continue" walk-off: a walkable route from `from` to the map's edge
   // ('north' or 'south'), so the family doesn't walk into scree. null if there is none.
   _findExit(P, from, dir) {
-    const { cols, rows, walk, centre, dist } = P;
-    const edgeRow = dir !== 'south' ? 0 : rows - 1;
+    const { cols, rows, walk, centre, dist, region, regionNear } = P;
+    const edgeRow = dir !== 'south' ? 0 : rows - 1, home = regionNear(from);
     const exits = [];
-    for (let c = 0; c < cols; c++) if (walk[edgeRow * cols + c]) exits.push(centre(edgeRow * cols + c));
+    for (let c = 0; c < cols; c++) {
+      const i = edgeRow * cols + c;
+      if (walk[i] && region[i] === home) exits.push(centre(i));   // (only an edge they can walk to)
+    }
     exits.sort((a, b) => dist(a, from) - dist(b, from));
     let route = null;
     for (let k = 0; k < Math.min(6, exits.length) && !route; k++) route = this._findPath(from, exits[k]);
@@ -498,6 +543,11 @@ class ModuleDirector {
   // and keeping off scree edges. `blocked(x, y)` rules out extra cells. Returns [{x, y}] or null.
   _findPath(from, to, blocked = null) {
     const G = this._grid, cols = G.cols, rows = G.rows, step = G.step, N = cols * rows;
+    // Ends on two stretches of land a ridge cuts apart: no way round, so no need to search.
+    if (G.regionNear) {
+      const ra = G.regionNear(from), rb = G.regionNear(to);
+      if (ra >= 0 && rb >= 0 && ra !== rb) return null;
+    }
     const cell = (p) => Math.max(0, Math.min(rows - 1, (p.y / step) | 0)) * cols +
                         Math.max(0, Math.min(cols - 1, (p.x / step) | 0));
     const start = cell(from), goal = cell(to);
@@ -637,7 +687,8 @@ class ModuleDirector {
   _spawnMoa(x, y, female, role, opts = {}) {
     const sim = this.game.simulation;
     // Never on scree, ice or snow: a bird set down there can't walk off it (see _walkableNear).
-    const p = this._walkableNear(x, y);
+    // And on the land its home is on (opts.anchor, else the nest): not over a ridge from it.
+    const p = this._walkableNear(x, y, 80, 4, opts.anchor || (this.sites && this.sites.nest));
     if (p) { x = p.x; y = p.y; }
     const m = sim._createFromRegistry('moa', 'upland_moa', x, y, Moa);
     m.isFemale = female;
@@ -662,10 +713,14 @@ class ModuleDirector {
 
   // The nearest point to (x, y) a moa can stand on now (walkable, seasonal snow included, and at
   // least `edge` in from the map's edges), searched in rings out to maxR; (x, y) itself when it
-  // already is; null if none.
-  _walkableNear(x, y, maxR = 80, edge = 4) {
+  // already is; null if none. With `anchor` ({ x, y }), only ground a bird there could walk to
+  // (the same land region: TerrainGenerator.landRegions), so the nearest ground over a ridge
+  // isn't taken.
+  _walkableNear(x, y, maxR = 80, edge = 4, anchor = null) {
     const t = this.game.terrain, W = t.mapWidth, H = t.mapHeight;
-    const ok = (px, py) => px > edge && py > edge && px < W - edge && py < H - edge && t.isWalkable(px, py);
+    const home = (anchor && t.regionNear) ? t.regionNear(anchor) : -1;
+    const ok = (px, py) => px > edge && py > edge && px < W - edge && py < H - edge && t.isWalkable(px, py) &&
+      (home < 0 || t.regionNear({ x: px, y: py }, 'now', 1) === home);
     if (ok(x, y)) return { x, y };
     for (let r = 3; r <= maxR; r += 3) {
       const n = Math.max(8, Math.round(r * 1.5));
@@ -1435,8 +1490,8 @@ class ModuleDirector {
       // Aim a little inside the storm on the far side, toward the goal (on ground it can stand on).
       const gx = j.goal.x - p.pos.x, gy = j.goal.y - p.pos.y, gl = Math.hypot(gx, gy) || 1;
       let pt = { x: p.pos.x + gx / gl * p.radius * 0.25, y: p.pos.y + gy / gl * p.radius * 0.25 };
-      if (!t.isWalkable(pt.x, pt.y)) pt = this._walkableNear(p.pos.x, p.pos.y, p.radius * 0.5);
-      if (!pt) continue;
+      if (!t.isWalkable(pt.x, pt.y)) pt = this._walkableNear(p.pos.x, p.pos.y, p.radius * 0.5, 4, here);
+      if (!pt || (t.connected && !t.connected(here, pt))) continue;   // (a storm over a ridge is no way on)
       const gain = leftHere - this._walkLeft(j, pt);
       if (gain < 20) continue;
       const score = gain - d * 0.3 + (p === cur ? 15 : 0);
@@ -2087,9 +2142,9 @@ class MoaLife {
   graze(x, y, radius = 24) { this.mode = 'graze'; this._setSpot(x, y); this.radius = radius; }
   goTo(x, y, speed = 1)   { this.mode = 'go'; this._setSpot(x, y); this.speed = speed; }
   // Where it stays, grazes or walks to: on ground it can stand on (a spot on scree or snow is
-  // moved to the nearest that isn't, or it would walk back onto it).
+  // moved to the nearest that isn't, or it would walk back onto it), on its own side of any ridge.
   _setSpot(x, y) {
-    const p = this.offMap ? null : this.dir._walkableNear(x, y, 40);
+    const p = this.offMap ? null : this.dir._walkableNear(x, y, 40, 4, this.moa.pos);
     this.spot.x = p ? p.x : x; this.spot.y = p ? p.y : y;
   }
   follow(leader, gap = 10) { this.mode = 'follow'; this.leader = leader; this.gap = gap; }
@@ -2224,6 +2279,9 @@ class MoaLife {
   _travel(x, y, strength, arrive, dt) {
     const m = this.moa;
     this._travelling = true;
+    // A goal on land a ridge cuts off from here can never be reached (no detour finds a way):
+    // make for the nearest ground on this side of it instead (see _reachable).
+    if (!this.offMap) ({ x, y } = this._reachable(x, y));
     let tx = x, ty = y, ar = arrive;
     const d = this._detour;
     if (d) {
@@ -2237,6 +2295,26 @@ class MoaLife {
     }
     m.applyForce(m.seekPoint(tx, ty, strength, ar));
     this._watchProgress(tx, ty, x, y, arrive, dt);
+  }
+
+  // (x, y) if the bird can walk there (the same land region: TerrainGenerator.landRegions, with
+  // the snow as it is now), else the nearest point it can, toward it. The stand-in is kept while
+  // the goal stays put. In debug mode the first stand-in for a goal says so in the console.
+  _reachable(x, y) {
+    const m = this.moa, t = m.terrain;
+    if (!t || !t.regionNear || !t.isInBounds(x, y)) return { x, y };
+    const here = t.regionNear(m.pos);
+    if (here < 0) return { x, y };   // (it's on scree or snow itself: its escape sees to that)
+    const s = this._standIn;
+    if (s && s.region === here && Math.abs(s.gx - x) + Math.abs(s.gy - y) < 6) return s.p;
+    if (t.regionNear({ x, y }) === here) { this._standIn = null; return { x, y }; }
+    const p = t.nearestInRegion({ x, y }, here) || { x, y };
+    if (CONFIG.debugMode && !(s && Math.abs(s.gx - x) + Math.abs(s.gy - y) < 6)) {
+      console.warn(`[module] a ${this.role} moa can't reach (${Math.round(x)}, ${Math.round(y)}): it's ` +
+        `over a ridge. Walking to (${Math.round(p.x)}, ${Math.round(p.y)}) on its own side instead.`);
+    }
+    this._standIn = { gx: x, gy: y, region: here, p };
+    return p;
   }
 
   // How much closer the bird gets to what it's steering at, over windows of STUCK_WINDOW
@@ -2328,7 +2406,8 @@ class MoaLife {
     let best = null, bestD = PLANT_LURE.range;
     for (const l of lures) {
       const d = Math.hypot(l.plant.pos.x - m.pos.x, l.plant.pos.y - m.pos.y);
-      if (d < bestD) { bestD = d; best = l.plant; }
+      // (A plant over a ridge from it is out of reach, however close.)
+      if (d < bestD && !(m.terrain.connected && !m.terrain.connected(m.pos, l.plant.pos))) { bestD = d; best = l.plant; }
     }
     this._lureTarget = best;
     if (best) best._heldBy = m;   // (left for it: see _feed)

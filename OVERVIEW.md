@@ -15,8 +15,20 @@ picking up future tasks. The other docs:
 - `DEVBLOG_systems.md`: the ecology and behaviour, as a narrative "how it works".
 - `FREEPLAY_PLAN.md`: Free Play's design and its ecology grounding.
 - `YEARS_PLAN.md`: Free Play's year structure, kea cascade and world grid (the living plan).
+- `MODULE_ENGINE_PLAN.md`: the module engine ("chapters"): its format, vocabulary and build
+  plan (the living plan).
+- `MODULE_SCRIPTING.md`: how to script a module with it (the reference: every key, condition,
+  action and default, with recipes and debugging).
+- `CHAPTERS_MODULES.md`: the three lessons built on the engine (the Storm, Pātōtara, the five
+  years), in plain language: what each teaches, what the simulation does on its own, what is
+  guaranteed, the two sketches, and what the game records for the research.
 - `GL_PORT.md` / `PERF_ASSESSMENT.md`: the GPU renderer, and where frame time goes.
 - `MISTAKES.md`: things that went wrong, and the rule that stops a repeat.
+- `ENGINE_ASSESSMENT.md`: the module / endless split, a proposed grammar (substrate, direction,
+  presentation) to reconcile the teaching build with the research build, and how that weighs
+  against the chapters engine, the legacy modules and new free play modes. Its section 16 is
+  the latest review: the Stories and the Chapters set compared, the changes proposed next, and
+  other ways to set the framework up.
 
 ---
 
@@ -46,13 +58,22 @@ picking up future tasks. The other docs:
   later-loaded file as long as the reference only *executes* at runtime (during play),
   not at parse time. `mauri_sketch.js` loads **last** and owns `setup()/draw()`.
 - **No modules, no bundler in development.** Serve the folder (`node tools/serve.js`, port
-  8081) and open `index.html`. `dist/` holds a minified release build.
+  8081) and open `index.html`. `dist/` holds a minified release build (`node tools/build.js`).
+- **URL parameters** open the game in a state: `?level=<id or family>&sketch=<label>` starts a
+  level without the menu, `seed=<n>` fixes the land and, on one machine and browser, replays the whole run exactly, `bench=1`
+  records from the first frame, `years=<n>` ends a recorded run, `chapter=<id>` starts a chapter
+  level there, `render=2d` uses the flat renderer.
+- **Headless tools** (`tools/`, through Playwright): `validate.js` checks every level without
+  playing (`--smoke` also runs each for 15 s); `batch.js` plays a level across seeds with a
+  stand-in player and saves the benchmark CSV and the story log per run. `MODULE_SCRIPTING.md`
+  §16 has the options.
 - **Delta-time.** Almost everything takes a `dt` and scales by it, so the sim is
   frame-rate independent (fast-forward runs the sim twice per frame).
 - **Spatial grids** (`mauri_spatial.js`) back all "who's near me" queries so behaviour
   stays O(neighbours) not O(N²).
 - `node --check` is a good smoke test for every `.js` after an edit; a runtime typo only
-  shows up by running the game (see `MISTAKES.md`).
+  shows up by running the game (`node tools/validate.js --smoke` does that for every level;
+  see `MISTAKES.md`).
 
 ---
 
@@ -102,7 +123,12 @@ picking up future tasks. The other docs:
   noise, island falloff or lake basins), classifies each cell into an elevation-band
   biome, and exposes `getElevationAt / getBiomeAt / isWalkable / canPlace`. On a
   `worldGrid` level it generates one continuous land several windows wide and pans the
-  window across it (`panToArea`). Owns the dynamic **snow line**. Flat per-season images
+  window across it (`panToArea`). Owns the dynamic **snow line**, and the window's **land
+  regions** (`landRegions`, `regionAt`, `regionNear`, `connected`, `nearestInRegion`; labelled
+  by `labelLandRegions`): the connected stretches of walkable ground, split wherever scree, ice,
+  snow or water cuts the land, so code can tell whether a bird could ever walk from one place to
+  another. Module sites, spawns and walks, the chapter engine's sites, and (opt-in,
+  `mechanics.landRegionMates`) wild moa mating all respect them; the **L** lens draws them. Flat per-season images
   are baked only when the flat 2D view needs them.
 - **`mauri_seasons.js`**; `SEASONS` table + `SeasonManager`: advances the season
   clock, produces smoothly-lerped modifiers (per-biome plant growth, per-plant-type
@@ -155,6 +181,19 @@ picking up future tasks. The other docs:
   adds Module 1's `PatotaraDirector` and the scripted kea (`KeaLife`).
   **`mauri_module_freeplay.js`** adds `FreePlayDirector`, the five years after Module 1
   (see the module levels below), and `BIRD_CALENDAR`, each species' breeding year.
+- **`mauri_chapters.js`**; the module engine: `ChapterRunner` (`game.chapters`) runs any level
+  with a `chapters` list over the free-running sim. Its verbs come in two toolboxes: the
+  scripting toolbox (`CHAPTER_SCRIPT_TOOLS`: words, the toolbar and pacing, named `sites` and
+  things placed, sown or spawned at them, moments, and `aim`) and the ecology toolbox
+  (`CHAPTER_ECOLOGY_TOOLS`: focus, floors, nest founding, newcomers, a mechanics overlay, and
+  eagle pressure). Each chapter sets levers, measures goals on the sim, answers the sim's
+  events with lines and banners compiled into tutorial tips (`TUTORIAL_EVENTS.STORY_BEAT`), and
+  runs **guaranteed beats** (invite an event with ecology levers, force it with a script tool
+  by a deadline). Chapters advance on the season clock and branch on outcomes. Validator, debug
+  inspector (**J** in debug mode), log and jump. Also here: `MomentPlayer`, the moments (the
+  world held still, the camera in, big words) that the Free Play years' director plays its
+  hatchings and catches on too. `HaastsEagle` reads `aimAt` (a chapter's `aim`). Format and
+  plan: `MODULE_ENGINE_PLAN.md`.
 
 ### Rendering
 - **`mauri_projection.js`**; the plan-oblique "3D" mapping (world point + elevation →
@@ -180,7 +219,9 @@ picking up future tasks. The other docs:
 - **`mauri_encyclopedia.js`**; the gamewide Field Guide (**E**).
 - Debug tools: **`mauri_lens.js`** (world-space overlays of hidden sim state, **L** in
   debug mode) and **`mauri_benchmark.js`** (population CSV recorder, armed from the level
-  splash in debug mode).
+  splash in debug mode or by `?bench=1`; each row carries the seed, level, sketch and chapter,
+  the chapters story log goes into its `event` column and into a `.beats.json` beside it, and
+  `tools/batch.js` saves both headless).
 
 ### Level system
 - **`mauri_level_format.js`**; `LEVEL_REGISTRY` (register/get/order/unlock),
@@ -196,6 +237,19 @@ picking up future tasks. The other docs:
 - **`levels/level_freeplay_kahurangi.js`**; Free Play (*Mutunga-kore*), the endless mode.
   A four-year loop of focus species across a 2×2 world grid, a deepening glacial climate,
   per-year toolbars. See `FREEPLAY_PLAN.md` and `YEARS_PLAN.md`.
+- **`levels/chapters_prototype.js`**; the module engine's worked example (`devOnly`: listed
+  only in debug mode). One year of upland moa on Level 2's land with Free Play's ecology,
+  four chapters that branch in spring on how the flock came through winter.
+- **`levels/chapters_storms.js`, `levels/chapters_patotara.js`, `levels/chapters_freeplay.js`**;
+  the Storm lesson, the Pātōtara lesson and the five years rebuilt on the chapters engine,
+  beside the scripted originals (which stay as the menu's "Stories"). Each file is a factory
+  that registers one level per *sketch* (a setting of the emergence dial: Guided, Open) and a
+  family (`LEVEL_REGISTRY.registerFamily`). The level select is built from `MENU_SECTIONS`
+  (`mauri_sketch.js`: Stories, Chapters, Endless, Classic; placeholder labels, renamable in one
+  place) and each level's `section`; the Chapters section draws a card per family with a button
+  per sketch. **`levels/_template_chapters.js`** is the copyable starting point (debug mode
+  only). What the lessons teach and how they were verified: `CHAPTERS_MODULES.md`; every key
+  and flag: `MODULE_SCRIPTING.md`. The stand-in batch results live in `tests/chapters/`.
 - **`levels/tutorial_*.js`**; each level's tips. The modules share a kit
   (`tutorial_module_kit.js`: dialogue scenes, "do this" banners) and Te Whē's opening and
   closing words (`tutorial_module_bookends.js`).
@@ -267,12 +321,16 @@ per flag; Free Play's (`level_freeplay_kahurangi.js`) is the fullest. The main f
 are habitat stress and forest competition, emergent eagles (`eagleTargetRatio` is the
 main knob), forest contraction, Free Play's climate (`climateDrift`, `winterInedibility`,
 `coldToleranceMatters`), its year engine (`freeplay*`), the kea cascade and nesting sites.
-(Module levels don't use flags for their story; see `mauri_module.js`.) This is the main
-extension pattern; add a flag, read it behind a
+(Module levels don't use flags for their story; see `mauri_module.js`.) The flags added for
+the chapters modules (storm as cover, the eagle's visible wind-up and its preference for a
+species with a surplus, kea raids rolled against defending moa, placed food that follows the
+seasons, the birds' breeding calendar) are tabled in `MODULE_SCRIPTING.md` §19. This is the
+main extension pattern; add a flag, read it behind a
 `typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.x` guard.
 
 ### 4.3 Goals, phases, stories and years
-Module levels hand the whole job to their director (`checkGoals` returns early). Free
+Module levels hand the whole job to their director (`checkGoals` returns early), and chapter
+levels to their `ChapterRunner` (each chapter's goals, its end, the branch, the win). Free
 Play (`endless: true`) never wins: `_checkFreeplayYear` sets each year's goals for its
 focus species, and the run is lost when any focus species dies out.
 Classic levels list `goals` (each `{ name, condition(sim, game), reward }`); the level
@@ -354,6 +412,10 @@ tip set via `tutorial.tips`; otherwise the default `TUTORIAL_TIPS` is used.
   if relevant), then list its key + cost in a level's `availablePlaceables`.
 - **Add a mechanic:** read a new `LEVEL_MECHANICS.<flag>` behind a `typeof` guard in the
   relevant system, and set it in a level's `mechanics`.
+- **Add a chapters module (a lesson):** copy `levels/_template_chapters.js`, rename its family
+  and ids, write its `claim`, add a `<script>` tag after the template's in `index.html`, and
+  run `node tools/validate.js --only <id>`, then `node tools/batch.js --level <family> --seeds
+  1..5`. `MODULE_SCRIPTING.md` §18.
 
 ---
 

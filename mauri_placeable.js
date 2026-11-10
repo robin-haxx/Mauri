@@ -49,8 +49,13 @@ class PlaceableObject {
     this.simulation = simulation;
     this.seasonManager = seasonManager;
     // Prefer the level/year-resolved def (merged PLACEABLES[type] + overrides, carrying
-    // _parsedColor); fall back to the global base for an off-palette spawn.
-    this.def = (typeof game !== 'undefined' && game && game.activePlaceables && game.activePlaceables[type]) || PLACEABLES[type];
+    // _parsedColor); then the level's own resolved def (its overrides still apply to an item
+    // that isn't on the toolbar right now: a chapter level's storm hides rather than stuns even
+    // when the Storm tool is off the palette); and only then the global base.
+    const _g = (typeof game !== 'undefined' && game) ? game : null;
+    this.def = (_g && _g.activePlaceables && _g.activePlaceables[type]) ||
+      (_g && _g.currentLevel && _g.currentLevel._resolvedPlaceables && _g.currentLevel._resolvedPlaceables[type]) ||
+      PLACEABLES[type];
 
     // A stand that matures (matureAfterYears) never wears out, so it has no life to count.
     this.life = this.maxLife = this.def.matureAfterYears ? 1 : this.def.duration;
@@ -354,7 +359,7 @@ class PlaceableObject {
       if (this.fading) {
         this.life -= dt * 2;
         if (this.life <= 0) {
-          this.destroy();
+          this._expire();
           return;
         }
       }
@@ -363,7 +368,7 @@ class PlaceableObject {
     } else {
       this.life -= dt;
       if (this.life <= 0) {
-        this.destroy();
+        this._expire();
         return;
       }
     }
@@ -401,10 +406,20 @@ class PlaceableObject {
   // FEEDING
   // ============================================
   
+  // placedPlantsSeasonal: a patch that stands bare (unsprouted, or its plants without winter
+  // food) neither feeds nor draws a moa.
+  _bare() {
+    if (!(typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.placedPlantsSeasonal)) return false;
+    if (this.unsprouted) return true;
+    const ps = this.spawnedPlants;
+    return !!(ps && ps.length && ps.every(p => !p.alive || p.unsprouted || p.winterInedible));
+  }
+
   feedMoa(moa, dt = 1) {
     if (!this.def.feedingRate) return 0;
     if (this.frostDying) return 0;   // a frost-killed grove no longer feeds (see frostKill)
     if (this.matured) return 0;      // grown out of reach (see mature)
+    if (this._bare()) return 0;      // nothing on it this season (see _bare)
 
     // Species-selective feeders (lancewood, speargrass) nourish only their favoured
     // species; others are scaled by LEVEL_MECHANICS.unfavouredBrowsePenalty (0 = none).
@@ -452,7 +467,7 @@ class PlaceableObject {
   // ============================================
   
   getAttractionStrength(moa) {
-    if (!this.alive || this.matured) return 0;
+    if (!this.alive || this.matured || this._bare()) return 0;
     
     let strength = 0;
     
@@ -507,6 +522,16 @@ class PlaceableObject {
   destroy() {
     this.alive = false;
     for (const plant of this.spawnedPlants) plant.alive = false;
+  }
+
+  // Worn out (its life ran down): gone, and the tutorial is told (PLACEABLE_EXPIRED), so a
+  // chapter level can answer a storm breaking up over the moa it was hiding.
+  _expire() {
+    this.destroy();
+    const g = this.simulation && this.simulation.game;
+    if (g && g.tutorial && typeof TUTORIAL_EVENTS !== 'undefined') {
+      g.tutorial.fireEvent(TUTORIAL_EVENTS.PLACEABLE_EXPIRED, { placeable: this, type: this.type });
+    }
   }
 
   // An unsprouted pātōtara patch brought into fruit (a press and hold on it; Game._sprout).

@@ -52,6 +52,7 @@
     <script src="mauri_module.js"></script>   <!-- module levels: story director, moa family + eagle scripts -->
     <script src="mauri_module_patotara.js"></script>   <!-- module 1 director + scripted kea (after mauri_module.js) -->
     <script src="mauri_module_freeplay.js"></script>   <!-- the Free Play years after module 1 (after mauri_module_patotara.js) -->
+    <script src="mauri_chapters.js"></script>   <!-- the module engine: ChapterRunner for levels with a `chapters` list -->
 
     <!-- UI -->
     <script src="mauri_UI.js"></script>
@@ -70,6 +71,11 @@
     <script src="levels/level_02_glacial_kahurangi.js"></script>
     <script src="levels/level_03_alpine_lakes.js"></script>
     <script src="levels/level_freeplay_kahurangi.js"></script>  <!-- endless deepening-glacial Free Play -->
+    <script src="levels/chapters_prototype.js"></script>  <!-- the module engine's worked example (debug mode only; after levels 2 and Free Play, which it borrows from) -->
+    <script src="levels/chapters_storms.js"></script>  <!-- the Storm lesson on the chapters engine (guided and open sketches; borrows Module 0's land) -->
+    <script src="levels/chapters_patotara.js"></script>  <!-- the Pātōtara lesson on the chapters engine (after chapters_storms, whose land it shares) -->
+    <script src="levels/chapters_freeplay.js"></script>  <!-- the five years on the chapters engine (after the two lessons, whose land it shares) -->
+    <script src="levels/_template_chapters.js"></script>  <!-- a copyable module template (debug mode only) -->
     <script src="mauri_encyclopedia.js"></script>
 
     <!-- Per-level tutorial scripts (register with TUTORIAL_REGISTRY) -->

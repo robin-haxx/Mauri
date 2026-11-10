@@ -250,6 +250,9 @@ const KAKAPO_SPECIES = {
   // Reproduction; the base loop, but GATED to mast years by _tryReproduce.
   maturitySec:      30,    // slow to mature
   eggCooldownSec:   50,
+  // The breeding year (seasonalBirdBreeding: 'calendar'): only a rimu mast year, summer, 2 to
+  // 3 eggs; grown at about 4, and years between clutches.
+  calendar: { lay: 'summer', layFrom: 0.2, layTo: 0.6, clutch: [2, 3], maturityYears: 4, every: [2, 4], success: 0, mastSuccess: 1 },
   mateRadius:       180,
   reproCheckSec:    4,
   maxPopulation:    10,

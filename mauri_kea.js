@@ -27,18 +27,16 @@ class Kea extends Kereru {
     this._sm = null;   // season manager, stashed each tick so the band helper can read it
 
     // Egg-raiding: kea rob moa nests, destroying the egg, feeding a little, and seeding
-    // a disturbance moa steer away from. A cooldown keeps it opportunistic.
+    // a disturbance moa steer away from. A cooldown keeps it opportunistic. The mode and the
+    // numbers are read when they're used (_raidMode, _raidCfg), so a chapter can switch them.
     const M = (typeof LEVEL_MECHANICS !== 'undefined') ? LEVEL_MECHANICS : {};
-    this._raidEnabled = !!M.keaRaidsEggs;
-    this._raidRadius = M.keaRaidRadius ?? 95;
-    this._raidNutrition = M.keaRaidNutrition ?? 46;
-    this._raidCooldownFrames = (M.keaRaidCooldownSec ?? 5) * 60;
-    this._raidCooldown = Math.random() * this._raidCooldownFrames;
+    this._raidCooldown = random() * this._raidCfg().cooldown;
+    this._shoo = null;   // { x, y, t }: driven off a nest by its moa, flying clear for t frames
 
     // Berry Cache choice (emergent flock spread): a kea commits to one cache for a beat,
     // chosen by relative nutrition-per-bird and distance (see _chooseLure).
     this._lureChoice = null;
-    this._lureChoiceTimer = Math.random() * 90;         // stagger the first pick across the flock
+    this._lureChoiceTimer = random() * 90;         // stagger the first pick across the flock
     this._lureChoiceFrames = (sp.lureChoiceSec ?? 2.5) * 60;
     this._lureBaseNutrition = sp.lureBaseNutrition ?? 6; // a placed cache attracts even before its berries grow
     this._lureCrowdWeight   = sp.lureCrowdWeight ?? 1.0; // ↑ = the flock spreads harder off a crowded cache
@@ -121,7 +119,7 @@ class Kea extends Kereru {
       if (!this._lureValid() || this._lureChoiceTimer <= 0) {
         const prev = this._lureChoice;
         this._lureChoice = this._chooseLure(sim);
-        this._lureChoiceTimer = this._lureChoiceFrames * (0.75 + Math.random() * 0.5);
+        this._lureChoiceTimer = this._lureChoiceFrames * (0.75 + random() * 0.5);
         // Newly committed to a (different) cache → drop the old perch so it re-homes near the cache.
         if (this._lureChoice && this._lureChoice !== prev) {
           this._perchTree = null;
@@ -272,17 +270,27 @@ class Kea extends Kereru {
         if (dx * dx + dy * dy < lureR2) lureBonus = this._perchLureBonus;
       }
       // Small jitter breaks ties so kea choosing at the same moment don't all land on one tree.
-      const score = food + siteBonus + lureBonus - crowd * this._perchCrowdWeight + Math.random() * 0.5;
+      const score = food + siteBonus + lureBonus - crowd * this._perchCrowdWeight + random() * 0.5;
       if (score > bestScore) { bestScore = score; best = p; }
     }
     if (best) this._perchTree = best;
   }
 
-  // Is the committed cache still a valid target; alive, a cache, and within pull range?
+  // What draws a kea from afar: a Berry Cache, or (keaBerryLureRadius, a level flag) a patch of
+  // pātōtara the player has grown and sprouted, whose berries kea come for. 0 = not a lure.
+  _lureRange(p) {
+    if (!p || !p.alive) return 0;
+    if (p.type === 'keaLure') return (p.def && p.def.keaAttractRadius) || 520;
+    const berryR = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.keaBerryLureRadius) || 0;
+    if (berryR && p.type === 'patotara' && !p.unsprouted) return berryR;
+    return 0;
+  }
+
+  // Is the committed lure still a valid target; alive, a lure, and within pull range?
   _lureValid() {
     const c = this._lureChoice;
-    if (!c || !c.alive || c.type !== 'keaLure') return false;
-    const r = (c.def && c.def.keaAttractRadius) || 520;
+    const r = this._lureRange(c);
+    if (!r) return false;
     const dx = c.pos.x - this.pos.x, dy = c.pos.y - this.pos.y;
     return dx * dx + dy * dy <= r * r;
   }
@@ -328,8 +336,8 @@ class Kea extends Kereru {
     const caches = [];
     for (let i = 0; i < list.length; i++) {
       const p = list[i];
-      if (!p.alive || p.type !== 'keaLure') continue;
-      const r = (p.def && p.def.keaAttractRadius) || 520;
+      const r = this._lureRange(p);
+      if (!r) continue;
       const dx = p.pos.x - px, dy = p.pos.y - py, d2 = dx * dx + dy * dy;
       if (d2 <= r * r) caches.push({ c: p, d: Math.sqrt(d2), r });
     }
@@ -383,9 +391,40 @@ class Kea extends Kereru {
     cache._keaFood = food;
   }
 
+  // The raid mode: false (none), true (the legacy auto-raid: a kea that reaches an egg always
+  // takes it), or 'odds' (it rolls Simulation.raidSuccessChance against the moa around the
+  // nest, and is driven off when it loses). Read each tick, so a chapter's overlay reaches
+  // every kea.
+  _raidMode() {
+    return (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS) ? (LEVEL_MECHANICS.keaRaidsEggs || false) : false;
+  }
+  _raidCfg() {
+    const M = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS) ? LEVEL_MECHANICS : {};
+    return { radius: M.keaRaidRadius ?? 95, nutrition: M.keaRaidNutrition ?? 46, cooldown: (M.keaRaidCooldownSec ?? 5) * 60 };
+  }
+
+  // Driven off a nest: fly clear of it for a moment (no feeding, no raiding).
+  _shooStep(dt) {
+    const s = this._shoo;
+    s.t -= dt;
+    if (s.t <= 0) { this._shoo = null; return; }
+    let dx = this.pos.x - s.x, dy = this.pos.y - s.y, m = Math.hypot(dx, dy);
+    if (m < 1) { dx = 1; dy = 0; m = 1; }
+    const t = this.terrain, edge = this._edgeMargin ? this._edgeMargin() : 20;
+    const fx = constrain(this.pos.x + dx / m * 90, edge, t.mapWidth - edge), fy = constrain(this.pos.y + dy / m * 90, edge, t.mapHeight - edge);
+    this.state = KERERU_STATE.FLYING;
+    this._targetTree = null;
+    const base = this.speciesData?.config?.baseSpeed || 0.42;
+    this.maxSpeed = base * 1.15;
+    this._target.set(fx, fy);
+    this.applyForce(this.seek(this._target, 1.4));
+    this.edges();
+  }
+
   // Raiding overrides foraging: while airborne and off cooldown, a moa egg in reach makes
   // the kea divert to rob it. Inside _runState so the base bookkeeping still runs.
   _runState(sim, dt) {
+    if (this._shoo) { this._shooStep(dt); return; }
     // Player-directed egg raid (tap a moa egg): the assigned kea flies to it and eats it.
     if (this._directedEgg) {
       if (!this._directedEgg.alive || this._directedEgg.hatched) {
@@ -396,8 +435,8 @@ class Kea extends Kereru {
         return;
       }
     }
-    // Auto-raid (Link 1); OFF in Free Play (keaRaidsEggs:false), kept for other configs.
-    if (this._raidEnabled && this._raidCooldown <= 0 && this.state === KERERU_STATE.FLYING) {
+    // A raid of its own (keaRaidsEggs: true, or 'odds'). OFF in Free Play, where the player raids.
+    if (this._raidMode() && this._raidCooldown <= 0 && this.state === KERERU_STATE.FLYING) {
       const egg = this._findMoaEgg(sim);
       if (egg) { this._raidStep(sim, egg, dt); return; }
     }
@@ -407,7 +446,7 @@ class Kea extends Kereru {
   // Nearest un-hatched MOA egg within raid range (kea target moa nests, not other birds').
   _findMoaEgg(sim) {
     if (!sim.getNearbyEggs) return null;
-    const eggs = sim.getNearbyEggs(this.pos.x, this.pos.y, this._raidRadius);
+    const eggs = sim.getNearbyEggs(this.pos.x, this.pos.y, this._raidCfg().radius);
     const px = this.pos.x, py = this.pos.y;
     let best = null, bestSq = Infinity;
     for (let i = 0; i < eggs.length; i++) {
@@ -425,12 +464,26 @@ class Kea extends Kereru {
     this.maxSpeed = (this.speciesData && this.speciesData.config && this.speciesData.config.baseSpeed) || 0.4;
     const dx = egg.pos.x - this.pos.x, dy = egg.pos.y - this.pos.y;
     if (dx * dx + dy * dy < 13 * 13) {
-      if (sim.raidMoaEgg) sim.raidMoaEgg(egg, this);
-      const scale = (typeof CONFIG !== 'undefined' && CONFIG.faunaNutritionScale) ? CONFIG.faunaNutritionScale : 1;
-      this.hunger = Math.max(0, this.hunger - this._raidNutrition * scale);
-      this._raidCooldown = this._raidCooldownFrames;
-      this.state = KERERU_STATE.PERCHED;
-      this._restTimer = this._restFrames;
+      const cfg = this._raidCfg(), mode = this._raidMode();
+      const site = (sim.nestingSites || []).find(s => s.alive !== false && s.isInRange && s.isInRange(egg.pos)) || null;
+      // At the odds: the moa around the nest decide it. A kea that loses is driven off.
+      const success = mode === 'odds' && sim.raidSuccessChance ? random() < sim.raidSuccessChance(site, egg.pos) : true;
+      if (success) {
+        if (sim.raidMoaEgg) sim.raidMoaEgg(egg, this);
+        const scale = (typeof CONFIG !== 'undefined' && CONFIG.faunaNutritionScale) ? CONFIG.faunaNutritionScale : 1;
+        this.hunger = Math.max(0, this.hunger - cfg.nutrition * scale);
+        this._raidCooldown = cfg.cooldown;
+        this.state = KERERU_STATE.PERCHED;
+        this._restTimer = this._restFrames;
+      } else {
+        this._raidCooldown = cfg.cooldown * 2;
+        this._shoo = { x: egg.pos.x, y: egg.pos.y, t: 150 };
+        this.state = KERERU_STATE.FLYING;
+        if (sim.game && sim.game.addNotification) sim.game.addNotification("The moa drove a kea off the nest.", 'info');
+      }
+      if (mode === 'odds' && sim.game && sim.game.tutorial && typeof TUTORIAL_EVENTS !== 'undefined') {
+        sim.game.tutorial.fireEvent(TUTORIAL_EVENTS.NEST_RAID, { site, success, kea: this, egg });
+      }
       return;
     }
     this._target.set(egg.pos.x, egg.pos.y);
@@ -604,6 +657,9 @@ const KEA_SPECIES = {
   // Reproduction; sexual, emergent (the Kereru loop).
   maturitySec:      30,
   eggCooldownSec:   45,
+  // The breeding year (seasonalBirdBreeding: 'calendar'): nest from late winter, 2 to 4 eggs,
+  // first breed at about 3; a hen lays every year or two.
+  calendar: { lay: 'winter', layFrom: 0.35, layTo: 0.6, clutch: [2, 4], maturityYears: 3, every: [1, 2], success: 1 },
   mateRadius:       220,
   reproCheckSec:    3.5,
   maxPopulation:    14,

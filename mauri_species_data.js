@@ -89,6 +89,9 @@ const MOA_SPECIES = {
   south_island_giant_moa: {
     displayName: "South Island Giant Moa",
     scientificName: "Dinornis robustus",
+    // The breeding year (seasonalBirdBreeding: 'calendar'): one egg in spring, every two or
+    // three years; bone growth rings say the young took many years to grow up.
+    calendar: { lay: 'spring', layFrom: 0.2, layTo: 0.6, clutch: [1, 1], maturityYears: 8, every: [2, 3], success: 1 },
     tint: [170, 150, 130],     // Dinornis; desaturated brown
     highlightColor: [190, 140, 90],   // brown; player highlight
     // The outline scales with the sprite, and these are drawn big: a thinner one (source px;

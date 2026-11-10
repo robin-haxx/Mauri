@@ -20,7 +20,7 @@ class NestingSite {
     // gather and lay there. null = any moa (seeded and player-founded nests).
     this.reservedFor = opts.reservedFor || null;
     this.eggCount = 0;          // recomputed by the sim from eggs in range
-    this.animTime = Math.random() * 1000;
+    this.animTime = random() * 1000;
   }
 
   isInRange(pos) {

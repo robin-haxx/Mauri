@@ -164,6 +164,16 @@ const ENCYCLOPEDIA = [
     ], seeAlso: ['coexistence', 'winter_food'] },
 
   // ---- Biomes ----------------------------------------------------------------
+  { id: 'patotara', category: 'Plants', title: 'Pātōtara', subtitle: 'Leucopogon fraseri · dwarf mingimingi',
+    body: [
+      "A low, prickly shrub of the tussock tops and dry slopes, hugging the ground against the",
+      "wind. In summer it carries small, sweet orange berries that birds and moa seek out;",
+      "by winter the berries are gone and only the hard foliage is left.",
+      "",
+      "Kea, the alpine parrots, come a long way for the berries. A kea at a moa nest will try",
+      "for an egg, but not with moa standing round it: together, the moa drive a kea off."
+    ], seeAlso: ['kea', 'subalpine', 'upland_moa'] },
+
   { id: 'beech_refuge', category: 'Land', title: 'The Forest Refuge', subtitle: 'A glacial-age haven',
     body: [
       "During the last glacial, tall forest collapsed across most of the South Island;",

@@ -1197,6 +1197,26 @@ class MauriManager {
 // ============================================
 // GAME MANAGER
 // ============================================
+// ============================================
+// THE LEVEL SELECT'S SECTIONS
+// ============================================
+// One section per architecture (ENGINE_ASSESSMENT.md §12). `key` is what a level's `section`
+// names; `label` is what the player reads (placeholders: rename them here); `style` is how the
+// section draws its levels: 'modules' (small square cards), 'sketches' (one card per family of
+// sketches with a button per sketch under it), or 'cards' (the wide challenge cards). Settings
+// is added last by renderLevelSelect. A section with no levels isn't drawn.
+const MENU_SECTIONS = [
+  { key: 'stories',  label: "Stories",  style: 'modules' },
+  { key: 'chapters', label: "Chapters", style: 'sketches' },
+  { key: 'endless',  label: "Endless",  style: 'cards' },
+  { key: 'classic',  label: "Classic",  style: 'cards' }
+];
+
+// Which section a level belongs in: its own `section`, else by what it is.
+function levelSection(l) {
+  return l.section || (l.chapters ? 'chapters' : l.module ? 'stories' : l.endless ? 'endless' : 'classic');
+}
+
 class Game {
   constructor() {
     this.state = GAME_STATE.LEVEL_SELECT;
@@ -1425,6 +1445,11 @@ class Game {
     // A level load / restart replaces the terrain: free the old one's canvases first, or each
     // load leaks its season buffers (see TerrainGenerator.dispose).
     if (this.terrain && this.terrain.dispose) this.terrain.dispose();
+    // A seeded run (?seed=, or a research batch's seed for this run): the land, and with every
+    // roll on p5's generator, the play, come back the same. Nothing is seeded otherwise.
+    const seed = (typeof BENCHMARK !== 'undefined' && BENCHMARK.nextSeed) ? BENCHMARK.nextSeed() : null;
+    this.runSeed = seed != null ? seed : (this._urlSeed != null ? this._urlSeed : null);
+    if (this.runSeed != null) { randomSeed(this.runSeed); noiseSeed(this.runSeed); }
     this.terrain = new TerrainGenerator(CONFIG, this.activeBiomes);
     this.seasonManager = new SeasonManager(CONFIG);
     this.terrain.setSeasonManager(this.seasonManager);
@@ -1607,20 +1632,29 @@ class Game {
     // script registered for this level id, else the shared 'default' script.
     // Per-level scripts live in levels/tutorial_*.js (see TUTORIAL_REGISTRY).
     // Endless levels never fall back to the story's script: without their own, no tips.
+    // Chapter levels (a `chapters` list; mauri_chapters.js) don't fall back to it either.
     const _endlessLevel = !!(this.currentLevel && this.currentLevel.endless);
+    const _chapterLevel = !!(this.currentLevel && this.currentLevel.chapters);
     let _tips = this.currentLevel.tutorial?.tips ||
       TUTORIAL_REGISTRY.get(this.currentLevel.id) ||
-      (_endlessLevel ? null : TUTORIAL_REGISTRY.get('default'));
+      ((_endlessLevel || _chapterLevel) ? null : TUTORIAL_REGISTRY.get('default'));
     // Module levels all carry Te Whē's welcome and farewell (levels/tutorial_module_bookends.js);
     // the director decides which module shows which.
     const _bookends = this.module && TUTORIAL_REGISTRY.get('module_bookends');
     if (_bookends) _tips = Object.assign({}, _bookends, _tips || {});
+    // Chapter levels are run by a ChapterRunner, which compiles the level's lines and banners
+    // into tips of its own (see MODULE_ENGINE_PLAN.md).
+    this.chapters = (_chapterLevel && typeof ChapterRunner !== 'undefined')
+      ? new ChapterRunner(this, this.currentLevel) : null;
+    if (this.chapters) _tips = Object.assign({}, _tips || {}, this.chapters.tips);
     this.tutorial.setLevelTips(_tips);
     if (BENCHMARK.pending) this.tutorial.enabled = false;   // benchmark runs clean
     this.tutorial.init();
 
     // Module levels: place the family, egg, food, storms and eagle, and start the story.
     if (this.module) this.module.setup();
+    // Chapter levels: open the first chapter (its tools, focus, goals and opening words).
+    if (this.chapters) this.chapters.start();
 
     // Benchmark: start an armed run; a reload mid-run abandons the old one
     if (BENCHMARK.pending) BENCHMARK.start(this);
@@ -1962,7 +1996,9 @@ class Game {
     if (this.state !== GAME_STATE.PLAYING && this.state !== GAME_STATE.PAUSED) return;
     // A module's "moment" (Free Play: a hatching, a catch) holds the whole world still while it
     // plays: no sim, no clock, no tips; only the moment's own timeline runs.
-    if (this.module && this.module.moment) { this.module.updateMoment(dt); return; }
+    // (A chapter level's moments do the same: see _storyMoment.)
+    const _moment = this._storyMoment();
+    if (_moment) { _moment.updateMoment(dt); return; }
 
     if (this.tutorial) this.tutorial.update(dt);
     this.updateHoldToMove(dt);   // like placement, works while paused
@@ -1990,11 +2026,15 @@ class Game {
     this.seasonManager.mastYear = _mast;
     this.simulation.mastYear = _mast;
 
-    if (this.seasonManager.update(this.module ? this.module.seasonStep(dt) : dt)) this.onSeasonChange();
-    
+    // (A module, or a chapter's holdSeason, can keep the season waiting.)
+    const _seasonDt = this.module ? this.module.seasonStep(dt) : (this.chapters ? this.chapters.seasonStep(dt) : dt);
+    if (this.seasonManager.update(_seasonDt)) this.onSeasonChange();
+
     this.simulation.update(this.mauri, dt);
     // Module levels: the story moves on after the birds have moved.
     if (this.module) this.module.update(dt);
+    // Chapter levels: the chapter reacts to what the birds just did, and checks its goals.
+    if (this.chapters) this.chapters.update(dt);
     // Extended species voices: fade highlight tracks in/out and crossfade the kākāpō
     // ambience to match the flock (booming in a mast, territorial when males contest).
     if (audioManager && audioManager.update) audioManager.update(this.simulation, dt);
@@ -2149,7 +2189,8 @@ class Game {
 
   checkGoals() {
     // Module levels: the director sets each season's goals, ticks them, and decides the win.
-    if (this.module) return;
+    // Chapter levels: the same, by the ChapterRunner (in its update).
+    if (this.module || this.chapters) return;
     // Free Play is endless: rolling yearly goals, and NEVER a win (an empty goals array
     // would otherwise win on frame one). Loss stays with the all-moa-gone check in update().
     if (this.currentLevel && this.currentLevel.endless) { this._checkFreeplayYear(); return; }
@@ -3398,26 +3439,14 @@ class Game {
     return n;
   }
 
-  _moaNearSite(site, radius) {
-    const moas = this.simulation.moas;
-    const rSq = radius * radius;
-    let n = 0;
-    for (let i = 0; i < moas.length; i++) {
-      const m = moas[i];
-      if (!m.alive) continue;
-      const dx = m.pos.x - site.pos.x, dy = m.pos.y - site.pos.y;
-      if (dx * dx + dy * dy <= rSq) n++;
-    }
-    return n;
-  }
+  _moaNearSite(site, radius) { return this.simulation.moaNear(site.pos, radius); }
 
-  // Success chance of raiding a site right now: high when the moa have left, low
-  // while they're still crowding the nest (they drive the kea off).
+  // Success chance of raiding a site right now: high when the moa have left, low while
+  // they're still crowding the nest (they drive the kea off). The formula is the
+  // simulation's (Simulation.raidSuccessChance), shared with kea raiding on their own.
   _raidSuccessChance(site) {
     const cfg = this._keaRaidCfg(); if (!cfg) return 0;
-    const moa = this._moaNearSite(site, cfg.moaRadius ?? 90);
-    let p = (cfg.baseSuccess ?? 0.9) - (cfg.moaPenalty ?? 0.12) * moa;
-    return Math.max(cfg.minSuccess ?? 0.05, Math.min(1, p));
+    return this.simulation.raidSuccessChance(site);
   }
 
   // Attempt the raid: spend mauri, roll against the success chance, and on success
@@ -3437,7 +3466,7 @@ class Game {
     }
     this.mauri.spend(cost);
     const chance = this._raidSuccessChance(site);
-    const success = Math.random() < chance;
+    const success = random() < chance;
     if (success) {
       const eaten = this.simulation.destroyNestingSite(site);
       this.addNotification(`The kea raid the nest; ${eaten} egg${eaten === 1 ? '' : 's'} taken; the moa flee to another site.`, 'success');
@@ -3667,6 +3696,7 @@ class Game {
 
     this.addNotification(`Season changed to ${season.name} ${season.icon}`, 'info');
     if (audioManager) audioManager.playSeasonChange(seasonKey);
+    if (this.simulation) this.simulation.seasonTurns = (this.simulation.seasonTurns || 0) + 1;
 
     // Module levels: the story moves into the new season (its goals, moves and prompts).
     if (this.module) this.module.onSeasonChange(seasonKey);
@@ -3757,9 +3787,17 @@ class Game {
     return !(this.tutorial && this.tutorial._pausedByTutorial) || !!this._pauseMenu;
   }
 
+  // Whoever has a moment playing (a module's director, or a chapter level's runner), else null:
+  // while one plays the world stands still and its big words show (see MomentPlayer).
+  _storyMoment() {
+    if (this.module && this.module.moment) return this.module;
+    if (this.chapters && this.chapters.moment) return this.chapters;
+    return null;
+  }
+
   // A tip (or a module's big words) is on screen: the pause card then draws over it.
   _tipOnScreen() {
-    return !!((this.module && this.module.moment) ||
+    return !!(this._storyMoment() ||
               (this.tutorial && this.tutorial.active && this.tutorial.currentTip));
   }
 
@@ -3768,6 +3806,41 @@ class Game {
     if (!this.currentLevel) return;
     this.loadLevel(this.currentLevel.id);
     this._startLoading();
+  }
+
+  // Straight into a level, no splash (the win card's "Next module", the URL's ?level=).
+  _startLevel(id) {
+    this.loadLevel(id);
+    if (this.currentLevel && this.currentLevel.id === id) this._startLoading();
+  }
+
+  // ?level=<id or family>&sketch=<label>&seed=<n>&bench=<runs>&years=<n>: start a level as the
+  // page opens, with no menu and no splash (a sketch to test, or a research run; tools/batch.js
+  // drives it this way). ?seed on its own seeds the next level the player starts.
+  autoStartFromURL() {
+    if (typeof window === 'undefined' || !window.location) return false;
+    const q = new URLSearchParams(window.location.search);
+    const seed = q.get('seed');
+    if (seed != null && seed !== '' && isFinite(Number(seed))) this._urlSeed = Number(seed);
+    const want = q.get('level');
+    if (!want) return false;
+    let def = LEVEL_REGISTRY.get(want);
+    if (!def && LEVEL_REGISTRY.getFamily) {   // a family name, with ?sketch=<label> (else its default)
+      const fam = LEVEL_REGISTRY.getFamily(want), label = (q.get('sketch') || '').toLowerCase();
+      const sketches = fam ? LEVEL_REGISTRY.sketchesOf(want) : [];
+      def = sketches.find(l => ((l.sketch && l.sketch.label) || '').toLowerCase() === label) ||
+            (fam && fam.defaultSketch ? LEVEL_REGISTRY.get(fam.defaultSketch) : null) || sketches[0] || null;
+    }
+    if (!def) { console.warn(`[url] no level or family "${want}"`); return false; }
+    const bench = Number(q.get('bench') || 0);
+    if (bench > 0 && typeof BENCHMARK !== 'undefined') {
+      BENCHMARK.armBatch(bench);
+      BENCHMARK.seedBase = this._urlSeed != null ? this._urlSeed : null;
+      const years = Number(q.get('years') || 0);
+      BENCHMARK.maxYears = years > 0 ? years : 0;
+    }
+    this._startLevel(def.id);
+    return true;
   }
 
   // Win / loss screen's "Back to Menu" button (and the R key there). playWin/playLoss already
@@ -3816,6 +3889,7 @@ class Game {
 
   selectPlaceable(type) {
     if (this.module && this.module.inputLocked()) return;   // a module's outro is hands-off
+    if (this.chapters && this.chapters.moment) return;      // (a chapter's moment, too)
     if (this.isToolLocked(type)) {
       this.addNotification("That isn't ready yet.", 'info');
       return;
@@ -3895,6 +3969,7 @@ class Game {
     }
     t.sprout(true);
     if (this.module && this.module.onSprouted) this.module.onSprouted(t);
+    if (this.tutorial) this.tutorial.fireEvent(TUTORIAL_EVENTS.PLANT_SPROUTED, { sprouted: t, type: t.type || 'patotara' });
   }
 
   _beginMove(p) {
@@ -4171,7 +4246,7 @@ class Game {
     // Pick 20% of the rimu (shuffle the front of the list, take that many).
     const count = Math.max(1, Math.round(rimus.length * 0.2));
     for (let i = 0; i < count && i < rimus.length; i++) {
-      const j = i + ((Math.random() * (rimus.length - i)) | 0);
+      const j = i + ((random() * (rimus.length - i)) | 0);
       const t = rimus[i]; rimus[i] = rimus[j]; rimus[j] = t;
     }
     const picked = rimus.slice(0, count);
@@ -4186,7 +4261,7 @@ class Game {
     for (const tree of picked) {
       tree._berryDropFrame = now;   // (visual hook)
       sim.scrambleSites.push({ x: tree.pos.x, y: tree.pos.y, radius: 60, expireFrame: now + gatherFrames });
-      const a = Math.random() * Math.PI * 2, rr = 14 + Math.random() * 22;
+      const a = random() * Math.PI * 2, rr = 14 + random() * 22;
       const bx = tree.pos.x + Math.cos(a) * rr, by = tree.pos.y + Math.sin(a) * rr;
       const biome = sim.terrain.getBiomeAt(bx, by);
       if (biome && biome.canHavePlants && sim.terrain.isWalkable(bx, by) && typeof Plant !== 'undefined') {
@@ -4399,6 +4474,7 @@ class Game {
     this.simulation.render();
     if (typeof GLBatch !== 'undefined' && GLBatch.enabled && GLBatch._open) GLBatch.composite(drawingContext);
     if (this.module) this.module.renderOver();   // a module's markers, over the birds
+    this._renderInspect();
     this.mauri.renderFloatingTexts();
     if (_castAlpha < 1) drawingContext.globalAlpha = 1;
 
@@ -4426,9 +4502,7 @@ class Game {
 
     // Benchmark: the run ends with the level (update() no longer ticks in
     // WON/LOST states, so the final sample + CSV save happens here)
-    if (BENCHMARK.active && !BENCHMARK.finished &&
-        (this.state === GAME_STATE.WON || this.state === GAME_STATE.LOST)) {
-      BENCHMARK.finish(this, this.state === GAME_STATE.WON ? 'win' : 'loss');
+    if (BENCHMARK.finishIfEnded(this)) {
     }
 
     // Overlay button hit-rects are rebuilt each frame by _renderOverlay (only the paused /
@@ -4457,8 +4531,9 @@ class Game {
       else this._drawScreenShot(this._handoffShot, 1 - hf.t / hf.frames);
     }
 
-    if (this.module && this.module.moment) {
-      this.module.renderMoment();   // its big words, in place of any tip
+    const _moment = this._storyMoment();
+    if (_moment) {
+      _moment.renderMoment();   // its big words, in place of any tip
     } else if (this.tutorial) {
       this.tutorial.render();
       // Tips flagged ringsAboveUI (e.g. "Say hello to the new Moa!") re-draw
@@ -4538,20 +4613,30 @@ class Game {
       // merely "balanced". (_goalsTally() also lazily fills _goalsTotal.)
       const goalsTally = this._goalsTally();
       const allGoalsMet = (this._goalsCompleted || 0) >= this._goalsTotal;
+      // A chapters module's card also says what it taught (its claim) and offers the next
+      // module (its nextLevel), with that module's focus item as "Next up".
+      const L = this.currentLevel || {};
+      const nextDef = L.nextLevel ? LEVEL_REGISTRY.get(L.nextLevel) : null;
+      const nextItem = nextDef && nextDef.menu && nextDef.menu.focusItem;
+      const buttons = [];
+      if (nextDef && PROGRESS.isUnlocked(nextDef.id)) buttons.push({ label: "Next module", action: () => this._startLevel(nextDef.id) });
+      buttons.push({ label: "Back to Menu", action: () => this._returnToMenuFromEnd() });
       this._renderOverlay(...CONFIG.col_UI.slice(0,3), 150, {
-        title: allGoalsMet ? "ECOSYSTEM THRIVING!" : "ECOSYSTEM BALANCED",
+        title: L.winTitle || (allGoalsMet ? "ECOSYSTEM THRIVING!" : "ECOSYSTEM BALANCED"),
         titleColor: [180, 255, 180],
         lines: [
-          { text: this._endMessage(), color: [150, 220, 150], size: 18 },
+          { text: L.winText || this._endMessage(), color: [150, 220, 150], size: 18 },
+          ...(this.chapters && L.claim ? [{ text: L.claim, color: [200, 240, 200], size: 15 }] : []),
           { text: goalsTally, color: [150, 220, 150], size: 14 },
           { text: `Final population: ${this._cachedMoaCount} moa`, color: [120, 180, 120], size: 14 },
           { text: `Total mauri earned: ${this.mauri.totalEarned | 0}`, color: [120, 180, 120], size: 14 },
           { text: `Time elapsed: ${(this.playTime / 60) | 0} seconds`, color: [120, 180, 120], size: 14 },
           { text: `Final Score: ${computeLevelScore(this.currentLevel, this._scoreContext())} points`, color: [200, 240, 200], size: 16 }
         ],
+        art: nextItem ? { h: 190, draw: (cx, top) => this._renderNextUp(nextItem, cx, top) } : null,
         boxColor: [30, 60, 40, 250],
         strokeColor: [100, 180, 120],
-        buttons: [{ label: "Back to Menu", action: () => this._returnToMenuFromEnd() }]
+        buttons
       });
     } else if (this.state === GAME_STATE.LOST) {
       const _endless = !!(this.currentLevel && this.currentLevel.endless);
@@ -5040,9 +5125,9 @@ class Game {
   // A module's card on the level select: a square, in the challenge cards' style, with its
   // number (∞ for the free play after the modules) over the tool it teaches and its name.
   // Pushes its bounds onto _levelCardBounds, so a click loads it.
-  _renderModuleCard(level, x, y, s) {
+  _renderModuleCard(level, x, y, s, opts = {}) {
     const unlocked = PROGRESS.isUnlocked(level.id);
-    const completed = PROGRESS.isCompleted(level.id);
+    const completed = opts.completed != null ? opts.completed : PROGRESS.isCompleted(level.id);
     const hover = unlocked && mouseX > x && mouseX < x + s && mouseY > y && mouseY < y + s;
     push();
     textAlign(CENTER, CENTER);
@@ -5068,13 +5153,13 @@ class Game {
     pop();
     fill(unlocked ? [200, 240, 210] : [80, 80, 85]);
     push(); textFont(FreckleFace); textSize(s * 0.11);
-    text((level.menu && level.menu.moduleLabel) || level.name, bx, y + s * 0.66);
+    text(opts.label || (level.menu && level.menu.moduleLabel) || level.name, bx, y + s * 0.66);
     pop();
     fill(unlocked ? [140, 180, 150] : [60, 60, 65]);
     smallTextSize(13);
     text(unlocked ? level.name : '🔒', bx, y + s * 0.82);
     pop();
-    this._levelCardBounds.push({ x, y, w: s, h: s, levelId: level.id, unlocked, module: true });
+    this._levelCardBounds.push({ x, y, w: s, h: s, levelId: level.id, unlocked, module: true, chapters: !!level.chapters });
   }
 
   // A level card's body: a rounded, bevelled panel (lit top-left rim, shaded bottom-right) in
@@ -5117,9 +5202,10 @@ class Game {
     text("Avian Age", centerX, 100);
     pop();
 
-    const allLevels = LEVEL_REGISTRY.getAll();
-    const levels = allLevels.filter(l => !l.module);
-    const modules = allLevels.filter(l => l.module);
+    // (devOnly levels, such as the chapters prototype, are listed only in debug mode.)
+    const allLevels = LEVEL_REGISTRY.getAll().filter(l => !l.devOnly || CONFIG.debugMode);
+    const bySection = {};
+    for (const l of allLevels) (bySection[levelSection(l)] || (bySection[levelSection(l)] = [])).push(l);
     this._levelCardBounds = [];
     this._menuHeaderBounds = [];
     // (Settings' controls only take clicks while showing; see _renderRenderSettings.)
@@ -5130,14 +5216,24 @@ class Game {
     const boxW = Math.min(1000, cw - 120), boxX = centerX - boxW / 2, headH = 72, gap = 18;
     const depth = 9, trayInset = 14;
     const mx = mouseX / spriteSS(), my = mouseY / spriteSS();
-    const sections = [
-      { key: 'learn', label: "[ VERTICAL SLICE ]  Learn About Te Taiao!", bodyH: 250,
-        draw: (top) => this._renderModuleCards(modules, centerX, top + 25, boxW - 40) },
-      { key: 'challenge', label: "Try a challenge!", bodyH: 250,
-        draw: (top) => this._renderChallengeCards(levels, centerX, top + 25, boxW - 40) },
-      { key: 'settings', label: "Settings", bodyH: 170,
-        draw: (top) => this._renderRenderSettings(centerX, top + 28, 300) }
-    ];
+    // The sections, from MENU_SECTIONS, each as tall as its rows of cards.
+    const sections = [];
+    const cardS = 200, cardGap = 32, perRow = Math.max(1, Math.floor((boxW - 40 + cardGap) / (cardS + cardGap)));
+    for (const sec of MENU_SECTIONS) {
+      const list = bySection[sec.key];
+      if (!list || !list.length) continue;
+      if (sec.style === 'cards') {
+        sections.push({ key: sec.key, label: sec.label, bodyH: 250,
+          draw: (top) => this._renderChallengeCards(list, centerX, top + 25, boxW - 40) });
+      } else {
+        const entries = this._moduleEntries(list), withSketches = sec.style === 'sketches';
+        const rows = Math.ceil(entries.length / perRow), rowH = cardS + cardGap + (withSketches ? 44 : 0);
+        sections.push({ key: sec.key, label: sec.label, bodyH: rows * rowH + 18,
+          draw: (top) => this._renderModuleCards(entries, centerX, top + 25, boxW - 40, withSketches) });
+      }
+    }
+    sections.push({ key: 'settings', label: "Settings", bodyH: 170,
+      draw: (top) => this._renderRenderSettings(centerX, top + 28, 300) });
     // Per-section springs: `open` (0 shut … 1 open, with a little overshoot as the tray lands)
     // and `lift` (the slab's height off the ground: up under the pointer, flat while pressed,
     // sitting low while its section is open).
@@ -5207,16 +5303,61 @@ class Game {
     text(`Version: ${CONFIG.version}`, centerX, ch - 40);
   }
 
-  // The modules, as square cards in a centred row (wrapping if the screen is narrow).
-  _renderModuleCards(modules, centerX, top, maxW) {
-    const s = 200, gap = 32;
-    const perRow = Math.max(1, Math.min(modules.length, Math.floor((maxW + gap) / (s + gap))));
-    modules.forEach((level, i) => {
+  // The levels of a modules section as card entries: a level on its own, or a family of
+  // sketches ({ family, sketches, face }: the face is the family's default sketch, else its
+  // first), in the order they were registered.
+  _moduleEntries(list) {
+    const out = [], seen = {};
+    for (const l of list) {
+      const fam = l.sketch && l.sketch.of;
+      if (!fam) { out.push({ level: l }); continue; }
+      if (!seen[fam]) {
+        const info = LEVEL_REGISTRY.getFamily ? LEVEL_REGISTRY.getFamily(fam) : null;
+        seen[fam] = { family: fam, info, sketches: [], face: null };
+        out.push(seen[fam]);
+      }
+      seen[fam].sketches.push(l);
+      const info = seen[fam].info;
+      if (!seen[fam].face || (info && info.defaultSketch === l.id)) seen[fam].face = l;
+    }
+    return out;
+  }
+
+  // The modules, as square cards in a centred row (wrapping if the screen is narrow). An entry
+  // that is a family of sketches shows its face and, with withSketches, a button per sketch.
+  _renderModuleCards(entries, centerX, top, maxW, withSketches = false) {
+    const s = 200, gap = 32, rowH = s + gap + (withSketches ? 44 : 0);
+    const perRow = Math.max(1, Math.min(entries.length, Math.floor((maxW + gap) / (s + gap))));
+    entries.forEach((entry, i) => {
       const row = Math.floor(i / perRow), col = i % perRow;
-      const n = Math.min(perRow, modules.length - row * perRow);
+      const n = Math.min(perRow, entries.length - row * perRow);
       const x = centerX - (n * s + (n - 1) * gap) / 2 + col * (s + gap);
-      this._renderModuleCard(level, x, top + row * (s + gap), s);
+      const y = top + row * rowH;
+      const face = entry.level || entry.face;
+      const completed = entry.sketches ? entry.sketches.some(l => PROGRESS.isCompleted(l.id)) : undefined;
+      this._renderModuleCard(face, x, y, s, { completed, label: entry.info && entry.info.label });
+      if (withSketches && entry.sketches && entry.sketches.length) this._renderSketchButtons(entry.sketches, x, y + s + 8, s);
     });
+  }
+
+  // The sketches of one module as small buttons under its card, labelled by sketch.label: the
+  // same lesson at different settings (guided, open...). A click starts that sketch.
+  _renderSketchButtons(sketches, x, y, w) {
+    const n = sketches.length, gap = 6, bw = Math.min(96, (w - gap * (n - 1)) / n), bh = 32;
+    const x0 = x + (w - (n * bw + (n - 1) * gap)) / 2;
+    push();
+    textAlign(CENTER, CENTER);
+    sketches.forEach((l, i) => {
+      const bx = x0 + i * (bw + gap);
+      const unlocked = PROGRESS.isUnlocked(l.id), completed = PROGRESS.isCompleted(l.id);
+      const hover = unlocked && mouseX > bx && mouseX < bx + bw && mouseY > y && mouseY < y + bh;
+      this._cardFrame(bx, y, bw, bh, unlocked, hover, completed);
+      fill(unlocked ? [210, 240, 215] : [90, 90, 95]);
+      textFont(FreckleFace); textSize(15);
+      text((l.sketch && l.sketch.label) || l.name, bx + bw / 2, y + bh / 2 + 1);
+      this._levelCardBounds.push({ x: bx, y, w: bw, h: bh, levelId: l.id, unlocked, module: true, chapters: !!l.chapters });
+    });
+    pop();
   }
 
   // The prototype levels' cards, in a centred row sized to fit.
@@ -5932,7 +6073,8 @@ class Game {
             this.loadLevel(card.levelId);
             // A module level starts straight away (its story opens it); a card goes to the
             // level splash first.
-            if (card.module) this._startLoading();
+            // (A chapters level keeps the splash in debug mode, for its benchmark buttons.)
+            if (card.module && !(card.chapters && CONFIG.debugMode)) this._startLoading();
             else this.state = GAME_STATE.MENU;  // Go to level splash
             return;
           }
@@ -6014,6 +6156,7 @@ class Game {
 
     if (this.state !== GAME_STATE.PLAYING && this.state !== GAME_STATE.PAUSED) return;
     if (this.module && this.module.inputLocked()) return;   // a module's outro is hands-off
+    if (this.chapters && this.chapters.moment) return;      // (a chapter's moment, too)
 
     if (this.isInGameArea(mx, my)) {
       const { x: tx, y: ty } = this._pointerWorld(mx, my);
@@ -6041,6 +6184,14 @@ class Game {
         return;
       }
 
+      // eagleTelegraph (a chapter level's rule): a tap on an eagle says how it's doing for a few
+      // seconds (HaastsEagle.describe, drawn by _renderInspect), so the player can read whether
+      // a hunt is coming.
+      if (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.eagleTelegraph && sim && sim.eagleGrid) {
+        const e = sim.eagleGrid.getClosest(tx, ty, 26, (b) => b.alive);
+        if (e) { this._inspect = { e, until: millis() + 3500 }; return; }
+      }
+
       // Nothing selected: pressing near a placed item's center arms a touch-and-hold;
       // held ~1s it becomes a move (see updateHoldToMove).
       // A storm is wide and has no solid centre, so it can be taken anywhere in its inner half.
@@ -6060,8 +6211,12 @@ class Game {
       // being sprouted, or the press is on a storm (taking it up, or anywhere under its clouds)
       // or just after placing or setting something down (a quick second tap meant for the tool).
       const justPlaced = millis() - (this._lastPlacedMs || -1e9) < 500;
+      // (lureUnderStorm, a chapter level's rule: a tap under the clouds still rustles a plant,
+      // unless it's the press that takes the storm itself up.)
+      const underStorm = !!(sim && sim.stormAt(tx, ty)) &&
+        !(typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.lureUnderStorm);
       if (!sproutPatch && !wild && !justPlaced && !(held && held.type === 'Storm') &&
-          !(sim && sim.stormAt(tx, ty))) this._tapPlant(tx, ty);
+          !underStorm) this._tapPlant(tx, ty);
     }
   }
 
@@ -6084,6 +6239,26 @@ class Game {
       if (d < Math.max(8, size * 0.5) && d < bestD) { bestD = d; best = p; }
     }
     return best;
+  }
+
+  // eagleTelegraph: the words over a tapped eagle while they last (see handleClick).
+  _renderInspect() {
+    const ins = this._inspect;
+    if (!ins) return;
+    if (!ins.e.alive || millis() > ins.until) { this._inspect = null; return; }
+    const words = ins.e.describe ? ins.e.describe(this) : '';
+    if (!words) return;
+    push();
+    const x = ins.e.pos.x, y = ins.e.pos.y - 24;
+    textAlign(CENTER, BOTTOM);
+    textSize(8);
+    const w = textWidth(words) + 10;
+    noStroke();
+    fill(16, 22, 28, 210);
+    rect(x - w / 2, y - 12, w, 14, 3);
+    fill(240, 236, 216);
+    text(words, x, y - 1);
+    pop();
   }
 
   // A tap on a plant: it rustles and shakes, and for a few seconds draws the hungry
@@ -6131,6 +6306,12 @@ class Game {
     }
 
     if (key === 'd' || key === 'D') { CONFIG.debugMode = !CONFIG.debugMode; return; }
+
+    // Debug: J toggles a chapter level's inspector (see ChapterRunner.renderInspector).
+    if ((key === 'j' || key === 'J') && CONFIG.debugMode && this.chapters) {
+      this.addNotification(this.chapters.toggleInspector() ? 'Chapter inspector ON' : 'Chapter inspector OFF', 'info');
+      return;
+    }
 
     // Free Play: export this run's season-by-season stats (.txt + .json). Works during
     // play, while paused, and on the game-over screen.
@@ -6269,6 +6450,7 @@ function setup() {
   PROGRESS.init();
 
   game = new Game();
+  game.autoStartFromURL();
 
   document.addEventListener('visibilitychange', () => {
     if (game) game.handleVisibilityChange(!document.hidden);
@@ -6548,6 +6730,8 @@ function draw() {
 
   // Debug lenses: screen-space legend (clickable) + per-lens readouts, over the HUD.
   if (typeof Lens !== 'undefined' && game) Lens.renderScreen(game);
+  // A chapter level's inspector (debug mode, J), beside the lens legend.
+  if (game && game.chapters) game.chapters.renderInspector();
 
   if (_dbg) {
     // Feed the CPU-span EMAs so "Hidden" (the GPU/composite time the Update/Render

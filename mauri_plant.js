@@ -307,7 +307,7 @@ class Plant {
 
   // Whether there's anything on it for a browser to eat now (what a tap's lure needs).
   hasFood() {
-    return this.alive && !this.dormant && !this.unsprouted && !this.matured && this.growth >= 0.3;
+    return this.alive && !this.dormant && !this.unsprouted && !this.matured && !this.winterInedible && this.growth >= 0.3;
   }
 
   // A tap on it (Game._tapPlant): a quick side-to-side shake on top of the sway. It runs on
@@ -327,6 +327,18 @@ class Plant {
     if (this.isSpawned && this.parentPlaceable) {
       if (!this.parentPlaceable.alive) {
         this.alive = false;
+        return;
+      }
+      // placedPlantsSeasonal (a level flag): food the player grew follows the seasons as wild
+      // food does (never dormant: the plant stands), and a type with no winter food value at
+      // all (pātōtara, rimu: winterEdibility 0) bears nothing through the winter.
+      if (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.placedPlantsSeasonal) {
+        this.seasonalModifier = Math.max(0.35, seasonManager.getPlantModifier(this.biomeKey) * 1.2);
+        this.plantTypeModifier = seasonManager.getPlantTypeModifier(this.type);
+        this.handleGrowth();
+        const def = PLANT_TYPES[this.type];
+        const w = seasonManager.getWinterness ? seasonManager.getWinterness() : 0;
+        this.winterInedible = !!(def && def.winterEdibility === 0 && w >= 0.5);
         return;
       }
       this.seasonalModifier = 1.2;

@@ -1,0 +1,405 @@
+{
+ "level": "chapters_storms_open",
+ "sketch": "Open",
+ "seed": 2,
+ "result": "loss",
+ "playTime": 165,
+ "csv": "seed,level,sketch,chapter,time_s,year,season,upland_moa,stout_legged_moa,other_moa,total_moa,eagles,eggs,placed_Storm,event\n2,chapters_storms_open,Open,summer,0,1,summer,2,7,0,9,1,2,0,start\n2,chapters_storms_open,Open,summer,9.6,1,summer,2,7,0,9,1,2,0,reaction:hungry_eagle:when\n2,chapters_storms_open,Open,summer,10,1,summer,2,7,0,9,1,2,0,beat:first_hunt:start\n2,chapters_storms_open,Open,summer,10,1,summer,2,7,0,9,1,2,0,sample\n2,chapters_storms_open,Open,summer,14.8,1,summer,2,7,0,9,1,2,0,reaction:cover:eagle_hunting\n2,chapters_storms_open,Open,summer,14.8,1,summer,2,7,0,9,1,2,0,reaction:cover_again:eagle_hunting\n2,chapters_storms_open,Open,summer,14.8,1,summer,2,7,0,9,1,2,0,beat:first_hunt:done\n2,chapters_storms_open,Open,summer,15,1,summer,2,7,0,9,1,2,0,player:cover:papa\n2,chapters_storms_open,Open,summer,15.1,1,summer,2,7,0,9,1,2,0,goal:seen_off\n2,chapters_storms_open,Open,summer,20,1,summer,2,7,0,9,1,4,0,sample\n2,chapters_storms_open,Open,summer,26.7,1,summer,3,7,0,10,1,5,0,reaction:hatched:egg_hatched\n2,chapters_storms_open,Open,summer,26.7,1,summer,3,7,0,10,1,5,0,moment:$moa:Pukepuke has hatched!\n2,chapters_storms_open,Open,summer,26.7,1,summer,3,7,0,10,1,5,0,cast:pukepuke:adopted\n2,chapters_storms_open,Open,summer,26.7,1,summer,3,7,0,10,1,5,0,goal:hatched\n2,chapters_storms_open,Open,summer,30,1,summer,3,7,0,10,2,4,0,sample\n2,chapters_storms_open,Open,summer,32.6,1,summer,3,6,0,9,2,5,0,reaction:herd_taken:moa_killed\n2,chapters_storms_open,Open,summer,32.6,1,summer,3,6,0,9,2,5,0,reaction:herd_taken_again:moa_killed\n2,chapters_storms_open,Open,summer,35,1,summer,3,6,0,9,2,5,0,reaction:storm_gone:placeable_expired\n2,chapters_storms_open,Open,summer,40,1,summer,3,5,0,8,2,6,0,sample\n2,chapters_storms_open,Open,summer,45,1,autumn,4,5,0,9,2,7,0,close:summer:-> autumn\n2,chapters_storms_open,Open,autumn,45,1,autumn,4,5,0,9,2,7,0,chapter:autumn\n2,chapters_storms_open,Open,autumn,45,1,autumn,4,5,0,9,2,7,0,place:waterhole:tarn\n2,chapters_storms_open,Open,autumn,45,1,autumn,4,5,0,9,2,7,0,fade:Storm:2\n2,chapters_storms_open,Open,autumn,47.9,1,autumn,4,5,0,9,2,7,0,reaction:cover_again:eagle_hunting\n2,chapters_storms_open,Open,autumn,50,1,autumn,4,5,0,9,2,7,0,sample\n2,chapters_storms_open,Open,autumn,50,1,autumn,4,5,0,9,2,7,0,player:cover:papa\n2,chapters_storms_open,Open,autumn,56.5,1,autumn,4,5,0,9,2,7,0,player:cover:mama\n2,chapters_storms_open,Open,autumn,60,1,autumn,4,6,0,10,2,7,0,sample\n2,chapters_storms_open,Open,autumn,70,1,autumn,5,8,0,13,2,6,0,sample\n2,chapters_storms_open,Open,autumn,73.2,1,autumn,5,8,0,13,2,5,0,reaction:herd_taken_again:moa_killed\n2,chapters_storms_open,Open,autumn,77.9,1,autumn,5,8,0,13,2,6,0,reaction:hungry_eagle:when\n2,chapters_storms_open,Open,autumn,80,1,autumn,5,8,0,13,2,8,0,sample\n2,chapters_storms_open,Open,autumn,86.2,1,autumn,5,10,0,15,2,8,0,reaction:cover_again:eagle_hunting\n2,chapters_storms_open,Open,autumn,86.5,1,autumn,5,10,0,15,2,8,0,player:cover:mama\n2,chapters_storms_open,Open,autumn,90,1,winter,7,10,0,17,2,7,0,close:autumn:-> winter\n2,chapters_storms_open,Open,winter,90,1,winter,7,10,0,17,2,7,0,chapter:winter\n2,chapters_storms_open,Open,winter,90,1,winter,7,10,0,17,2,7,0,fade:Storm:1\n2,chapters_storms_open,Open,winter,90,1,winter,7,10,0,17,2,7,0,sample\n2,chapters_storms_open,Open,winter,96.7,1,winter,6,9,0,15,2,8,0,reaction:family_taken:moa_killed\n2,chapters_storms_open,Open,winter,100,1,winter,6,10,0,16,2,7,0,sample\n2,chapters_storms_open,Open,winter,103.5,1,winter,6,10,0,16,2,8,0,reaction:winter_press:when\n2,chapters_storms_open,Open,winter,103.5,1,winter,6,10,0,16,2,8,0,reaction:cover_again:eagle_hunting\n2,chapters_storms_open,Open,winter,103.5,1,winter,6,10,0,16,2,8,0,player:cover:mama\n2,chapters_storms_open,Open,winter,108.3,1,winter,6,9,0,15,2,7,0,reaction:family_taken:moa_killed\n2,chapters_storms_open,Open,winter,110,1,winter,6,9,0,15,2,8,0,sample\n2,chapters_storms_open,Open,winter,116.6,1,winter,6,7,0,13,2,7,0,reaction:herd_taken_again:moa_killed\n2,chapters_storms_open,Open,winter,120,1,winter,6,9,0,15,2,6,0,sample\n2,chapters_storms_open,Open,winter,121.5,1,winter,6,9,0,15,2,6,0,reaction:winter_press2:when\n2,chapters_storms_open,Open,winter,121.5,1,winter,6,9,0,15,2,6,0,reaction:cover_again:eagle_hunting\n2,chapters_storms_open,Open,winter,121.5,1,winter,6,9,0,15,2,6,0,player:cover:papa\n2,chapters_storms_open,Open,winter,121.6,1,winter,6,9,0,15,2,6,0,reaction:hungry_eagle:when\n2,chapters_storms_open,Open,winter,128.4,1,winter,5,8,0,13,2,6,0,reaction:family_taken:moa_killed\n2,chapters_storms_open,Open,winter,130,1,winter,5,9,0,14,2,5,0,sample\n2,chapters_storms_open,Open,winter,135,1,spring,5,10,0,15,2,4,0,goal:through\n2,chapters_storms_open,Open,winter,135,1,spring,5,10,0,15,2,4,0,close:winter:-> spring\n2,chapters_storms_open,Open,spring,135,1,spring,5,10,0,15,2,4,0,chapter:spring\n2,chapters_storms_open,Open,spring,140,1,spring,5,8,0,13,2,5,0,sample\n2,chapters_storms_open,Open,spring,150,1,spring,5,9,0,14,2,3,0,sample\n2,chapters_storms_open,Open,spring,155.2,1,spring,4,10,0,14,2,3,0,cast_lost:mama:starved\n2,chapters_storms_open,Open,spring,155.2,1,spring,4,10,0,14,2,3,0,reaction:parent_starved:cast_lost\n2,chapters_storms_open,Open,spring,160,1,spring,4,11,0,15,2,2,0,sample\n2,chapters_storms_open,Open,spring,165.2,1,spring,3,11,0,14,2,2,0,cast_lost:pukepuke:starved\n2,chapters_storms_open,Open,spring,165.2,1,spring,3,11,0,14,2,2,0,reaction:pukepuke_starved:cast_lost\n2,chapters_storms_open,Open,spring,165.2,1,spring,3,11,0,14,2,2,0,lost:spring:Pukepuke starved. A family needs food close by: tap plants near them to bring them to it.\n2,chapters_storms_open,Open,spring,165.2,1,spring,3,11,0,14,2,2,0,loss",
+ "log": [
+  {
+   "t": 0,
+   "chapter": "summer",
+   "kind": "chapter",
+   "id": "summer",
+   "info": ""
+  },
+  {
+   "t": 0,
+   "chapter": "summer",
+   "kind": "nest",
+   "id": "nest",
+   "info": "home"
+  },
+  {
+   "t": 0,
+   "chapter": "summer",
+   "kind": "spawn",
+   "id": "upland_moa",
+   "info": "2"
+  },
+  {
+   "t": 0,
+   "chapter": "summer",
+   "kind": "cast",
+   "id": "mama",
+   "info": "adopted"
+  },
+  {
+   "t": 0,
+   "chapter": "summer",
+   "kind": "cast",
+   "id": "papa",
+   "info": "adopted"
+  },
+  {
+   "t": 0,
+   "chapter": "summer",
+   "kind": "lay",
+   "id": "upland_moa",
+   "info": "1"
+  },
+  {
+   "t": 0,
+   "chapter": "summer",
+   "kind": "sow",
+   "id": "patotara",
+   "info": "5"
+  },
+  {
+   "t": 0,
+   "chapter": "summer",
+   "kind": "place",
+   "id": "Storm",
+   "info": "tops"
+  },
+  {
+   "t": 0,
+   "chapter": "summer",
+   "kind": "place",
+   "id": "Storm",
+   "info": "lookout"
+  },
+  {
+   "t": 9.6,
+   "chapter": "summer",
+   "kind": "reaction",
+   "id": "hungry_eagle",
+   "info": "when"
+  },
+  {
+   "t": 10,
+   "chapter": "summer",
+   "kind": "beat",
+   "id": "first_hunt",
+   "info": "start"
+  },
+  {
+   "t": 14.8,
+   "chapter": "summer",
+   "kind": "reaction",
+   "id": "cover",
+   "info": "eagle_hunting"
+  },
+  {
+   "t": 14.8,
+   "chapter": "summer",
+   "kind": "reaction",
+   "id": "cover_again",
+   "info": "eagle_hunting"
+  },
+  {
+   "t": 14.8,
+   "chapter": "summer",
+   "kind": "beat",
+   "id": "first_hunt",
+   "info": "done"
+  },
+  {
+   "t": 15,
+   "chapter": "summer",
+   "kind": "player",
+   "id": "cover",
+   "info": "papa"
+  },
+  {
+   "t": 15.1,
+   "chapter": "summer",
+   "kind": "goal",
+   "id": "seen_off",
+   "info": ""
+  },
+  {
+   "t": 26.7,
+   "chapter": "summer",
+   "kind": "reaction",
+   "id": "hatched",
+   "info": "egg_hatched"
+  },
+  {
+   "t": 26.7,
+   "chapter": "summer",
+   "kind": "moment",
+   "id": "$moa",
+   "info": "Pukepuke has hatched!"
+  },
+  {
+   "t": 26.7,
+   "chapter": "summer",
+   "kind": "cast",
+   "id": "pukepuke",
+   "info": "adopted"
+  },
+  {
+   "t": 26.7,
+   "chapter": "summer",
+   "kind": "goal",
+   "id": "hatched",
+   "info": ""
+  },
+  {
+   "t": 32.6,
+   "chapter": "summer",
+   "kind": "reaction",
+   "id": "herd_taken",
+   "info": "moa_killed"
+  },
+  {
+   "t": 32.6,
+   "chapter": "summer",
+   "kind": "reaction",
+   "id": "herd_taken_again",
+   "info": "moa_killed"
+  },
+  {
+   "t": 35,
+   "chapter": "summer",
+   "kind": "reaction",
+   "id": "storm_gone",
+   "info": "placeable_expired"
+  },
+  {
+   "t": 45,
+   "chapter": "summer",
+   "kind": "close",
+   "id": "summer",
+   "info": "-> autumn"
+  },
+  {
+   "t": 45,
+   "chapter": "autumn",
+   "kind": "chapter",
+   "id": "autumn",
+   "info": ""
+  },
+  {
+   "t": 45,
+   "chapter": "autumn",
+   "kind": "place",
+   "id": "waterhole",
+   "info": "tarn"
+  },
+  {
+   "t": 45,
+   "chapter": "autumn",
+   "kind": "fade",
+   "id": "Storm",
+   "info": "2"
+  },
+  {
+   "t": 47.9,
+   "chapter": "autumn",
+   "kind": "reaction",
+   "id": "cover_again",
+   "info": "eagle_hunting"
+  },
+  {
+   "t": 50,
+   "chapter": "autumn",
+   "kind": "player",
+   "id": "cover",
+   "info": "papa"
+  },
+  {
+   "t": 56.5,
+   "chapter": "autumn",
+   "kind": "player",
+   "id": "cover",
+   "info": "mama"
+  },
+  {
+   "t": 73.2,
+   "chapter": "autumn",
+   "kind": "reaction",
+   "id": "herd_taken_again",
+   "info": "moa_killed"
+  },
+  {
+   "t": 77.9,
+   "chapter": "autumn",
+   "kind": "reaction",
+   "id": "hungry_eagle",
+   "info": "when"
+  },
+  {
+   "t": 86.2,
+   "chapter": "autumn",
+   "kind": "reaction",
+   "id": "cover_again",
+   "info": "eagle_hunting"
+  },
+  {
+   "t": 86.5,
+   "chapter": "autumn",
+   "kind": "player",
+   "id": "cover",
+   "info": "mama"
+  },
+  {
+   "t": 90,
+   "chapter": "autumn",
+   "kind": "close",
+   "id": "autumn",
+   "info": "-> winter"
+  },
+  {
+   "t": 90,
+   "chapter": "winter",
+   "kind": "chapter",
+   "id": "winter",
+   "info": ""
+  },
+  {
+   "t": 90,
+   "chapter": "winter",
+   "kind": "fade",
+   "id": "Storm",
+   "info": "1"
+  },
+  {
+   "t": 96.7,
+   "chapter": "winter",
+   "kind": "reaction",
+   "id": "family_taken",
+   "info": "moa_killed"
+  },
+  {
+   "t": 103.5,
+   "chapter": "winter",
+   "kind": "reaction",
+   "id": "winter_press",
+   "info": "when"
+  },
+  {
+   "t": 103.5,
+   "chapter": "winter",
+   "kind": "reaction",
+   "id": "cover_again",
+   "info": "eagle_hunting"
+  },
+  {
+   "t": 103.5,
+   "chapter": "winter",
+   "kind": "player",
+   "id": "cover",
+   "info": "mama"
+  },
+  {
+   "t": 108.3,
+   "chapter": "winter",
+   "kind": "reaction",
+   "id": "family_taken",
+   "info": "moa_killed"
+  },
+  {
+   "t": 116.6,
+   "chapter": "winter",
+   "kind": "reaction",
+   "id": "herd_taken_again",
+   "info": "moa_killed"
+  },
+  {
+   "t": 121.5,
+   "chapter": "winter",
+   "kind": "reaction",
+   "id": "winter_press2",
+   "info": "when"
+  },
+  {
+   "t": 121.5,
+   "chapter": "winter",
+   "kind": "reaction",
+   "id": "cover_again",
+   "info": "eagle_hunting"
+  },
+  {
+   "t": 121.5,
+   "chapter": "winter",
+   "kind": "player",
+   "id": "cover",
+   "info": "papa"
+  },
+  {
+   "t": 121.6,
+   "chapter": "winter",
+   "kind": "reaction",
+   "id": "hungry_eagle",
+   "info": "when"
+  },
+  {
+   "t": 128.5,
+   "chapter": "winter",
+   "kind": "reaction",
+   "id": "family_taken",
+   "info": "moa_killed"
+  },
+  {
+   "t": 135,
+   "chapter": "winter",
+   "kind": "goal",
+   "id": "through",
+   "info": ""
+  },
+  {
+   "t": 135,
+   "chapter": "winter",
+   "kind": "close",
+   "id": "winter",
+   "info": "-> spring"
+  },
+  {
+   "t": 135,
+   "chapter": "spring",
+   "kind": "chapter",
+   "id": "spring",
+   "info": ""
+  },
+  {
+   "t": 155.2,
+   "chapter": "spring",
+   "kind": "cast_lost",
+   "id": "mama",
+   "info": "starved"
+  },
+  {
+   "t": 155.2,
+   "chapter": "spring",
+   "kind": "reaction",
+   "id": "parent_starved",
+   "info": "cast_lost"
+  },
+  {
+   "t": 165.2,
+   "chapter": "spring",
+   "kind": "cast_lost",
+   "id": "pukepuke",
+   "info": "starved"
+  },
+  {
+   "t": 165.2,
+   "chapter": "spring",
+   "kind": "reaction",
+   "id": "pukepuke_starved",
+   "info": "cast_lost"
+  },
+  {
+   "t": 165.2,
+   "chapter": "spring",
+   "kind": "lost",
+   "id": "spring",
+   "info": "Pukepuke starved. A family needs food close by: tap plants near them to bring them to it."
+  }
+ ],
+ "beats": {
+  "first_hunt": "natural"
+ }
+}

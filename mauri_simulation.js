@@ -17,6 +17,7 @@ class Simulation {
     this.treePlants = [];     // rimu / beech / fern; drawn above entities
     this.eggs = [];
     this.placeables = [];
+    this.seasonTurns = 0;     // season changes since the level began (Game.onSeasonChange counts them)
 
     this.activeSpecies = {moa: {}, eagle: []};
     this.otherEntities = {};
@@ -391,7 +392,8 @@ class Simulation {
   // Seed the established moa nests: some in the downslope forest, the rest across open moa
   // country. Count/placement from LEVEL_MECHANICS.nestingSites; inert when not opted in.
   _seedNestingSites() {
-    this.nestingSites = [];
+    // (Sites a level's script set down, addNestingSite, stay; the seeded ones are remade.)
+    this.nestingSites = (this.nestingSites || []).filter(s => s.scripted);
     const M = (typeof LEVEL_MECHANICS !== 'undefined') ? LEVEL_MECHANICS : {};
     const cfg = M.nestingSites;
     if (!cfg || typeof NestingSite === 'undefined') return;
@@ -813,7 +815,7 @@ class Simulation {
     // Pick from active eagle species if no specific key given
     if (!speciesKey && this.activeSpecies.eagle.length > 0) {
       const eagleSpecies = this.activeSpecies.eagle;
-      speciesKey = eagleSpecies[Math.floor(Math.random() * eagleSpecies.length)];
+      speciesKey = eagleSpecies[Math.floor(random() * eagleSpecies.length)];
     }
     
     const eagle = this._createFromRegistry('eagle', speciesKey, pos.x, pos.y, HaastsEagle);
@@ -962,6 +964,7 @@ class Simulation {
     chick.age = 0;
     chick.mature = false;
     chick.hunger = 30;
+    chick._bornYear = Math.floor((this.seasonTurns || 0) / 4);   // (the calendar's years to come of age)
 
     // Sex-balance the hatchling: take the minority sex of its own living flock so a
     // small population keeps both sexes and stays able to pair within itself.
@@ -975,6 +978,9 @@ class Simulation {
     flock.push(chick);
     this._invalidateCache();
     if (this.game && this.game.module && this.game.module.onHatched) this.game.module.onHatched(chick, type);
+    if (this.game && this.game.tutorial) {
+      this.game.tutorial.fireEvent(TUTORIAL_EVENTS.BIRD_HATCHED, { egg, bird: chick, speciesKey: type });
+    }
 
     if (this.stats && this.stats.births !== undefined) this.stats.births++;
     const name = (sp && sp.displayName) || (chick.species && chick.species.displayName) || type;
@@ -1035,7 +1041,17 @@ class Simulation {
       eagle.huntSearchTimer = 0;
       return;
     }
+    // coverBreaksLock (a chapter level's rule): a strike on a moa fully under cover fails and
+    // the bird breaks off, as it does on a protected species.
+    if (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.coverBreaksLock &&
+        moa.inShelter && !(moa.shelterSpotFrac > 0)) {
+      eagle.hunting = false;
+      eagle.target = null;
+      eagle.huntSearchTimer = 0;
+      return;
+    }
     moa.alive = false;
+    moa.causeOfDeath = 'eagle';
     if (audioManager) audioManager.playEagleCatch();
 
     eagle.kills++;
@@ -1104,6 +1120,9 @@ class Simulation {
 
     const name = (prey.species && prey.species.displayName) || (prey._label) || 'bird';
     if (this.game) this.game.addNotification(`An eagle seized a ${name}!`, 'error');
+    if (this.game && this.game.tutorial) {
+      this.game.tutorial.fireEvent(TUTORIAL_EVENTS.BIRD_KILLED, { bird: prey, eagle, speciesKey: key });
+    }
     this.stats.deaths++;
     this._invalidateCache();
   }
@@ -1116,6 +1135,64 @@ class Simulation {
     this.eggs.push(egg);
     this.markEggGridDirty();   // new egg → rebuild the static egg grid
     return egg;
+  }
+
+  // An egg set down at a point by a level's script (a chapter's `lay`): a moa species hatches
+  // a moa, any other registered species its own kind. Not a laying event: it fires no EGG_LAID,
+  // as a scripted `place` doesn't count as the player's placement.
+  addEggAt(x, y, speciesKey, opts = {}) {
+    const egg = this.addEgg(x, y, speciesKey);
+    const isMoa = typeof MOA_SPECIES !== 'undefined' && !!MOA_SPECIES[speciesKey];
+    egg.offspringType = isMoa ? 'moa' : speciesKey;
+    egg.parentSpecies = speciesKey;
+    if (opts.incubationFrames != null) egg.incubationTime = opts.incubationFrames;
+    const ns = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.nestingSites) || null;
+    egg.speedBonus = Math.max(egg.speedBonus || 1, opts.speedBonus ?? ((ns && ns.eggSpeedBonus) || 1));
+    egg.scripted = true;
+    return egg;
+  }
+
+  // An established nest at a chosen point (a chapter's `nest`). It survives _seedNestingSites,
+  // which otherwise rebuilds the list when a level or an area starts.
+  addNestingSite(x, y, opts = {}) {
+    if (typeof NestingSite === 'undefined') return null;
+    const cfg = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.nestingSites) || {};
+    const forestBand = cfg.forestBand || { min: 0.36, max: 0.48 };
+    const e = this.terrain.getElevationAt(x, y);
+    const habitat = opts.habitat || ((e >= forestBand.min && e < forestBand.max) ? 'forest' : 'open');
+    const site = new NestingSite(x, y, { radius: opts.radius ?? (cfg.radius ?? 46), habitat, reservedFor: opts.reservedFor || null });
+    site.scripted = true;
+    if (opts.hideClutch) site.hideClutch = true;
+    if (!this.nestingSites) this.nestingSites = [];
+    this.nestingSites.push(site);
+    this._invalidateCache();
+    return site;
+  }
+
+  // Moa within `radius` of a point.
+  moaNear(p, radius) {
+    const rSq = radius * radius;
+    let n = 0;
+    for (let i = 0; i < this.moas.length; i++) {
+      const m = this.moas[i];
+      if (!m.alive) continue;
+      const dx = m.pos.x - p.x, dy = m.pos.y - p.y;
+      if (dx * dx + dy * dy <= rSq) n++;
+    }
+    return n;
+  }
+
+  // The chance a kea raid on a nest succeeds right now: high with the moa away, falling with
+  // every moa close by (they drive the kea off). One formula for the player's Nest Raid and
+  // for kea raiding on their own (keaRaidsEggs: 'odds'); the numbers are mechanics.keaRaid.
+  // `at` stands in for a site when an egg lies in the open.
+  raidSuccessChance(site, at = null) {
+    const cfg = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.keaRaid) || {};
+    const p = site ? site.pos : at;
+    if (!p) return 1;
+    const moa = this.moaNear(p, cfg.moaRadius ?? 90);
+    const prob = (cfg.baseSuccess ?? 0.9) - (cfg.moaPenalty ?? 0.12) * moa;
+    return Math.max(cfg.minSuccess ?? 0.05, Math.min(1, prob));
   }
 
   // A kea robs a moa nest: destroy the egg and seed a disturbance the moa avoid.
@@ -1401,7 +1478,7 @@ class Simulation {
     if (forestN >= patchCap) return false;
 
     for (let tries = 0; tries < 6; tries++) {
-      const a = Math.random() * Math.PI * 2, rr = Math.sqrt(Math.random()) * radius;
+      const a = random() * Math.PI * 2, rr = Math.sqrt(random()) * radius;
       const px = x + Math.cos(a) * rr, py = y + Math.sin(a) * rr;
       const biome = this.terrain.getBiomeAt(px, py);
       if (!biome || !biome.canHavePlants || !this.terrain.isWalkable(px, py)) continue;
@@ -1410,7 +1487,7 @@ class Simulation {
       let n = 0;
       for (let i = 0; i < near.length; i++) if (near[i].alive && FOREST_TREES.has(near[i].type)) n++;
       if (n >= 2) continue;
-      const type = Math.random() < 0.6 ? 'rimu' : 'beech';   // podocarp-led
+      const type = random() < 0.6 ? 'rimu' : 'beech';   // podocarp-led
       const seedling = new Plant(px, py, type, this.terrain, biome.key);
       seedling.growth = 0.4;    // start as a visible young tree, not a tiny sprout (reads sooner)
       this.addPlant(seedling);
@@ -1453,7 +1530,7 @@ class Simulation {
     const cap = M.maxPlants ?? this.config.maxPlants ?? 1200;
     if (this.plants.length >= cap) return false;
 
-    const type = forestHere[(Math.random() * forestHere.length) | 0];
+    const type = forestHere[(random() * forestHere.length) | 0];
     const seedling = new Plant(x, y, type, this.terrain, biome.key);
     seedling.growth = 0.25;                              // a young recruit; handleGrowth() grows it in
     this.addPlant(seedling);
@@ -1818,6 +1895,7 @@ class Simulation {
             else if (_sm < _sf) newMoa.isFemale = false;
 
             newMoa.hunger = 35;
+            newMoa._bornYear = Math.floor((this.seasonTurns || 0) / 4);   // (a species on the calendar matures by the year)
             newMoa.size *= 0.6;
             newMoa._cacheSizeMultipliers();
             newMoa.homeRange.set(egg.pos.x, egg.pos.y);

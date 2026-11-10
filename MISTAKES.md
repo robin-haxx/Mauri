@@ -12,6 +12,57 @@ fixed; **[process]** a testing trap, not a bug; **[rule]** a design guardrail, b
 
 ---
 
+## [fixed] Wild moa starved beside food: three foraging traps, found by the first emergent module
+
+- **What happened.** In the chapters modules (`levels/chapters_storms.js`, `chapters_patotara.js`),
+  where the family are ordinary simulation moa rather than scripted ones, a parent or a chick
+  starved within a minute with forty plants in reach. The scripted modules never showed it:
+  their family moa fed through `MoaLife._feed`, not `Moa.forage`.
+- **Root cause.** Three traps in `mauri_moa.js`, each read from a headless trace of one bird
+  (`tools/batch.js --trace <cast name>`). (1) `findPlant` did not skip an **unsprouted** pātōtara
+  (a bare bush waiting for the player's hand): the moa walked to it and "ate" nothing from it,
+  frame after frame. (2) `seekAttractions` pre-empts `forage()` whenever a placed patch attracts
+  the moa, with no check that it is getting nearer; a slow bird on a steep slope was pulled at a
+  patch across a rock band until it died. (3) `forage()` kept a target plant it never reached
+  for the same reason (the distance swung between 30 and 70 units for forty seconds).
+- **Rule.** A forager skips what has nothing on it (`unsprouted`, `nutrition <= 0`, a plant it
+  gave up on), a critically hungry moa eats what is in reach before following a patch's pull,
+  and any pull or target that has made no progress for four seconds is given up for a while
+  (`_attrStall`, `_tgtStall`, `_unreachable`). The general rule, again: **anything a bird walks
+  at must be checked for progress, and dropped when there is none.** To find such a trap,
+  trace one bird once a second (state, hunger, target and its distance) rather than reading
+  population counts.
+
+## [process] A headless run must advance `frameCount` by hand
+
+- **What happened.** Driving the game from a script (`game.update(1)` in a loop with the draw
+  loop stopped), moa searched for food once and never again, and every family starved.
+- **Root cause.** `Moa.forage` backs off its next search to `frameCount + 20`, and p5's
+  `frameCount` only moves when `draw()` runs. A few other things are timed by it too (storm
+  swell, the kea's lure refresh, a plant's sprouting).
+- **Rule.** A harness that steps the simulation itself increments `frameCount` with every step
+  (`tools/batch.js`, `tools/validate.js --smoke`), and stops the page's own loop *before* the
+  level loads, or a few real-time frames reach the simulation and a seeded run stops being a
+  replay.
+
+## [fixed] Module moa walked forever at goals over a ridge; sites picked by distance, not by land
+
+- **What happened.** In the modules, a moa told to go somewhere it couldn't reach kept trying:
+  two moa started with an unbroken line of mountain tops between them, and a walk's goal sat
+  across a ridge.
+- **Root cause.** The directors pick their sites by distance on the planning grid (only the
+  tarn's and the friends' winter spot's routes were path-checked, and Module 1's way in fell
+  back to a straight line when there was no path). `_walkableNear` snapped a bird to the nearest
+  walkable ground even across a ridge. And `MoaLife`'s stuck-watcher re-planned a detour every
+  ~4 s to a goal no detour could reach. `mauri_module.js`, `mauri_module_patotara.js`.
+- **Rule.** Anything a bird walks between must be on one stretch of land: check it with land
+  regions (`TerrainGenerator.connected`, or the planning grid's `sameRegion` while the terrain
+  is still generating). Site pickers filter candidates to the home region, spawns pass an anchor
+  to `_walkableNear`, `_findPath` gives up at once between regions, and `MoaLife._travel` swaps a
+  goal it can't reach for the nearest ground on its own side. To test it, wrap
+  `TerrainGenerator.prototype.getElevation` to raise a glacier band across the window: real
+  seeds rarely split the land.
+
 ## [fixed] Forest birds starved in a small window: three steering traps
 
 - **What happened.** In the modules' free play (a 425×317 window), kererū, kākā and kōkako
@@ -181,3 +232,55 @@ fixed; **[process]** a testing trap, not a bug; **[rule]** a design guardrail, b
   parametric oscillation is the right choice: tunable and legible. If the game is ever asked to
   replay a *real* sequence of glacials, use an anchor table, not a wave.
   `mauri_climate_drift.js`.
+
+## [fixed] The eagle could never catch a giant moa: its resist roll ran on every scan
+
+- **What happened.** In the five-year free play the eagle hunted the giant moa herd for four
+  minutes, got within a pixel of one, and starved to death without a catch; the chapters run
+  then ended with "the ecosystem lost its apex predator".
+- **Root cause.** The giant moa's `eagleResistance` (a 30% chance to shrug off an attack) was
+  rolled in the eagle's prey *scan*, once per moa per frame. In a herd the bird's pick flickered
+  between members from frame to frame, and under a chapter level's `coverBreaksLock` every
+  change of target counted as a fresh lock-on: a new wind-up, a new grace window, another
+  `eagle_hunting` event. No wind-up ever reached zero. (A lone giant moa in a classic level was
+  nearly uncatchable the same way: the one-second wind-up needs sixty unbroken frames and a
+  30% per-frame skip never allows them.)
+- **Rule.** A chance to resist is rolled *at the strike*, once per attempt (`Moa.resistEagleAttack`,
+  now called from `HaastsEagle.hunt`); on a shrug-off the bird breaks off and rests briefly. A
+  scan decides what the eagle can *see*; nothing in it may be random per frame for the bird it
+  is already chasing. And a "fresh lock" means the last target is gone from view (under cover or
+  dead), not that a nearer bird appeared. `mauri_eagle.js`.
+
+## [fixed] A chick starved at arm's length from its feeding parent; two more foraging traps
+
+- **What happened.** In the five-year free play Pukepuke hovered for seventy seconds at exactly
+  fifty units from a parent feeding on a wharariki patch, hunger climbing, and starved. In
+  spring it walked past tussock at its feet toward a beech a hundred units up a slope.
+- **Root cause.** Two rules of the open simulation, each fine alone. (1) The separation push
+  from a neighbour inside fifty units is stronger than the pull toward a plant (0.96 against at
+  most 0.9 of `maxForce`), so a bird whose food lies inside a neighbour's ring stands on the
+  ring. (2) Plant choice divides distance by nutrition, so a rich plant far off outscores a poor
+  one close by; a starving bird on a slope dies on the way to the richer one, then the stall
+  watch hands it the next far plant.
+- **Rule.** A hungry bird crowds in: above its hunger threshold the separation push scales down
+  toward 0.3 as hunger nears critical. A starving bird (past `criticalHunger`) takes the nearest
+  real meal (fifteen food or more on it), not the richest in range. Both in `mauri_moa.js`.
+  When a cast member starves beside food, run `tools/batch.js --trace <name>` first: the trace
+  prints the target plant, its distance and the stall counter once a second, and the fault is
+  usually visible in twenty rows.
+
+## [process] A replay proven on one machine was claimed for every machine
+
+- **What happened.** The documents said a run "replays exactly from a seed, so two researchers
+  can watch the same five years". The owner re-ran nine seeded stand-in runs on another machine
+  with the same code. Each began identically and drifted apart 17 to 35 seconds in; two runs
+  that were wins in the build container were losses there.
+- **Root cause.** The claim was tested only where it was made: same container, same browser
+  build, same processor. There it holds (same hash under load, in parallel, six days apart).
+  The simulation's stepping reads no clock, so the remaining suspects are the browser's own
+  math functions (sine, cosine, arctangent, powers), which may differ in the last digit between
+  browser builds and processors. Not yet confirmed.
+- **Rule.** "Deterministic" needs its scope stated: one machine, one browser, or everywhere.
+  Before a replay is promised across machines, run one seed on two of them and compare the
+  hash `tools/batch.js` prints. Until that passes, research replays are made on the machine
+  that made the original, and results are reported over many seeds as a range.

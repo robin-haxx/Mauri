@@ -5538,7 +5538,10 @@ class Game {
     pop();
     fill(unlocked ? [140, 180, 150] : [60, 60, 65]);
     smallTextSize(13);
-    text(unlocked ? level.name : '🔒', bx, y + s * 0.82);
+    // (A long name is drawn smaller, to stay inside the card.)
+    const _nm = unlocked ? level.name : '🔒', _nw = textWidth(_nm);
+    if (_nw > s * 0.9) textSize((13 + SMALL_TEXT_BUMP) * s * 0.9 / _nw);
+    text(_nm, bx, y + s * 0.82);
     pop();
     this._levelCardBounds.push({ x, y, w: s, h: s, levelId: level.id, unlocked, module: true, chapters: !!level.chapters });
   }

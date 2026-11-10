@@ -62,6 +62,8 @@ const { serve, args, openGame } = require('./_headless');
         out.push(`${String(s).padStart(4)}s ${h.toString(16).padStart(8, '0')} alive=${n} eggs=${sim.eggs.filter(e => e.alive && !e.hatched).length}`);
         if (s % 10 === 0) await new Promise(r => setTimeout(r, 0));
       }
+      // (A run with nobody playing can end early: say so, so a short file isn't taken for a fault.)
+      out.push(`end ${game.state}${game.gameOverReason ? ' (' + game.gameOverReason + ')' : ''} at ${Math.round(game.playTime / 60)}s of play`);
       return out;
     }, { seconds });
     const text = lines.join('\n') + '\n';

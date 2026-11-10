@@ -405,6 +405,27 @@ the `teaches` list of the lesson that covers it.
 
 ---
 
+## Checking replays between two machines
+
+A seed replays a run exactly on one machine and browser, and not yet across machines. To find
+out why, run this on your own machine and compare the file it writes with the one recorded on
+the build container, `tests/replay/storms_guided_seed1_build_container.txt`:
+
+```bash
+node tools/replaydiff.js --level chapters_storms --sketch Guided --seed 1 --seconds 60 --out mine.txt
+```
+
+```bash
+diff mine.txt tests/replay/storms_guided_seed1_build_container.txt | head
+```
+
+The first line of each file is a fingerprint of the browser's own arithmetic, function by
+function. If that line differs, the browser's math is the cause and the line names the
+functions. If it matches and a later line differs, the cause is elsewhere and the line gives
+the second the runs part.
+
+---
+
 ## Making a lesson for a partner's brief
 
 A new lesson starts from a copy of the template file (`levels/_template_chapters.js`) and

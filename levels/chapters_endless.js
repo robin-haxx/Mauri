@@ -114,6 +114,9 @@ const CHAPTERS_ENDLESS = (() => {
     endlessChapters: true,              // never won: a loss shows the years kept (Game's overlay)
     userCamera: true,                   // the zoom buttons, drag to pan, tap an animal to follow it
     claim: "Small herds grow slowly, so every animal counts, and the Pouākai must eat too.",
+    // (What its own lines say outright. Its other rules show as untaught in tools/coverage.js:
+    // they are the lessons still to be written.)
+    teaches: ['slow_herds', 'over_the_pass', 'nest_founding'],
     guide: ['upland_moa', 'haasts_eagle', 'kea', 'kaka', 'kokako', 'south_island_giant_moa', 'predator_prey', 'patotara'],
     unlockCondition: null,
 

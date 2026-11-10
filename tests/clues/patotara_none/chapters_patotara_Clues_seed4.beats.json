@@ -1,0 +1,382 @@
+{
+ "level": "chapters_patotara_clues",
+ "sketch": "Clues",
+ "seed": 4,
+ "result": "loss",
+ "playTime": 114,
+ "csv": "seed,level,sketch,chapter,time_s,year,season,upland_moa,stout_legged_moa,other_moa,total_moa,eagles,eggs,n_kea,placed_patotara,placed_Storm,event\n4,chapters_patotara_clues,Clues,summer,0,1,summer,5,7,0,12,1,2,3,0,0,start\n4,chapters_patotara_clues,Clues,summer,0.1,1,summer,5,7,0,12,1,2,3,0,0,reaction:kea_near:when\n4,chapters_patotara_clues,Clues,summer,4.1,1,summer,5,7,0,12,1,2,3,0,0,hint:kea_near:rung 1\n4,chapters_patotara_clues,Clues,summer,10,1,summer,5,7,0,12,1,2,3,0,0,sample\n4,chapters_patotara_clues,Clues,summer,10.1,1,summer,5,7,0,12,1,2,3,0,0,hint:kea_near:rung 2\n4,chapters_patotara_clues,Clues,summer,18.1,1,summer,5,7,0,12,1,2,3,0,0,reaction:hungry_eagle:when\n4,chapters_patotara_clues,Clues,summer,20,1,summer,5,7,0,12,1,2,3,0,0,sample\n4,chapters_patotara_clues,Clues,summer,26.7,1,summer,6,7,0,13,1,1,3,0,0,reaction:koukou_hatched:egg_hatched\n4,chapters_patotara_clues,Clues,summer,26.7,1,summer,6,7,0,13,1,1,3,0,0,moment:$moa:Koukou has hatched!\n4,chapters_patotara_clues,Clues,summer,26.7,1,summer,6,7,0,13,1,1,3,0,0,cast:koukou:adopted\n4,chapters_patotara_clues,Clues,summer,26.7,1,summer,6,7,0,13,1,1,3,0,0,goal:koukou\n4,chapters_patotara_clues,Clues,summer,27.8,1,summer,6,7,0,13,1,1,3,0,0,reaction:cover:eagle_hunting\n4,chapters_patotara_clues,Clues,summer,28.5,1,summer,6,7,0,13,1,1,3,0,0,case:cover:rung 0; 0.7s; passed\n4,chapters_patotara_clues,Clues,summer,28.9,1,summer,6,7,0,13,1,1,3,0,0,reaction:cover_again:eagle_hunting\n4,chapters_patotara_clues,Clues,summer,30,1,summer,6,7,0,13,1,0,3,0,0,sample\n4,chapters_patotara_clues,Clues,summer,32.9,1,summer,6,7,0,13,1,0,3,0,0,hint:cover_again:rung 1\n4,chapters_patotara_clues,Clues,summer,35.9,1,summer,6,7,0,13,1,0,3,0,0,hint:cover_again:rung 2\n4,chapters_patotara_clues,Clues,summer,40,1,summer,6,7,0,13,1,0,3,0,0,sample\n4,chapters_patotara_clues,Clues,summer,40.3,1,summer,5,7,0,12,1,0,3,0,0,cast_lost:friendPapa:eagle\n4,chapters_patotara_clues,Clues,summer,40.3,1,summer,5,7,0,12,1,0,3,0,0,case:cover_again:rung 2; 11.5s; lost\n4,chapters_patotara_clues,Clues,summer,40.3,1,summer,5,7,0,12,1,0,3,0,0,reaction:parent_taken:cast_lost\n4,chapters_patotara_clues,Clues,summer,45,1,autumn,5,7,0,12,1,0,3,0,0,close:summer:-> autumn\n4,chapters_patotara_clues,Clues,autumn,45,1,autumn,5,7,0,12,1,0,3,0,0,chapter:autumn\n4,chapters_patotara_clues,Clues,autumn,45,1,autumn,5,7,0,12,1,0,3,0,0,place:waterhole:tarn\n4,chapters_patotara_clues,Clues,autumn,45,1,autumn,5,7,0,12,1,0,3,0,0,fade:Storm:2\n4,chapters_patotara_clues,Clues,autumn,50,1,autumn,5,7,0,12,1,0,3,0,0,sample\n4,chapters_patotara_clues,Clues,autumn,50.1,1,autumn,5,7,0,12,1,0,3,0,0,case:kea_near:rung 2; 50s; passed\n4,chapters_patotara_clues,Clues,autumn,60,1,autumn,5,7,0,12,1,0,3,0,0,sample\n4,chapters_patotara_clues,Clues,autumn,70,1,autumn,5,7,0,12,1,0,3,0,0,sample\n4,chapters_patotara_clues,Clues,autumn,80,1,autumn,5,7,0,12,1,0,3,0,0,sample\n4,chapters_patotara_clues,Clues,autumn,90,1,autumn,5,7,0,12,1,0,3,0,0,reaction:storm_gone:placeable_expired\n4,chapters_patotara_clues,Clues,autumn,90,1,autumn,5,7,0,12,1,0,3,0,0,sample\n4,chapters_patotara_clues,Clues,autumn,93,1,autumn,5,7,0,12,1,0,3,0,0,reaction:hungry_eagle:when\n4,chapters_patotara_clues,Clues,autumn,96,1,autumn,5,7,0,12,1,0,3,0,0,hint:storm_gone:rung 1\n4,chapters_patotara_clues,Clues,autumn,100,1,autumn,5,7,0,12,1,0,3,0,0,sample\n4,chapters_patotara_clues,Clues,autumn,102.7,1,autumn,5,7,0,12,1,0,3,0,0,reaction:cover_again:eagle_hunting\n4,chapters_patotara_clues,Clues,autumn,104,1,autumn,5,7,0,12,1,0,3,0,0,hint:storm_gone:rung 2\n4,chapters_patotara_clues,Clues,autumn,106.8,1,autumn,5,7,0,12,1,0,3,0,0,hint:cover_again:rung 1\n4,chapters_patotara_clues,Clues,autumn,109.8,1,autumn,5,7,0,12,1,0,3,0,0,hint:cover_again:rung 2\n4,chapters_patotara_clues,Clues,autumn,110,1,autumn,5,7,0,12,1,0,3,0,0,sample\n4,chapters_patotara_clues,Clues,autumn,113.5,1,autumn,4,7,0,11,1,0,3,0,0,cast_lost:pukepuke:eagle\n4,chapters_patotara_clues,Clues,autumn,113.5,1,autumn,4,7,0,11,1,0,3,0,0,case:cover_again:rung 2; 10.8s; lost\n4,chapters_patotara_clues,Clues,autumn,113.5,1,autumn,4,7,0,11,1,0,3,0,0,reaction:pukepuke_lost:cast_lost\n4,chapters_patotara_clues,Clues,autumn,113.5,1,autumn,4,7,0,11,1,0,3,0,0,lost:autumn:The Pouākai took Pukepuke.\n4,chapters_patotara_clues,Clues,autumn,113.5,1,autumn,4,7,0,11,1,0,3,0,0,loss",
+ "log": [
+  {
+   "t": 0,
+   "chapter": "summer",
+   "kind": "chapter",
+   "id": "summer",
+   "info": ""
+  },
+  {
+   "t": 0,
+   "chapter": "summer",
+   "kind": "nest",
+   "id": "friendNest",
+   "info": "friendsHome"
+  },
+  {
+   "t": 0,
+   "chapter": "summer",
+   "kind": "spawn",
+   "id": "upland_moa",
+   "info": "2"
+  },
+  {
+   "t": 0,
+   "chapter": "summer",
+   "kind": "cast",
+   "id": "friendMama",
+   "info": "adopted"
+  },
+  {
+   "t": 0,
+   "chapter": "summer",
+   "kind": "cast",
+   "id": "friendPapa",
+   "info": "adopted"
+  },
+  {
+   "t": 0,
+   "chapter": "summer",
+   "kind": "lay",
+   "id": "upland_moa",
+   "info": "1"
+  },
+  {
+   "t": 0,
+   "chapter": "summer",
+   "kind": "spawn",
+   "id": "upland_moa",
+   "info": "2"
+  },
+  {
+   "t": 0,
+   "chapter": "summer",
+   "kind": "spawn",
+   "id": "upland_moa",
+   "info": "1"
+  },
+  {
+   "t": 0,
+   "chapter": "summer",
+   "kind": "cast",
+   "id": "mama",
+   "info": "adopted"
+  },
+  {
+   "t": 0,
+   "chapter": "summer",
+   "kind": "cast",
+   "id": "papa",
+   "info": "adopted"
+  },
+  {
+   "t": 0,
+   "chapter": "summer",
+   "kind": "cast",
+   "id": "pukepuke",
+   "info": "adopted"
+  },
+  {
+   "t": 0,
+   "chapter": "summer",
+   "kind": "place",
+   "id": "patotara",
+   "info": "patch"
+  },
+  {
+   "t": 0,
+   "chapter": "summer",
+   "kind": "spawn",
+   "id": "kea",
+   "info": "3"
+  },
+  {
+   "t": 0,
+   "chapter": "summer",
+   "kind": "place",
+   "id": "Storm",
+   "info": "tops"
+  },
+  {
+   "t": 0,
+   "chapter": "summer",
+   "kind": "place",
+   "id": "Storm",
+   "info": "lookout"
+  },
+  {
+   "t": 0.1,
+   "chapter": "summer",
+   "kind": "reaction",
+   "id": "kea_near",
+   "info": "when"
+  },
+  {
+   "t": 4.1,
+   "chapter": "summer",
+   "kind": "hint",
+   "id": "kea_near",
+   "info": "rung 1"
+  },
+  {
+   "t": 10.1,
+   "chapter": "summer",
+   "kind": "hint",
+   "id": "kea_near",
+   "info": "rung 2"
+  },
+  {
+   "t": 18.1,
+   "chapter": "summer",
+   "kind": "reaction",
+   "id": "hungry_eagle",
+   "info": "when"
+  },
+  {
+   "t": 26.7,
+   "chapter": "summer",
+   "kind": "reaction",
+   "id": "koukou_hatched",
+   "info": "egg_hatched"
+  },
+  {
+   "t": 26.7,
+   "chapter": "summer",
+   "kind": "moment",
+   "id": "$moa",
+   "info": "Koukou has hatched!"
+  },
+  {
+   "t": 26.7,
+   "chapter": "summer",
+   "kind": "cast",
+   "id": "koukou",
+   "info": "adopted"
+  },
+  {
+   "t": 26.7,
+   "chapter": "summer",
+   "kind": "goal",
+   "id": "koukou",
+   "info": ""
+  },
+  {
+   "t": 27.8,
+   "chapter": "summer",
+   "kind": "reaction",
+   "id": "cover",
+   "info": "eagle_hunting"
+  },
+  {
+   "t": 28.5,
+   "chapter": "summer",
+   "kind": "case",
+   "id": "cover",
+   "info": "rung 0, 0.7s, passed"
+  },
+  {
+   "t": 28.9,
+   "chapter": "summer",
+   "kind": "reaction",
+   "id": "cover_again",
+   "info": "eagle_hunting"
+  },
+  {
+   "t": 32.9,
+   "chapter": "summer",
+   "kind": "hint",
+   "id": "cover_again",
+   "info": "rung 1"
+  },
+  {
+   "t": 35.9,
+   "chapter": "summer",
+   "kind": "hint",
+   "id": "cover_again",
+   "info": "rung 2"
+  },
+  {
+   "t": 40.3,
+   "chapter": "summer",
+   "kind": "cast_lost",
+   "id": "friendPapa",
+   "info": "eagle"
+  },
+  {
+   "t": 40.3,
+   "chapter": "summer",
+   "kind": "case",
+   "id": "cover_again",
+   "info": "rung 2, 11.5s, lost"
+  },
+  {
+   "t": 40.3,
+   "chapter": "summer",
+   "kind": "reaction",
+   "id": "parent_taken",
+   "info": "cast_lost"
+  },
+  {
+   "t": 45,
+   "chapter": "summer",
+   "kind": "close",
+   "id": "summer",
+   "info": "-> autumn"
+  },
+  {
+   "t": 45,
+   "chapter": "autumn",
+   "kind": "chapter",
+   "id": "autumn",
+   "info": ""
+  },
+  {
+   "t": 45,
+   "chapter": "autumn",
+   "kind": "place",
+   "id": "waterhole",
+   "info": "tarn"
+  },
+  {
+   "t": 45,
+   "chapter": "autumn",
+   "kind": "fade",
+   "id": "Storm",
+   "info": "2"
+  },
+  {
+   "t": 50.1,
+   "chapter": "autumn",
+   "kind": "case",
+   "id": "kea_near",
+   "info": "rung 2, 50s, passed"
+  },
+  {
+   "t": 90,
+   "chapter": "autumn",
+   "kind": "reaction",
+   "id": "storm_gone",
+   "info": "placeable_expired"
+  },
+  {
+   "t": 93,
+   "chapter": "autumn",
+   "kind": "reaction",
+   "id": "hungry_eagle",
+   "info": "when"
+  },
+  {
+   "t": 96,
+   "chapter": "autumn",
+   "kind": "hint",
+   "id": "storm_gone",
+   "info": "rung 1"
+  },
+  {
+   "t": 102.7,
+   "chapter": "autumn",
+   "kind": "reaction",
+   "id": "cover_again",
+   "info": "eagle_hunting"
+  },
+  {
+   "t": 104,
+   "chapter": "autumn",
+   "kind": "hint",
+   "id": "storm_gone",
+   "info": "rung 2"
+  },
+  {
+   "t": 106.8,
+   "chapter": "autumn",
+   "kind": "hint",
+   "id": "cover_again",
+   "info": "rung 1"
+  },
+  {
+   "t": 109.8,
+   "chapter": "autumn",
+   "kind": "hint",
+   "id": "cover_again",
+   "info": "rung 2"
+  },
+  {
+   "t": 113.5,
+   "chapter": "autumn",
+   "kind": "cast_lost",
+   "id": "pukepuke",
+   "info": "eagle"
+  },
+  {
+   "t": 113.5,
+   "chapter": "autumn",
+   "kind": "case",
+   "id": "cover_again",
+   "info": "rung 2, 10.8s, lost"
+  },
+  {
+   "t": 113.5,
+   "chapter": "autumn",
+   "kind": "reaction",
+   "id": "pukepuke_lost",
+   "info": "cast_lost"
+  },
+  {
+   "t": 113.5,
+   "chapter": "autumn",
+   "kind": "lost",
+   "id": "autumn",
+   "info": "The Pouākai took Pukepuke."
+  }
+ ],
+ "beats": {},
+ "cases": [
+  {
+   "id": "cover",
+   "t": 28.5,
+   "sec": 0.7,
+   "rung": 0,
+   "outcome": "passed",
+   "who": "koukou",
+   "chapter": "summer",
+   "transfer": false
+  },
+  {
+   "id": "cover_again",
+   "t": 40.3,
+   "sec": 11.5,
+   "rung": 2,
+   "outcome": "lost",
+   "who": "friendPapa",
+   "chapter": "summer",
+   "transfer": false
+  },
+  {
+   "id": "kea_near",
+   "t": 50.1,
+   "sec": 50,
+   "rung": 2,
+   "outcome": "passed",
+   "who": "",
+   "chapter": "autumn",
+   "transfer": false
+  },
+  {
+   "id": "cover_again",
+   "t": 113.5,
+   "sec": 10.8,
+   "rung": 2,
+   "outcome": "lost",
+   "who": "pukepuke",
+   "chapter": "autumn",
+   "transfer": false
+  }
+ ]
+}

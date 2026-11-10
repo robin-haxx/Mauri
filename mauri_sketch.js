@@ -1959,6 +1959,7 @@ class Game {
     this._selected = e;
     this._follow = true;
     this._huntCam = null;
+    if (this.tutorial) this.tutorial.fireEvent(TUTORIAL_EVENTS.ANIMAL_SELECTED, { animal: e, speciesKey: e.speciesKey || (e.hunting !== undefined ? 'haasts_eagle' : '') });
     const cur = this._zoomGoal();
     const z = cur <= 1.05 ? USER_ZOOMS[2] : cur;
     this.cameraTo({ zoom: z, cx: e.pos.x, cy: this._groundPaintY(e.pos.x, e.pos.y), ax: 0.5, ay: 0.5 }, 40);
@@ -5006,6 +5007,7 @@ class Game {
         lines: [
           { text: L.winText || this._endMessage(), color: [150, 220, 150], size: 18 },
           ...(this.chapters && L.claim ? [{ text: L.claim, color: [200, 240, 200], size: 15 }] : []),
+          ...(this.chapters && this.chapters.unaidedLine() ? [{ text: this.chapters.unaidedLine(), color: [255, 240, 170], size: 15 }] : []),
           { text: goalsTally, color: [150, 220, 150], size: 14 },
           { text: `Final population: ${this._cachedMoaCount} moa`, color: [120, 180, 120], size: 14 },
           { text: `Total mauri earned: ${this.mauri.totalEarned | 0}`, color: [120, 180, 120], size: 14 },
@@ -6655,6 +6657,7 @@ class Game {
     p.shake();
     if (audioManager && audioManager.playPlantRustle) audioManager.playPlantRustle();
     this.simulation.lurePlant(p);
+    if (this.tutorial) this.tutorial.fireEvent(TUTORIAL_EVENTS.PLANT_TAPPED, { plant: p, type: p.type });
   }
   
   handleKey(key) {

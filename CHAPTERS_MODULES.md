@@ -43,12 +43,14 @@ makes the eagle hungry and brings it over the family), and only if it still has 
 a deadline does it force it. The game records which way it went. Across many runs that record is
 the measure of whether the stage was set well.
 
-**Two sketches of every lesson.** Each lesson comes in a Guided and an Open sketch, as small
-buttons under one card in the menu. Guided guarantees the first demonstration, waits for the
-chick to hatch before the season turns, gives the eagle a long wind-up and pauses play on the
-first prompt of each kind. Open guarantees nothing, has a shorter wind-up, never pauses, and may
-have a second eagle. The lesson is the same; only the dial is different. More sketches can be
-added in a few lines, and a study can compare them on the same seeds.
+**Three sketches of every lesson.** Each lesson comes as small buttons under one card in the
+menu: Guided, Open and Clues. The lesson is the same in all three; what differs is how much is
+guaranteed and how much is said. Guided guarantees the first demonstration, waits for the chick
+to hatch before the season turns, gives the eagle a long wind-up and tells the player what to
+do the moment a problem appears. Open guarantees nothing, has a shorter wind-up and never
+pauses. Clues keeps Guided's guarantees and turns the teaching round: it says nothing when a
+problem appears, asks a question if the player has not acted, and only then says what to do.
+More sketches can be added in a few lines, and a study can compare them on the same seeds.
 
 **The eagle can be read.** The Pouākai is a creature with needs, not a timer. Its hunger bar is
 always visible; it pulses amber as the bird nears hunting; every hunt opens with a wind-up in
@@ -243,21 +245,97 @@ should be switched on in the lessons too.
 
 ---
 
+## The Clues sketch: teaching by clue first
+
+The Guided and Open sketches put the answer on screen the moment the eagle locks on: "Move a
+STORM over it". The Clues sketch is built to find out whether a player has learned the rule
+or only followed the prompt.
+
+**The hint ladder.** When the simulation raises a problem, nothing is said at first. What the
+player can see is the clue: the eagle's "!" over the bird it has picked, its amber hunger bar,
+a storm thinning. If the problem is still there a few seconds on, a question is asked ("The
+Pouākai has seen Mama Moa. It can only take what it can see. What could hide Mama Moa?"). Only
+after that is the player told what to do. The first hunt of a lesson climbs the ladder quickly
+and its last rung stops play, so nobody loses a bird to not knowing the rule; later hunts climb
+it slowly. The eagle's wind-up is eight seconds in this sketch, to leave room for the ladder.
+The same ladder is used for a storm blowing out and for kea circling a nest.
+
+**A word for getting there first.** A player who hides the bird before any hint is told so, in
+words that state the rule: "Hidden in time, with no hint. The Pouākai can't take what it can't
+see."
+
+**One more season with nothing said.** After spring, each lesson has one more summer in which
+no hint is given at all. In the Pātōtara lesson the neighbours have a new egg. How the player
+does there is the test of the lesson. The win card says "Without a hint: 3 of 5. On your own at
+the end: 2 of 2."
+
+**Honest ecology.** No species is protected by a floor: when the herd runs low a few arrive over
+the pass, and the lesson says so. Hide its bird twice and the eagle gives the family up and goes
+for the herd. The families are on the breeding calendar, so a chick is small, stays beside its
+mother, and in the five years grows up over years, which makes that lesson's claim true of
+the birds the player is watching.
+
+**What the record gains.** Each problem is logged with the rung at which it was answered, how
+long it took and how it ended, and every storm moved, patch sprouted, plant tapped or animal
+tapped is logged with its second. That is the measure of the learner the earlier record lacked.
+
+### How different players fare in the Clues sketches
+
+Stand-in players on the build container, four seeds per lesson (three for the five years). The
+stand-ins cover and feed but do not lead a family down to the water or home, so in this sketch
+those goals are not required. Read the pattern, not single numbers.
+
+| Lesson | Player | Won | Problems met | Answered with no hint | After the question | After being told | Lost | Unprompted summer: answered | Named birds lost |
+|---|---|---|---|---|---|---|---|---|---|
+| The Storm | Careful (2 s) | 4 of 4 | 11 | 6 | 5 | 0 | 0 | 5 of 5 | 0 |
+| The Storm | Slower (5 s) | 4 of 4 | 12 | 1 | 8 | 3 | 0 | none met | 1 |
+| The Storm | Late (8 s) | 4 of 4 | 10 | 0 | 1 | 9 | 0 | 2 of 2 | 0 |
+| The Storm | Does nothing | 0 of 4 | 4 | 0 | 0 | 0 | 4 | none met | 4 |
+| Pātōtara | Careful (2 s) | 4 of 4 | 12 | 5 | 4 | 3 | 0 | 5 of 8 | 0 |
+| Pātōtara | Slower (5 s) | 4 of 4 | 9 | 0 | 2 | 7 | 0 | 4 of 6 | 0 |
+| Pātōtara | Late (8 s) | 4 of 4 | 13 | 0 | 0 | 13 | 0 | 4 of 7 | 0 |
+| Pātōtara | Does nothing | 0 of 4 | 9 | 0 | 0 | 0 | 9 | none met | 9 |
+| The five years | Careful (2 s) | 3 of 3 | 18 | 15 | 3 | 0 | 0 | n/a | 0 |
+| The five years | Slower (5 s) | 3 of 3 | 23 | 0 | 19 | 4 | 0 | n/a | 0 |
+| The five years | Late (8 s) | 3 of 3 | 28 | 0 | 0 | 28 | 0 | n/a | 0 |
+| The five years | Does nothing | 1 of 3 | 9 | 0 | 0 | 0 | 9 | n/a | 8 |
+
+### Where your judgement is wanted in the Clues sketches
+
+- **How long before each hint.** The first hunt asks its question at two seconds and gives the
+  instruction at five; later hunts at four and seven. The wind-up is eight seconds. These are
+  one line in `levels/_chapters_kit.js`. Too short and it is Guided again; too long and a slow
+  player loses a bird before being told.
+- **Whether the opening should still state the rule.** The lessons' opening lines are the same
+  in all three sketches, so the Storm lesson still says "a moa under a storm can't be seen"
+  before play begins. As built, Clues tests whether the player *applies* a rule they were told.
+  Dropping that line would test whether they *discover* it, which is harder and closer to your
+  first design rule.
+- **Leading the family to the water and home is not required** in this sketch, where it loses
+  the level in Guided. It is still a goal with a reward.
+- **The unprompted summer.** The standing storms thin out in fifteen seconds so the family is
+  in the open when the eagle comes. One summer may be too short to see more than one hunt.
+- **Which sketch a lesson opens on.** The menu card still opens Guided; Clues is its third
+  button.
+
+---
+
 ## Choosing a sketch
 
-| | Guided | Open |
-|---|---|---|
-| First demonstration | Guaranteed by a deadline | Invited, then left to the ecosystem |
-| The season clock | Waits for the lesson's key goal (with a time limit) | Never waits |
-| Eagle wind-up | Six seconds | Three and a half seconds |
-| Prompts | Pause play the first time | Never pause |
-| Eagles | One | May breed to two |
-| Herd protection | A floor of two on the other species | None |
-| Suits | A first session, a younger class, a demonstration on a projector | A second play, confident players, the research condition nearest to open play |
+| | Guided | Open | Clues |
+|---|---|---|---|
+| First demonstration | Guaranteed by a deadline | Invited, then left to the ecosystem | Guaranteed by a deadline |
+| When a problem appears | The instruction, at once | The instruction, at once, without pausing | Nothing; then a question; then the instruction |
+| The season clock | Waits for the lesson's key goal (with a time limit) | Never waits | Waits, as Guided |
+| Eagle wind-up | Six seconds | Three and a half seconds | Eight seconds |
+| Herd protection | A floor of two | A floor of two (none in the five years) | None; newcomers over the pass |
+| The family's breeding | Any season | Any season | By the calendar; chicks grow over years |
+| A stretch with nothing said | No | No | One more summer |
+| The record shows | How the stage behaved | How the stage behaved | Also how each problem was answered |
+| Suits | A first session, a younger class, a projector | Confident players | Finding out what was learned; the research condition |
 
-Both sketches are built for ages eleven to fourteen: short lines, one idea each, te reo names
-beside the English, prompts that name the tool and the target, at most three panels before
-play begins.
+All three are built for ages eleven to fourteen: short lines, one idea each, te reo names
+beside the English, at most three panels before play begins.
 
 ---
 
@@ -299,6 +377,31 @@ What held in all eighteen runs: the first demonstration came on its own, no name
 by the eagle, and every named bird that died had starved. The files in `tests/chapters/` for
 both Storm sketches and the Guided Pātōtara sketch are from that second machine (5 November),
 so they differ from the table above; the rest are from the build container.
+
+---
+
+## What the lessons do not teach yet
+
+Each lesson lists the rules of the simulation it teaches. A tool (`node tools/coverage.js`)
+reads every level, works out which rules it plays by, and reports the ones no lesson teaches.
+This replaces the hand-kept list, and it is the map for the lessons still to be written.
+
+| Level | Rules in force | Taught by a lesson | Untaught | Plays against a taught rule |
+|---|---|---|---|---|
+| Endless: The Tops (the new variant) | 16 | 12 | 4 | 0 |
+| Endless: Mutunga kore (the first Endless level) | 16 | 5 | 9 | 2 |
+
+**Untaught in the new variant:** that wild browse only partly feeds the families, the
+waterhole, where mauri comes from, and the deepening cold.
+
+**Untaught in the first Endless level:** the Nest Raid, the waterhole, the fern shelter, where
+mauri comes from, the yearly focus species, the deepening cold, the mast year, the forest tools
+and the world tour. **It also plays against two taught rules:** its storm stuns the eagle where
+the lessons teach that a storm hides a moa, and it protects species with floors where the Clues
+sketches teach that newcomers come over the pass.
+
+When a new mechanic is built, add it to the table at the top of the tool, and add its name to
+the `teaches` list of the lesson that covers it.
 
 ---
 

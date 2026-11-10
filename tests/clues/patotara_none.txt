@@ -1,0 +1,14 @@
+seed 1: loss after 146s (The Pouākai took Pukepuke.) | beats (no beats) | eagle took: upland_moa 3 | cast lost: mama@39.5s papa@113.3s pukepuke@146.1s | focus animals 3, year 1 | spent nothing, 232 mauri in hand | replay 27982665
+   problems met: 6 (answered: no hint 0, after the question 0, after being told 0; went away by itself 3; lost 3)
+seed 2: loss after 148s (The Pouākai took Pukepuke.) | beats (no beats) | eagle took: upland_moa 3 | cast lost: papa@39.2s friendMama@113.5s pukepuke@147.5s | focus animals 3, year 1 | spent nothing, 224 mauri in hand | replay ec948b02
+   problems met: 5 (answered: no hint 0, after the question 0, after being told 0; went away by itself 2; lost 3)
+seed 3: loss after 41s (The Pouākai took Koukou.) | beats (no beats) | eagle took: upland_moa 1 | cast lost: koukou@40.6s | focus animals 5, year 1 | spent nothing, 196 mauri in hand | replay 3a5a0dd
+   problems met: 1 (answered: no hint 0, after the question 0, after being told 0; went away by itself 0; lost 1)
+seed 4: loss after 114s (The Pouākai took Pukepuke.) | beats (no beats) | eagle took: upland_moa 2 | cast lost: friendPapa@40.3s pukepuke@113.5s | focus animals 4, year 1 | spent nothing, 215 mauri in hand | replay 3ec0fdc9
+   problems met: 4 (answered: no hint 0, after the question 0, after being told 0; went away by itself 2; lost 2)
+
+4 run(s): loss 4
+  eagle took: upland_moa 9; cast lost 9
+  focus animals at the end: 3 to 5 (median 4); years reached: 1 to 1
+  problems met in the lessons' year: 0 of 9 answered with no hint, 0 after a hint, 9 lost; in the unprompted stretch: none
+  files in /home/user/Mauri/tests/clues/patotara_none

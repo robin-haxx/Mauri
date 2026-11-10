@@ -1,0 +1,22 @@
+seed,level,sketch,chapter,time_s,year,season,upland_moa,stout_legged_moa,other_moa,total_moa,eagles,eggs,n_kea,placed_patotara,placed_Storm,event
+3,chapters_patotara_clues,Clues,summer,0,1,summer,5,7,0,12,1,2,3,0,0,start
+3,chapters_patotara_clues,Clues,summer,0.1,1,summer,5,7,0,12,1,2,3,0,0,reaction:kea_near:when
+3,chapters_patotara_clues,Clues,summer,4.1,1,summer,5,7,0,12,1,2,3,0,0,hint:kea_near:rung 1
+3,chapters_patotara_clues,Clues,summer,10,1,summer,5,7,0,12,1,2,3,0,0,sample
+3,chapters_patotara_clues,Clues,summer,10.1,1,summer,5,7,0,12,1,2,3,0,0,hint:kea_near:rung 2
+3,chapters_patotara_clues,Clues,summer,18.1,1,summer,5,7,0,12,1,2,3,0,0,reaction:hungry_eagle:when
+3,chapters_patotara_clues,Clues,summer,20,1,summer,5,7,0,12,1,2,3,0,0,sample
+3,chapters_patotara_clues,Clues,summer,26.7,1,summer,6,7,0,13,1,1,3,0,0,reaction:koukou_hatched:egg_hatched
+3,chapters_patotara_clues,Clues,summer,26.7,1,summer,6,7,0,13,1,1,3,0,0,moment:$moa:Koukou has hatched!
+3,chapters_patotara_clues,Clues,summer,26.7,1,summer,6,7,0,13,1,1,3,0,0,cast:koukou:adopted
+3,chapters_patotara_clues,Clues,summer,26.7,1,summer,6,7,0,13,1,1,3,0,0,goal:koukou
+3,chapters_patotara_clues,Clues,summer,27.8,1,summer,6,7,0,13,1,1,3,0,0,reaction:cover:eagle_hunting
+3,chapters_patotara_clues,Clues,summer,29.8,1,summer,6,7,0,13,1,1,3,0,0,hint:cover:rung 1
+3,chapters_patotara_clues,Clues,summer,30,1,summer,6,7,0,13,1,0,3,0,0,sample
+3,chapters_patotara_clues,Clues,summer,32.8,1,summer,6,7,0,13,1,0,3,0,0,hint:cover:rung 2
+3,chapters_patotara_clues,Clues,summer,40,1,summer,6,7,0,13,1,0,3,0,0,sample
+3,chapters_patotara_clues,Clues,summer,40.6,1,summer,5,7,0,12,1,0,3,0,0,cast_lost:koukou:eagle
+3,chapters_patotara_clues,Clues,summer,40.6,1,summer,5,7,0,12,1,0,3,0,0,case:cover:rung 2; 12.8s; lost
+3,chapters_patotara_clues,Clues,summer,40.6,1,summer,5,7,0,12,1,0,3,0,0,reaction:koukou_lost:cast_lost
+3,chapters_patotara_clues,Clues,summer,40.6,1,summer,5,7,0,12,1,0,3,0,0,lost:summer:The Pouākai took Koukou.
+3,chapters_patotara_clues,Clues,summer,40.6,1,summer,5,7,0,12,1,0,3,0,0,loss

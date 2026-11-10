@@ -87,6 +87,9 @@ function seedList(opt) {
         const tended = () => { const f = focusKeys(); return sim.moas.filter(m => m.alive && f.includes(m.speciesKey)); };
         const near = (type, m, d) => sim.placeables.some(p => p.alive && p.type === type && Math.hypot(p.pos.x - m.pos.x, p.pos.y - m.pos.y) < d);
         const has = (type) => !!(game.activePlaceables && game.activePlaceables[type]);
+        // (What a stand-in does is announced as a player's own action would be, so the lesson's
+        // record and its hint ladders see it.)
+        const did = (ev, type) => { if (game.tutorial && typeof TUTORIAL_EVENTS !== 'undefined') game.tutorial.fireEvent(TUTORIAL_EVENTS[ev], { type }); };
         const standIn = () => {
           if (!KIND) return;
           const now = game.playTime, f = focusKeys();
@@ -100,7 +103,8 @@ function seedList(opt) {
             if (storms.length && pay('move storm', 10)) {
               storms.sort((a, b) => Math.hypot(a.pos.x - t.pos.x, a.pos.y - t.pos.y) - Math.hypot(b.pos.x - t.pos.x, b.pos.y - t.pos.y));
               const s = storms[0]; s.pos.x = t.pos.x; s.pos.y = t.pos.y; if (s.life != null && s.maxLife) s.life = s.maxLife;
-            } else if (has('Storm') && pay('new storm', 40)) sim.addPlaceable(t.pos.x, t.pos.y, 'Storm');
+              did('PLACEABLE_MOVED', 'Storm');
+            } else if (has('Storm') && pay('new storm', 40)) { sim.addPlaceable(t.pos.x, t.pos.y, 'Storm'); did('PLACEMENT', 'Storm'); }
           }
           for (const [t] of seenHunt) if (!t.alive || !sim.eagles.some(e => e.alive && e.hunting && e.target === t)) seenHunt.delete(t);
           if (KIND.feed && now >= nextFeed) {
@@ -110,7 +114,7 @@ function seedList(opt) {
             const cold = sk === 'winter' || (sk === 'autumn' && game.seasonManager.progress > 0.6);
             const type = cold ? 'wharariki' : 'patotara', line = cold ? 45 : 55;
             if (has(type)) for (const m of tended()) {
-              if (m.hunger > line && !near(type, m, 90) && pay(type, 25)) { sim.addPlaceable(m.pos.x + 18, m.pos.y, type); break; }
+              if (m.hunger > line && !near(type, m, 90) && pay(type, 25)) { sim.addPlaceable(m.pos.x + 18, m.pos.y, type); did('PLACEMENT', type); break; }
             }
           }
         };
@@ -156,7 +160,8 @@ function seedList(opt) {
         const left = counters['left:' + focusKeys()[0]] || 0;
         return { result: last.result, playTime: last.playTime, beats: last.beats || {}, kills, castLost, csv: last.csv, json: last.log ? last : null,
                  state: game.state, reason: game.gameOverReason || '', hash: h.toString(16), traced,
-                 focusNow, years, left, spent, paying: !!KIND, mauri: Math.floor(game.mauri.mauri) };
+                 focusNow, years, left, spent, paying: !!KIND, mauri: Math.floor(game.mauri.mauri),
+                 cases: (last.cases || []).filter(c => c.outcome === 'solved' || c.outcome === 'lost' || c.outcome === 'passed') };
       }, { maxFrames: seconds * 60, player: opt.player || null, trace: opt.trace || null });
       if (opt.trace && run.traced.length) { console.log(`  trace of ${opt.trace}:`); for (const r of run.traced.slice(-Number(opt.traceRows || 40))) console.log('   ' + r); }
       const seen = (tally.seedsSeen = tally.seedsSeen || {}); seen[seed] = (seen[seed] || 0) + 1;
@@ -169,6 +174,14 @@ function seedList(opt) {
       const tail = run.paying || paid || run.left ? ` | focus animals ${run.focusNow}${run.left ? `, ${run.left} left over the pass` : ''}, year ${run.years} | spent ${paid || 'nothing'}, ${run.mauri} mauri in hand` : '';
       console.log(`seed ${seed}: ${run.result} after ${run.playTime}s${run.reason ? ` (${run.reason})` : ''} | beats ${beats} | eagle took: ${kills}${run.castLost.length ? ` | cast lost: ${run.castLost.join(' ')}` : ''}${tail} | replay ${run.hash}`);
       (tally.focus = tally.focus || []).push(run.focusNow); (tally.yearsRun = tally.yearsRun || []).push(run.years);
+      // Hint ladders: how far up each problem went before it was answered.
+      if (run.cases && run.cases.length) {
+        const part = (list) => { const solved = list.filter(c => c.outcome === 'solved'); const at = (r) => solved.filter(c => c.rung === r).length;
+          return `${list.length} (answered: no hint ${at(0)}, after the question ${at(1)}, after being told ${solved.filter(c => c.rung >= 2).length}; went away by itself ${list.filter(c => c.outcome === 'passed').length}; lost ${list.filter(c => c.outcome === 'lost').length})`; };
+        const main = run.cases.filter(c => !c.transfer), tr = run.cases.filter(c => c.transfer);
+        console.log(`   problems met: ${part(main)}${tr.length ? `; in the unprompted stretch: ${part(tr)}` : ''}`);
+        tally.cases = (tally.cases || []).concat(run.cases);
+      }
       for (const e of errors.filter(x => /error/.test(x))) console.log('   ' + e);
       tally.runs++;
       tally.results[run.result] = (tally.results[run.result] || 0) + 1;
@@ -186,6 +199,12 @@ function seedList(opt) {
   if (tally.focus && tally.focus.length) {
     const f = tally.focus.slice().sort((a, b) => a - b), y = tally.yearsRun.slice().sort((a, b) => a - b);
     console.log(`  focus animals at the end: ${f[0]} to ${f[f.length - 1]} (median ${f[Math.floor(f.length / 2)]}); years reached: ${y[0]} to ${y[y.length - 1]}`);
+  }
+  if (tally.cases && tally.cases.length) {
+    const main = tally.cases.filter(c => !c.transfer), tr = tally.cases.filter(c => c.transfer);
+    const share = (list) => { const real = list.filter(c => c.outcome !== 'passed');
+      return real.length ? `${real.filter(c => c.outcome === 'solved' && c.rung === 0).length} of ${real.length} answered with no hint, ${real.filter(c => c.outcome === 'solved' && c.rung > 0).length} after a hint, ${real.filter(c => c.outcome === 'lost').length} lost` : 'none'; };
+    console.log(`  problems met in the lessons' year: ${share(main)}; in the unprompted stretch: ${share(tr)}`);
   }
   console.log(`  files in ${outDir}`);
 })().catch((e) => { console.error(e); process.exit(2); });

@@ -35,8 +35,42 @@ const CHAPTERS_PATOTARA_FAMILY = 'chapters_patotara';
 
 const PATOTARA_SKETCHES = {
   guided: { label: 'Guided', forced: true,  hold: true,  graceSec: 6,   kea: 3, moaPenalty: 0.25, minSuccess: 0,    pause: true,  eagleHungerRate: 0.012 },
-  open:   { label: 'Open',   forced: false, hold: false, graceSec: 3.5, kea: 4, moaPenalty: 0.15, minSuccess: 0.05, pause: false, eagleHungerRate: 0.014 }
+  open:   { label: 'Open',   forced: false, hold: false, graceSec: 3.5, kea: 4, moaPenalty: 0.15, minSuccess: 0.05, pause: false, eagleHungerRate: 0.014 },
+  // Clues: the Guided sketch's guarantees, taught by clue first (levels/_chapters_kit.js). When
+  // kea circle the nest nothing is said at first; then a question; then the instruction. The
+  // same for the eagle and the storms. No floor under the herd, the families on the breeding
+  // calendar (Pukepuke stays a half-grown bird beside Mama), and one more summer at the end
+  // with a new egg in the neighbours' nest and nothing said.
+  clues:  { label: 'Clues',  forced: true,  hold: true,  graceSec: 8,   kea: 3, moaPenalty: 0.25, minSuccess: 0,    pause: true,  eagleHungerRate: 0.012, clues: true }
 };
+
+// The Clues sketch's reactions: the Guided list with its instructions swapped for hint ladders.
+function patotaraCluesReactions(list) {
+  const K = CHAPTERS_KIT;
+  const eggInNest = (x) => x.runner.sim.eggs.some(e => e.alive && !e.hatched && e.parentSpecies === 'upland_moa');
+  const kept = list.filter(r => !['cover', 'cover_again', 'storm_gone', 'kea_near', 'sprouted'].includes(r.id));
+  return K.quietAfterYear([
+    // The berries are out: said as what happened, not as what to do about it.
+    { id: 'sprouted', on: 'plant_sprouted',
+      say: [['guide', "Berries! Kea can smell those from far off.", { lit: ['kea'] }]] },
+    // Kea at a nest with an egg in it: the lesson's own ladder. Answered when the moa see a
+    // kea off; lost when a kea takes the egg.
+    { id: 'kea_near', when: (x) => eggInNest(x) && x.runner.nearCheck('kea', 'friendsHome', 170, null), once: false, cooldown: 30,
+      until: { any: [{ seen: ['nest_raid'] }, { after: 50 }] },
+      solved: { seen: ['nest_raid', { success: false }] }, lost: { seen: ['nest_raid', { success: true }] },
+      hints: [
+        { after: 4, notify: ["Kea are circling the neighbours' nest. What would make a kea think twice?", 'error'] },
+        { after: 10, banner: { words: ["Gather the moa at the nest: grow PĀTŌTARA beside it and sprout it", "Tap beside the nest to grow PĀTŌTARA"],
+                               tool: 'patotara', lit: ['kea', 'nests'], pause: false, maxSec: 20 } }
+      ] },
+    ...K.coverLadder({ species: 'upland_moa' }),
+    ...K.praise({ chapters: K.YEAR }),
+    ...K.stormLadder({ lit: ['mama', 'papa', 'pukepuke'], unlock: false, chapters: K.YEAR }),
+    ...K.gaveUp(),
+    ...K.arrivals(),
+    ...kept
+  ], ['hungry_eagle', 'gave_up', 'gave_up_again', 'raid_failed', 'raid_won', 'sprouted']);
+}
 
 function makeChaptersPatotara(sketchKey) {
   const D = PATOTARA_SKETCHES[sketchKey];
@@ -51,6 +85,7 @@ function makeChaptersPatotara(sketchKey) {
     section: 'chapters',
     sketch: { of: CHAPTERS_PATOTARA_FAMILY, label: D.label, dial: D },
     claim: "Sprouted pātōtara berries draw kea; moa gathered at a nest drive them off.",
+    teaches: ['sprout', 'berries_draw_kea', 'moa_defend_nests', 'winter_food'],   // (rule names: tools/coverage.js)
     guide: ['kea', 'patotara', 'upland_moa'],
     nextLevel: 'chapters_freeplay_guided',
     unlockCondition: null,
@@ -100,7 +135,9 @@ function makeChaptersPatotara(sketchKey) {
       eaglePreyPopThreshold: 1, eagleScarcePreyPenalty: 3, eagleSurplusPreference: true,
       eagleTelegraph: { graceSec: D.graceSec, warnBelow: 10 },
       coverBreaksLock: true, coverCalmsMoa: true, lureUnderStorm: true, placeableQueryRadius: 100,
-      populationFloors: { stout_legged_moa: 2 },
+      populationFloors: D.clues ? {} : { stout_legged_moa: 2 },
+      ...(D.clues ? Object.assign({ rescueImmigration: { stout_legged_moa: { below: 3, count: 3, afterSeasons: 1 } },
+                                    coverSendsEagleAway: { after: 2, sec: 45 } }, CHAPTERS_KIT.familyCalendar) : {}),
       nestingSites: { forestCount: 0, openCount: 0, radius: 40, laySnapRadius: 150, drawRadius: 260, layBoost: 0.5, eggSpeedBonus: 1.5 },
       habitatStress: true, habitatStressMargin: 0.08, habitatStressPenalty: 0.4, winterStressMult: 1.4,
       hungerRateMult: 0.6, juvenileHungerMult: 1.0
@@ -140,6 +177,10 @@ function makeChaptersPatotara(sketchKey) {
           { adopt: { mama: { species: 'upland_moa', near: 'home', female: true },
                      papa: { species: 'upland_moa', near: 'home', female: false },
                      pukepuke: { species: 'upland_moa', near: 'home', pick: 'youngest' } } },
+          // (Clues, on the calendar: the hens have laid for now, and Pukepuke is last year's
+          // chick, a year old and still at Mama's side.)
+          ...(D.clues ? [CHAPTERS_KIT.hensHaveLaid(['mama', 'friendMama']),
+                         (x) => { const p = x.runner.castEnts.pukepuke; if (p) { p._bornTurn = -4; p._bornYear = -1; p.mother = x.runner.castEnts.mama || null; } }] : []),
           { place: { type: 'patotara', at: 'patch', standing: true } },
           { spawn: { type: 'kea', at: 'keaNest', count: D.kea, radius: 24 } },
           { place: { type: 'Storm', at: 'tops', standing: true } },
@@ -201,16 +242,23 @@ function makeChaptersPatotara(sketchKey) {
         tools: ['patotara', 'Storm'],
         start: [ tell("Spring: the pātōtara can fruit again. Lead the family home.", ['nests']) ],
         goals: [
-          { id: 'home', name: "Bring the family home beside their neighbours", reward: 25, required: true,
+          { id: 'home', name: "Bring the family home beside their neighbours", reward: 25, required: !D.clues,
             done: { any: [{ near: ['pukepuke', 'home', 120] }, { near: ['mama', 'home', 120] }, { near: ['papa', 'home', 120] }] },
             failReason: "Summer came and the family hadn't made it home." }
         ],
         holdSeason: D.hold ? { until: { goal: 'home' }, at: 0.9, maxSec: 30 } : undefined,
-        next: 'win'
-      }
+        next: D.clues ? 'transfer' : 'win'
+      },
+
+      // Clues only: one more summer, a new egg in the neighbours' nest, and nothing said.
+      ...(D.clues ? [CHAPTERS_KIT.transferChapter({
+        at: 'pukepuke', tools: ['patotara', 'Storm'],
+        words: "One more summer. The neighbours have a new egg, and this time nobody will tell you what to do.",
+        start: [{ lay: { species: 'upland_moa', at: 'friendsHome' } }]
+      })] : [])
     ],
 
-    reactions: [
+    reactions: (D.clues ? patotaraCluesReactions : (list) => list)([
       // The berries are out: now the kea.
       { id: 'sprouted', on: 'plant_sprouted',
         say: [['guide', "Berries! Kea can smell those from far off. Grow more PĀTŌTARA beside the nest and sprout it, so the moa gather there to feed.", { lit: ['friendMama', 'friendPapa', 'mama'] }]] },
@@ -264,7 +312,7 @@ function makeChaptersPatotara(sketchKey) {
         notify: ["One of the grown moa starved. Tap plants near the families to bring them to food.", 'error'] },
       { id: 'home_again', on: 'goal_met', if: (x) => x.event && x.event.goal === 'home',
         moment: { on: 'mama', text: "Home again!" } }
-    ],
+    ]),
 
     lose: [{ when: { extinct: 'focus' }, reason: "The upland moa are gone from the tops." }],
 

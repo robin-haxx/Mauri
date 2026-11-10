@@ -65,8 +65,44 @@ const STORM_SKETCHES = {
     loseParents: false,
     stormCost: 40,
     eagleHungerRate: 0.014
+  },
+  // Clues: the Guided sketch's guarantees, taught the other way round. Nothing is said when
+  // the eagle locks on: its "!" is the clue. A question comes if the player hasn't acted, and
+  // the instruction only after that (levels/_chapters_kit.js). The wind-up is longer to leave
+  // room for the ladder. No floor under the herd: a few arrive over the pass when it runs low.
+  // Hide its bird twice and the eagle goes for the herd. The year ends with one more summer
+  // in which nothing is said at all.
+  clues: {
+    label: 'Clues',
+    forced: true,
+    hold: true,
+    graceSec: 8,
+    eagles: 1,
+    eagleBreeding: false,
+    storms: 4,
+    pause: true,
+    loseParents: true,
+    stormCost: 25,
+    eagleHungerRate: 0.012,
+    clues: true
   }
 };
+
+// The Clues sketch's reactions: the Guided list with its instructions swapped for the kit's
+// hint ladders, a word for an unprompted answer, the herd's arrivals and the eagle giving up,
+// and the eagle's "getting hungry" notice kept to the lesson's year (it is a hint too).
+function stormCluesReactions(list) {
+  const K = CHAPTERS_KIT;
+  const kept = list.filter(r => !['cover', 'cover_again', 'storm_gone'].includes(r.id));
+  return K.quietAfterYear([
+    ...K.coverLadder({ species: 'upland_moa' }),
+    ...K.praise({ chapters: K.YEAR }),
+    ...K.stormLadder({ lit: ['mama', 'papa', 'pukepuke'], chapters: K.YEAR }),
+    ...K.gaveUp(),
+    ...K.arrivals(),
+    ...kept
+  ], ['hungry_eagle', 'gave_up', 'gave_up_again']);
+}
 
 function makeChaptersStorms(sketchKey) {
   const D = STORM_SKETCHES[sketchKey];
@@ -87,6 +123,7 @@ function makeChaptersStorms(sketchKey) {
     section: 'chapters',
     sketch: { of: CHAPTERS_STORMS_FAMILY, label: D.label, dial: D },
     claim: "A moa under a storm can't be seen by the Pouākai, so the eagle hunts what it can see.",
+    teaches: ['cover', 'eagle_reads', 'surplus_prey'],   // (rule names: tools/coverage.js)
     guide: ['haasts_eagle', 'upland_moa', 'subalpine', 'predator_prey'],
     nextLevel: 'chapters_patotara_guided',
     unlockCondition: null,
@@ -149,8 +186,11 @@ function makeChaptersStorms(sketchKey) {
       coverCalmsMoa: true,
       lureUnderStorm: true,
       placeableQueryRadius: 100,
-      // The herd can't be wiped out by the lesson.
-      populationFloors: { stout_legged_moa: 2 },
+      // The herd can't be wiped out by the lesson. (Clues: no floor; a few come over the pass
+      // when it runs low, and hiding its bird twice sends the eagle to the herd.)
+      populationFloors: D.clues ? {} : { stout_legged_moa: 2 },
+      ...(D.clues ? Object.assign({ rescueImmigration: { stout_legged_moa: { below: 3, count: 3, afterSeasons: 1 } },
+                                    coverSendsEagleAway: { after: 2, sec: 45 } }, CHAPTERS_KIT.familyCalendar) : {}),
       // The nest is a nesting site (set down by the summer chapter): eggs gather there and hatch
       // sooner. No sites are seeded.
       nestingSites: { forestCount: 0, openCount: 0, radius: 40, laySnapRadius: 150, drawRadius: 260,
@@ -192,6 +232,7 @@ function makeChaptersStorms(sketchKey) {
           { adopt: { mama: { species: 'upland_moa', near: 'nest', female: true },
                      papa: { species: 'upland_moa', near: 'nest', female: false } } },
           { lay: { species: 'upland_moa', at: 'nest' } },
+          ...(D.clues ? [CHAPTERS_KIT.hensHaveLaid(['mama'])] : []),
           { sow: { plant: 'patotara', at: 'grove', count: 5, radius: 26, sprouted: true } },
           ...openingStorms,
           // The eagle starts over the herd below; brought up to a lookout by the nest, not yet
@@ -267,17 +308,21 @@ function makeChaptersStorms(sketchKey) {
         start: [ tell("Spring! The tops are green again. Lead the family home to the nest.", ['nests']) ],
         goals: [
           // Whoever is left of the family, home: the year isn't won until someone is.
-          { id: 'home', name: "Bring the family home to the nest", reward: 25, required: true,
+          // (Clues: not required. A family that isn't home has its next summer where it stands.)
+          { id: 'home', name: "Bring the family home to the nest", reward: 25, required: !D.clues,
             done: { any: [{ near: ['pukepuke', 'home', 110] }, { near: ['mama', 'home', 110] }, { near: ['papa', 'home', 110] }] },
             failReason: "Summer came and the family hadn't made it home to the nest." }
         ],
         holdSeason: D.hold ? { until: { goal: 'home' }, at: 0.9, maxSec: 30 } : undefined,
-        next: 'win'
-      }
+        next: D.clues ? 'transfer' : 'win'
+      },
+
+      // Clues only: one more summer with nothing said (the kit's unprompted stretch).
+      ...(D.clues ? [CHAPTERS_KIT.transferChapter({ at: 'pukepuke', tools: ['Storm'] })] : [])
     ],
 
     // All year: the words and prompts that answer what the simulation does.
-    reactions: [
+    reactions: (D.clues ? stormCluesReactions : (list) => list)([
       // The eagle has picked a family member: cover it. (Paused and lit the first time in the
       // guided sketch; a running prompt after that, and always in the open sketch.)
       { id: 'cover', on: 'eagle_hunting', if: { species: 'upland_moa' },
@@ -320,7 +365,7 @@ function makeChaptersStorms(sketchKey) {
       // Home again.
       { id: 'home_again', on: 'goal_met', if: (x) => x.event && x.event.goal === 'home',
         moment: { on: 'mama', text: "Home again!" } }
-    ],
+    ]),
 
     lose: [{ when: { extinct: 'focus' }, reason: "The upland moa are gone from the tops." }],
 

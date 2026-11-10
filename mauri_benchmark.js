@@ -240,7 +240,8 @@ const BENCHMARK = {
     const beats = {};
     for (const l of log) if (l.kind === 'beat' && /^done/.test(l.info)) beats[l.id] = /forced/.test(l.info) ? 'forced' : 'natural';
     this.lastRun = { level: this._levelId, sketch: this._sketch, seed: this._seed, result: event,
-                     playTime: game ? Math.round(game.playTime / 60) : 0, csv: lines.join('\n'), log, beats };
+                     playTime: game ? Math.round(game.playTime / 60) : 0, csv: lines.join('\n'), log, beats,
+                     cases: (game && game.chapters && game.chapters.caseLog) || [] };
     if (this.noDownload) return;
     const stamp = new Date().toISOString().replace(/[:T]/g, '-').slice(0, 19);
     const runTag = this.batchTotal > 1 ? `run${this.batchIndex}of${this.batchTotal}_` : '';

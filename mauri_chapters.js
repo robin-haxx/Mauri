@@ -54,9 +54,15 @@ const CHAPTER_EVENTS = {
   bird_hatched:    { subject: 'bird', count: 'hatched' },  // a flighted bird's egg hatched: `$bird`, `$egg`
   bird_killed:     { subject: 'bird', count: 'killed' },   // an eagle took a flighted bird: `$bird`, `$eagle` (counts with the moa under killed:<species>)
   species_arrived: { count: 'arrived' },                   // newcomers came in (rescueImmigration, eagleReturns): `species`, `count`
+  plant_tapped:    { count: 'tapped' },                    // the player rustled a plant: `type`
+  animal_selected: { subject: 'animal', count: 'selected' },   // the player tapped an animal to read and follow it: `$animal`, `species`
+  case_closed:     {},                                     // a hint ladder's case ended: `case` (the reaction's id), `rung`, `outcome`, `sec`, `transfer`
   species_left:    { subject: 'moa', count: 'left' },      // a grown young bird set off over the pass (dispersal): `$moa`, `species`
   eagle_gave_up:   { subject: 'eagle', count: 'gaveUp' }   // hidden prey sent the eagle to other prey (coverSendsEagleAway): `$eagle`, `species` (what it went for), `from`
 };
+
+// The events that are the player's own hand (written to the log as kind 'player').
+const CHAPTER_PLAYER_EVENTS = new Set(['placement', 'placeable_moved', 'plant_sprouted', 'plant_tapped', 'animal_selected']);
 
 // Conditions that read the world as it is right now. A beat whose `until` is made only of these
 // can miss the moment it waits for (an eagle's lock can be gone between two polls), so the
@@ -197,7 +203,7 @@ const CHAPTER_MOMENT = { zoom: 2.4, inSec: 0.7, outSec: 0.9 };
 
 // What a chapter may say (the validator flags anything else, e.g. a misspelt lever).
 const CHAPTER_KEYS = new Set(['id', 'title', 'sites', 'start', 'goals', 'reactions', 'beats', 'until',
-  'holdSeason', 'next', ...CHAPTER_LEVERS.map(([key]) => key)]);
+  'holdSeason', 'next', 'transfer', ...CHAPTER_LEVERS.map(([key]) => key)]);
 
 // The ways a site can be found (see ChapterRunner._findSite).
 const CHAPTER_SITE_FINDERS = new Set(['flock', 'nest', 'biome', 'high', 'low', 'open', 'edge']);
@@ -226,6 +232,8 @@ class ChapterRunner {
     this.focus = [];               // this chapter's focus species
     this.castEnts = {};            // cast name -> the adopted entity (null once lost)
     this.vars = {};                // values function actions leave for the words ({$name} in text)
+    this._cases = [];              // hint ladders under way: { rx, ev, t0, scope, rung }
+    this.caseLog = [];             // ...and how each ended: { id, t, sec, rung, outcome, who, chapter, transfer }
     this.cueData = {};             // cue id -> the event it answers (for roles and banner scopes)
     this._chain = {};              // a line cue -> the banner cue its last line leads to
     this.seasonTurns = 0;          // season changes since the level began
@@ -420,8 +428,31 @@ class ChapterRunner {
       max: r.max != null ? r.max : Infinity,
       chapters: r.chapters || null,
       actions: this._compileActions(`rx:${id}`, this._ownActions(r)),
+      // A hint ladder (see _updateCases): rungs said one after another while `until` has not
+      // come true; `solved`, the ending that counts as the player's own answer; and `lost`, the
+      // ending that counts as the problem winning.
+      hints: this._compileHints(id, r),
+      until: r.until ? this.compile(r.until) : null,
+      solved: r.solved ? this.compile(r.solved) : null,
+      lost: r.lost ? this.compile(r.lost) : null,
       fired: 0, lastAt: -Infinity, was: false, heldSince: null
     };
+  }
+
+  // hints: [{ after: sec, notify | say | banner | do ... }, ...]: each rung's actions, with the
+  // seconds since the reaction fired at which it is said. A rung's banner with no `until` of
+  // its own waits on the reaction's.
+  _compileHints(id, r) {
+    if (!r.hints) return [];
+    if (!r.until) this._issue(`reaction "${id}": hints need an until (what ends the case)`);
+    let last = -1;
+    return r.hints.map((h, k) => {
+      if ((h.after || 0) < last) this._issue(`reaction "${id}": its hints' after times must rise`);
+      last = h.after || 0;
+      const hh = (h.banner && !h.banner.until && !h.banner.maxSec && r.until)
+        ? Object.assign({}, h, { banner: Object.assign({ until: r.until }, h.banner) }) : h;
+      return { after: (h.after || 0) * CHAPTER_FPS, actions: this._compileActions(`rx:${id}:hint${k + 1}`, this._ownActions(hh)) };
+    });
   }
 
   // A guaranteed beat: starts `when` its condition holds (the chapter's start, without one) and
@@ -837,6 +868,8 @@ class ChapterRunner {
     if (this._ended || !CHAPTER_EVENTS[type]) return;
     const ev = Object.assign({ name: type }, data);
     this._count(ev);
+    // What the player's own hand did goes in the record, with the second it was done.
+    if (CHAPTER_PLAYER_EVENTS.has(type)) this._log('player', type, (data && (data.type || data.speciesKey)) || '');
     if (type === 'season_change') this.seasonTurns++;
     this._seenLog.push({ name: type, t: this.game ? this.game.playTime : 0, ev });
     if (this._seenLog.length > 512) this._seenLog.shift();
@@ -927,6 +960,8 @@ class ChapterRunner {
       rx.was = now;
       if (this._ended) return;
     }
+    this._updateCases();
+    if (this._ended) return;
     this._updateBeats();
     if (this._ended) return;
     this._checkGoals();
@@ -1084,6 +1119,61 @@ class ChapterRunner {
     rx.lastAt = this.game.playTime;
     this._log('reaction', rx.id, ev && ev.name);
     this._run(rx.actions, ev);
+    if (rx.until && (rx.hints.length || rx.solved)) {
+      this._cases.push({ rx, ev, t0: this.game.playTime, scope: this.scope(), rung: 0 });
+    }
+  }
+
+  // ---- Hint ladders ---------------------------------------------------------------------
+  // A reaction with `hints` and an `until` opens a CASE each time it fires: a problem the
+  // simulation has raised (an eagle on a moa, a storm blown out). Nothing is said at first:
+  // what the player can see is the clue. While `until` has not come true, each rung is said at
+  // its `after` time (a question, then the instruction). When `until` holds the case closes
+  // and the record keeps how far up the ladder it went, how long it took, and whether it ended
+  // the way `solved` describes (the player's own answer) or some other way. In a chapter marked
+  // `transfer: true` no rung is said at all: the stretch that tests what was learned.
+  // The record (caseLog, exported with the run) is the measure of the learner, as natural or
+  // forced beats are the measure of the stage.
+  _updateCases() {
+    const now = this.game.playTime, quiet = !!(this.cur && this.cur.def.transfer);
+    for (let i = this._cases.length - 1; i >= 0; i--) {
+      const c = this._cases[i], rx = c.rx, x = this._ctx(c.ev, c.scope);
+      const done = rx.until(x), stale = now - c.t0 > 120 * CHAPTER_FPS;
+      if (done || stale) {
+        this._cases.splice(i, 1);
+        // solved: it ended the way the player's own answer ends it. lost: it ended badly (the
+        // reaction's `lost`). passed: it went away some other way (the bird hid itself, the
+        // eagle turned elsewhere).
+        const outcome = stale && !done ? 'timed out'
+          : (rx.solved && rx.solved(x) ? 'solved' : (rx.lost && rx.lost(x) ? 'lost' : (rx.solved ? 'passed' : 'over')));
+        const subj = this.subject(c.ev);
+        const rec = { id: rx.id, t: Math.round(now / CHAPTER_FPS * 10) / 10, sec: Math.round((now - c.t0) / CHAPTER_FPS * 10) / 10,
+                      rung: c.rung, outcome, who: (subj && (subj.castName || subj.speciesKey)) || '',
+                      chapter: this.cur ? this.cur.id : '', transfer: quiet };
+        this.caseLog.push(rec);
+        const add = (k) => { this.counters[k] = (this.counters[k] || 0) + 1; };
+        add('cases'); if (outcome === 'solved') { add('solved'); if (c.rung === 0) add('unaided'); }
+        this._log('case', rx.id, `rung ${c.rung}, ${rec.sec}s, ${outcome}${quiet ? ', transfer' : ''}`);
+        this._emit('case_closed', { case: rx.id, rung: c.rung, outcome, sec: rec.sec, transfer: quiet });
+        continue;
+      }
+      if (!quiet && c.rung < rx.hints.length && now - c.t0 >= rx.hints[c.rung].after) {
+        this._run(rx.hints[c.rung].actions, c.ev);
+        c.rung++;
+        this._log('hint', rx.id, `rung ${c.rung}`);
+        if (this._ended) return;
+      }
+    }
+  }
+
+  // For the win card: how many of the problems with a "solved" ending the player answered
+  // before any hint was said, and (where the level has one) how the unprompted stretch went.
+  unaidedLine() {
+    const all = this.caseLog.filter(c => c.outcome === 'solved' || c.outcome === 'lost');
+    if (!all.length) return '';
+    const tr = all.filter(c => c.transfer), main = all.filter(c => !c.transfer);
+    const part = (list) => `${list.filter(c => c.outcome === 'solved' && c.rung === 0).length} of ${list.length}`;
+    return tr.length ? `Without a hint: ${part(main)}. On your own at the end: ${part(tr)}.` : `Without a hint: ${part(main)}.`;
   }
 
   _run(actions, ev) {

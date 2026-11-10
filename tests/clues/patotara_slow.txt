@@ -1,0 +1,15 @@
+seed 1: win after 240s | beats raid_comes:natural | eagle took: stout_legged_moa 3 | focus animals 6, year 2 | spent move storm 10, new storm 40, 344 mauri in hand | replay 17d4b7d3
+   problems met: 4 (answered: no hint 0, after the question 0, after being told 2; went away by itself 2; lost 0); in the unprompted stretch: 2 (answered: no hint 2, after the question 0, after being told 0; went away by itself 0; lost 0)
+seed 2: win after 255s | beats (no beats) | eagle took: stout_legged_moa 5 | focus animals 7, year 2 | spent move storm 20, wharariki 25, 386 mauri in hand | replay 54b40193
+   problems met: 4 (answered: no hint 0, after the question 1, after being told 1; went away by itself 2; lost 0); in the unprompted stretch: 1 (answered: no hint 1, after the question 0, after being told 0; went away by itself 0; lost 0)
+seed 3: win after 241s | beats raid_comes:natural | eagle took: stout_legged_moa 4 | focus animals 6, year 2 | spent move storm 20, wharariki 25, new storm 40, 339 mauri in hand | replay 2e17cfee
+   problems met: 4 (answered: no hint 0, after the question 1, after being told 2; went away by itself 1; lost 0); in the unprompted stretch: 2 (answered: no hint 1, after the question 0, after being told 0; went away by itself 0; lost 1)
+seed 4: win after 255s | beats raid_comes:natural | eagle took: stout_legged_moa 5 | focus animals 6, year 2 | spent move storm 10, wharariki 25, 334 mauri in hand | replay 2423acfa
+   problems met: 4 (answered: no hint 0, after the question 0, after being told 2; went away by itself 2; lost 0); in the unprompted stretch: 1 (answered: no hint 0, after the question 0, after being told 0; went away by itself 0; lost 1)
+
+4 run(s): win 4
+  beat raid_comes: natural 3, forced 0
+  eagle took: stout_legged_moa 17; cast lost 0
+  focus animals at the end: 6 to 7 (median 6); years reached: 2 to 2
+  problems met in the lessons' year: 0 of 9 answered with no hint, 9 after a hint, 0 lost; in the unprompted stretch: 4 of 6 answered with no hint, 0 after a hint, 2 lost
+  files in /home/user/Mauri/tests/clues/patotara_slow

@@ -112,6 +112,7 @@ The runner only runs while the game is playing. Moments and pausing tips hold it
 | `guide` | Field Guide entry ids the module rests on (`mauri_encyclopedia.js`). The `guide` action opens one. |
 | `sketch` | `{ of, label, dial }`: this level is one variant (one setting of the emergence dial) of a module family (§18). |
 | `nextLevel` | A level id: the win card's "Next module" button. |
+| `teaches` | The rules of the simulation this lesson teaches, by name (`['cover', 'eagle_reads']`). `node tools/coverage.js` uses them to show which of any level's rules no lesson teaches (§16). |
 | `userCamera` | `true`: the player's camera on this level. Zoom buttons (and the wheel, and + / -), a drag to pan when zoomed in, a tap on an animal to ring it, read who it is and follow it. With `mechanics.huntCamera` the view also eases to a hunt and back (§19). |
 
 The game's own loss (every moa gone) still applies.
@@ -132,6 +133,7 @@ The game's own loss (every moa gone) still applies.
 | `beats` | | Guaranteed beats (§11). |
 | `until` | `{ seasons: 1 }` | When the chapter closes (a condition). |
 | `holdSeason` | | `{ until, at = 0.9, maxSec }`: the season clock waits at `at` of the way through until `until` holds, or `maxSec` seconds have passed. The validator warns when there is no `maxSec`: a hold needs a way out. |
+| `transfer` | `false` | `true`: the unprompted stretch. No hint rung is said in this chapter, and its cases are recorded apart (§10, hint ladders). |
 | `next` | the following chapter, else `'win'` | `'id'`, `'win'`, `[[cond, 'id'], ..., [true, 'id']]` (the first that holds), or `{ if, then, else }`. |
 
 Any other key is flagged by the validator.
@@ -219,6 +221,8 @@ A condition is an object whose keys must **all** hold, or `true`, or a function
 | `laid`, `hatched`, `killed`, `hunts` | eggs, chicks (moa and flighted birds), eagle catches (moa and flighted birds), eagle hunts started | `:species` (`hatched:upland_moa`, `killed:kea`) |
 | `placed`, `moved` | the player's placements and moves | `:type` (`placed:shelter`) |
 | `expired`, `sprouted` | placed items that wore out; pātōtara the player sprouted | `:type` (`expired:Storm`) |
+| `cases`, `solved`, `unaided` | hint-ladder cases closed; those the player answered; those answered before any hint | |
+| `tapped`, `selected` | plants the player rustled; animals the player tapped | `:type` |
 | `arrived`, `left`, `gaveUp` | newcomers over the pass; grown young gone over it; times an eagle gave a hidden species up | `:species` (`left:upland_moa`) |
 | `raids`, `raidsWon` | kea nest raids | |
 
@@ -333,6 +337,39 @@ after the last line.
 | `max` | ∞ | The most times it fires. |
 | `chapters` | | Only in these chapters (for a level-wide reaction). |
 | own actions | | `unlock`, `notify`, `moment`, `say`, `banner`, `do` |
+| `hints`, `until`, `solved`, `lost` | | A hint ladder (below). |
+
+**Hint ladders: teach by clue first.** A reaction with `hints` and an `until` opens a *case* each
+time it fires: a problem the simulation has raised. Nothing is said at first, because what the
+player can see is the clue. While `until` has not come true, each rung is said at its `after`
+time: a question, then the instruction. When `until` holds the case closes, and the record keeps
+how far up the ladder it went, how long it took and how it ended.
+
+```js
+{ id: 'cover', on: 'eagle_hunting', if: { species: 'upland_moa' }, once: false,
+  until:  { any: [{ hidden: '$target' }, { not: { alive: '$target' } }, { not: { hunted: '$target' } }] },
+  solved: { all: [{ hidden: '$target' }, { any: [{ placed: 'Storm' }, { gained: ['moved:Storm', '>=', 1] }] }] },
+  lost:   { not: { alive: '$target' } },
+  hints: [
+    { after: 4, notify: "The Pouākai is watching a moa. What could hide it?" },
+    { after: 7, banner: { words: "Cover the hunted moa with a STORM", lit: ['$target', '$eagle'], pause: false, maxSec: 20 } }
+  ] }
+```
+
+| Field | What |
+|---|---|
+| `until` | The case is over when this holds. Counted in the case's own scope (`placed`, `gained`, `seen` and `after` count from when the reaction fired), with the event's roles. |
+| `hints` | `[{ after: sec, ...own actions }]`, in rising order of `after`. A rung's banner with no `until` of its own waits on the reaction's. |
+| `solved` | The ending that counts as the player's own answer. |
+| `lost` | The ending that counts as the problem winning. Any other ending is recorded as `passed` (it went away by itself). |
+
+Each closed case is a row in `game.chapters.caseLog` (and in a run's `.beats.json`): the
+reaction, the rung reached (0: no hint was said), the seconds, the outcome, who it was about, the
+chapter, and whether it was in a `transfer` chapter. It fires `case_closed`, and adds to the
+counters `cases`, `solved` and `unaided` (solved at rung 0). The win card shows "Without a hint:
+2 of 5." This record is the measure of the learner, as natural or forced beats are the measure
+of the stage. Keep a rung's `after` inside the time the player has (for a hunt, the level's
+`eagleTelegraph.graceSec`).
 
 | Event | Roles (`$name`) and fields |
 |---|---|
@@ -346,6 +383,8 @@ after the last line.
 | `plant_sprouted` | `type` (the player sprouted a pātōtara) |
 | `bird_hatched` | `$bird`, `$egg` (a flighted bird's, or a kākāpō's, egg hatched) |
 | `bird_killed` | `$bird`, `$eagle` (an eagle took a flighted bird) |
+| `plant_tapped`, `animal_selected` | `type` / `$animal` (the player rustled a plant; tapped an animal to read and follow it). Like placements, moves and sprouting, these are written to the log as kind `player` with the second they happened. |
+| `case_closed` | `case` (the reaction's id), `rung`, `outcome` (`solved`, `lost`, `passed`), `sec`, `transfer` |
 | `species_arrived` | `species`, `count` (newcomers came in over the pass: `rescueImmigration`, `eagleReturns`) |
 | `species_left` | `$moa`, `species` (a grown young bird has set off over the pass: `dispersal`) |
 | `eagle_gave_up` | `$eagle`, `species` (what it went for), `from` (its prey kept getting under cover: `coverSendsEagleAway`) |
@@ -540,6 +579,13 @@ preinstalled).
 | `node tools/validate.js` | The level-format checks on every level and the engine's checks on every chapter level, without playing. `--smoke` also starts each level and runs it 15 s, reporting any page or console error. `--only <id>` for one level. Exits non-zero on anything but a warning. |
 | `node tools/batch.js --level <id or family> --sketch <label> --seeds 1..10` | Research runs. Each seed plays headless until the level ends, `--years n` have passed, or `--seconds n` (300) of play. It writes `<name>.csv` (populations every 10 s, the story log in the `event` column) and `<name>.beats.json` (the log, each beat natural or forced, the result) into `--out` (`tests/`), and prints a line per run: the result, each beat, who the eagle took, any cast lost, and a replay hash (the same seed prints the same hash on the same machine and browser; across machines a run starts the same and then drifts). `--player cover` stands in for a player who puts a Storm over any cast member an eagle is hunting; `--player basic` also sprouts bare pātōtara and sets wharariki by the family in winter. Six more stand-ins **pay** for what they do and tend every animal of a focus species, to show how different players fare: `tend` (covers 2 s into a wind-up, feeds the hungry), `slow` (5 s), `late` (8 s), `storms` (covers, never feeds), `feeder` (feeds, never covers), `none`. With these the line also gives the focus animals left, the year reached, what was spent and the mauri in hand. `--trace <cast>` prints that bird once a second: state, hunger, target plant and its distance, the stall counter. |
 
+| `node tools/coverage.js [--level <id>]` | Which rules each level plays by (worked out from its switches and tools) and which lesson's `teaches` covers each. A rule in force that no lesson teaches is a gap; a level playing by the opposite of a taught rule is marked as contradicting it. The table of rules is at the top of the tool. |
+| `node tools/replaydiff.js --level <id> --seed 1 --out a.txt` | Prints a fingerprint of the simulation once a second, and first a fingerprint of the browser's own arithmetic. Run the same command on two machines and `diff` the files: the first differing line is where the runs part, and a differing `math` line names the functions that cause it. |
+
+With a lesson that has hint ladders, `tools/batch.js` also prints, for each run, how each
+problem was answered: with no hint, after the question, after being told, went away by itself,
+or lost; and the same for the unprompted stretch.
+
 **URL parameters** (`index.html?...`): `level=<id or family>`, `sketch=<label>`, `seed=<n>`
 (the land and the opening stage are the same everywhere; the whole run replays exactly only on
 the same machine and browser), `bench=1` (record from the first
@@ -635,6 +681,14 @@ LEVEL_REGISTRY.registerFamily('chapters_storms', { label: "Storms", defaultSketc
 - `?level=<family>` opens the family's default sketch; `tools/batch.js --level <family>
   --sketch <label>` picks one.
 - The dial is any object. Keep its keys few, and name them for what they change in play.
+- **The lesson kit** (`levels/_chapters_kit.js`) holds the pieces lessons share, as functions
+  that return reactions or a chapter: `coverLadder` (the hint ladder for an eagle on a focus
+  moa), `stormLadder`, `praise` (a word for an answer given before any hint), `gaveUp`,
+  `arrivals`, `transferChapter` (the unprompted stretch), `familyCalendar` and `hensHaveLaid`
+  (the family on the breeding calendar), `quietAfterYear`. The **Clues** sketch of each lesson
+  is built from it: the Guided sketch's stage and guarantees, with every instruction swapped
+  for a ladder, no floors, the family on the calendar, and one more season at the end in which
+  nothing is said. A new lesson should start from the kit, not from a copy of an old sketch.
 - `levels/_template_chapters.js` is a copyable module with a claim, a guide list, two sketches,
   one beat and a few reactions, with comments written for a first-time author. Copy it, rename
   the family and the ids, add a `<script>` tag for it in `index.html` after the template's,

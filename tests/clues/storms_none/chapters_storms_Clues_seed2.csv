@@ -1,0 +1,43 @@
+seed,level,sketch,chapter,time_s,year,season,upland_moa,stout_legged_moa,other_moa,total_moa,eagles,eggs,placed_Storm,event
+2,chapters_storms_clues,Clues,summer,0,1,summer,2,7,0,9,1,2,0,start
+2,chapters_storms_clues,Clues,summer,10,1,summer,2,7,0,9,1,2,0,beat:first_hunt:start
+2,chapters_storms_clues,Clues,summer,10,1,summer,2,7,0,9,1,2,0,sample
+2,chapters_storms_clues,Clues,summer,10.1,1,summer,2,7,0,9,1,2,0,reaction:hungry_eagle:when
+2,chapters_storms_clues,Clues,summer,20,1,summer,2,7,0,9,1,2,0,sample
+2,chapters_storms_clues,Clues,summer,26.7,1,summer,3,7,0,10,1,1,0,reaction:hatched:egg_hatched
+2,chapters_storms_clues,Clues,summer,26.7,1,summer,3,7,0,10,1,1,0,moment:$moa:Pukepuke has hatched!
+2,chapters_storms_clues,Clues,summer,26.7,1,summer,3,7,0,10,1,1,0,cast:pukepuke:adopted
+2,chapters_storms_clues,Clues,summer,26.7,1,summer,3,7,0,10,1,1,0,goal:hatched
+2,chapters_storms_clues,Clues,summer,30,1,summer,3,7,0,10,1,0,0,sample
+2,chapters_storms_clues,Clues,summer,35.2,1,summer,3,6,0,9,1,0,0,reaction:herd_taken:moa_killed
+2,chapters_storms_clues,Clues,summer,35.2,1,summer,3,6,0,9,1,0,0,reaction:herd_taken_again:moa_killed
+2,chapters_storms_clues,Clues,summer,40,1,summer,3,6,0,9,1,0,0,beat:first_hunt:forced
+2,chapters_storms_clues,Clues,summer,40,1,summer,3,6,0,9,1,0,0,aim:mama
+2,chapters_storms_clues,Clues,summer,40,1,summer,3,6,0,9,1,0,0,sample
+2,chapters_storms_clues,Clues,summer,50,1,summer,3,6,0,9,1,0,0,sample
+2,chapters_storms_clues,Clues,summer,50.2,1,summer,3,6,0,9,1,0,0,reaction:cover:eagle_hunting
+2,chapters_storms_clues,Clues,summer,50.2,1,summer,3,6,0,9,1,0,0,beat:first_hunt:done (forced)
+2,chapters_storms_clues,Clues,summer,50.3,1,summer,3,6,0,9,1,0,0,case:cover:rung 0; 0.1s; passed
+2,chapters_storms_clues,Clues,summer,50.3,1,summer,3,6,0,9,1,0,0,goal:seen_off
+2,chapters_storms_clues,Clues,summer,54.7,1,autumn,3,6,0,9,1,0,0,goal:parents
+2,chapters_storms_clues,Clues,summer,54.7,1,autumn,3,6,0,9,1,0,0,close:summer:-> autumn
+2,chapters_storms_clues,Clues,autumn,54.7,1,autumn,3,6,0,9,1,0,0,chapter:autumn
+2,chapters_storms_clues,Clues,autumn,54.7,1,autumn,3,6,0,9,1,0,0,place:waterhole:tarn
+2,chapters_storms_clues,Clues,autumn,54.7,1,autumn,3,6,0,9,1,0,0,fade:Storm:4
+2,chapters_storms_clues,Clues,autumn,60,1,autumn,3,6,0,9,1,0,0,sample
+2,chapters_storms_clues,Clues,autumn,70,1,autumn,3,6,0,9,1,0,0,sample
+2,chapters_storms_clues,Clues,autumn,80,1,autumn,3,6,0,9,1,0,0,sample
+2,chapters_storms_clues,Clues,autumn,88.1,1,autumn,3,6,0,9,1,0,0,reaction:hungry_eagle:when
+2,chapters_storms_clues,Clues,autumn,90,1,autumn,3,6,0,9,1,0,0,sample
+2,chapters_storms_clues,Clues,autumn,99.7,1,autumn,3,6,0,9,1,0,0,reaction:storm_gone:placeable_expired
+2,chapters_storms_clues,Clues,autumn,99.7,1,autumn,3,6,0,9,1,0,0,reaction:cover_again:eagle_hunting
+2,chapters_storms_clues,Clues,autumn,100,1,autumn,3,6,0,9,1,0,0,sample
+2,chapters_storms_clues,Clues,autumn,103.7,1,autumn,3,6,0,9,1,0,0,hint:cover_again:rung 1
+2,chapters_storms_clues,Clues,autumn,105.7,1,autumn,3,6,0,9,1,0,0,hint:storm_gone:rung 1
+2,chapters_storms_clues,Clues,autumn,106.7,1,autumn,3,6,0,9,1,0,0,hint:cover_again:rung 2
+2,chapters_storms_clues,Clues,autumn,109.5,1,autumn,2,6,0,8,1,0,0,reaction:family_taken:moa_killed
+2,chapters_storms_clues,Clues,autumn,109.5,1,autumn,2,6,0,8,1,0,0,cast_lost:pukepuke:eagle
+2,chapters_storms_clues,Clues,autumn,109.5,1,autumn,2,6,0,8,1,0,0,case:cover_again:rung 2; 9.8s; lost
+2,chapters_storms_clues,Clues,autumn,109.5,1,autumn,2,6,0,8,1,0,0,reaction:pukepuke_lost:cast_lost
+2,chapters_storms_clues,Clues,autumn,109.5,1,autumn,2,6,0,8,1,0,0,lost:autumn:The Pouākai took Pukepuke.
+2,chapters_storms_clues,Clues,autumn,109.5,1,autumn,2,6,0,8,1,0,0,loss

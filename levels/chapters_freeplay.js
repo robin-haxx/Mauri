@@ -33,8 +33,28 @@ const CHAPTERS_FREEPLAY_FAMILY = 'chapters_freeplay';
 
 const FREEPLAY_SKETCHES = {
   guided: { label: 'Guided', graceSec: 6,   floors: 2, eagleBreeding: false, pause: true,  eagleHungerRate: 0.012 },
-  open:   { label: 'Open',   graceSec: 3.5, floors: 0, eagleBreeding: true,  pause: false, eagleHungerRate: 0.014 }
+  open:   { label: 'Open',   graceSec: 3.5, floors: 0, eagleBreeding: true,  pause: false, eagleHungerRate: 0.014 },
+  // Clues: taught by clue first (levels/_chapters_kit.js), with no floors (newcomers come over
+  // the pass instead) and the two families on the breeding calendar like everyone else, so
+  // Pukepuke and Koukou are small in year one and grown by year four, and the lesson's claim
+  // holds for the birds the player is watching.
+  clues:  { label: 'Clues',  graceSec: 8,   floors: 0, eagleBreeding: false, pause: true,  eagleHungerRate: 0.012, clues: true }
 };
+
+// The Clues sketch's reactions: hint ladders for the eagle and the storms in place of the
+// instructions, a word for an unprompted answer, the eagle giving up, and arrivals.
+function freeplayCluesReactions(list) {
+  const K = CHAPTERS_KIT;
+  const kept = list.filter(r => !['cover', 'cover_again', 'storm_gone'].includes(r.id));
+  return [
+    ...K.coverLadder({ species: 'upland_moa' }),
+    ...K.praise(),
+    ...K.stormLadder({ lit: ['pukepuke', 'koukou'], unlock: false }),
+    ...K.gaveUp(),
+    ...K.arrivals(),
+    ...kept
+  ];
+}
 
 const FREEPLAY_YEARS = 5;
 
@@ -56,6 +76,7 @@ function makeChaptersFreeplay(sketchKey) {
     section: 'chapters',
     sketch: { of: CHAPTERS_FREEPLAY_FAMILY, label: D.label, dial: D },
     claim: "Every creature breeds in its own season, and a hungry Pouākai takes whatever it can see.",
+    teaches: D.clues ? ['breeding_seasons', 'eagle_takes_birds', 'slow_herds', 'over_the_pass'] : ['breeding_seasons', 'eagle_takes_birds'],
     guide: ['upland_moa', 'haasts_eagle', 'kea', 'kaka', 'kokako', 'south_island_giant_moa', 'predator_prey'],
     unlockCondition: null,
 
@@ -105,6 +126,11 @@ function makeChaptersFreeplay(sketchKey) {
       coverBreaksLock: true, coverCalmsMoa: true, lureUnderStorm: true, placeableQueryRadius: 100,
       populationFloors: floors,
       birdPopulationFloor: D.floors,
+      ...(D.clues ? Object.assign({
+        rescueImmigration: { south_island_giant_moa: { below: 2, count: 2, afterSeasons: 3 }, kea: { below: 2, count: 2, afterSeasons: 3 },
+                             kaka: { below: 2, count: 2, afterSeasons: 4 }, kokako: { below: 2, count: 2, afterSeasons: 4 } },
+        eagleReturns: { afterSeasons: 2 },
+        coverSendsEagleAway: { after: 2, sec: 45 } }, CHAPTERS_KIT.familyCalendar) : {}),
       nestingSites: { forestCount: 0, openCount: 0, radius: 40, laySnapRadius: 150, drawRadius: 260, layBoost: 0.5, eggSpeedBonus: 1.5 },
       habitatStress: true, habitatStressMargin: 0.08, habitatStressPenalty: 0.4, winterStressMult: 1.4,
       hungerRateMult: 0.6, juvenileHungerMult: 1.0
@@ -184,7 +210,7 @@ function makeChaptersFreeplay(sketchKey) {
       }
     ],
 
-    reactions: [
+    reactions: (D.clues ? freeplayCluesReactions : (list) => list)([
       // The stage, once, as the level begins (a reaction so it runs after the level's own spawning).
       { id: 'stage', on: 'chapter_start', if: (x) => x.event && x.event.chapter === 'summer' && !x.runner.flags.staged,
         do: [
@@ -197,6 +223,7 @@ function makeChaptersFreeplay(sketchKey) {
                      friendMama: { species: 'upland_moa', near: 'homeB', female: true }, friendPapa: { species: 'upland_moa', near: 'homeB', female: false } } },
           { lay: { species: 'upland_moa', at: 'homeA' } },
           { lay: { species: 'upland_moa', at: 'homeB' } },
+          ...(D.clues ? [CHAPTERS_KIT.hensHaveLaid(['mama', 'friendMama'])] : []),
           { place: { type: 'Storm', at: 'tops', standing: true } },
           { place: { type: 'Storm', at: 'lookout', standing: true } },
           { place: { type: 'waterhole', at: 'tarn', standing: true } },
@@ -252,7 +279,7 @@ function makeChaptersFreeplay(sketchKey) {
         notify: ["The Pouākai took one of the grown moa.", 'error'] },
       { id: 'grown_starved', on: 'cast_lost', if: { cast: ['mama', 'papa', 'friendMama', 'friendPapa'], cause: ['starved', 'unknown'] }, once: false,
         notify: ["One of the grown moa starved. Tap plants near the families to bring them to food.", 'error'] }
-    ],
+    ]),
 
     lose: [{ when: { extinct: 'focus' }, reason: "The upland moa are gone from the tops." }],
 

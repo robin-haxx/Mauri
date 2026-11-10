@@ -38,6 +38,8 @@ const TUTORIAL_EVENTS = {
   BIRD_HATCHED: 'bird_hatched',       // a flighted bird's (or kākāpō's) egg hatched, data: { egg, bird, speciesKey }
   BIRD_KILLED: 'bird_killed',         // an eagle took a flighted bird, data: { bird, eagle, speciesKey }
   SPECIES_ARRIVED: 'species_arrived', // newcomers walked or flew in (mechanics.rescueImmigration, eagleReturns), data: { speciesKey, count }
+  PLANT_TAPPED: 'plant_tapped',       // the player tapped a plant to rustle it (lures hungry moa), data: { plant, type }
+  ANIMAL_SELECTED: 'animal_selected', // the player tapped an animal to read and follow it (userCamera levels), data: { animal, speciesKey }
   SPECIES_LEFT: 'species_left',       // a grown young bird has set off over the pass (mechanics.dispersal), data: { moa, speciesKey }
   EAGLE_GAVE_UP: 'eagle_gave_up'      // its prey kept getting under cover, so it went for other prey (mechanics.coverSendsEagleAway), data: { eagle, speciesKey (what it went for), from }
 };

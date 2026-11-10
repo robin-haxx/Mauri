@@ -26,7 +26,9 @@ picking up future tasks. The other docs:
 - `MISTAKES.md`: things that went wrong, and the rule that stops a repeat.
 - `ENGINE_ASSESSMENT.md`: the module / endless split, a proposed grammar (substrate, direction,
   presentation) to reconcile the teaching build with the research build, and how that weighs
-  against the chapters engine, the legacy modules and new free play modes.
+  against the chapters engine, the legacy modules and new free play modes. Its section 16 is
+  the latest review: the Stories and the Chapters set compared, the changes proposed next, and
+  other ways to set the framework up.
 
 ---
 

@@ -514,6 +514,39 @@ separated from logic for partner editing; land hand-off between modules; Field G
 phase 5 parity; the kōkako laying less often than its calendar allows (one clutch in five
 springs in the run checked).
 
+## Review of the two sets (2026-11-10)
+
+The Stories and the Chapters set were re-assessed side by side, with an outside review of the
+old modules and the Endless mode as input (`ENGINE_ASSESSMENT.md` §16). Nothing below is built;
+each item is **[proposed]** until the owner picks it up.
+
+What the review found, in one line each:
+- The Chapters world is emergent but its teaching is still scripted: a banner gives the answer
+  at every hunt, in both sketches and every year.
+- The Endless mode still plays by the old rules (the storm stuns, background species are
+  protected), so there are three rulebooks, not one.
+- The record of a run measures the stage (natural or forced), not the learner.
+- Guided and Open differ in up to nine settings at once.
+- The upland moa family breeds in every season and a chick is adult in fifteen seconds, which
+  contradicts the five-year lesson's claim.
+- The three lesson files repeat 24 named pieces and 34 rule settings by hand.
+
+The proposals, in order (detail in §16.6):
+1. **[proposed]** One rulebook (`rules: 'tops'`) and a shared lesson kit, proven to change
+   nothing by matching replay hashes.
+2. **[proposed]** A hint ladder (clue, then a question, then the instruction), the player's
+   actions in the record, a transfer stretch per lesson, and the dial split into three axes
+   (what is guaranteed, how much is said, how hard the eagle presses).
+3. **[proposed]** A new Endless variant on the shared rules, beside the existing one.
+4. **[proposed]** The family on the breeding calendar and visibly growing; floors replaced by
+   visible arrivals; powers named apart from the world's rules; Field Guide entries marked
+   known, inferred or imagined.
+5. **[proposed]** A curriculum map (`teaches` / `assumes` and a coverage tool that prints the
+   untaught rules of any level) and an optional before-and-after question.
+
+On the framework itself the review recommends one rulebook with several framings, and each
+lesson ending in one or two unprompted situations; see §16.5 for the options weighed.
+
 ## Open questions
 
 - How much pacing is acceptable? `holdSeason` keeps a season waiting for a goal; that's a

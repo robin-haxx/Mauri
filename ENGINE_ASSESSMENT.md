@@ -580,3 +580,189 @@ Still open, in the order I would take them: a `pacing` lever (§14) so fewer bea
 deadline; `order` with hand-back; words separated from logic for partner editing; land
 hand-off between modules; Field Guide locks; porting the cycling Free Play's year engine to
 chapters.
+
+---
+
+## 16. Re-assessment of the two module sets (2026-11-10)
+
+*Written for a reader who knows the project's goals but not its code. Nothing in this section
+has been built; it is an assessment and a set of proposals.*
+
+The game now has two versions of its three opening experiences (the Storm lesson, the Pātōtara
+lesson, and the five years with Pukepuke and Koukou).
+
+- **Stories** are the originals. A script moves the family and times the eagle's attacks.
+- **Chapters** are the parallel set built this month. The ecosystem runs freely and the lesson
+  only sets the stage, measures and speaks.
+
+Both lead to a third thing, the **Endless** mode (the conference Free Play), which neither set
+changed.
+
+This section answers three questions from the owner: how the two versions compare now, what
+changes are worth considering, and what other ways there are to set the framework up. It also
+checks an outside review of the old modules and the Endless mode against today's build.
+
+**How this was checked.** Both sets' lesson files and every prompt were re-read. The words a
+player can be shown were counted. The two sketches of each Chapters lesson were compared
+setting by setting. The Endless mode's rules were read, and so was what the game's story log
+records. Neither set was played by hand for this review, and no child has played either. Every
+Chapters result so far comes from a scripted stand-in player.
+
+### 16.1 The verdict in brief
+
+1. **Chapters is the right foundation.** One simulation, staged situations, outcomes decided by
+   the ecosystem. That is the design the outside review recommends.
+2. **Chapters made the world emergent and left the teaching scripted.** Every time the eagle
+   locks onto a family member, a banner still says "Move a STORM over it". This is true in both
+   sketches, in every season, and in year five of the free play. The player is never left to
+   read the eagle and decide. Against the project's first design rule (problem-solving from
+   context clues) this is the largest gap, and it is in the Chapters set itself.
+3. **The "two rulebooks" problem is half solved, and there are now three.** The Chapters
+   lessons agree with each other. The Endless mode still plays by the old rules: its storm
+   stuns the eagle, and its background species cannot die out. A player who finishes the
+   Chapters lessons and opens the Endless mode is still taught something different.
+4. **The Stories should stay frozen.** They are the scripted comparison for the research and a
+   source of presentation to borrow. They should not receive new work.
+
+### 16.2 The two versions side by side
+
+| | Stories | Chapters |
+|---|---|---|
+| Who decides what happens | The script | The simulation |
+| The rule taught is a rule of the simulation | No (cover is scripted; the first raid is fixed to fail) | Yes, behind switches each lesson turns on |
+| Prompts | Tell the player what to do, on the script's clock | Tell the player what to do, when the simulation raises the problem |
+| Words a player can be shown | 475, 349 and 267, plus 190 shared | 460, 547 and 429 |
+| A stretch with no help, to test understanding | None | None |
+| Species protected from dying out | None in its free play | In five of six sketches |
+| What the record of a run can show | Nothing | How the stage behaved, not what the player did |
+| Polish (Te Whē's opening and closing words, the worn trail, walking on to the next land) | Yes | Not yet |
+| Evidence from players | None | None; stand-in runs only |
+
+The word counts are rough. They count every sentence of four words or more in each lesson's
+script, including menu text and messages shown only on a loss, so one play shows fewer. The
+point stands: Chapters did not reduce the reading, and its Pātōtara lesson increased it.
+
+### 16.3 The outside review's points, checked against today's build
+
+| Their point | In Stories | In Chapters | What remains |
+|---|---|---|---|
+| Scripts teach rules the simulation does not enforce | Still true | Fixed within the set. The raid is rolled at real odds, by the same formula the Endless mode's Nest Raid uses | The Endless mode uses none of the new rules |
+| Player powers and ecology are blurred | Still true | Still true. The Field Guide also states the kea raiding moa nests as fact | Name the powers apart from the world's rules; mark what is known, inferred or imagined |
+| No transfer check | Still true | Still true. The Open sketch is "less help", not "a new place and no help" | An unprompted stretch per lesson |
+| The cliff to the Endless mode | Still true | Softer: the five years show the whole cast and their seasons | The economy, focus species, nest founding, the Berry Cache and the climate are taught nowhere |
+| Floors teach the wrong lesson | Not applicable | Floors in five of six sketches | Replace protection with something the player can see |
+| Framing of the kea | Speculative, unmarked | Better framed (the moa drive kea off), still unmarked | Mark it; reword the Field Guide entry |
+| No evidence from children | Still true | Still true, and the record cannot yet capture what a child did | Record the player; one question before and after |
+
+Their recommendation was to keep the modules, have directors stage situations, let the real
+rules decide, and treat the rule ports as the priority. The Chapters set is that design. Two
+things differ from their advice. It was built beside the Stories instead of replacing them,
+which was chosen so the Stories can serve as the comparison. And the port they ranked first,
+storm as cover in the Endless mode, has not been done.
+
+### 16.4 Further findings
+
+1. **The answer is always on screen.** The eagle's visible wind-up (its "!", the amber pulse on
+   its hunger bar) was built so a player could see a hunt coming and act. The banner makes
+   reading it unnecessary.
+2. **The record measures the stage, not the learner.** The story log records chapters, goals,
+   prompts, and whether each guaranteed event came naturally or was forced. It does not record
+   a storm moved, a patch sprouted or a plant tapped, or whether a prompt ended because the
+   player acted or because it timed out. The population table carries only a count of storms
+   and patches standing at each ten-second sample. The thesis needs the first kind of measure
+   and does not yet have it.
+3. **Guided and Open differ in too many ways at once.** The Storm sketches differ in nine
+   settings: the guarantee, the season holds, the wind-up, eagle breeding, the number of
+   storms, their cost, pausing, the loss rule and the eagle's appetite. A difference in play
+   between the two cannot be attributed to any one of them.
+4. **The family's biology contradicts the five-year lesson.** The lesson claims every creature
+   breeds in its own season. In the run that was checked, the upland moa laid in all four
+   seasons (23 eggs: 11 in autumn, 6 in summer, 4 in spring, 2 in winter). A chick also reaches
+   adult size and breeding age fifteen seconds after hatching, and in one traced run Pukepuke
+   was mating in its first winter. So "keep the two young alive until they are grown" has no
+   visible growing. By the second winter of one run there were twelve upland moa, and across
+   the five-year runs the families' unnamed descendants were the eagle's main food (22 of 36
+   catches in the Guided runs, 41 of 54 in the Open ones).
+5. **The three lesson files repeat each other.** Twenty-four named pieces (chapters, goals and
+   prompts) appear in two or more of them, and 34 rule settings are common to all three,
+   copied by hand. A change to the cover prompt must be made three times, and the copies can
+   drift apart. This repetition is also the main cost of making a new slice for a client.
+6. **Small defects.** The third menu card's subtitle overflows its card. The release build
+   needs a package that no file in the repository declares, and running it removes the release
+   archive from `dist/`. Three art and sound files are missing in every build
+   (`sprites/moa_juvenile.png` and the two moa calls).
+
+### 16.5 Other ways to set the framework up
+
+| Option | What it is | What it buys | What it costs |
+|---|---|---|---|
+| A. Leave both sets as they are | Stories and Chapters side by side, each lesson listing its own rule switches | Nothing to build | Three rulebooks, repeated files, the gaps above |
+| B. One rulebook, several framings | The shared rules get one name. Every Chapters lesson and a new Endless variant use it. A lesson becomes a stage, words and checks | Replay reinforces the lessons; a new slice is short; one place to tune | A refactor, and re-balancing the Endless variant |
+| C. Convert the Stories' directors | The outside review's suggestion: keep the Stories and replace their scripted animals with staged situations | One set instead of two | It rebuilds what Chapters already is, and removes the scripted comparison |
+| D. Situations instead of years | The unit of teaching is a two to four minute situation with one rule, several valid answers and a measured outcome. A lesson is a short story followed by a few situations | Fits a class period; many trials per learner; transfer is built in; a client brief maps to a playlist | Loses some of the year with a named family, which is what works for a young audience |
+| E. A storyteller instead of deadlines | A tension curve raises and eases the eagle's hunger and the weather, so the lesson's moment is likely without being forced | More emergent; fewer guarantees to write | A weaker promise that the moment arrives; harder to explain to a teacher |
+| F. Lesson cards for partners | Lessons written as a form or a sheet and compiled to the engine's format | Partners can author | Only pays off once a second author exists |
+
+**Recommendation.** Take B as the base. Add the useful part of D: keep the year with the family
+as the teaching arc, and end each lesson with one or two unprompted situations as the transfer
+check. Those situations are also the natural unit for client slices. Borrow from C only the
+Stories' presentation. Keep E as a third research sketch for later. Defer F.
+
+### 16.6 Proposed changes, in the order worth taking them
+
+None of these is started. Each is behind a new level, a new switch or a new key, so the
+Stories, the Classic levels and the existing Endless level would play as they do now.
+
+1. **One rulebook and a shared lesson kit, with no change in play.** A named set of rules
+   (`rules: 'tops'`) that every Chapters lesson declares, and one file holding the pieces the
+   three lessons repeat (the cover prompts, storm upkeep, losses by cause, the family stage).
+   Each lesson shrinks to what is unique to it. The proof that nothing changed is that every
+   seeded run prints the same replay hash before and after.
+2. **Teach by clue first, and record the learner.**
+   - *A hint ladder.* When the eagle locks on, nothing is said at first: the "!" and the amber
+     bar are the clue. After a few seconds comes a question ("The Pouākai is watching Mama.
+     What can hide her?"), and only then the instruction. The record keeps the rung at which
+     the player acted, how long it took and how it ended. The Guided sketch would start at the
+     instruction the first time only.
+   - *The player's hand in the record.* Every storm moved, patch sprouted and plant tapped,
+     and how each prompt ended.
+   - *A transfer stretch per lesson.* A last chapter with no hints, the same rule and a new
+     place: a second pair on the next ridge for the Storm lesson, a third nest for Pātōtara.
+     The win card says "On your own: 2 of 3".
+   - *The dial split into three named axes:* what is guaranteed, how much is said, and how
+     hard the eagle presses. The two menu buttons stay; a study can change one axis at a time.
+3. **The Endless mode on the same rulebook, as a new variant beside the existing one.** Cover
+   instead of a stun, the visible wind-up and the breeding calendar first. It would need the
+   owner's tuning: cover will shift its balance.
+4. **Honest ecology.**
+   - *The family on the calendar:* one egg in summer for the upland moa, and a chick sized by
+     its year of birth, so Pukepuke is visibly young for years.
+   - *Protection the player can see:* no floors in the Chapters sketches. When a herd falls
+     low, a few arrive over the pass next season, and the lesson says so. The eagle dying out
+     becomes an event the lesson answers, not a generic loss.
+   - *Powers and evidence:* each lesson names what the kaitiaki can do apart from the rule of
+     the world it teaches, and each Field Guide entry is marked known, inferred or imagined.
+     The tags and the kea entry's wording are the owner's to judge.
+5. **A curriculum map and a study question.** Each lesson lists the rules it teaches, and a
+   small tool prints, for any level, which of its rules no earlier lesson teaches. That
+   replaces the hand-kept "still untaught" list in `YEARS_PLAN.md` and shows the cliff as a
+   number. An optional multiple-choice question before and after a lesson, logged with the
+   run, off by default and collecting no names.
+
+Left for later: the Stories' presentation in Chapters, a playlist of situations for client
+slices, the storyteller sketch, and ordering a named bird to walk somewhere.
+
+### 16.7 Choices that are the owner's
+
+| Choice | Suggested default |
+|---|---|
+| Sketches in the menu | Stay at two per lesson; other dial settings by address parameter |
+| The Endless mode | A new variant beside the existing one, which is untouched |
+| Floors in Chapters | Removed from every sketch and replaced by visible arrivals |
+| The study question | Built, switched off by default. Using it with children needs the institution's ethics approval and guardian consent |
+| The Stories | Frozen, kept in the menu |
+
+### 16.8 What no build can settle
+
+Whether a child reads the eagle's wind-up unprompted, and what they can explain afterwards. That
+needs people. The second proposal exists so that the record can show it when they do.

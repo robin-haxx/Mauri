@@ -165,8 +165,11 @@ play begins.
 
 ## What the game records
 
-Every run can be replayed exactly from a **seed** (a number in the address bar), so two
-researchers can watch the same five years. In a recorded run the game writes two files: a table
+A **seed** (a number in the address bar) fixes the land and the opening stage on any computer.
+On one computer and browser it also replays the whole run exactly. Across computers it does not
+yet: the same seed starts the same and drifts apart within about half a minute of play
+(`ENGINE_ASSESSMENT.md` §16.4), so a replay for research has to be made on the machine that made
+the original. In a recorded run the game writes two files: a table
 of populations every ten seconds, with the seed, the lesson, the sketch and the chapter on every
 row and the story's events in the last column; and a log of the story itself: every chapter,
 goal, prompt, and each guaranteed beat marked **natural** or **forced**. The share of natural
@@ -190,8 +193,14 @@ The stand-in is not a player: it never leads a family to the water or home, so i
 the lessons' tasks left undone (a family not home by spring; a chick hungry by the water), and
 its wins say only that a lesson can be won by doing the one thing it teaches. The eagle's
 catches show the surplus rule at work: in the first two lessons it fed mostly on the herd; in the
-five years, on the giant moa and on the families' many wild descendants. Keep the files from a
-batch; this build's are in `tests/chapters/`.
+five years, on the giant moa and on the families' many wild descendants.
+
+**Read the win counts with care.** Three seeds are too few, and the counts moved when nine of
+these runs were repeated on another machine (seven wins in the build container, five there).
+What held in all eighteen runs: the first demonstration came on its own, no named bird was taken
+by the eagle, and every named bird that died had starved. The files in `tests/chapters/` for
+both Storm sketches and the Guided Pātōtara sketch are from that second machine (5 November),
+so they differ from the table above; the rest are from the build container.
 
 ---
 

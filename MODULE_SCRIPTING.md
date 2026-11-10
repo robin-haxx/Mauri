@@ -531,10 +531,11 @@ preinstalled).
 | Command | What |
 |---|---|
 | `node tools/validate.js` | The level-format checks on every level and the engine's checks on every chapter level, without playing. `--smoke` also starts each level and runs it 15 s, reporting any page or console error. `--only <id>` for one level. Exits non-zero on anything but a warning. |
-| `node tools/batch.js --level <id or family> --sketch <label> --seeds 1..10` | Research runs. Each seed plays headless until the level ends, `--years n` have passed, or `--seconds n` (300) of play. It writes `<name>.csv` (populations every 10 s, the story log in the `event` column) and `<name>.beats.json` (the log, each beat natural or forced, the result) into `--out` (`tests/`), and prints a line per run: the result, each beat, who the eagle took, any cast lost, and a replay hash (the same seed prints the same hash). `--player cover` stands in for a player who puts a Storm over any cast member an eagle is hunting; `--player basic` also sprouts bare pātōtara and sets wharariki by the family in winter. `--trace <cast>` prints that bird once a second: state, hunger, target plant and its distance, the stall counter. |
+| `node tools/batch.js --level <id or family> --sketch <label> --seeds 1..10` | Research runs. Each seed plays headless until the level ends, `--years n` have passed, or `--seconds n` (300) of play. It writes `<name>.csv` (populations every 10 s, the story log in the `event` column) and `<name>.beats.json` (the log, each beat natural or forced, the result) into `--out` (`tests/`), and prints a line per run: the result, each beat, who the eagle took, any cast lost, and a replay hash (the same seed prints the same hash on the same machine and browser; across machines a run starts the same and then drifts). `--player cover` stands in for a player who puts a Storm over any cast member an eagle is hunting; `--player basic` also sprouts bare pātōtara and sets wharariki by the family in winter. `--trace <cast>` prints that bird once a second: state, hunger, target plant and its distance, the stall counter. |
 
 **URL parameters** (`index.html?...`): `level=<id or family>`, `sketch=<label>`, `seed=<n>`
-(the land and every roll replay exactly for the same seed), `bench=1` (record from the first
+(the land and the opening stage are the same everywhere; the whole run replays exactly only on
+the same machine and browser), `bench=1` (record from the first
 frame, no splash), `years=<n>` (end the run after that many), `chapter=<id>`, `render=2d`.
 
 Headless in the preview (the game's global is `game`):

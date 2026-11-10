@@ -268,3 +268,19 @@ fixed; **[process]** a testing trap, not a bug; **[rule]** a design guardrail, b
   When a cast member starves beside food, run `tools/batch.js --trace <name>` first: the trace
   prints the target plant, its distance and the stall counter once a second, and the fault is
   usually visible in twenty rows.
+
+## [process] A replay proven on one machine was claimed for every machine
+
+- **What happened.** The documents said a run "replays exactly from a seed, so two researchers
+  can watch the same five years". The owner re-ran nine seeded stand-in runs on another machine
+  with the same code. Each began identically and drifted apart 17 to 35 seconds in; two runs
+  that were wins in the build container were losses there.
+- **Root cause.** The claim was tested only where it was made: same container, same browser
+  build, same processor. There it holds (same hash under load, in parallel, six days apart).
+  The simulation's stepping reads no clock, so the remaining suspects are the browser's own
+  math functions (sine, cosine, arctangent, powers), which may differ in the last digit between
+  browser builds and processors. Not yet confirmed.
+- **Rule.** "Deterministic" needs its scope stated: one machine, one browser, or everywhere.
+  Before a replay is promised across machines, run one seed on two of them and compare the
+  hash `tools/batch.js` prints. Until that passes, research replays are made on the machine
+  that made the original, and results are reported over many seeds as a range.

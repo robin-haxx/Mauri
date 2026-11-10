@@ -13,7 +13,9 @@
 // --player cover   a stand-in player: every few seconds, a Storm is put over any cast member an
 //                  eagle is hunting in the open (free; the harness is not playing for mauri).
 //
-// Same seed, same run: the land and every roll come from p5's seeded generator.
+// Same seed, same run, on one machine and browser: the land and every roll come from p5's
+// seeded generator. On another machine the run starts the same and then drifts (most likely
+// the browser's own sine and cosine differing in the last digit): ENGINE_ASSESSMENT.md §16.4.
 // Needs Playwright (see tools/_headless.js).
 // ============================================================================
 'use strict';

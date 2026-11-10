@@ -60,7 +60,7 @@ picking up future tasks. The other docs:
 - **No modules, no bundler in development.** Serve the folder (`node tools/serve.js`, port
   8081) and open `index.html`. `dist/` holds a minified release build (`node tools/build.js`).
 - **URL parameters** open the game in a state: `?level=<id or family>&sketch=<label>` starts a
-  level without the menu, `seed=<n>` makes the land and every roll replay exactly, `bench=1`
+  level without the menu, `seed=<n>` fixes the land and, on one machine and browser, replays the whole run exactly, `bench=1`
   records from the first frame, `years=<n>` ends a recorded run, `chapter=<id>` starts a chapter
   level there, `render=2d` uses the flat renderer.
 - **Headless tools** (`tools/`, through Playwright): `validate.js` checks every level without

@@ -489,7 +489,9 @@ reader who hasn't seen the code needs is in `CHAPTERS_MODULES.md`; every key in
 - Substrate flags (`MODULE_SCRIPTING.md` §19) and simulation helpers (`addNestingSite`,
   `addEggAt`, `raidSuccessChance`, `moaNear`, `seasonTurns`, `causeOfDeath`, `_bornYear`).
 - Seeds: `?seed=` seeds p5's generators before the land is built, the `Math.random` call
-  sites moved onto `random()`, and a run replays exactly (same seed, same CSV hash).
+  sites moved onto `random()`, and a run replays exactly on one machine and browser (same
+  seed, same CSV hash). Across machines it starts the same and then drifts: see the 2026-11-10
+  review below.
 - Benchmark: seed, level, sketch and chapter on every row, the story log in the `event`
   column and in `<name>.beats.json`, URL arming (`?bench=1&years=n`), `BENCHMARK.lastRun`.
 
@@ -530,6 +532,9 @@ What the review found, in one line each:
 - The upland moa family breeds in every season and a chick is adult in fifteen seconds, which
   contradicts the five-year lesson's claim.
 - The three lesson files repeat 24 named pieces and 34 rule settings by hand.
+- A seed replays exactly on one machine but not across machines: the owner's re-run of nine
+  seeds began identically and drifted apart after 17 to 35 seconds. Three seeds per sketch
+  are also too few to quote win counts from.
 
 The proposals, in order (detail in §16.6):
 1. **[proposed]** One rulebook (`rules: 'tops'`) and a shared lesson kit, proven to change
@@ -543,6 +548,9 @@ The proposals, in order (detail in §16.6):
    known, inferred or imagined.
 5. **[proposed]** A curriculum map (`teaches` / `assumes` and a coverage tool that prints the
    untaught rules of any level) and an optional before-and-after question.
+6. **[proposed]** Batches of twenty or more seeds reported as ranges; and either one named
+   research machine for replays, or the simulation's own sine, cosine and angle functions so a
+   run is the same everywhere.
 
 On the framework itself the review recommends one rulebook with several framings, and each
 lesson ending in one or two unprompted situations; see §16.5 for the options weighed.

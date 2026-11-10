@@ -606,7 +606,8 @@ checks an outside review of the old modules and the Endless mode against today's
 player can be shown were counted. The two sketches of each Chapters lesson were compared
 setting by setting. The Endless mode's rules were read, and so was what the game's story log
 records. Neither set was played by hand for this review, and no child has played either. Every
-Chapters result so far comes from a scripted stand-in player.
+Chapters result so far comes from a scripted stand-in player. The owner re-ran nine of those
+stand-in runs on their own machine on 5 November; the two sets of results are compared below.
 
 ### 16.1 The verdict in brief
 
@@ -687,7 +688,23 @@ storm as cover in the Endless mode, has not been done.
    prompts) appear in two or more of them, and 34 rule settings are common to all three,
    copied by hand. A change to the cover prompt must be made three times, and the copies can
    drift apart. This repetition is also the main cost of making a new slice for a client.
-6. **Small defects.** The third menu card's subtitle overflows its card. The release build
+6. **A seed replays exactly on one machine, and not across machines.** In the build container
+   the same seed gives the same run every time: under load, in parallel, and six days apart.
+   The owner's re-run of nine seeds on another machine, with the same code, began identically
+   each time (the same land, the same stage, the first hunt at the same tenth of a second) and
+   then drifted apart between 17 and 35 seconds in. The simulation's own stepping reads no
+   clock, so pacing is ruled out. The likely cause is that browsers and processors compute
+   functions such as sine and cosine with tiny differences, which a simulation like this
+   magnifies. That cause is not confirmed. The earlier claim in these documents that two
+   researchers can replay the same run from a seed was wrong and has been corrected: today it
+   holds only on one machine and browser.
+7. **Three seeds per sketch say very little.** The same nine seeds gave seven wins here and
+   five on the owner's machine (with three losses and one run unfinished when it was stopped).
+   Three things did hold in all eighteen runs. The first demonstration came on its own every
+   time. No named bird was taken by the eagle. And every named bird that died had starved (one
+   here, five there). So the stage works, cover works for a player who uses it, and hunger is
+   what loses these lessons. Win counts from three seeds should not be quoted as results.
+8. **Small defects.** The third menu card's subtitle overflows its card. The release build
    needs a package that no file in the repository declares, and running it removes the release
    archive from `dist/`. Three art and sound files are missing in every build
    (`sprites/moa_juvenile.png` and the two moa calls).
@@ -748,6 +765,12 @@ Stories, the Classic levels and the existing Endless level would play as they do
    replaces the hand-kept "still untaught" list in `YEARS_PLAN.md` and shows the cliff as a
    number. An optional multiple-choice question before and after a lesson, logged with the
    run, off by default and collecting no names.
+
+6. **Runs that can be trusted.** Batches of twenty or more seeds per sketch, reported as a
+   range and not as a count of wins. For replays, either name one machine and browser as the
+   research machine, or make the simulation's arithmetic the same everywhere (its own sine,
+   cosine and angle functions in place of the browser's). The second is real work and should
+   start with a test that finds which function first differs.
 
 Left for later: the Stories' presentation in Chapters, a playlist of situations for client
 slices, the storyteller sketch, and ordering a named bird to walk somewhere.

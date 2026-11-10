@@ -36,7 +36,10 @@ const TUTORIAL_EVENTS = {
   STORY_BEAT: 'story_beat',           // a chapter level's line or banner (mauri_chapters.js), data: { cue }
   PLANT_SPROUTED: 'plant_sprouted',   // a pātōtara (patch or wild plant) sprouted by hand, data: { sprouted, type }
   BIRD_HATCHED: 'bird_hatched',       // a flighted bird's (or kākāpō's) egg hatched, data: { egg, bird, speciesKey }
-  BIRD_KILLED: 'bird_killed'          // an eagle took a flighted bird, data: { bird, eagle, speciesKey }
+  BIRD_KILLED: 'bird_killed',         // an eagle took a flighted bird, data: { bird, eagle, speciesKey }
+  SPECIES_ARRIVED: 'species_arrived', // newcomers walked or flew in (mechanics.rescueImmigration, eagleReturns), data: { speciesKey, count }
+  SPECIES_LEFT: 'species_left',       // a grown young bird has set off over the pass (mechanics.dispersal), data: { moa, speciesKey }
+  EAGLE_GAVE_UP: 'eagle_gave_up'      // its prey kept getting under cover, so it went for other prey (mechanics.coverSendsEagleAway), data: { eagle, speciesKey (what it went for), from }
 };
 
 // Named toolbar-button highlight targets → the placeable key each one shows.

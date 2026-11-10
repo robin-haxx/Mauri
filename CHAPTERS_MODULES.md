@@ -145,6 +145,104 @@ has no floors, and the eagle may breed.
 
 ---
 
+## The endless game on the lessons' rules (The Tops)
+
+**What it is.** The endless game the three lessons lead to, as a new card in the menu's Endless
+section beside the first Endless level, which is unchanged. The two families from the lessons
+live on one stretch of country, with a herd on the flats, bush moa and birds in the forest and
+one Pouākai. The years go round without end, and the same animals live through them: the chick
+that hatches in year one is half grown in year two and a parent in year four.
+
+**Why it is a different game from the first Endless level.** That level sets down a fresh cast
+in a new area every year and asks for herds of eight or ten. This one is built so the player
+knows each animal.
+
+- **Small herds that grow slowly.** Every moa keeps a breeding calendar: one egg in its season,
+  a year or two between clutches, three years to grow up. In stand-in play the upland moa went
+  from four to about ten over six years.
+- **A chick stays with its mother** for its first two years, and is visibly small.
+- **Tended food decides breeding and winters.** Wild browse only partly feeds the upland
+  families. Hens that are fed on the pātōtara and wharariki the player grows lay; hens that are
+  not, mostly do not. Winter falls hardest on each year's chicks.
+- **A hunt is an event.** The eagle has a slow appetite and hunts about once a season. Every
+  hunt opens with a six-second wind-up on the bird it has picked, and it never strikes a bird it
+  has not wound up on. Hide its bird twice and it gives the family up for a while and goes
+  after a herd with numbers to spare.
+- **Nothing is protected from dying out.** When a herd falls low, a few arrive over the pass a
+  season or two later. A lost eagle is replaced the same way.
+- **The clan stays small.** Once there are more than ten upland moa, the oldest grown young walk
+  off over the pass each spring to found families elsewhere. Sending them is the long game:
+  the count of them is the score that keeps rising.
+- **The player defends nests and does not raid them.** Kea raid at odds the gathered moa set,
+  as the Pātōtara lesson taught. From year two a Berry Cache draws kea away from the nests,
+  which is the same rule used from the other side.
+
+**The year.** Summer at the nests (eggs, kea, the first hunts). Autumn (get wharariki growing).
+Winter (keep every upland moa alive). Spring (the year's count, and the grown young leave).
+Kākā arrive in year two. From year three two speargrass patches found a new nest. A second
+eagle may come from year five if the land holds many moa. The cold deepens slowly over about
+fourteen years.
+
+**What carries over from the first Endless level:** its country and biomes, the deepening
+climate, the Berry Cache, nest founding with a favoured plant, the birds. **What is reworked:**
+breeding, goals, income, the eagle, protection. **What is left out of this first version:** the
+tour of a 2×2 world, the mast year and the kākāpō, the player's Nest Raid, and the forest tools.
+
+### How different players fare
+
+A command-line tool plays the game with stand-in players who pay for everything they do. They
+differ in how fast they react to a hunt and in what they bother with. Nine years each, six
+seeds each, on the build container; read the ranges, not single runs.
+
+| Player | Runs ended early | Upland moa at the end | Sent over the pass | Named birds lost (of 6) | Mauri spent | Mauri in hand |
+|---|---|---|---|---|---|---|
+| Careful: reacts in 2 s, feeds | 0 of 6 | 12 to 14 | 4 to 8 | 0 | 1070 to 1630 | 75 to 455 |
+| Slower: reacts in 5 s, feeds | 0 of 6 | 12 to 14 | 3 to 8 | 0 | 845 to 1165 | 269 to 635 |
+| Late: reacts in 8 s, feeds | 0 of 6 | 10 to 13 | 1 to 7 | 0 to 2 | 805 to 1270 | 81 to 549 |
+| Covers but never feeds | 0 of 6 | 5 to 11 | 0 to 5 | 1 to 4 | 150 to 630 | 580 to 1342 |
+| Feeds but never covers | 4 of 6 | 0 to 5 | 0 | 3 to 6 | 200 to 575 | 424 to 830 |
+| Does nothing | 3 of 6 | 0 to 4 | 0 | 4 to 6 | 0 | 237 to 1196 |
+
+Both tools matter: the player who only covers and the player who only feeds each do far worse
+than the one who does both. A five-second reaction is enough, and an eight-second one costs a
+named bird or two over nine years.
+
+### The player's camera
+
+On this level the player can look closer. Two buttons under the pause controls zoom in and out
+in four steps, and they are finger-sized for a touchscreen. The mouse wheel zooms on a desktop,
+and the + and - keys work too. A drag on the land pans when zoomed in. A tap on any animal rings
+it, says who it is (its name if it has one, its kind, sex and age, how well fed it is, what it
+is doing, whose young it is) and makes the view follow it; a second tap, or the cross on the
+"Following" label, lets it go. When the view is zoomed in elsewhere and an eagle starts on an
+upland moa, the view eases over to frame hunter and hunted, and eases back when the hunt is
+over. All of it is drawn-view only and costs nothing the simulation can feel. Any level can
+switch it on with one line (`userCamera: true`); pinch-to-zoom is not built.
+
+### Where your judgement is wanted
+
+These are the numbers that decide how the game feels. Each is one line in the dial at the top
+of `levels/chapters_endless.js`.
+
+| Dial | Now | What it does |
+|---|---|---|
+| The eagle's wind-up | 6 s | The main difficulty dial. At 6 s a five-second player loses nobody. |
+| Wild food for the families | 30% | How much the upland moa depend on what the player grows. |
+| A chick's hunger | 1.5 times an adult's | How hard winter falls on the young. |
+| Income and rewards | about 150 mauri a year for a careful player | A careful stand-in ends nine years with a few hundred in hand. |
+| The clan's full size | 10 | Above it, grown young leave. Named birds never leave. |
+| The eagle's appetite | a meal every few minutes | How often hunts come. |
+| Season length | 45 s | A year is three minutes, as in the lessons. |
+| Years to grow up | 3 | Nine minutes from hatching to breeding. |
+| A second eagle | year 5, if 16 or more moa | When pressure steps up. |
+
+Other choices that are yours: the level's name (a placeholder), names for chicks after
+Pukepuke and Koukou (left to you, since naming in te reo is not mine to do), whether the
+world tour, the mast year and the Nest Raid belong in this version, and whether the camera
+should be switched on in the lessons too.
+
+---
+
 ## Choosing a sketch
 
 | | Guided | Open |

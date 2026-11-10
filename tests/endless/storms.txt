@@ -1,0 +1,11 @@
+seed 1: year_end after 1620s | beats (no beats) | eagle took: stout_legged_moa 9, little_bush_moa 4, south_island_giant_moa 6 | cast lost: papa@1017.7s | focus animals 10, 5 left over the pass, year 10 | spent move storm 30, new storm 120, 1342 mauri in hand | replay 122e91a2
+seed 2: year_end after 1620s | beats (no beats) | eagle took: stout_legged_moa 12, little_bush_moa 4, south_island_giant_moa 2 | cast lost: pukepuke@159.3s koukou@165.4s friendMama@188.9s | focus animals 5, year 10 | spent new storm 320, move storm 30, 794 mauri in hand | replay 7a1eca61
+seed 3: year_end after 1620s | beats (no beats) | eagle took: south_island_giant_moa 4, stout_legged_moa 6, little_bush_moa 10 | cast lost: friendPapa@221.8s koukou@360.6s pukepuke@1301.9s friendMama@1440.1s | focus animals 5, year 10 | spent move storm 70, new storm 320, 718 mauri in hand | replay 4fe4e470
+seed 4: year_end after 1620s | beats (no beats) | eagle took: little_bush_moa 3, stout_legged_moa 15, south_island_giant_moa 2 | cast lost: pukepuke@118.4s papa@674.1s mama@1443.1s | focus animals 10, year 10 | spent move storm 100, new storm 480, 589 mauri in hand | replay 606f29e0
+seed 5: year_end after 1620s | beats (no beats) | eagle took: stout_legged_moa 9, little_bush_moa 9, kea 1 | cast lost: koukou@1400.2s friendMama@1453.9s | focus animals 11, year 10 | spent move storm 110, new storm 520, 580 mauri in hand | replay 89de6bad
+seed 6: year_end after 1620s | beats (no beats) | eagle took: stout_legged_moa 10, south_island_giant_moa 2, little_bush_moa 5, kea 1, kokako 1 | cast lost: koukou@164.3s papa@1116.1s | focus animals 10, year 10 | spent new storm 520, move storm 50, 671 mauri in hand | replay 34c27a0d
+
+6 run(s): year_end 6
+  eagle took: stout_legged_moa 61, little_bush_moa 35, south_island_giant_moa 16, kea 2, kokako 1; cast lost 15
+  focus animals at the end: 5 to 11 (median 10); years reached: 10 to 10
+  files in /home/user/Mauri/tests/endless/storms

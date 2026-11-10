@@ -246,6 +246,7 @@ class HaastsEagle extends Boid {
       this._huntEventFired = false;
       this._graceGiven = false;
       this._chaseLoop = null;
+      this._coverFoils = 0;   // (fed, or not hungry: the next hunger starts its count afresh)
       this.patrol(dt);
     }
     
@@ -443,6 +444,8 @@ class HaastsEagle extends Boid {
         const spotR = this.huntRadius * frac;
         if (frac <= 0 || dSq > spotR * spotR) continue;
       }
+      // (coverSendsEagleAway: the kind it has given up on for now reads as not there.)
+      if (this._shunSpecies === moa.speciesKey && this._clock < (this._shunUntil || 0) && moa !== this.aimAt) continue;
       // (A moa's eagleResistance is rolled at the strike, not here: rolled on every scan it made
       // the bird's pick flicker between herd members, so no wind-up ever finished.)
       // Camouflage: chance the eagle doesn't spot this moa during a scan. Once it's the
@@ -489,6 +492,22 @@ class HaastsEagle extends Boid {
       }
     }
 
+    // eagleTelegraph: the bird commits to the one it has picked for as long as it can still see
+    // it and it is in range, and does not turn to a nearer one part-way through a dive. So a
+    // change of target only happens when the first is truly lost, every change is a new hunt
+    // with its own wind-up (see `retarget` below), and nothing is struck without warning.
+    const cur = this.target;
+    if (_M.eagleTelegraph && cur && cur.alive && cur !== target && cur.pos) {
+      const dx = cur.pos.x - px, dy = cur.pos.y - py, dSq = dx * dx + dy * dy;
+      const frac = cur.shelterSpotFrac || 0;
+      const hidden = !!cur.inShelter && (frac <= 0 || dSq > this.huntRadius * this.huntRadius * frac * frac);
+      const shunned = this._shunSpecies === cur.speciesKey && this._clock < (this._shunUntil || 0);
+      const guarded = simulation.isSpeciesProtected && simulation.isSpeciesProtected(cur.speciesKey);
+      if (!hidden && !shunned && !guarded && dSq <= this.huntRadius * this.huntRadius * 1.3) {
+        target = cur; targetDistSq = dSq; targetIsFlyer = !!cur.isFlyer;
+      }
+    }
+
     // An aimed moa out in the open (a chapter level's `aim`) is gone after from any distance,
     // ahead of nearer prey. Under cover it can't be seen, so the scan above decides.
     const aim = this.aimAt;
@@ -497,13 +516,28 @@ class HaastsEagle extends Boid {
       target = aim; targetDistSq = dx * dx + dy * dy; targetIsFlyer = false;
     }
 
+    // coverSendsEagleAway { after = 2, sec = 45 } (a level's rule): each time the bird it was on
+    // gets under cover counts as a foil. After `after` of them in one hunger it gives that kind
+    // up for `sec` seconds and takes its hunt to other prey, by preference a species with
+    // numbers to spare (see _leaveForOtherPrey). So hiding the family sends the eagle to the herd.
+    const _away = _M.coverSendsEagleAway;
+    const _prev = this.target;
+    if (_away && _prev && _prev !== target && _prev.alive && _prev.inShelter && !_prev.isFlyer) {
+      this._coverFoils = (this._coverFoils || 0) + 1;
+      if (this._coverFoils >= (_away.after ?? 2) && this._leaveForOtherPrey(simulation, _prev.speciesKey, _away, _M)) {
+        this.edges();
+        return;
+      }
+    }
+
     if (target) {
       const hadNoTarget = this.target === null;
-      // Under coverBreaksLock a change of target because the last one is gone from view (under
-      // cover, or dead) counts as a fresh lock: a new wind-up, and the hunt event again, so a
-      // lesson can answer it. Turning to a nearer bird mid-chase is not: the dive carries on.
-      const retarget = !hadNoTarget && this.target !== target && !!_M.coverBreaksLock &&
-        (!this.target.alive || !!this.target.inShelter);
+      // A change of target counts as a fresh lock (a new wind-up, and the hunt event again, so a
+      // lesson can answer it): under eagleTelegraph always, since the bird only changes when its
+      // first is lost (above); under coverBreaksLock alone, when the last one is gone from view
+      // (under cover, or dead), and not when it merely turns to a nearer bird mid-chase.
+      const retarget = !hadNoTarget && this.target !== target &&
+        (!!_M.eagleTelegraph || (!!_M.coverBreaksLock && (!this.target.alive || !!this.target.inShelter)));
 
       this.state = 'hunting';
       this.hunting = true;
@@ -522,8 +556,10 @@ class HaastsEagle extends Boid {
       if (hadNoTarget || retarget) {
         const fresh = retarget || (this._noTargetFrames || 0) >= 30 || target !== this._lastTarget;
         this._lastTarget = target;
-        if (_T && fresh && this.tutorialGraceTimer <= 0) {
-          this.tutorialGraceTimer = Math.round((_T.graceSec ?? 4) * 60);
+        // (The full window for each fresh lock: a bird it turns to part-way through another's
+        // wind-up gets its own, not the seconds left over. A longer one a tutorial set stands.)
+        if (_T && fresh) {
+          this.tutorialGraceTimer = Math.max(this.tutorialGraceTimer, Math.round((_T.graceSec ?? 4) * 60));
         }
       }
 
@@ -583,6 +619,7 @@ class HaastsEagle extends Boid {
         const pr = _M.eaglePursuitRadius ?? 320;
         const prey = simulation.getClosestMoa(this.pos.x, this.pos.y, pr, m =>
           m.alive && !m.inShelter &&
+          !(this._shunSpecies === m.speciesKey && this._clock < (this._shunUntil || 0)) &&
           !(simulation.isSpeciesProtected && simulation.isSpeciesProtected(m.speciesKey)));
         if (prey) {
           this.huntSearchTimer = 0;            // an active chase never "times out" into a relocate
@@ -790,6 +827,38 @@ class HaastsEagle extends Boid {
 
   // Move this bird's territory onto (x, y) and drag a bonded partner to a nearby offset,
   // so a relocating pair stays inside mate range.
+  // Give up on `shun` (a species whose birds keep getting under cover) and take the hunt to
+  // other prey: the nearest moa in the open of another kind, a plentiful kind reading as nearer
+  // and a scarce one as further. The territory moves there, and the shunned kind is not seen
+  // for cfg.sec seconds. false (and nothing changes) when there is no other prey to go to.
+  _leaveForOtherPrey(simulation, shun, cfg, M) {
+    const thresh = M.eaglePreyPopThreshold ?? 12, scarce = M.eagleScarcePreyPenalty ?? 6;
+    let best = null, bestScore = Infinity;
+    const moas = simulation.moas;
+    for (let i = 0; i < moas.length; i++) {
+      const m = moas[i];
+      if (!m.alive || m.inShelter || m.speciesKey === shun) continue;
+      if (simulation.isSpeciesProtected && simulation.isSpeciesProtected(m.speciesKey)) continue;
+      const n = simulation.getCachedSpeciesCount ? simulation.getCachedSpeciesCount(m.speciesKey) : 1;
+      const dx = m.pos.x - this.pos.x, dy = m.pos.y - this.pos.y;
+      let score = Math.sqrt(dx * dx + dy * dy) / Math.max(1, n);
+      if (n <= thresh) score *= scarce;
+      if (score < bestScore) { bestScore = score; best = m; }
+    }
+    if (!best) return false;
+    this._relocateTerritory(best.pos.x, best.pos.y);
+    this._shunSpecies = shun;
+    this._shunUntil = this._clock + (cfg.sec ?? 45) * 60;
+    this._coverFoils = 0;
+    this.target = null;
+    this._huntEventFired = false;
+    this.huntSearchTimer = 0;
+    if (simulation.game && simulation.game.tutorial && typeof TUTORIAL_EVENTS !== 'undefined') {
+      simulation.game.tutorial.fireEvent(TUTORIAL_EVENTS.EAGLE_GAVE_UP, { eagle: this, speciesKey: best.speciesKey, from: shun });
+    }
+    return true;
+  }
+
   _relocateTerritory(x, y) {
     this.nest.set(x, y);
     this.patrolCenter.set(x, y);

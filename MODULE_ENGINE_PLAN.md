@@ -542,7 +542,14 @@ The proposals, in order (detail in §16.6):
 2. **[proposed]** A hint ladder (clue, then a question, then the instruction), the player's
    actions in the record, a transfer stretch per lesson, and the dial split into three axes
    (what is guaranteed, how much is said, how hard the eagle presses).
-3. **[proposed]** A new Endless variant on the shared rules, beside the existing one.
+3. **[done 2026-11-11]** A new Endless variant on the shared rules, beside the existing one:
+   `levels/chapters_endless.js` ("The Tops"). Built on the chapters engine, so it is also the
+   first step of phase 5. One persistent land in place of the world tour; every moa on a
+   breeding calendar and growing by the year; arrivals, departures and a returning eagle in
+   place of floors; income and goals sized for small herds; the player's camera (zoom, pan,
+   follow, hunt view). Two flaws in the eagle's wind-up were found and fixed on the way, which
+   also makes the lessons fairer (`MISTAKES.md`). How six kinds of stand-in player fare, and
+   the dials that want the owner's judgement, are in `CHAPTERS_MODULES.md`.
 4. **[proposed]** The family on the breeding calendar and visibly growing; floors replaced by
    visible arrivals; powers named apart from the world's rules; Field Guide entries marked
    known, inferred or imagined.

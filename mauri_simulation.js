@@ -1896,6 +1896,24 @@ class Simulation {
 
             newMoa.hunger = 35;
             newMoa._bornYear = Math.floor((this.seasonTurns || 0) / 4);   // (a species on the calendar matures by the year)
+            newMoa._bornTurn = (this.seasonTurns || 0) + ((this.seasonManager && this.seasonManager.progress) || 0);
+            newMoa._sim = this;
+            // Its family: the hen that laid the egg and her mate. An egg set down by a level
+            // (addEggAt) takes the nearest hen of its kind as its mother where the level links
+            // families (mechanics.familyLinks).
+            newMoa.mother = (egg.mother && egg.mother.alive) ? egg.mother : null;
+            newMoa.father = (egg.father && egg.father.alive) ? egg.father : null;
+            if (!newMoa.mother && typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.familyLinks) {
+              let _best = null, _bd = 160 * 160;
+              for (let mi = 0; mi < this.moas.length; mi++) {
+                const _m = this.moas[mi];
+                if (!_m.alive || !_m.isFemale || _m.speciesKey !== newMoa.speciesKey || _m.isJuvenile()) continue;
+                const _d = (_m.pos.x - egg.pos.x) ** 2 + (_m.pos.y - egg.pos.y) ** 2;
+                if (_d < _bd) { _bd = _d; _best = _m; }
+              }
+              newMoa.mother = _best;
+            }
+            if (newMoa.mother) newMoa.mother.offspring = (newMoa.mother.offspring || 0) + 1;
             newMoa.size *= 0.6;
             newMoa._cacheSizeMultipliers();
             newMoa.homeRange.set(egg.pos.x, egg.pos.y);
@@ -2050,6 +2068,7 @@ class Simulation {
   }
 
   onEagleStartHunt(eagle, target) {
+    if (this.game._onHuntStart) this.game._onHuntStart(eagle, target);   // (the player's camera: mechanics.huntCamera)
     if (this.game.tutorial) {
       this.game.tutorial.fireEvent(TUTORIAL_EVENTS.EAGLE_HUNTING, { eagle, target });
     }

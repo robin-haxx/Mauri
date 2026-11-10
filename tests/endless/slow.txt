@@ -1,0 +1,11 @@
+seed 1: year_end after 1620s | beats (no beats) | eagle took: stout_legged_moa 12, little_bush_moa 4, south_island_giant_moa 3 | focus animals 14, 8 left over the pass, year 10 | spent patotara 175, move storm 40, wharariki 550, new storm 280, 579 mauri in hand | replay a3a737ad
+seed 2: year_end after 1620s | beats (no beats) | eagle took: stout_legged_moa 9, little_bush_moa 6, south_island_giant_moa 4 | focus animals 14, 7 left over the pass, year 10 | spent wharariki 700, new storm 200, move storm 20, patotara 75, 635 mauri in hand | replay ba8a983e
+seed 3: year_end after 1620s | beats (no beats) | eagle took: south_island_giant_moa 5, little_bush_moa 8, stout_legged_moa 7 | focus animals 14, 3 left over the pass, year 10 | spent wharariki 500, move storm 80, new storm 240, patotara 25, 575 mauri in hand | replay b9d1353e
+seed 4: year_end after 1620s | beats (no beats) | eagle took: little_bush_moa 9, stout_legged_moa 8, kaka 1, south_island_giant_moa 1 | focus animals 14, 5 left over the pass, year 10 | spent wharariki 600, move storm 60, patotara 150, new storm 320, 337 mauri in hand | replay 7e55961e
+seed 5: year_end after 1620s | beats (no beats) | eagle took: stout_legged_moa 9, little_bush_moa 8 | focus animals 12, 3 left over the pass, year 10 | spent patotara 150, move storm 90, wharariki 475, new storm 400, 272 mauri in hand | replay b360ae5c
+seed 6: year_end after 1620s | beats (no beats) | eagle took: stout_legged_moa 11, south_island_giant_moa 5, little_bush_moa 3 | focus animals 13, 4 left over the pass, year 10 | spent wharariki 550, new storm 440, move storm 100, patotara 75, 269 mauri in hand | replay 8afd3397
+
+6 run(s): year_end 6
+  eagle took: stout_legged_moa 56, little_bush_moa 38, south_island_giant_moa 18, kaka 1; cast lost 0
+  focus animals at the end: 12 to 14 (median 14); years reached: 10 to 10
+  files in /home/user/Mauri/tests/endless/slow

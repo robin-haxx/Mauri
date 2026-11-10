@@ -1205,6 +1205,9 @@ class MauriManager {
 // section draws its levels: 'modules' (small square cards), 'sketches' (one card per family of
 // sketches with a button per sketch under it), or 'cards' (the wide challenge cards). Settings
 // is added last by renderLevelSelect. A section with no levels isn't drawn.
+// The player's zoom steps (Game.zoomStep): the whole land, then three closer views.
+const USER_ZOOMS = [1, 1.5, 2.25, 3.2];
+
 const MENU_SECTIONS = [
   { key: 'stories',  label: "Stories",  style: 'modules' },
   { key: 'chapters', label: "Chapters", style: 'sketches' },
@@ -1575,6 +1578,9 @@ class Game {
       ? ClimateDrift.cfgFrom(LEVEL_MECHANICS) : null;
     this.coldIndex = 0;
     this.cycle = 0;
+    this._lowSeasons = null;   // (seasonal arrivals: see _seasonalArrivals)
+    this._seenSpecies = null;
+    this._sentByYear = null;   // (...and departures: _seasonalDepartures)
     if (this.seasonManager) this.seasonManager.coldIndex = 0;
     this._freeplayYear = -1;
     this.freeplayFocus = [];
@@ -1807,6 +1813,7 @@ class Game {
   // eases out as a loop widens the country.
   _resetCamera() {
     this.camera = { zoom: 1, cx: 0, cy: 0, ax: 0.5, ay: 0.5, tween: null };
+    this._selected = null; this._follow = false; this._huntCam = null; this._panCand = null;   // (the player's camera)
   }
 
   // Ease the camera to `target` ({ zoom, cx, cy, ax, ay }; omitted keys hold) over `frames`
@@ -1844,6 +1851,251 @@ class Game {
     c.cx = lerpK('cx'); c.cy = lerpK('cy'); c.ax = lerpK('ax'); c.ay = lerpK('ay');
     if (tw.t >= 1) c.tween = null;
     this._updateViewTransform();
+  }
+
+  // ==========================================================================================
+  // THE PLAYER'S CAMERA (levels with `userCamera: true`)
+  // ==========================================================================================
+  // Built on the render-only camera above, so none of it touches the simulation:
+  //   zoomStep(±1)        the + and - buttons (and keys): 1x, 1.5x, 2.25x, 3.2x
+  //   zoomWheel(delta)    the mouse wheel, about the pointer
+  //   a drag on the land  pans, when zoomed in and nothing is in hand (_updatePan)
+  //   a tap on an animal  selects it: a ring, a label saying who it is (its describe()), and
+  //                       the view follows it; a second tap lets it go (selectAnimal)
+  //   a hunt              with mechanics.huntCamera, when zoomed in elsewhere, the view eases to
+  //                       an eagle starting on a focus animal and back when it is over
+  // Each costs a few numbers a frame. The Stories' directors and a chapter's moments own the
+  // camera while they run, and the player's controls stand down (userCameraOn).
+  userCameraOn() {
+    return !!(this.currentLevel && this.currentLevel.userCamera) && !this.module &&
+      !(this.chapters && this.chapters.moment) && !this._yearTransition && !this._introShot &&
+      (this.state === GAME_STATE.PLAYING || this.state === GAME_STATE.PAUSED);
+  }
+
+  // The zoom the camera is at, or is easing to.
+  _zoomGoal() { const c = this.camera; return (c && c.tween) ? c.tween.to.zoom : (c ? c.zoom : 1); }
+
+  // The paint point now at the middle of the play viewport.
+  _viewCentre() {
+    const v = this._viewport();
+    return { cx: (v.x + v.w / 2 - CONFIG.viewX) / CONFIG.viewZoom, cy: (v.y + v.h / 2 - CONFIG.viewY) / CONFIG.viewZoom };
+  }
+
+  // After the view has been clamped to the land's edge, make the camera's own focus agree with
+  // what is on screen (anchored at the middle), so the next move starts from what the player sees.
+  _normaliseCamera() {
+    const c = this.camera;
+    if (!c || c.zoom <= 1.0001) return;
+    Object.assign(c, this._viewCentre(), { ax: 0.5, ay: 0.5 });
+  }
+
+  // Whether a world point is on screen, inside the viewport shrunk by `margin` (a fraction).
+  _inView(pos, margin = 0) {
+    const v = this._viewport();
+    const sx = CONFIG.viewX + pos.x * CONFIG.viewZoom;
+    const sy = CONFIG.viewY + this._groundPaintY(pos.x, pos.y) * CONFIG.viewZoom;
+    return sx > v.x + v.w * margin && sx < v.x + v.w * (1 - margin) &&
+           sy > v.y + v.h * margin && sy < v.y + v.h * (1 - margin);
+  }
+
+  zoomStep(dir) {
+    if (!this.userCameraOn()) return;
+    const cur = this._zoomGoal();
+    let i = 0;
+    for (let k = 0; k < USER_ZOOMS.length; k++) if (Math.abs(USER_ZOOMS[k] - cur) < Math.abs(USER_ZOOMS[i] - cur)) i = k;
+    // (From between two steps, as the wheel leaves it, a press goes to the next step that way.)
+    if (dir > 0 && USER_ZOOMS[i] > cur + 0.01) i--;
+    if (dir < 0 && USER_ZOOMS[i] < cur - 0.01) i++;
+    const z = USER_ZOOMS[Math.max(0, Math.min(USER_ZOOMS.length - 1, i + dir))];
+    if (Math.abs(z - cur) < 0.01) return;
+    this._huntCam = null;   // the player has the camera
+    const f = (this._follow && this._selected && this._selected.alive) ? this._selected : null;
+    if (z <= 1.0001) this.cameraTo({ zoom: 1 }, 30);
+    else if (f) this.cameraTo({ zoom: z, cx: f.pos.x, cy: this._groundPaintY(f.pos.x, f.pos.y), ax: 0.5, ay: 0.5 }, 30);
+    else this.cameraTo({ zoom: z, ax: 0.5, ay: 0.5 }, 30);
+  }
+
+  // The wheel: zoom smoothly about the pointer (canvas point mx, my).
+  zoomWheel(delta, mx, my) {
+    if (!this.userCameraOn() || !this.isInGameArea(mx, my)) return false;
+    const c = this.camera, z0 = this._zoomGoal();
+    const z = Math.max(1, Math.min(USER_ZOOMS[USER_ZOOMS.length - 1], z0 * Math.exp(-delta * 0.0015)));
+    if (Math.abs(z - z0) < 0.001) return true;
+    this._huntCam = null;
+    const v = this._viewport();
+    const px = (mx - CONFIG.viewX) / CONFIG.viewZoom, py = (my - CONFIG.viewY) / CONFIG.viewZoom;
+    c.tween = null;
+    if (z <= 1.0001) { c.zoom = 1; this._updateViewTransform(); return true; }
+    Object.assign(c, { zoom: z, cx: px, cy: py, ax: (mx - v.x) / v.w, ay: (my - v.y) / v.h });
+    this._updateViewTransform();
+    this._normaliseCamera();
+    return true;
+  }
+
+  // The animal drawn nearest a world point, within a finger's width: a moa, a bird or an eagle.
+  _animalAt(tx, ty) {
+    const sim = this.simulation;
+    if (!sim) return null;
+    const reach = 20 / Math.sqrt(Math.max(1, this.camera ? this.camera.zoom : 1));
+    let best = null, bestD = reach * reach;
+    const look = (list) => {
+      if (!list) return;
+      for (let i = 0; i < list.length; i++) {
+        const e = list[i];
+        if (!e.alive || !e.pos) continue;
+        const dx = e.pos.x - tx, dy = e.pos.y - ty, d = dx * dx + dy * dy;
+        if (d < bestD) { bestD = d; best = e; }
+      }
+    };
+    look(sim.moas); look(sim.eagles);
+    for (const k in (sim.otherEntities || {})) look(sim.otherEntities[k]);
+    return best;
+  }
+
+  // Select an animal: it is ringed and labelled, and the view follows it (closing in on it
+  // first when the whole land was in view).
+  selectAnimal(e) {
+    if (!e || !e.alive) return;
+    this._selected = e;
+    this._follow = true;
+    this._huntCam = null;
+    const cur = this._zoomGoal();
+    const z = cur <= 1.05 ? USER_ZOOMS[2] : cur;
+    this.cameraTo({ zoom: z, cx: e.pos.x, cy: this._groundPaintY(e.pos.x, e.pos.y), ax: 0.5, ay: 0.5 }, 40);
+  }
+
+  clearSelection() { this._selected = null; this._follow = false; }
+
+  // A tap on the land of a userCamera level, decided on release: on an animal, select it (or
+  // let it go if it was the one selected); else on a plant, rustle it as a tap always has.
+  _tapAt(pc) {
+    const e = this._animalAt(pc.tx, pc.ty);
+    if (e) { if (this._selected === e) this.clearSelection(); else this.selectAnimal(e); return; }
+    if (pc.plantTap) this._tapPlant(pc.tx, pc.ty);
+  }
+
+  // A press on the land that moves more than a few pixels, with nothing in hand and the view
+  // zoomed in, drags the land under the finger. (Called every real frame.)
+  _updatePan() {
+    const pc = this._panCand;
+    if (!pc) return;
+    if (!mouseIsPressed) return;   // (the release itself is handled in handleRelease)
+    const s = spriteSS(), mx = mouseX / s, my = mouseY / s;
+    const c = this.camera;
+    if (!pc.active) {
+      if (Math.hypot(mx - pc.x0, my - pc.y0) <= 14 || this.selectedPlaceable || this.movingPlaceable ||
+          pc.held || c.zoom <= 1.0001) return;
+      pc.active = true;
+      this._holdCandidate = null;
+      this._huntCam = null;
+      this._follow = false;        // the player is looking round: stop following (the ring stays)
+      c.tween = null;
+      this._normaliseCamera();
+      pc.lx = mx; pc.ly = my;
+    }
+    c.cx -= (mx - pc.lx) / CONFIG.viewZoom;
+    c.cy -= (my - pc.ly) / CONFIG.viewZoom;
+    pc.lx = mx; pc.ly = my;
+    this._updateViewTransform();
+    this._normaliseCamera();
+  }
+
+  // mechanics.huntCamera { focusOnly }: an eagle has started on `target`. If the player is zoomed
+  // in and the hunt is off screen, ease the view to frame hunter and hunted, remembering where
+  // the view was; _updateHuntCam eases back when the hunt is over. Not while the player's
+  // hands are busy (a drag, an item being moved or placed).
+  _onHuntStart(eagle, target) {
+    const H = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS && LEVEL_MECHANICS.huntCamera) || null;
+    if (!H || !this.userCameraOn() || !eagle || !target || !target.pos) return;
+    if (this._zoomGoal() <= 1.05) return;                       // the whole land is in view already
+    if (H.focusOnly) {
+      const focus = (this.chapters && this.chapters.focus) || this.freeplayFocus || [];
+      if (!focus.includes(target.speciesKey)) return;
+    }
+    if (this._huntCam) { this._huntCam.eagle = eagle; this._huntCam.target = target; return; }   // the same hunt, its next bird
+    if ((this._panCand && this._panCand.active) || this.movingPlaceable || this.selectedPlaceable) return;
+    if (this._inView(target.pos, 0.12) && this._inView(eagle.pos, 0.04)) return;                 // already on screen
+    this._huntCam = { eagle, target, frames: 0, quiet: 0,
+                      back: Object.assign({ zoom: this._zoomGoal(), follow: this._follow }, this._viewCentre()) };
+    this._follow = false;
+    this._frameHunt(this._huntCam, 45);
+  }
+
+  _frameHunt(hc, frames) {
+    const e = hc.eagle, t = hc.target, v = this._viewport(), b = this._baseView();
+    const ey = this._groundPaintY(e.pos.x, e.pos.y), ty = this._groundPaintY(t.pos.x, t.pos.y);
+    const spanW = Math.abs(e.pos.x - t.pos.x) + 170, spanH = Math.abs(ey - ty) + 170;
+    const zoom = Math.max(1.15, Math.min(Math.max(1.5, hc.back.zoom), Math.min(v.w * 0.8 / spanW, v.h * 0.8 / spanH) / b.z));
+    this.cameraTo({ zoom, cx: (e.pos.x + t.pos.x) / 2, cy: (ey + ty) / 2, ax: 0.5, ay: 0.5 }, frames);
+  }
+
+  _updateHuntCam(hc) {
+    hc.frames++;
+    const e = hc.eagle, live = e.alive && e.hunting;
+    const t = (live && e.target && e.target.alive) ? e.target : null;
+    if (t) { hc.target = t; hc.quiet = 0; } else hc.quiet++;
+    const over = !live || hc.quiet > 90 || hc.frames > 60 * 25;
+    if (over && hc.frames > 90) {
+      // Back to where the view was (or to the animal it was following).
+      this._huntCam = null;
+      const b = hc.back, f = (b.follow && this._selected && this._selected.alive) ? this._selected : null;
+      this._follow = !!f;
+      this.cameraTo(f ? { zoom: b.zoom, cx: f.pos.x, cy: this._groundPaintY(f.pos.x, f.pos.y), ax: 0.5, ay: 0.5 }
+                      : { zoom: b.zoom, cx: b.cx, cy: b.cy, ax: 0.5, ay: 0.5 }, 60);
+      return;
+    }
+    const c = this.camera, tt = hc.target;
+    if (!c.tween && tt && tt.pos) {
+      const mx = (e.pos.x + tt.pos.x) / 2;
+      const my = (this._groundPaintY(e.pos.x, e.pos.y) + this._groundPaintY(tt.pos.x, tt.pos.y)) / 2;
+      c.cx += (mx - c.cx) * 0.08; c.cy += (my - c.cy) * 0.08; c.ax = c.ay = 0.5;
+      this._updateViewTransform();
+    }
+  }
+
+  // Every real frame (from render, before the camera's own ease): the drag, the hunt, the follow.
+  _updateUserCamera() {
+    if (!this.currentLevel || !this.currentLevel.userCamera || !this.camera) return;
+    if (this._selected && !this._selected.alive) this.clearSelection();
+    if (!this.userCameraOn()) { this._panCand = null; return; }
+    this._updatePan();
+    if (this._huntCam) { this._updateHuntCam(this._huntCam); return; }
+    const e = this._selected, c = this.camera;
+    if (this._follow && e && !c.tween && c.zoom > 1.0001 && !(this._panCand && this._panCand.active)) {
+      const ty = this._groundPaintY(e.pos.x, e.pos.y);
+      c.cx += (e.pos.x - c.cx) * 0.1; c.cy += (ty - c.cy) * 0.1; c.ax = c.ay = 0.5;
+      this._updateViewTransform();
+    }
+  }
+
+  // The selected animal's ring and its label (who it is and how it is doing: its describe()).
+  // Drawn in the world pass; the label grows less than the land does as the view closes in.
+  _renderSelection() {
+    const e = this._selected;
+    if (!e || !e.alive || !e.pos || !this.currentLevel || !this.currentLevel.userCamera) return;
+    const k = Math.pow(Math.max(1, this.camera ? this.camera.zoom : 1), -0.75);
+    const x = e.pos.x, y = this._groundPaintY(e.pos.x, e.pos.y), sz = e.size || 12;
+    push();
+    noFill();
+    stroke(255, 236, 150, 170 + 60 * Math.sin(frameCount * 0.1));
+    strokeWeight(1.5 * k);
+    ellipse(x, y + 1, sz * 1.6 + 16 * k, sz * 0.8 + 8 * k);
+    const lines = [].concat(e.describe ? e.describe(this) : []).filter(Boolean);
+    if (lines.length) {
+      textAlign(CENTER, BOTTOM);
+      textSize(6.5 * k);
+      let w = 0;
+      for (const l of lines) w = Math.max(w, textWidth(l));
+      const lh = 8.4 * k, h = lh * lines.length + 4 * k, top = y - sz - 12 * k - h;
+      noStroke();
+      fill(16, 22, 28, 215);
+      rect(x - w / 2 - 5 * k, top, w + 10 * k, h, 3 * k);
+      for (let i = 0; i < lines.length; i++) {
+        if (i === 0) fill(255, 240, 170); else fill(226, 226, 214);
+        text(lines[i], x, top + lh * (i + 1) + 1 * k);
+      }
+    }
+    pop();
   }
 
   // Whether `type` could go at (x, y) right now: the ground, biome, forest and spacing rules
@@ -2053,7 +2305,12 @@ class Game {
     if (this._incomeAccumulator >= 64) {
       this._incomeAccumulator -= 64;
       let income;
-      if (this.currentLevel && this.currentLevel.endless) {
+      const _eco = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.ecosystemIncome) || null;
+      if (_eco) {
+        // Small-herd levels: a steady trickle for the families and for every other animal
+        // on the land (see ecosystemIncomePerSec).
+        income = this.ecosystemIncomePerSec(_eco) * (64 / 60);
+      } else if (this.currentLevel && this.currentLevel.endless) {
         // Endless: a healthy, EVEN ecosystem pays (avg pop above floor × balance). See
         // ecosystemStats(). The tick is ~1.07s (64 frames), so scale the per-second rate.
         income = this.ecosystemStats().mauriPerSec * (64 / 60);
@@ -2074,7 +2331,8 @@ class Game {
     this.checkGoals();
     // Endless skips the one-time total-moa milestone bonuses; its economy is the steady
     // ecosystem stream above, not lump-sum growth rewards.
-    if (!(this.currentLevel && this.currentLevel.endless)) {
+    if (!(this.currentLevel && this.currentLevel.endless) &&
+        !(typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.noPopulationMilestones)) {
       this.mauri.checkMilestones(this._cachedMoaCount, this.simulation, this);
     }
 
@@ -2130,6 +2388,7 @@ class Game {
     // eagle egg is still incubating.
     if (this.state === GAME_STATE.PLAYING && !(this.currentLevel && this.currentLevel.endless) &&
         typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.emergentEagles &&
+        !LEVEL_MECHANICS.eagleReturns &&   // (a new bird takes the empty territory: _seasonalArrivals)
         this.simulation.countAliveEagles() === 0) {
       let eagleEggs = 0;
       const eggs = this.simulation.eggs;
@@ -2400,6 +2659,116 @@ class Game {
   // skipped gracefully rather than leaving a dead goal or spawning nothing.
   _speciesUsable(key) {
     return (typeof REGISTRY !== 'undefined') && !!REGISTRY.getSpecies(key);
+  }
+
+  // mechanics.ecosystemIncome { base, perAnimal, perFocusAnimal }: mauri a second on a level of
+  // small herds. `base` while any focus animal lives, `perFocusAnimal` for each of them, and
+  // `perAnimal` for every other moa and bird on the land (eagles never count). After the
+  // Stories' free play: the families, plus a little for every bird.
+  ecosystemIncomePerSec(cfg) {
+    const sim = this.simulation;
+    if (!sim || !cfg) return 0;
+    const focus = (this.chapters && this.chapters.focus) || this.freeplayFocus || [];
+    const keys = [...((this.activeSpecies && this.activeSpecies.moa) || []),
+                  ...((this.activeSpecies && this.activeSpecies.other) || [])];
+    let focusN = 0, otherN = 0;
+    for (const k of keys) {
+      const c = sim.getSpeciesCount(k);
+      if (focus.includes(k)) focusN += c; else otherN += c;
+    }
+    return (focusN > 0 ? (cfg.base ?? 0.3) : 0) + focusN * (cfg.perFocusAnimal ?? 0.06) + otherN * (cfg.perAnimal ?? 0.04);
+  }
+
+  // Newcomers at a season's turn, in place of population floors (both opt-in):
+  //   mechanics.rescueImmigration { species: { below, count, afterSeasons = 2 } }: a species that
+  //     has stood below `below` for `afterSeasons` turns is joined by `count` from over the pass.
+  //   mechanics.eagleReturns { afterSeasons = 2 }: with no eagle left (and none in the egg), a
+  //     new bird takes the empty territory after that many turns, and losing the last one is
+  //     not a loss.
+  // Each fires SPECIES_ARRIVED so a level can say so.
+  _seasonalArrivals() {
+    const M = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS) || null;
+    const sim = this.simulation;
+    if (!M || !sim || !(M.rescueImmigration || M.eagleReturns || M.dispersal)) return;
+    const low = this._lowSeasons || (this._lowSeasons = {});
+    const arrived = (speciesKey, count) => {
+      if (this.tutorial) this.tutorial.fireEvent(TUTORIAL_EVENTS.SPECIES_ARRIVED, { speciesKey, count });
+    };
+    const R = M.rescueImmigration;
+    if (R) for (const key in R) {
+      const r = R[key];
+      if (!this._speciesUsable(key)) continue;
+      // (Only a species that has lived here: one a level brings in later isn't "low" before then.)
+      const seen = this._seenSpecies || (this._seenSpecies = {});
+      const count = sim.getSpeciesCount(key);
+      if (count > 0) seen[key] = true;
+      if (!seen[key]) continue;
+      if (count >= (r.below ?? 2)) { low[key] = 0; continue; }
+      low[key] = (low[key] || 0) + 1;
+      if (low[key] < (r.afterSeasons ?? 2)) continue;
+      low[key] = 0;
+      this._spawnFreeplaySpecies(key, r.count ?? 2);
+      sim._invalidateCache();
+      arrived(key, r.count ?? 2);
+    }
+    this._seasonalDepartures(M, sim);
+    const E = M.eagleReturns;
+    if (E && sim.countAliveEagles() === 0 &&
+        !sim.eggs.some(e => e.alive && !e.hatched && e.offspringType === 'eagle')) {
+      low._eagle = (low._eagle || 0) + 1;
+      if (low._eagle >= (E.afterSeasons ?? 2)) {
+        low._eagle = 0;
+        sim.spawnEagle();
+        arrived('haasts_eagle', 1);
+      }
+    } else if (E) low._eagle = 0;
+  }
+
+  // mechanics.dispersal { species: { above, maxPerYear = 2, season = 'spring' } }: the other half
+  // of arrivals. At the turn into `season`, while a moa species stands above `above`, its oldest
+  // grown young (hatched here, of age, not named by the level) set off for the nearest walkable
+  // edge of the land and are gone (Moa.beginLeaving), so a tended herd stays small and what the
+  // player raised goes on elsewhere. Fires SPECIES_LEFT as each sets off.
+  _seasonalDepartures(M, sim) {
+    const D = M.dispersal;
+    if (!D || !this.terrain) return;
+    const year = Math.floor((sim.seasonTurns || 0) / 4);
+    const sent = this._sentByYear || (this._sentByYear = {});
+    for (const key in D) {
+      const d = D[key];
+      if (this.seasonManager.currentKey !== (d.season || 'spring')) continue;
+      const herd = sim.moas.filter(m => m.alive && m.speciesKey === key && !m._leaving);
+      let over = herd.length - (d.above ?? 10);
+      const young = herd.filter(m => !m.castName && !m.isPregnant && m._bornTurn != null && m._calYears() != null &&
+                                     m._calYears() >= ((m._calendar() || {}).maturityYears || 1))
+                        .sort((a, b) => a._bornTurn - b._bornTurn);
+      const tag = key + ':' + year;
+      while (over > 0 && young.length && (sent[tag] || 0) < (d.maxPerYear ?? 2)) {
+        const m = young.shift();
+        const edge = this._nearestEdge(m.pos.x, m.pos.y);
+        if (!edge) break;
+        m.beginLeaving(edge.x, edge.y);
+        sent[tag] = (sent[tag] || 0) + 1;
+        over--;
+        if (this.tutorial) this.tutorial.fireEvent(TUTORIAL_EVENTS.SPECIES_LEFT, { moa: m, speciesKey: key });
+      }
+    }
+  }
+
+  // The nearest walkable point just inside the edge of the land (for a bird walking off it).
+  _nearestEdge(x, y) {
+    const t = this.terrain, w = t.mapWidth, h = t.mapHeight, inset = 12, n = 28;
+    let best = null, bestD = Infinity;
+    const tryAt = (px, py) => {
+      if (!t.isWalkable(px, py)) return;
+      const d = (px - x) * (px - x) + (py - y) * (py - y);
+      if (d < bestD) { bestD = d; best = { x: px, y: py }; }
+    };
+    for (let i = 0; i <= n; i++) {
+      const fx = inset + (w - 2 * inset) * i / n, fy = inset + (h - 2 * inset) * i / n;
+      tryAt(fx, inset); tryAt(fx, h - inset); tryAt(inset, fy); tryAt(w - inset, fy);
+    }
+    return best;
   }
 
   // Spawn n of a species, routing moa vs other-entity (flighted bird) correctly.
@@ -3697,6 +4066,7 @@ class Game {
     this.addNotification(`Season changed to ${season.name} ${season.icon}`, 'info');
     if (audioManager) audioManager.playSeasonChange(seasonKey);
     if (this.simulation) this.simulation.seasonTurns = (this.simulation.seasonTurns || 0) + 1;
+    this._seasonalArrivals();
 
     // Module levels: the story moves into the new season (its goals, moves and prompts).
     if (this.module) this.module.onSeasonChange(seasonKey);
@@ -3949,6 +4319,7 @@ class Game {
     hc.heldFrames += dt;
     if (hc.heldFrames >= 60) {   // ~1 second
       this._holdCandidate = null;
+      if (this._panCand) this._panCand.held = true;   // (not a tap: see handleRelease)
       if (hc.action === 'sprout') { this._sprout(hc.p); return; }
       this._beginMove(hc.p);
       // Still held: dragging on from here and letting go sets it down there (handleRelease).
@@ -4007,7 +4378,10 @@ class Game {
     const tool = this._toolDrag, lift = this._moveDrag;
     this._toolDrag = null;
     this._moveDrag = null;
+    const pc = this._panCand;   // (a userCamera level's press on the land: a pan, or a tap)
+    this._panCand = null;
     if (this.state !== GAME_STATE.PLAYING && this.state !== GAME_STATE.PAUSED) return;
+    if (pc && pc.active) return;   // the end of a pan: nothing was tapped or dropped
     const dropsHere = (d) => Math.hypot(mx - d.x0, my - d.y0) > DRAG_SLOP_PX &&
                              this.isInGameArea(mx, my) && !this._pointerOverChrome(mx, my);
     if (tool && this.selectedPlaceable === tool.type && dropsHere(tool)) {
@@ -4016,6 +4390,9 @@ class Game {
     } else if (lift && this.movingPlaceable === lift.p && dropsHere(lift)) {
       const { x, y } = this._pointerWorld(mx, my);
       this.tryDropMove(x, y);
+    } else if (pc && !pc.held && !this.movingPlaceable && !this.selectedPlaceable &&
+               Math.hypot(mx - pc.x0, my - pc.y0) <= 14 && this.userCameraOn()) {
+      this._tapAt(pc);
     }
   }
 
@@ -4390,6 +4767,7 @@ class Game {
       return;
     }
 
+    this._updateUserCamera();   // the player's drag, follow and hunt view (userCamera levels)
     this._updateCamera();   // advance any camera ease (real frames, so it runs while paused)
     if (!CONFIG.fullscreen) this.ui.renderPanels();
 
@@ -4475,6 +4853,7 @@ class Game {
     if (typeof GLBatch !== 'undefined' && GLBatch.enabled && GLBatch._open) GLBatch.composite(drawingContext);
     if (this.module) this.module.renderOver();   // a module's markers, over the birds
     this._renderInspect();
+    this._renderSelection();
     this.mauri.renderFloatingTexts();
     if (_castAlpha < 1) drawingContext.globalAlpha = 1;
 
@@ -6184,10 +6563,17 @@ class Game {
         return;
       }
 
+      // A userCamera level: this press may turn into a drag (a pan, when zoomed in) or stay a
+      // tap (on an animal: select it; else on a plant: rustle it). Which is decided on release
+      // (handleRelease, _tapAt), so a drag that starts on a plant doesn't lure the moa.
+      const pc = this.userCameraOn()
+        ? (this._panCand = { x0: mx, y0: my, lx: mx, ly: my, tx, ty, active: false, held: false, plantTap: false })
+        : null;
+
       // eagleTelegraph (a chapter level's rule): a tap on an eagle says how it's doing for a few
       // seconds (HaastsEagle.describe, drawn by _renderInspect), so the player can read whether
-      // a hunt is coming.
-      if (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.eagleTelegraph && sim && sim.eagleGrid) {
+      // a hunt is coming. (On a userCamera level the tap selects it instead, with the same words.)
+      if (!pc && typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.eagleTelegraph && sim && sim.eagleGrid) {
         const e = sim.eagleGrid.getClosest(tx, ty, 26, (b) => b.alive);
         if (e) { this._inspect = { e, until: millis() + 3500 }; return; }
       }
@@ -6216,7 +6602,7 @@ class Game {
       const underStorm = !!(sim && sim.stormAt(tx, ty)) &&
         !(typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.lureUnderStorm);
       if (!sproutPatch && !wild && !justPlaced && !(held && held.type === 'Storm') &&
-          !underStorm) this._tapPlant(tx, ty);
+          !underStorm) { if (pc) pc.plantTap = true; else this._tapPlant(tx, ty); }
     }
   }
 
@@ -6272,6 +6658,12 @@ class Game {
   }
   
   handleKey(key) {
+    // The player's camera (userCamera levels): + and - step the zoom, 0 shows the whole land.
+    if (this.userCameraOn()) {
+      if (key === '+' || key === '=') { this.zoomStep(1); return; }
+      if (key === '-' || key === '_') { this.zoomStep(-1); return; }
+      if (key === '0') { this._huntCam = null; this.cameraTo({ zoom: 1 }, 30); return; }
+    }
 
     // The pause card is up: Esc / Space / P / Enter close it (back to play, or to the tip that
     // paused the game) rather than reaching the tip or the world behind it.
@@ -6869,4 +7261,6 @@ function mouseWheel(e) {
     game.encyclopedia.handleWheel(e.delta);
     return false;
   }
+  // The player's camera: the wheel zooms about the pointer (userCamera levels).
+  if (game && game.zoomWheel && game.zoomWheel(e.delta, mouseX / s, mouseY / s)) return false;
 }

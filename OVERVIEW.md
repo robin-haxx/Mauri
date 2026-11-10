@@ -247,8 +247,11 @@ picking up future tasks. The other docs:
   family (`LEVEL_REGISTRY.registerFamily`). The level select is built from `MENU_SECTIONS`
   (`mauri_sketch.js`: Stories, Chapters, Endless, Classic; placeholder labels, renamable in one
   place) and each level's `section`; the Chapters section draws a card per family with a button
-  per sketch. **`levels/_template_chapters.js`** is the copyable starting point (debug mode
-  only). What the lessons teach and how they were verified: `CHAPTERS_MODULES.md`; every key
+  per sketch. **`levels/chapters_endless.js`** is the endless game on the same rules ("The
+  Tops", in the Endless section beside the first Endless level): one land, the same animals
+  living on year after year, small herds on breeding calendars, arrivals and departures over
+  the pass in place of floors. **`levels/_template_chapters.js`** is the copyable starting
+  point (debug mode only). What the lessons teach and how they were verified: `CHAPTERS_MODULES.md`; every key
   and flag: `MODULE_SCRIPTING.md`. The stand-in batch results live in `tests/chapters/`.
 - **`levels/tutorial_*.js`**; each level's tips. The modules share a kit
   (`tutorial_module_kit.js`: dialogue scenes, "do this" banners) and Te Whē's opening and
@@ -341,6 +344,16 @@ advances phases by `playTime`, rewards growth objectives as they're met, marks s
 objectives complete when a phase ends, fails the run on a phase's `fail`, and **wins**
 when you reach the end of the final phase. `game.goals` is rebuilt per phase so the UI
 just renders the current objectives.
+
+### 4.3a The player's camera
+`Game.camera` is a render-only zoom and focus over the base framing; the Stories and a
+chapter's moments ease it with `cameraTo`. A level with `userCamera: true` also hands it to the
+player (`mauri_sketch.js`, "THE PLAYER'S CAMERA"): `zoomStep` (the HUD's zoom pair, + and -),
+`zoomWheel`, a drag to pan (`_updatePan`), a tap on an animal to select and follow it
+(`selectAnimal`; its label comes from the animal's `describe()`), and, with
+`mechanics.huntCamera`, a view that eases to a hunt and back (`_onHuntStart`). It never touches
+the simulation and costs a few numbers a frame. A press on the land is decided on release on
+these levels (a pan, a tap on an animal, or a tap on a plant), so a drag never lures the moa.
 
 ### 4.4 The Mauri economy
 `MauriManager` tracks the currency: earned from moa eating, eggs laid/hatched,

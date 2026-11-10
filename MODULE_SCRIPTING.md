@@ -112,6 +112,7 @@ The runner only runs while the game is playing. Moments and pausing tips hold it
 | `guide` | Field Guide entry ids the module rests on (`mauri_encyclopedia.js`). The `guide` action opens one. |
 | `sketch` | `{ of, label, dial }`: this level is one variant (one setting of the emergence dial) of a module family (§18). |
 | `nextLevel` | A level id: the win card's "Next module" button. |
+| `userCamera` | `true`: the player's camera on this level. Zoom buttons (and the wheel, and + / -), a drag to pan when zoomed in, a tap on an animal to ring it, read who it is and follow it. With `mechanics.huntCamera` the view also eases to a hunt and back (§19). |
 
 The game's own loss (every moa gone) still applies.
 
@@ -218,6 +219,7 @@ A condition is an object whose keys must **all** hold, or `true`, or a function
 | `laid`, `hatched`, `killed`, `hunts` | eggs, chicks (moa and flighted birds), eagle catches (moa and flighted birds), eagle hunts started | `:species` (`hatched:upland_moa`, `killed:kea`) |
 | `placed`, `moved` | the player's placements and moves | `:type` (`placed:shelter`) |
 | `expired`, `sprouted` | placed items that wore out; pātōtara the player sprouted | `:type` (`expired:Storm`) |
+| `arrived`, `left`, `gaveUp` | newcomers over the pass; grown young gone over it; times an eagle gave a hidden species up | `:species` (`left:upland_moa`) |
 | `raids`, `raidsWon` | kea nest raids | |
 
 **Scope.** `gained`, `placed` and `after` count from the chapter's opening. Inside a banner's
@@ -290,7 +292,9 @@ anything else uses Te Whē's picture and the chime. `extras` can override any ti
 (`title`, `pauseGame: false`, `guidePosition`, `voices`, ...) and add `lit: [...]`.
 
 **Text tokens:** `{species}` (the event's species, or the one that died out), `{chapter}`
-(the chapter's title), `{year}` (the level's year).
+(the chapter's title), `{year}` (the level's year), and `{$name}`: a value a function action
+left in `x.runner.vars.name` (a year's tally, a bird's name). Goal names take the same tokens,
+so a goal can count toward a target that moves (`name: "The clan: {$clan} of {$clanTarget}"`).
 
 **`lit`** takes `$role`s, cast names, species (all of them), `'focus'` (every focus bird),
 `'nests'`, and placeable types (every one placed).
@@ -342,6 +346,9 @@ after the last line.
 | `plant_sprouted` | `type` (the player sprouted a pātōtara) |
 | `bird_hatched` | `$bird`, `$egg` (a flighted bird's, or a kākāpō's, egg hatched) |
 | `bird_killed` | `$bird`, `$eagle` (an eagle took a flighted bird) |
+| `species_arrived` | `species`, `count` (newcomers came in over the pass: `rescueImmigration`, `eagleReturns`) |
+| `species_left` | `$moa`, `species` (a grown young bird has set off over the pass: `dispersal`) |
+| `eagle_gave_up` | `$eagle`, `species` (what it went for), `from` (its prey kept getting under cover: `coverSendsEagleAway`) |
 | `season_change` | `seasonKey` |
 | `chapter_start` | `chapter` |
 | `goal_met`, `goal_failed` | `goal` |
@@ -531,7 +538,7 @@ preinstalled).
 | Command | What |
 |---|---|
 | `node tools/validate.js` | The level-format checks on every level and the engine's checks on every chapter level, without playing. `--smoke` also starts each level and runs it 15 s, reporting any page or console error. `--only <id>` for one level. Exits non-zero on anything but a warning. |
-| `node tools/batch.js --level <id or family> --sketch <label> --seeds 1..10` | Research runs. Each seed plays headless until the level ends, `--years n` have passed, or `--seconds n` (300) of play. It writes `<name>.csv` (populations every 10 s, the story log in the `event` column) and `<name>.beats.json` (the log, each beat natural or forced, the result) into `--out` (`tests/`), and prints a line per run: the result, each beat, who the eagle took, any cast lost, and a replay hash (the same seed prints the same hash on the same machine and browser; across machines a run starts the same and then drifts). `--player cover` stands in for a player who puts a Storm over any cast member an eagle is hunting; `--player basic` also sprouts bare pātōtara and sets wharariki by the family in winter. `--trace <cast>` prints that bird once a second: state, hunger, target plant and its distance, the stall counter. |
+| `node tools/batch.js --level <id or family> --sketch <label> --seeds 1..10` | Research runs. Each seed plays headless until the level ends, `--years n` have passed, or `--seconds n` (300) of play. It writes `<name>.csv` (populations every 10 s, the story log in the `event` column) and `<name>.beats.json` (the log, each beat natural or forced, the result) into `--out` (`tests/`), and prints a line per run: the result, each beat, who the eagle took, any cast lost, and a replay hash (the same seed prints the same hash on the same machine and browser; across machines a run starts the same and then drifts). `--player cover` stands in for a player who puts a Storm over any cast member an eagle is hunting; `--player basic` also sprouts bare pātōtara and sets wharariki by the family in winter. Six more stand-ins **pay** for what they do and tend every animal of a focus species, to show how different players fare: `tend` (covers 2 s into a wind-up, feeds the hungry), `slow` (5 s), `late` (8 s), `storms` (covers, never feeds), `feeder` (feeds, never covers), `none`. With these the line also gives the focus animals left, the year reached, what was spent and the mauri in hand. `--trace <cast>` prints that bird once a second: state, hunger, target plant and its distance, the stall counter. |
 
 **URL parameters** (`index.html?...`): `level=<id or family>`, `sketch=<label>`, `seed=<n>`
 (the land and the opening stage are the same everywhere; the whole run replays exactly only on
@@ -648,7 +655,7 @@ per-level override of a placeable. The ones added for the modules, and the file 
 | `coverCalmsMoa: true` | A moa fully under cover holds still for an eagle that isn't on it, instead of bolting into the open. | `mauri_moa.js` |
 | `lureUnderStorm: true` | A tap on a plant under a storm lures moa as usual. | `mauri_sketch.js` |
 | `placeableQueryRadius: 100` | How far a moa notices placed items (80 otherwise; storms are wide). | `mauri_moa.js` |
-| `eagleTelegraph: { graceSec, warnBelow }` | The visible wind-up. Every fresh hunt opens with `graceSec` seconds in which the eagle chases slowly and can't strike, its "!" showing. Within `warnBelow` of its hunt threshold its hunger bar pulses amber. A tap on an eagle says in words how hungry it is and what it is doing. | `mauri_eagle.js`, `mauri_sketch.js` |
+| `eagleTelegraph: { graceSec, warnBelow }` | The visible wind-up. Every fresh hunt opens with `graceSec` seconds in which the eagle chases slowly and can't strike, its "!" showing. The eagle commits to the bird it picked while it can see it and it is in range; any change of target is a fresh hunt with the full window, so no bird is struck without a wind-up on it. Within `warnBelow` of its hunt threshold its hunger bar pulses amber. A tap on an eagle says in words how hungry it is and what it is doing. | `mauri_eagle.js`, `mauri_sketch.js` |
 | `eagleSurplusPreference: true`, with `eaglePreyPopThreshold` and `eagleScarcePreyPenalty` | To a hunting eagle a species with numbers to spare reads as nearer, and one at or under the threshold as further, so a bird kept from one moa turns to the herd. | `mauri_eagle.js` |
 | `keaRaidsEggs: 'odds'`, with `keaRaid: { baseSuccess, moaPenalty, minSuccess, moaRadius }` | A kea that reaches an egg at a nest rolls the raid odds, which fall with every moa within `moaRadius`; a failed raid shoos it off. Both outcomes fire `nest_raid`. | `mauri_kea.js`, `mauri_simulation.js` |
 | `keaBerryLureRadius: 400` | Sprouted pātōtara draws kea from that far. | `mauri_kea.js` |
@@ -657,3 +664,14 @@ per-level override of a placeable. The ones added for the modules, and the file 
 | `eagleHuntsFlyers: true`, with `eagleFlyerHungerGate`, `eagleFlyerPreyPenalty`, `eagleFlyerFeed` | A hungry eagle takes flighted birds too (an older flag; `bird_killed` now reports it). | `mauri_eagle.js` |
 | `hungerRateMult`, `juvenileHungerMult` | Scale how fast every moa, or a chick, gets hungry. A small land starves a family at the open rate. | `mauri_moa.js` |
 | `populationFloors: { species: n }` | A species the eagle can't take, and hunger can't kill, below `n`: the herd a lesson needs. | `mauri_simulation.js` |
+| `coverSendsEagleAway: { after = 2, sec = 45 }` | Each time the bird an eagle is on gets under cover counts as a foil. After `after` of them in one hunger it gives that species up for `sec` seconds and moves its hunt to other prey, a plentiful species reading as nearer. Fires `eagle_gave_up`. | `mauri_eagle.js` |
+| `moaCalendar: true` (with `seasonalBirdBreeding: 'calendar'`) | Every moa keeps its species' breeding calendar (the upland, little bush, stout-legged and heavy-footed moa have opt-in ones): one clutch in its season, years between clutches, years to grow up. A hatchling is sized by its year of birth, and counts as a juvenile for its whole first year. Asked of both partners, so a hen who has laid can't be courted again that year. | `mauri_moa.js`, `mauri_species_data.js` |
+| `familyLinks: true`, `juvenileFollow: { within, untilYears, pull }` | A chick knows its mother (an egg a level set down takes the nearest hen), keeps within `within` of her for `untilYears`, and the two stand close. | `mauri_simulation.js`, `mauri_moa.js` |
+| `focalSpecies: [...]`, `focalWildFoodMult` | Wild browse gives the focal species only this share of its food. What the player grows for them, and pātōtara the player has sprouted, feed in full, so tended food decides how well they breed and winter. | `mauri_moa.js` |
+| `rescueImmigration: { species: { below, count, afterSeasons } }` | In place of floors: a species that has lived here and stood below `below` for `afterSeasons` season turns is joined by `count` from over the pass. Fires `species_arrived`. | `mauri_sketch.js` (`Game._seasonalArrivals`) |
+| `eagleReturns: { afterSeasons }` | With no eagle left, a new one takes the territory after that many turns, and losing the last one is not a loss. Fires `species_arrived`. | `mauri_sketch.js` |
+| `dispersal: { species: { above, maxPerYear, season } }` | While a moa species stands above `above` at the turn into `season`, its oldest grown young (hatched here, not named by the level) walk to the edge of the land and are gone. Fires `species_left`. | `mauri_sketch.js` (`Game._seasonalDepartures`), `mauri_moa.js` |
+| `birdMaxPopulation: { kea: 6, ... }` | A cap per bird species for a level of small flocks; eggs in the nest count toward it. | `mauri_kereru.js` |
+| `ecosystemIncome: { base, perFocusAnimal, perAnimal }` | Mauri a second on a level of small herds: `base` while any focus animal lives, then so much for each focus animal and for every other moa and bird. Shown on the mauri dial. `noPopulationMilestones: true` switches off the older lump sums. | `mauri_sketch.js` (`Game.ecosystemIncomePerSec`) |
+| `huntCamera: { focusOnly }` (with the level key `userCamera`) | When the player is zoomed in and an eagle starts on an animal off screen (a focus animal, with `focusOnly`), the view eases to frame hunter and hunted, and back when it is over. Not while the player is dragging or holding an item. | `mauri_sketch.js` (`Game._onHuntStart`) |
+

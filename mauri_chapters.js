@@ -52,7 +52,10 @@ const CHAPTER_EVENTS = {
   placeable_expired: { count: 'expired' },          // a placed item wore out: `type` (expired:Storm)
   plant_sprouted:  { count: 'sprouted' },           // a pātōtara sprouted by hand: `sprouted`, `type`
   bird_hatched:    { subject: 'bird', count: 'hatched' },  // a flighted bird's egg hatched: `$bird`, `$egg`
-  bird_killed:     { subject: 'bird', count: 'killed' }    // an eagle took a flighted bird: `$bird`, `$eagle` (counts with the moa under killed:<species>)
+  bird_killed:     { subject: 'bird', count: 'killed' },   // an eagle took a flighted bird: `$bird`, `$eagle` (counts with the moa under killed:<species>)
+  species_arrived: { count: 'arrived' },                   // newcomers came in (rescueImmigration, eagleReturns): `species`, `count`
+  species_left:    { subject: 'moa', count: 'left' },      // a grown young bird set off over the pass (dispersal): `$moa`, `species`
+  eagle_gave_up:   { subject: 'eagle', count: 'gaveUp' }   // hidden prey sent the eagle to other prey (coverSendsEagleAway): `$eagle`, `species` (what it went for), `from`
 };
 
 // Conditions that read the world as it is right now. A beat whose `until` is made only of these
@@ -222,6 +225,7 @@ class ChapterRunner {
     this.counters = {};            // event counts for the run (see _count)
     this.focus = [];               // this chapter's focus species
     this.castEnts = {};            // cast name -> the adopted entity (null once lost)
+    this.vars = {};                // values function actions leave for the words ({$name} in text)
     this.cueData = {};             // cue id -> the event it answers (for roles and banner scopes)
     this._chain = {};              // a line cue -> the banner cue its last line leads to
     this.seasonTurns = 0;          // season changes since the level began
@@ -821,7 +825,9 @@ class ChapterRunner {
     return text
       .replace(/\{species\}/g, () => this._name(this.subjectSpecies(ev) || this._extinctKey))
       .replace(/\{chapter\}/g, () => (this.cur ? this.cur.title : ''))
-      .replace(/\{year\}/g, () => String(this.yearNow()));
+      .replace(/\{year\}/g, () => String(this.yearNow()))
+      // {$name}: a value a function action left in runner.vars (a year's tally, a name).
+      .replace(/\{\$(\w+)\}/g, (_, k) => (this.vars[k] != null ? String(this.vars[k]) : ''));
   }
 
   // The tutorial passes every event here first (TutorialManager.fireEvent): counted at once (a
@@ -1019,7 +1025,7 @@ class ChapterRunner {
 
   // The goal's words with {n} (its live value) and {target} filled.
   _nameGoal(goal) {
-    const p = goal._g.progress, words = goal._g.def.name || goal.id;
+    const p = goal._g.progress, words = this.fill(goal._g.def.name || goal.id, null);
     if (!p) { goal.name = words; return; }
     let n;
     if (p.kind === 'count') n = this.countOf(p.what);

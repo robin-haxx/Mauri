@@ -453,9 +453,11 @@ modules share one engine and the modules can grow into it.
 - `loop` on the chapter list (endless: never wins) and the mast goal as a branching goal.
 - Then `_beginFreeplayYear`'s schedule-reading shrinks to those systems.
 
-### Phase 6: new modules **[later]**
-Module 2 (YEARS_PLAN's planned food-security and moa–eagle module) and on, built as chapters.
-Whatever they need that the toolboxes lack is the next set of tools.
+### Phase 6: new modules **[planned 2026-11-13, not built]**
+The owner's outline for the journey replaces the earlier idea of a single Module 2. It adds
+five lessons (tiles 3 to 7), three free plays (4f, 6f and 7f) and a campaign record that
+carries the family and the herds from one level to the next. The plan, with its build order,
+the engine work it needs and the decisions still open, is in `CAMPAIGN_PLAN.md`.
 
 ### Phase 7: tooling **[later]**
 - Season-aligned jumps, and a snapshot at each chapter start to restart from.

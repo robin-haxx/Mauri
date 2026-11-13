@@ -41,6 +41,8 @@ const TUTORIAL_EVENTS = {
   PLANT_TAPPED: 'plant_tapped',       // the player tapped a plant to rustle it (lures hungry moa), data: { plant, type }
   ANIMAL_SELECTED: 'animal_selected', // the player tapped an animal to read and follow it (userCamera levels), data: { animal, speciesKey }
   SPECIES_LEFT: 'species_left',       // a grown young bird has set off over the pass (mechanics.dispersal), data: { moa, speciesKey }
+  MOA_CROWDED: 'moa_crowded',         // a moa's forest meal was cut short by other moa feeding beside it (mechanics.forestCompetition + crowdingSign), data: { moa, speciesKey, others }
+  FOREST_STRIPPED: 'forest_stripped', // a moa's forest meal was cut short by a flock feeding overhead (mechanics.flockStripsFloor), data: { moa, speciesKey, birds }
   EAGLE_GAVE_UP: 'eagle_gave_up'      // its prey kept getting under cover, so it went for other prey (mechanics.coverSendsEagleAway), data: { eagle, speciesKey (what it went for), from }
 };
 

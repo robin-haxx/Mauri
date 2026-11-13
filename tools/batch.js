@@ -24,6 +24,9 @@
 //   --player storms   covers (as tend) and never feeds
 //   --player feeder   feeds (as tend) and never covers
 //   --player none     never acts
+//   --player j:<kind> the journey's stand-ins (tools/standins.js), for levels/journey_*.js
+//   --record <name>   start a journey level from a written record (CAMPAIGN.PRESETS: all_lived,
+//                     papa_lost, mama_lost, elders_lost, barely) or a base64 record
 //
 // Same seed, same run, on one machine and browser: the land and every roll come from p5's
 // seeded generator. On another machine the run starts the same and then drifts (most likely
@@ -55,7 +58,7 @@ function seedList(opt) {
   const tally = { runs: 0, beats: {}, results: {}, kills: {}, castLost: 0 };
   try {
     for (const seed of seedList(opt)) {
-      const q = `?render=2d&level=${encodeURIComponent(opt.level)}${opt.sketch ? '&sketch=' + encodeURIComponent(opt.sketch) : ''}&seed=${seed}&bench=1${years ? '&years=' + years : ''}`;
+      const q = `?render=2d&level=${encodeURIComponent(opt.level)}${opt.sketch ? '&sketch=' + encodeURIComponent(opt.sketch) : ''}&seed=${seed}&bench=1${years ? '&years=' + years : ''}${opt.record ? '&record=' + encodeURIComponent(opt.record) : ''}`;
       const { page, errors, close } = await openGame(port, q);
       // Stop the page's own loop at once and step the loading ourselves, so no real-time frame
       // reaches the simulation: with a seed, the run then replays exactly.
@@ -66,6 +69,18 @@ function seedList(opt) {
         return game.state === GAME_STATE.PLAYING;
       });
       if (!started) { console.log(`seed ${seed}: the level did not start (is "${opt.level}" a level or family id?)`); await close(); continue; }
+      // --player j:<kind>: the journey's stand-ins (tools/standins.js: tend, slow, late, none, storms,
+      // lance, sow, lategrove, hideall), who know lancewood, harakeke, the Forest Seed and speargrass.
+      if (/^j:/.test(opt.player || '')) {
+        await page.addScriptTag({ url: `http://localhost:${port}/tools/standins.js` });
+        const out = await page.evaluate(async ({ seconds, kind }) => STANDINS.run({ seconds, player: kind }), { seconds, kind: opt.player.slice(2) });
+        const c = out.cases;
+        console.log(`seed ${seed}: ${out.state} after ${out.sec}s${out.reason ? ` (${out.reason})` : ''} | year ${out.year}, ${out.chapter} | goals ${out.goals.length}, missed ${out.missed.join(',') || 'none'} | beats ${out.beats.join(' ') || '(none)'} | taught: ${c.taught.noHint}/${c.taught.met} no hint, ${c.taught.lost} lost; own: ${c.own.noHint}/${c.own.met} | cast lost: ${out.castLost.join(' ') || 'none'} | ${Object.entries(out.species).map(([k, v]) => k + ' ' + v).join(', ')} | ${out.mauri} mauri`);
+        if (out.record) fs.writeFileSync(path.join(outDir, `${opt.level}_seed${seed}.record.json`), JSON.stringify(out.record, null, 1));
+        tally.runs++; tally.results[out.state] = (tally.results[out.state] || 0) + 1;
+        await close();
+        continue;
+      }
       const run = await page.evaluate(async ({ maxFrames, player, trace }) => {
         const sim = game.simulation;
         let frames = 0, nextPlayer = 0;

@@ -1209,6 +1209,7 @@ class MauriManager {
 const USER_ZOOMS = [1, 1.5, 2.25, 3.2];
 
 const MENU_SECTIONS = [
+  { key: 'journey',  label: "The journey", style: 'journey' },   // the map of tiles (mauri_campaign.js)
   { key: 'stories',  label: "Stories",  style: 'modules' },
   { key: 'chapters', label: "Chapters", style: 'sketches' },
   { key: 'endless',  label: "Endless",  style: 'cards' },
@@ -4686,7 +4687,78 @@ class Game {
 
   // Is the current game year the booked mast year?
   _isMastYear() {
+    if (this._lessonMastYear(0)) return true;
     return this._mastYearTargetCycle >= 0 && this.cycle === this._mastYearTargetCycle;
+  }
+
+  // A lesson can set which years are mast years (mechanics.mastYears: [2], or every: 4 for
+  // years 4, 8, 12...), counted by the turn of the seasons so a held season does not move it.
+  // ahead: 1 asks about next year (the rimu carry green fruit the year before a mast).
+  _lessonMastYear(ahead = 0) {
+    const M = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS) || null;
+    const my = M && M.mastYears;
+    if (!my || !this.simulation) return false;
+    const year = Math.floor((this.simulation.seasonTurns || 0) / 4) + 1 + ahead;
+    return Array.isArray(my) ? my.includes(year) : (!!my.every && year % my.every === 0);
+  }
+
+  // The signs of the journey's rules, drawn in the world pass over the birds: a mark over a
+  // moa whose meal was cut short (by a crowd, or by a flock overhead), green fruit on the
+  // rimu the year before a mast, and a ring round a lone favoured patch that a second patch
+  // would make a nest. Each is switched on by the level's mechanics; none touches the sim.
+  // PLACEHOLDER ART: plain shapes, to be replaced by sprites.
+  _renderWorldSigns() {
+    const M = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS) || null;
+    const sim = this.simulation;
+    if (!M || !sim) return;
+    const k = Math.pow(Math.max(1, this.camera ? this.camera.zoom : 1), -0.75);
+    push();
+    if (M.crowdingSign || M.flockStripsFloor) {
+      const now = this.playTime;
+      for (const m of sim.moas) {
+        const s = m._shortMeal;
+        if (!m.alive || !s || now > s.until) continue;
+        const x = m.pos.x, y = this._groundPaintY(m.pos.x, m.pos.y) - (m.size || 12) - 7 * k;
+        const a = Math.min(1, (s.until - now) / 40);
+        noStroke();
+        fill(16, 22, 28, 200 * a);
+        ellipse(x, y, 11 * k, 11 * k);
+        // crowded: a bitten leaf (amber). stripped: an empty husk (grey-brown).
+        if (s.why === 'crowded') fill(255, 196, 90, 255 * a); else fill(196, 170, 140, 255 * a);
+        arc(x, y, 7.5 * k, 7.5 * k, 0.6, TWO_PI - 0.6, PIE);
+      }
+    }
+    if (M.greenFruitSign && this._lessonMastYear(1)) {
+      // (The rimu list is refreshed once a second; trees do not move.)
+      if (!this._rimuList || this.playTime - (this._rimuListAt || 0) > 60) {
+        this._rimuList = sim.plants.filter(p => p.alive && p.type === 'rimu' && !p.dormant && p.growth >= 0.5);
+        this._rimuListAt = this.playTime;
+      }
+      noStroke();
+      for (const p of this._rimuList) {
+        if (!p.alive) continue;
+        const x = p.pos.x, y = this._groundPaintY(p.pos.x, p.pos.y), s = (p.size || 10) * 0.32;
+        fill(20, 40, 24, 190);
+        ellipse(x - s, y - s * 2.1, 3.4 * k, 3.4 * k); ellipse(x + s * 0.9, y - s * 1.5, 3.4 * k, 3.4 * k); ellipse(x, y - s * 3, 3.4 * k, 3.4 * k);
+        fill(150, 232, 96);
+        ellipse(x - s, y - s * 2.1, 2.2 * k, 2.2 * k); ellipse(x + s * 0.9, y - s * 1.5, 2.2 * k, 2.2 * k); ellipse(x, y - s * 3, 2.2 * k, 2.2 * k);
+      }
+    }
+    if (M.nestFoundingSign && sim.moaNestingWatch) {
+      const r = sim._nestFoundRadius(), r2 = r * r;
+      const patches = sim._focusPlantPatches();
+      noFill();
+      for (const p of patches) {
+        if (patches.some(q => q !== p && (q.pos.x - p.pos.x) ** 2 + (q.pos.y - p.pos.y) ** 2 <= r2)) continue;
+        const x = p.pos.x, y = this._groundPaintY(p.pos.x, p.pos.y);
+        stroke(255, 236, 150, 120 + 50 * Math.sin(frameCount * 0.08));
+        strokeWeight(1.2 * k);
+        drawingContext.setLineDash([5 * k, 5 * k]);
+        ellipse(x, y, r * 2, r * 1.0 * 2 * 0.62);
+        drawingContext.setLineDash([]);
+      }
+    }
+    pop();
   }
 
   // ---- split-resolution ground tier ---------------------------------------
@@ -4854,6 +4926,7 @@ class Game {
     if (typeof GLBatch !== 'undefined' && GLBatch.enabled && GLBatch._open) GLBatch.composite(drawingContext);
     if (this.module) this.module.renderOver();   // a module's markers, over the birds
     this._renderInspect();
+    this._renderWorldSigns();
     this._renderSelection();
     this.mauri.renderFloatingTexts();
     if (_castAlpha < 1) drawingContext.globalAlpha = 1;
@@ -5000,6 +5073,10 @@ class Game {
       const nextItem = nextDef && nextDef.menu && nextDef.menu.focusItem;
       const buttons = [];
       if (nextDef && PROGRESS.isUnlocked(nextDef.id)) buttons.push({ label: "Next module", action: () => this._startLevel(nextDef.id) });
+      // A journey level offers its ways on (mauri_campaign.js): west or north after the five
+      // years, the free play after a lesson, the next tile.
+      const _journey = (typeof CAMPAIGN !== 'undefined' && L.journey) ? CAMPAIGN : null;
+      if (_journey) for (const w of _journey.waysOn(L)) buttons.push({ label: w.label, action: () => this._startLevel(w.id) });
       buttons.push({ label: "Back to Menu", action: () => this._returnToMenuFromEnd() });
       this._renderOverlay(...CONFIG.col_UI.slice(0,3), 150, {
         title: L.winTitle || (allGoalsMet ? "ECOSYSTEM THRIVING!" : "ECOSYSTEM BALANCED"),
@@ -5008,6 +5085,7 @@ class Game {
           { text: L.winText || this._endMessage(), color: [150, 220, 150], size: 18 },
           ...(this.chapters && L.claim ? [{ text: L.claim, color: [200, 240, 200], size: 15 }] : []),
           ...(this.chapters && this.chapters.unaidedLine() ? [{ text: this.chapters.unaidedLine(), color: [255, 240, 170], size: 15 }] : []),
+          ...(_journey ? _journey.cardLines(L, this.chapters).map(text => ({ text, color: [226, 226, 214], size: 14 })) : []),
           { text: goalsTally, color: [150, 220, 150], size: 14 },
           { text: `Final population: ${this._cachedMoaCount} moa`, color: [120, 180, 120], size: 14 },
           { text: `Total mauri earned: ${this.mauri.totalEarned | 0}`, color: [120, 180, 120], size: 14 },
@@ -5603,7 +5681,13 @@ class Game {
     // The sections, from MENU_SECTIONS, each as tall as its rows of cards.
     const sections = [];
     const cardS = 200, cardGap = 32, perRow = Math.max(1, Math.floor((boxW - 40 + cardGap) / (cardS + cardGap)));
+    this._journeyBtnBounds = [];
     for (const sec of MENU_SECTIONS) {
+      if (sec.style === 'journey') {   // the map: its tiles come from CAMPAIGN.CELLS, not a list
+        if (typeof CAMPAIGN !== 'undefined') sections.push({ key: sec.key, label: sec.label, bodyH: 392,
+          draw: (top) => this._renderJourneyMap(centerX, top + 16, boxW - 40) });
+        continue;
+      }
       const list = bySection[sec.key];
       if (!list || !list.length) continue;
       if (sec.style === 'cards') {
@@ -5675,6 +5759,7 @@ class Game {
         pop();
         if (k < 0.98) {   // still sliding: nothing in it takes a click yet
           this._levelCardBounds.length = cards;
+          if (s.key === 'journey') this._journeyBtnBounds = [];
           if (s.key === 'settings') this._detailSliderBounds = this._perfToggleBounds = null;
         }
       }
@@ -5685,6 +5770,71 @@ class Game {
     smallTextSize(11);
     textAlign(CENTER, CENTER);
     text(`Version: ${CONFIG.version}`, centerX, ch - 40);
+  }
+
+  // The journey's map (the menu's first section): the tiles as on the sketch, north up, with
+  // the two paths drawn between them. A cell holds a lesson, or a lesson and its free play
+  // side by side. Done tiles are ticked, open ones lit, locked ones grey. Beside the map: who
+  // is in the family as the record stands, and two small buttons (open every tile for a class
+  // or a test; start the journey again). PLACEHOLDER ART: plain cells until the tiles are drawn.
+  _renderJourneyMap(centerX, top, maxW) {
+    const C = CAMPAIGN, cw = 168, chh = 62, gap = 10, cols = 3, rows = 5;
+    const mapW = cols * cw + (cols - 1) * gap, sideW = Math.min(360, maxW - mapW - 30);
+    const x0 = centerX - (mapW + (sideW > 180 ? 30 + sideW : 0)) / 2, y0 = top;
+    const mx = mouseX, my = mouseY;   // (as the other cards read the pointer)
+    const cellAt = (col, row) => ({ x: x0 + col * (cw + gap), y: y0 + row * (chh + gap) });
+    const mid = (col, row) => { const c = cellAt(col, row); return { x: c.x + cw / 2, y: c.y + chh / 2 }; };
+    push();
+    // The paths: the shared start, then west with Koukou and north with Pukepuke.
+    strokeWeight(5); noFill();
+    for (const path of C.PATHS) {
+      stroke(path.color[0], path.color[1], path.color[2], 150);
+      beginShape();
+      for (const [col, row] of path.cells) { const p = mid(col, row); vertex(p.x, p.y); }
+      endShape();
+    }
+    noStroke();
+    textAlign(CENTER, CENTER);
+    for (const cell of C.CELLS) {
+      const c = cellAt(cell.col, cell.row), n = cell.tiles.length, w = (cw - (n - 1) * 6) / n;
+      cell.tiles.forEach((tid, i) => {
+        const t = C.tile(tid), x = c.x + i * (w + 6);
+        const def = t.level ? LEVEL_REGISTRY.get(t.level) : null;
+        const open = !!def && C.isOpen(tid), done = C.isWon(tid);
+        const hover = open && mx > x && mx < x + w && my > c.y && my < c.y + chh;
+        this._cardFrame(x, c.y, w, chh, open, hover, done);
+        fill(open ? [226, 246, 228] : [96, 98, 104]);
+        push(); textFont(FreckleFace); textSize(22);
+        text(t.label + (done ? ' ✓' : ''), x + w / 2, c.y + 22); pop();
+        fill(open ? [150, 190, 160] : [80, 82, 88]);
+        smallTextSize(n > 1 ? 8 : 10);
+        text(def ? t.title : 'to come', x + w / 2, c.y + 46);
+        if (def) this._levelCardBounds.push({ x, y: c.y, w, h: chh, levelId: def.id, unlocked: open, module: true, chapters: true });
+      });
+    }
+    // Beside the map: the family, and the two buttons.
+    if (sideW > 180) {
+      const sx = x0 + mapW + 30;
+      textAlign(LEFT, TOP);
+      fill(232, 226, 204); push(); textFont(FreckleFace); textSize(20); text("The family", sx, y0); pop();
+      fill(190, 206, 190); smallTextSize(12);
+      let ty = y0 + 32;
+      for (const line of C.familyLines()) {
+        text(line, sx, ty, sideW, 80);
+        ty += 20 * Math.max(1, Math.ceil(textWidth(line) / sideW)) + 4;
+      }
+      const btn = (label, by, action) => {
+        const bw = Math.min(sideW, 250), bh = 34, hover = mx > sx && mx < sx + bw && my > by && my < by + bh;
+        this._cardFrame(sx, by, bw, bh, true, hover, false);
+        fill(210, 240, 215); textAlign(CENTER, CENTER);
+        push(); textFont(FreckleFace); textSize(15); text(label, sx + bw / 2, by + bh / 2 + 1); pop();
+        this._journeyBtnBounds.push({ x: sx, y: by, w: bw, h: bh, action });
+      };
+      const by0 = y0 + rows * (chh + gap) - gap - 34 * 2 - 10;
+      btn(C.record.openAll ? "Every tile is open" : "Open every tile", by0, () => C.toggleOpenAll());
+      btn("Start the journey again", by0 + 44, () => C.reset());
+    }
+    pop();
   }
 
   // The levels of a modules section as card entries: a level on its own, or a family of
@@ -6465,6 +6615,9 @@ class Game {
         }
       }
       if (this._handleRenderSettingsClick(mx, my)) return;
+      for (const b of (this._journeyBtnBounds || [])) {
+        if (mx > b.x && mx < b.x + b.w && my > b.y && my < b.y + b.h) { b.action(); return; }
+      }
       // A box's header opens it (closing the one that was open), or closes it if it's open.
       for (const h of (this._menuHeaderBounds || [])) {
         if (mx > h.x && mx < h.x + h.w && my > h.y && my < h.y + h.h) {

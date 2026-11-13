@@ -433,3 +433,81 @@ is the same either way. I have kept your version as the default because it is yo
    about an hour and three quarters of running time, before pauses and reading. More than
    half of that is the three free plays. This is worked out from season lengths, not timed.
 6. **No players yet.** Everything above is designed against stand-ins.
+
+## 12. Build status, 14 November 2026
+
+Stages A to F are built. Stage G (7f) is not started. Nothing is committed. Every number below
+is from stand-in players on one machine, one or two seeds each, so read them as "it runs and
+this is its shape", not as results.
+
+### What is built
+
+| Stage | Built | Where |
+|---|---|---|
+| A | The campaign record, the map as the menu's first section, the two ways on, and the five years with the baby | `mauri_campaign.js`, `Game._renderJourneyMap`, `levels/chapters_freeplay.js` (a fourth setting, `journey`) |
+| B | Tile 3, Into the bush | `levels/journey_03_bush.js` |
+| C | Tile 5, The crowded forest | `levels/journey_05_kaka.js` |
+| D | Tile 4, The night parrots, and tile 6, The crested one | `levels/journey_04_kakapo.js`, `levels/journey_06_crested.js` |
+| E | 4f, The mast years, and 6f, The giant moa | the same two files |
+| F | Tile 7, Where the paths meet, changing with the record | `levels/journey_07_meeting.js` |
+
+New rules of the world, each behind a level switch: the crowding mark and event
+(`crowdingSign`), a flock stripping the forest floor (`flockStripsFloor`), planted food that
+grows in (`growInSec` on a tool), mast years set by the lesson (`mastYears`), green fruit the
+year before (`greenFruitSign`), the ring round a lone patch (`nestFoundingSign`), and forest
+bounty (`Simulation.forestBounty`). The kit gained the travelling party, walking off, the riddle
+ladder, the cycling seasons, "won after N years if", and the lead and elder rules.
+
+Nothing old changed: the five years (Clues) and the first Endless level were stepped for 300 and
+270 seconds on the last commit and on this build with the same seed, and matched at every
+30-second mark.
+
+### How each level fared with stand-ins
+
+| Level | Careful player | Player who only covers | Player who does nothing |
+|---|---|---|---|
+| 2f with the baby | Won. On seed 1 Pukepuke, Koukou and the baby were all forced (the stand-in does not guard nests, and the kea took the first eggs) | not run | not run |
+| Tile 3 | Won on seeds 1 and 2. Crowding answered with no hint | Won on seed 3, with the lesson's goals unmet and every crowding problem recorded as lost | Lost on seed 1: the Pouākai took the baby |
+| Tile 5 | Won. Grove planted ahead, with no hint | Won, with the grove recorded as lost | not run |
+| Tile 4 | Won. Riddle answered at once; 5 kākāpō chicks in the mast | Won. Riddle unanswered; **also 5 chicks** | not run |
+| Tile 6 | Won. Nest founded, egg laid, one chick | not run | not run |
+| Tile 7, record "Papa lost" | Won. One nest asked for, the words changed, the new chick came naturally | not run | not run |
+| 4f | Ran all eight years, leads alive, 6 chicks. **Lost on the win measure**: bounty 71 at the start, 54 at the end | not run | not run |
+| 6f | Ran all eight years, leads alive, clan 14. **Lost on the win measure**: giant moa 5 at the start, 1 at the end | not run | not run |
+
+### What does not hold yet
+
+1. **Tile 4's lever does not decide the outcome.** The kākāpō bred just as well with no grove
+   sown. The lesson says a flock that is ready will breed; the simulation lets an unready flock
+   breed too. By your own same-rule test this lesson states something the world does not
+   enforce. It needs a real dependency (laying that needs fruit within reach of the courts)
+   before the riddle is worth writing.
+2. **Tile 5's winter is too kind.** The family mostly stays on the tops and does not go hungry,
+   so the grove is recorded but not needed. The flock rule fires, mostly on the herd.
+3. **A lesson can be won without doing what it teaches.** Only a lead's loss ends tiles 3, 5
+   and 6. The record shows the difference; the win card does not.
+4. **Both free plays are untuned.** Their targets (bounty above its start; giant moa no fewer)
+   are yours to set, as the plan said. 6f does show the plan's dilemma: with the clan's birds
+   hidden, the eagle took four giant moa.
+5. **Tile 7 is on its own land**, not on the south-east quarter of 7f's, because 7f is not built.
+6. **Walking on from an edge** is built but used only on tile 7. On tile 3 the party is set
+   down at the camp: set down at the edge, upland moa walked uphill and never met the herd.
+7. **Forest bounty is a goal line**, not a ring beside the mauri ring.
+8. **Not played by hand.** Speech panels, banners, the marks, the green fruit and the ring were
+   exercised by stand-ins with tips off. The map and the win card were looked at once.
+9. **`tools/batch.js` was edited but not run**: Playwright is not installed here. The stand-ins
+   were run in the app's browser through `tools/standins.js` and `tools/standins_probe.js`.
+
+### Placeholders that are yours
+
+The riddle and the crested moa's lore (marked `[PLACEHOLDER]` in the level files), every title
+and line, the names of Koukou's parents, the baby and the new chick (`CAMPAIGN.BIRDS`), and
+all art: the crowding mark, the green fruit, the ring, the map's tiles, a crested moa that
+reads as itself, and the kākāpō's portrait when it speaks.
+
+### Decisions taken by default
+
+Section 10's defaults were used throughout. Two more were made while building: every tile is
+locked until the one before it is won, with an "Open every tile" button on the map for a class
+or a test; and in the journey's five years a chick owed to the story is set down in year two if
+the kea took the first egg, logged as forced.

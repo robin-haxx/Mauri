@@ -58,6 +58,8 @@ const CHAPTER_EVENTS = {
   animal_selected: { subject: 'animal', count: 'selected' },   // the player tapped an animal to read and follow it: `$animal`, `species`
   case_closed:     {},                                     // a hint ladder's case ended: `case` (the reaction's id), `rung`, `outcome`, `sec`, `transfer`
   species_left:    { subject: 'moa', count: 'left' },      // a grown young bird set off over the pass (dispersal): `$moa`, `species`
+  moa_crowded:     { subject: 'moa', count: 'crowded' },   // a moa's forest meal was cut short by moa feeding beside it (crowdingSign): `$moa`, `others`
+  forest_stripped: { subject: 'moa', count: 'stripped' },  // ...or by a flock feeding overhead (flockStripsFloor): `$moa`, `birds`
   eagle_gave_up:   { subject: 'eagle', count: 'gaveUp' }   // hidden prey sent the eagle to other prey (coverSendsEagleAway): `$eagle`, `species` (what it went for), `from`
 };
 
@@ -897,6 +899,9 @@ class ChapterRunner {
     this._nests = this._counter('nests');
     this._adoptCast();
     this._resolveSites(this.level.sites);
+    // A journey level reads the campaign record as it starts: who is alive becomes story
+    // flags and words (mauri_campaign.js), so its reactions can say `if: { flag: 'papa_lost' }`.
+    if (this.level.journey && typeof CAMPAIGN !== 'undefined') CAMPAIGN.begin(this);
     let first = this.chapters[0] && this.chapters[0].id;
     // ?chapter=<id> starts the level there (the season clock isn't moved).
     const want = (typeof window !== 'undefined' && window.location)
@@ -1138,7 +1143,9 @@ class ChapterRunner {
     const now = this.game.playTime, quiet = !!(this.cur && this.cur.def.transfer);
     for (let i = this._cases.length - 1; i >= 0; i--) {
       const c = this._cases[i], rx = c.rx, x = this._ctx(c.ev, c.scope);
-      const done = rx.until(x), stale = now - c.t0 > 120 * CHAPTER_FPS;
+      // (A case is dropped as stale after two minutes; a slow problem, such as a riddle that
+      // takes a year to answer, says how long it may stand with `staleSec`.)
+      const done = rx.until(x), stale = now - c.t0 > (rx.def.staleSec || 120) * CHAPTER_FPS;
       if (done || stale) {
         this._cases.splice(i, 1);
         // solved: it ended the way the player's own answer ends it. lost: it ended badly (the
@@ -1728,6 +1735,9 @@ class ChapterRunner {
       const e = this.castEnts[name];
       if (!e || e.alive) continue;
       this.castEnts[name] = null;
+      // A named bird that walked off the land (the journey's travel: CHAPTERS_KIT.walkOff) is
+      // not lost: it is on its way to the next tile.
+      if (e.causeOfDeath === 'dispersed') { (this.walked || (this.walked = {}))[name] = true; this._log('cast_left', name); continue; }
       // How it died, when the simulation says (Moa.causeOfDeath: 'eagle' or 'starved'), so a
       // lesson can answer each differently (the `cause` filter).
       const cause = e.causeOfDeath || (e.hunger >= (e.maxHunger || 100) ? 'starved' : 'unknown');
@@ -1763,6 +1773,8 @@ class ChapterRunner {
     g.state = GAME_STATE.WON;
     if (audioManager) audioManager.playWin();
     PROGRESS.completeLevel(this.level.id, computeLevelScore(this.level, g._scoreContext()));
+    // A journey level hands on what its `outcome` block lists (mauri_campaign.js).
+    if (this.level.journey && typeof CAMPAIGN !== 'undefined') CAMPAIGN.finish(this);
     this._log('won', this.cur ? this.cur.id : '');
   }
 

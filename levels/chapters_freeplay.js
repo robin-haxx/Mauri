@@ -38,7 +38,14 @@ const FREEPLAY_SKETCHES = {
   // the pass instead) and the two families on the breeding calendar like everyone else, so
   // Pukepuke and Koukou are small in year one and grown by year four, and the lesson's claim
   // holds for the birds the player is watching.
-  clues:  { label: 'Clues',  graceSec: 8,   floors: 0, eagleBreeding: false, pause: true,  eagleHungerRate: 0.012, clues: true }
+  clues:  { label: 'Clues',  graceSec: 8,   floors: 0, eagleBreeding: false, pause: true,  eagleHungerRate: 0.012, clues: true },
+  // Journey: the Clues sketch as tile 2f of the journey's map (mauri_campaign.js). It is not
+  // a button under the Chapters card. Three things are added, and only here. Pukepuke hatches
+  // male and Koukou female, since they must pair. In year five Koukou has a chick, "the baby":
+  // her own egg if she lays one (she is of age from year four), and if no chick of hers is
+  // alive by the fifth spring an egg is set beside her (logged as forced). And the win writes
+  // the campaign record and offers the two ways on.
+  journey: { label: 'Journey', graceSec: 8, floors: 0, eagleBreeding: false, pause: true, eagleHungerRate: 0.012, clues: true, journey: true }
 };
 
 // The Clues sketch's reactions: hint ladders for the eagle and the storms in place of the
@@ -68,7 +75,31 @@ function makeChaptersFreeplay(sketchKey) {
   // The two young, whoever is left of them, within reach of a place.
   const youngNear = (place, dist) => ({ any: [{ near: ['pukepuke', place, dist] }, { near: ['koukou', place, dist] }] });
 
-  return {
+  // ---- The journey sketch's additions (D.journey; see FREEPLAY_SKETCHES) -------------------
+  // Koukou's living chick under two years old, if she has one.
+  const koukousChick = (x) => {
+    const k = x.runner.castEnts.koukou;
+    if (!k) return null;
+    const young = x.runner.sim.moas.filter(m => m.alive && m.mother === k && m._calYears() != null && m._calYears() < 2);
+    return young.sort((a, b) => a._calYears() - b._calYears())[0] || null;
+  };
+  const journeyParts = !D.journey ? {} : {
+    section: 'journey', journey: true, sketch: undefined,
+    name: "Pukepuke & Koukou: the five years",
+    winText: "Pukepuke and Koukou are grown, and Koukou has a chick. Two ways lead on from here.",
+    waysOn: [{ label: "West with Koukou", tile: 't3' }, { label: "North with Pukepuke", tile: 't5' }],
+    outcome: {
+      birds: ['mama', 'papa', 'friendMama', 'friendPapa', 'pukepuke', 'koukou', 'baby'],
+      also: (rec, r) => { rec.babyHatch = r.beatsDone.has('baby') ? ((r.log.some(l => l.kind === 'beat' && l.id === 'baby' && /forced/.test(l.info))) ? 'forced' : 'natural') : 'set down'; }
+    }
+  };
+  const sexes = !D.journey ? [] : [(x) => {
+    const p = x.runner.castEnts.pukepuke, k = x.runner.castEnts.koukou;
+    if (p && p.isFemale) { p.isFemale = false; p.updateAge(0); }
+    if (k && !k.isFemale) { k.isFemale = true; k.updateAge(0); }
+  }];
+
+  return Object.assign({
     id,
     name: `Pukepuke & Koukou (${D.label})`,
     module: true,
@@ -142,7 +173,8 @@ function makeChaptersFreeplay(sketchKey) {
       friendMama: { title: "The neighbour", species: 'upland_moa', manual: true, pitch: 0.9 },
       friendPapa: { title: "The neighbour", species: 'upland_moa', manual: true },
       pukepuke:   { title: "Pukepuke",   species: 'upland_moa', manual: true, scale: 0.6 },
-      koukou:     { title: "Koukou",     species: 'upland_moa', manual: true, scale: 0.6 }
+      koukou:     { title: "Koukou",     species: 'upland_moa', manual: true, scale: 0.6 },
+      ...(D.journey ? { baby: { title: "the baby", species: 'upland_moa', manual: true, scale: 0.6 } } : {})
     },
 
     sites: {
@@ -167,9 +199,9 @@ function makeChaptersFreeplay(sketchKey) {
         ],
         reactions: [
           { id: 'hatch_pukepuke', on: 'egg_hatched', if: { near: ['$egg', 'homeA', 60] },
-            do: [{ adopt: { pukepuke: '$moa' } }], moment: { on: '$moa', text: "Pukepuke has hatched!" } },
+            do: [{ adopt: { pukepuke: '$moa' } }, ...sexes], moment: { on: '$moa', text: "Pukepuke has hatched!" } },
           { id: 'hatch_koukou', on: 'egg_hatched', if: { near: ['$egg', 'homeB', 60] },
-            do: [{ adopt: { koukou: '$moa' } }], moment: { on: '$moa', text: "Koukou has hatched!" } }
+            do: [{ adopt: { koukou: '$moa' } }, ...sexes], moment: { on: '$moa', text: "Koukou has hatched!" } }
         ]
       },
       { id: 'autumn', title: "Autumn",
@@ -195,11 +227,28 @@ function makeChaptersFreeplay(sketchKey) {
         goals: [
           { id: 'home', name: "Year {year}: the young home to the tops", done: youngNear('nestA', 160), reward: 15 }
         ],
+        // Journey: the one guaranteed beat. By the fifth spring Koukou has a living chick. It
+        // is invited by the simulation itself (she is of age from year four and lays in summer
+        // if she is fed and Pukepuke is near); if none is alive twelve seconds into that spring
+        // an egg is set down beside her, and the record says it was forced.
+        ...(D.journey ? {
+          beats: [{ id: 'baby', when: { year: ['>=', FREEPLAY_YEARS] },
+            until: (x) => !!koukousChick(x), by: 12,
+            force: [{ lay: { species: 'upland_moa', at: 'koukou', incubationSec: 14 } }, { notify: "Koukou has laid an egg." }] }],
+          holdSeason: { until: (x) => x.runner.yearNow() < FREEPLAY_YEARS || !!koukousChick(x), at: 0.9, maxSec: 30 }
+        } : {}),
         // Five years turned: the finale. Else round again.
         next: [[{ year: ['>=', FREEPLAY_YEARS + 1] }, 'finale'], [true, 'summer']]
       },
       { id: 'finale', title: "Five years on",
         start: [
+          // Journey: Koukou's youngest living chick is the baby (set down beside her if the
+          // egg did not make it: the story needs the baby, and the log says how it came).
+          ...(D.journey ? [(x) => {
+            const r = x.runner, c = koukousChick(x);
+            if (c) { r.castEnts.baby = c; c.castName = 'baby'; r._log('cast', 'baby', 'adopted'); }
+            else if (r.castEnts.koukou) { CHAPTERS_KIT.party([{ name: 'baby', years: 0.1, mother: 'koukou' }], 'koukou')(x); r._log('beat', 'baby', 'set down at the finale'); }
+          }, { say: [['guide', "And Koukou has a chick of her own.", { lit: ['baby', 'koukou'] }]] }] : []),
           { moment: { on: 'pukepuke', text: "Grown up", sec: 3 } },
           { say: [['guide', "Five years have passed on the tops. Pukepuke and Koukou are grown.", { lit: ['pukepuke', 'koukou'] }],
                   ['guide', "As long as there are kaitiaki to watch over them, the upland moa will go on in Kahurangi."]] },
@@ -234,6 +283,34 @@ function makeChaptersFreeplay(sketchKey) {
             ['guide', "The Pouākai takes whatever it can see, bird or moa. Your storms, pātōtara and wharariki are what you have.", { lit: ['haasts_eagle'] }]
           ] }
         ] },
+      // Journey: a first egg lost to the kea is not the end of the name. If Mama's (or the
+      // neighbour hen's) first chick hatches later or away from the nest, it is still Pukepuke
+      // (or Koukou): the story needs both, and they are whoever those hens raise first.
+      ...(D.journey ? [{ id: 'late_named', on: 'egg_hatched', once: false,
+        if: (x) => !!x.event && !!x.event.moa && x.event.moa.speciesKey === 'upland_moa' && !x.event.moa.castName,
+        do: [(x) => {
+          const r = x.runner, m = x.event.moa;
+          const owed = r.vars._owed || [];
+          const name = (!r.castEnts.pukepuke && m.mother === r.castEnts.mama) ? 'pukepuke'
+            : ((!r.castEnts.koukou && m.mother === r.castEnts.friendMama) ? 'koukou' : (owed.find(n => !r.castEnts[n]) || null));
+          if (!name || r.castEnts[name] === null) return;   // (null: that one was lost, which ends the level)
+          r.castEnts[name] = m; m.castName = name; r._log('cast', name, 'adopted late');
+          sexes[0](x);
+          x.game.addNotification(`${r.castDefs[name].title} has hatched.`, 'success');
+        }] }] : []),
+      // Journey: the story needs both young grown by the fifth year. The first summer's eggs
+      // are the invitation; if either chick has still not hatched as the second summer opens
+      // (the kea took the eggs), an egg is set down at that nest, and the log says forced.
+      ...(D.journey ? [{ id: 'owed_chicks', on: 'chapter_start', if: (x) => !!x.event && x.event.chapter === 'summer' && x.runner.yearNow() === 2,
+        do: [(x) => {
+          const r = x.runner;
+          for (const [name, home] of [['pukepuke', 'homeA'], ['koukou', 'homeB']]) {
+            if (r.castEnts[name] !== undefined) continue;
+            (r.vars._owed || (r.vars._owed = [])).push(name);
+            r.lay({ species: 'upland_moa', at: home, incubationSec: 10 });
+            r._log('beat', name, 'forced: an egg set down in year two');
+          }
+        }] }] : []),
       // A new year.
       { id: 'new_year', on: 'season_change', if: (x) => x.event && x.event.seasonKey === 'summer', once: false,
         notify: ["Year {year} begins on the tops.", 'success'] },
@@ -307,7 +384,7 @@ function makeChaptersFreeplay(sketchKey) {
     },
 
     tutorial: { guideSprite: 'mantis_talk', tips: null }
-  };
+  }, journeyParts);
 }
 
 for (const key of Object.keys(FREEPLAY_SKETCHES)) LEVEL_REGISTRY.register(makeChaptersFreeplay(key));

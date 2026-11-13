@@ -169,3 +169,188 @@ const CHAPTERS_KIT = {
     return reactions.map(r => ids.includes(r.id) ? Object.assign({}, r, { chapters: CHAPTERS_KIT.YEAR }) : r);
   }
 };
+
+// ============================================================================
+// THE JOURNEY'S PIECES (CAMPAIGN_PLAN.md, section 7.5)
+// ============================================================================
+// The journey's lessons and free plays (levels/journey_*.js) share more than the hint ladders:
+// a named party that is set down from the campaign record and walks on and off the land, a
+// riddle told as a ladder, the four seasons that every free play cycles through, "won after N
+// years if", and what is said when a lead or an elder is lost. They are added here so eight
+// level files do not repeat each other. Nothing above this line is changed by them.
+// ============================================================================
+Object.assign(CHAPTERS_KIT, {
+  // ---- The travelling party ------------------------------------------------------------------
+  // A start action: set down the named birds at a place, those of them the campaign record
+  // says are alive (mauri_campaign.js). Each is { name, female, years, mother }: `years` is its
+  // age on the breeding calendar (left out: a grown founder), `mother` the cast name of the
+  // hen it follows while it is small. They are real birds of the simulation from here on.
+  //   walkTo   a site further in: their home range is set there, so they walk on from the edge
+  party(list, at, { radius = 14, hunger = 30, walkTo = null, species = 'upland_moa' } = {}) {
+    return (x) => {
+      // (`at` can list fallbacks: the first place that is found on this land.)
+      const r = x.runner, sim = r.sim, c = [].concat(at).map(a => r.point(a)).find(Boolean), home = walkTo ? r.point(walkTo) : null;
+      if (!c) { r._log('issue', 'party', `no place "${at}"`); return; }
+      const turns = sim.seasonTurns || 0;
+      for (const s of list) {
+        if (r.level.journey && typeof CAMPAIGN !== 'undefined' && !CAMPAIGN.alive(s.name)) { r._log('party', s.name, 'not with them'); continue; }
+        const p = r._walkableNear({ x: c.x + random(-radius, radius), y: c.y + random(-radius, radius) }, 120, c) || c;
+        const e = sim._createFromRegistry('moa', s.species || species, p.x, p.y, Moa);
+        if (!e) continue;
+        if (s.female != null) e.isFemale = !!s.female;
+        e.hunger = hunger;
+        e._sim = sim;
+        if (s.years != null) { e._bornTurn = turns - s.years * 4; e._bornYear = Math.floor(turns / 4) - Math.floor(s.years); }
+        e.age = (s.years != null && s.years < 1) ? Math.round(MOA_AGE.JUVENILE_MAX * 0.5) : MOA_AGE.ADULT_MIN + 1;
+        e.updateAge(0);
+        if (e.homeRange) e.homeRange.set(home ? home.x : p.x, home ? home.y : p.y);
+        sim.moas.push(e);
+        r.castEnts[s.name] = e;
+        e.castName = s.name;
+        r._log('party', s.name, 'set down');
+      }
+      // (Mothers second, once every bird is on the land.)
+      for (const s of list) {
+        const e = r.castEnts[s.name], m = s.mother && r.castEnts[s.mother];
+        if (e && m) { e.mother = m; m.offspring = (m.offspring || 0) + 1; }
+      }
+      sim._invalidateCache();
+    };
+  },
+
+  // A start action: the named birds (those alive) set off for an edge of the land and walk off
+  // it (Moa.beginLeaving, as a grown young bird leaving over the pass). The runner notes them as
+  // walked, not lost. The level should be won within a few seconds, while they are on their way.
+  walkOff(names, side) {
+    return (x) => {
+      const r = x.runner;
+      for (const n of names) {
+        const e = r.castEnts[n];
+        if (!e || !e.alive) continue;
+        const edge = r._findSite({ find: 'edge', side, near: n }) || x.game._nearestEdge(e.pos.x, e.pos.y);
+        if (edge) e.beginLeaving(edge.x, edge.y);
+      }
+      r._log('walk_off', names.join(','), side);
+    };
+  },
+
+  // ---- A riddle, as a hint ladder ----------------------------------------------------------------
+  // The riddle is said when the reaction fires and is the first rung: a player who answers from
+  // the riddle and the world alone is recorded as unaided. A plainer line comes later, then the
+  // instruction. The record keeps the rung at which the player acted.
+  //   speaker       who sets it (a cast name or 'guide')
+  //   riddle        its lines ([text, ...])
+  //   plainer, tell the second and third rungs (a line each); at: their seconds
+  //   until, solved what ends the case, and what counts as the player's answer
+  riddleLadder({ id = 'riddle', on = 'chapter_start', test = null, speaker = 'guide', riddle = [], plainer, tell, at = [45, 95],
+                 until, solved, lit = [], tool = null, staleSec = 400, chapters = null } = {}) {
+    return [{
+      id, on, if: test, chapters, staleSec,
+      say: riddle.map(t => [speaker, t, { lit }]),
+      until, solved,
+      hints: [
+        { after: at[0], say: [[speaker, plainer, { lit }]] },
+        { after: at[1], banner: Object.assign({ words: [].concat(tell), lit, pause: false, maxSec: 30 }, tool ? { tool } : {}) }
+      ]
+    }];
+  },
+
+  // ---- The four seasons a free play cycles through -------------------------------------------------
+  // by: { summer, autumn, winter, spring }, each a chapter's own keys (tools, start, goals,
+  // reactions). Spring goes back to summer until `years` have turned, then on to `then`.
+  seasonsCycle(by, { years, then = 'finale', titles = {} } = {}) {
+    return CHAPTERS_KIT.YEAR.map(key => Object.assign({ id: key, title: titles[key] || key.charAt(0).toUpperCase() + key.slice(1) },
+      by[key] || {}, key === 'spring' ? { next: [[{ year: ['>=', years + 1] }, then], [true, 'summer']] } : {}));
+  },
+
+  // The closing chapter of a free play: won if `ok` holds as the last year turns, else lost
+  // with `reason`. `words` are said first; `before` runs before them (the walk off the land).
+  wonAfterYears({ id = 'finale', title = "The years have turned", ok = () => true, reason = "The years ran out.", words = [], before = [], lit = [] } = {}) {
+    return {
+      id, title,
+      start: [
+        (x) => { if (!ok(x)) x.runner.lose(x.runner.fill(typeof reason === 'function' ? reason(x) : reason, null)); },
+        ...(words.length ? [{ say: words.map(t => ['guide', t, { lit }]) }] : []),
+        ...before
+      ],
+      until: { after: 5 },
+      next: 'win'
+    };
+  },
+
+  // ---- Leads and elders ----------------------------------------------------------------------------
+  // A lead lost ends the level, with words for how. names: { castName: "Title" }.
+  leadLost(names, { starved = "Food close by is what keeps a family: tap plants near them, or grow some beside them." } = {}) {
+    const out = [];
+    for (const n in names) {
+      out.push({ id: `${n}_taken`, on: 'cast_lost', if: { cast: n, cause: 'eagle' }, do: [{ lose: `The Pouākai took ${names[n]}.` }] });
+      out.push({ id: `${n}_starved`, on: 'cast_lost', if: { cast: n, cause: ['starved', 'unknown'] }, do: [{ lose: `${names[n]} starved. ${starved}` }] });
+    }
+    return out;
+  },
+  // An elder lost is not the end: the story goes on without them, and the record keeps it.
+  elderLost(names) {
+    const title = (x) => { x.runner.vars.who = names[x.event.cast] || 'One of the family'; };
+    return [
+      { id: 'elder_taken', on: 'cast_lost', if: { cast: Object.keys(names), cause: 'eagle' }, once: false,
+        do: [title, { notify: ["The Pouākai took {$who}. The family goes on without them.", 'error'] }] },
+      { id: 'elder_starved', on: 'cast_lost', if: { cast: Object.keys(names), cause: ['starved', 'unknown'] }, once: false,
+        do: [title, { notify: ["{$who} starved. The family goes on without them.", 'error'] }] }
+    ];
+  },
+
+  // Scope the named reactions to the chapters in which hints are given (the taught seasons),
+  // so they stay quiet in the unprompted season that ends a journey lesson.
+  quietOutside(reactions, ids, chapters) {
+    return reactions.map(r => ids.includes(r.id) ? Object.assign({}, r, { chapters }) : r);
+  },
+
+  // The Pouākai is brought over a place and made hungry (the invitation to a hunt), as the
+  // unprompted stretch does: for the season in which a journey lesson tests the storm again.
+  eagleComes(at, hunger = 41) { return { eagle: { which: 'nearest', near: at, watch: at, hunger } }; },
+
+  // A reaction's `if`: this chapter is the one named (for a stage set by a level-wide reaction).
+  opens(chapter, flag) { return (x) => !!x.event && x.event.chapter === chapter && !(flag && x.runner.flags[flag]); },
+
+  // The switches every journey level starts from: the Clues sketches' honest ecology (no
+  // floors, the breeding calendar, a readable eagle that gives up when its bird is hidden
+  // twice). A level adds its own rule on top.
+  journeyMechanics(extra = {}) {
+    return Object.assign({
+      noSpeciation: true,
+      evergreenPlants: MODULE_STORMS.mechanics.evergreenPlants,
+      landRegionMates: true,
+      maxPerSpecies: 12,
+      seasonalBirdBreeding: 'calendar', moaCalendar: true, familyLinks: true,
+      juvenileFollow: { within: 50, untilYears: 2, pull: 0.6 },
+      placedPlantsSeasonal: true,
+      emergentEagles: true, eagleMaxPopulation: 1, eagleHungerRate: 0.011,
+      eagleStarveThreshold: 88, eagleStarveTimeout: 7200, eagleTargetRatio: 1 / 5,
+      eaglePreyPopThreshold: 1, eagleScarcePreyPenalty: 3, eagleSurplusPreference: true,
+      eagleTelegraph: { graceSec: 8, warnBelow: 10 },
+      coverBreaksLock: true, coverCalmsMoa: true, lureUnderStorm: true, placeableQueryRadius: 100,
+      coverSendsEagleAway: { after: 2, sec: 45 },
+      eagleReturns: { afterSeasons: 2 },
+      nestingSites: { forestCount: 0, openCount: 0, radius: 40, laySnapRadius: 150, drawRadius: 260, layBoost: 0.5, eggSpeedBonus: 1.5 },
+      habitatStress: true, habitatStressMargin: 0.08, habitatStressPenalty: 0.4, winterStressMult: 1.4,
+      hungerRateMult: 0.6, juvenileHungerMult: 1.0
+    }, extra);
+  },
+
+  // The Storm as every journey level has it: cover, never a stun.
+  STORM: { cost: 40, moveCost: 10, radius: 64, blocksEagleVision: true, distractsEagles: false,
+           description: "A moa under the storm can't be seen by the Pouākai." },
+
+  // The menu card a journey level shows (its tile on the map is what the player clicks).
+  journeyMenu(title, subtitle, lines, plants) {
+    return {
+      title, subtitle,
+      areaLabel: "Kahurangi, Te Waipounamu",
+      areaSubtitle: "Upper West Coast, South Island",
+      featuredSpecies: { key: 'upland_moa', displayName: 'Upland Moa', localName: 'Moa Pukepuke', spriteKey: 'upland_walk_01', spriteScale: 0.4 },
+      flavorText: lines,
+      displayPlants: plants || ['tussock', 'beech', 'rimu'],
+      art: { coreWidth: 1600, coreHeight: 1080, bgColor: [28, 32, 40] }
+    };
+  }
+});

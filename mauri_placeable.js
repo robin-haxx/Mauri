@@ -350,8 +350,21 @@ class PlaceableObject {
   // UPDATE
   // ============================================
   
+  // Planted food that takes time to grow in (a level's def.growInSec): how far along it is,
+  // 0.15 as it goes in to 1 when grown. It feeds and draws moa in proportion, and its plants
+  // are held to that size, so planting ahead of the need is what works.
+  growFrac() {
+    const sec = this.def.growInSec;
+    if (!sec) return 1;
+    return Math.max(0.15, Math.min(1, (placeableWorldClock() - this.plantedAt) / (sec * 60)));
+  }
+
   update(dt = 1) {
     if (this._swell) this._applySwell();
+    if (this.def.growInSec) {
+      const g = this.growFrac();
+      if (g < 1) for (const p of this.spawnedPlants) if (p.alive && p.growth > g) p.growth = g;
+    }
     if (this.standing) {
       // A standing storm only counts down once fadeOver() has been called. Placeables update
       // every other frame (Simulation.updatePlaceables), so step 2x to keep fadeOver in real
@@ -435,7 +448,7 @@ class PlaceableObject {
       this.spawnFeedingParticle(moa.pos.x, moa.pos.y);
     }
 
-    return this.def.baseFeedingRate * this.seasonalMultiplier * dt * sel;
+    return this.def.baseFeedingRate * this.seasonalMultiplier * dt * sel * this.growFrac();
   }
   
   spawnFeedingParticle(x, y) {
@@ -489,7 +502,7 @@ class PlaceableObject {
       strength *= 0.2;
     }
 
-    return strength;
+    return strength * this.growFrac();
   }
   
   isInRange(pos) {

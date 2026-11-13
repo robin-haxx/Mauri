@@ -51,8 +51,16 @@ const { serve, args, openGame } = require('./_headless');
         balance_income:   ["Mauri comes from a healthy, even ecosystem.", (d) => !!(M(d).freeplayPassive || M(d).ecosystemIncome)],
         yearly_focus:     ["Each year has focus species with goals of their own.", (d) => !!d.freeplaySchedule],
         climate:          ["The cold deepens over the years.", (d) => !!M(d).climateDrift],
-        mast_year:        ["A rimu mast year lets the kākāpō breed.", (d) => !!d.mastGoal || tool(d, 'rimuScramble')],
+        mast_year:        ["A rimu mast year lets the kākāpō breed.", (d) => !!d.mastGoal || tool(d, 'rimuScramble') || !!M(d).mastYears],
         forest_tools:     ["Forest can be spread with the Forest Seed.", (d) => tool(d, 'forestBoost')],
+        // ---- the journey's rules (levels/journey_*.js) ----
+        crowding:         ["Moa crowded on the same forest food each get less.", (d) => !!M(d).forestCompetition],
+        favoured_plant:   ["Each kind of moa has its own plant, which draws it and feeds the others next to nothing.", (d) => tool(d, 'lancewood') || tool(d, 'speargrass')],
+        shared_forest:    ["A flock feeding overhead leaves a moa less on the forest floor.", (d) => !!M(d).flockStripsFloor],
+        grow_ahead:       ["Planted food takes time to grow in, so it is planted a season ahead.", (d) => Object.values(d.availablePlaceables || {}).some(p => p && p.growInSec)],
+        mast_ahead:       ["A mast can be seen coming a year ahead: green fruit on the rimu.", (d) => !!M(d).greenFruitSign],
+        forest_bounty:    ["A forest kept bountiful through the cold is what a mast-breeder lives on.", (d) => !!M(d).mastYears && !!M(d).forestContraction],
+        balance:          ["A slow-breeding herd pays for what its neighbours gain.", (d) => d.id === 'journey_giants'],
         world_tour:       ["The view moves to a new area of a larger land each year.", (d) => !!d.worldGrid && !d.story]
       };
       const levels = LEVEL_REGISTRY.getAll();

@@ -1545,6 +1545,51 @@ class Simulation {
   // Count-only query: returns a number and touches no shared result buffer, so it's safe
   // to call while a getNearbyMoas() list is still held.
   countNearbyMoas(x, y, radius, filter = null) { return this.moaGrid.countInRadius(x, y, radius, filter); }
+
+  // How many live birds of the named kinds are within `radius` of a point (the flock a moa
+  // feeds under: mechanics.flockStripsFloor).
+  countFlockNear(x, y, radius, species) {
+    const r2 = radius * radius;
+    let n = 0;
+    for (const k of species) {
+      const list = (this.otherEntities && this.otherEntities[k]) || [];
+      for (let i = 0; i < list.length; i++) {
+        const b = list[i];
+        if (!b.alive) continue;
+        const dx = b.pos.x - x, dy = b.pos.y - y;
+        if (dx * dx + dy * dy <= r2) n++;
+      }
+    }
+    return n;
+  }
+
+  // Forest bounty: the fruiting trees on the land (grown rimu and beech, not dormant). The
+  // measure the mast-years free play is won on. Counted afresh at most once a second.
+  forestBounty() {
+    const now = this.game ? this.game.playTime : 0;
+    if (this._bountyAt != null && now - this._bountyAt < 60 && now >= this._bountyAt) return this._bounty;
+    let n = 0;
+    for (let i = 0; i < this.plants.length; i++) {
+      const p = this.plants[i];
+      if (p.alive && !p.dormant && (p.type === 'rimu' || p.type === 'beech') && p.growth >= 0.5) n++;
+    }
+    this._bountyAt = now; this._bounty = n;
+    return n;
+  }
+
+  // A moa's meal was cut short ('crowded': by moa feeding beside it; 'stripped': by a flock
+  // overhead). It carries a mark for a few seconds (Game._renderWorldSigns), and the level is
+  // told, at most once every two seconds a bird. No roll is made, so a run replays the same.
+  noteShortMeal(moa, why, n) {
+    const now = this.game ? this.game.playTime : 0;
+    moa._shortMeal = { why, until: now + 240 };
+    if (now < (moa._shortMealTold || 0)) return;
+    moa._shortMealTold = now + 120;
+    const tut = this.game && this.game.tutorial;
+    if (!tut || typeof TUTORIAL_EVENTS === 'undefined') return;
+    if (why === 'crowded') tut.fireEvent(TUTORIAL_EVENTS.MOA_CROWDED, { moa, speciesKey: moa.speciesKey, others: n });
+    else tut.fireEvent(TUTORIAL_EVENTS.FOREST_STRIPPED, { moa, speciesKey: moa.speciesKey, birds: n });
+  }
   getNearbyEagles(x, y, radius) { return this.eagleGrid.getInRadius(x, y, radius); }
   getNearbyPlants(x, y, radius) { return this.plantGrid.getInRadius(x, y, radius); }
   getNearbyPlaceables(x, y, radius) { return this.placeableGrid.getInRadius(x, y, radius); }

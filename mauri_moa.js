@@ -1123,6 +1123,23 @@ class Moa extends Boid {
             // Cold-season competition ramps in with winterness (smooth, not a cliff).
             per *= 1 + ((LEVEL_MECHANICS.winterCompetitionMult ?? 1.6) - 1) * this._seasonCache.winterness;
             gain *= Math.max(0.25, 1 - over * per);
+            // The sign of it (opt-in): a mark over the moa for a few seconds, and an event a
+            // lesson can answer. Drawn by Game._renderWorldSigns.
+            if (LEVEL_MECHANICS.crowdingSign) simulation.noteShortMeal(this, 'crowded', competitors);
+          }
+        }
+
+        // A flock feeding overhead leaves less on the forest floor (opt-in:
+        // mechanics.flockStripsFloor { species, radius, tolerance, per, min }). Counted where
+        // the moa feeds, so it is the flock's presence that costs, and moving either answers it.
+        if (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.flockStripsFloor
+            && FOREST_BIOMES.has(this.targetPlant.biomeKey)) {
+          const FS = LEVEL_MECHANICS.flockStripsFloor;
+          const birds = simulation.countFlockNear(this.pos.x, this.pos.y, FS.radius ?? 90, FS.species || ['kaka']);
+          const tol = FS.tolerance ?? 1;
+          if (birds > tol) {
+            gain *= Math.max(FS.min ?? 0.3, 1 - (birds - tol) * (FS.per ?? 0.15));
+            simulation.noteShortMeal(this, 'stripped', birds);
           }
         }
 

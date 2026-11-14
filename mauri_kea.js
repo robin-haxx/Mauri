@@ -85,18 +85,21 @@ class Kea extends Kereru {
     // skips its own life entirely.
     if (this.lifeScript) { this.lifeScript.behave(sim, mauri, seasonManager, dt); return; }
     this._sm = seasonManager;
+    this._simRef = sim;   // (for the storm checks in helpers that aren't passed it)
     this._shielded = this._starveImmune(sim);   // for the security bar (see _renderExtra)
     if (this._raidCooldown > 0) this._raidCooldown -= dt;
 
     // Perch tree: each kea holds a fruiting forest tree (chosen by nearby food) as its home
     // perch, refreshed when lost or on a timer. _anchorPoint() feeds it to the base loop.
     this._perchSearchTimer = (this._perchSearchTimer || 0) - dt;
+    if (this._perchValid() && this._stormAt(sim, this._perchTree.pos.x, this._perchTree.pos.y)) this._perchTree = null;   // (a storm over it)
     if (!this._perchValid() || this._perchSearchTimer <= 0) {
       this._perchSearchTimer = 120;
       this._choosePerchTree(sim);
     }
 
     super.behave(sim, mauri, seasonManager, dt);
+    this._watchTarget(dt);
 
     // Berry Cache feed: in a cache's ring the cache tops the kea up, so net hunger goes DOWN
     // (overrides the base hunger tick, see _cacheFeed). Keeps the flock fed and breeding where
@@ -106,7 +109,7 @@ class Kea extends Kereru {
       if (fed > 0) this.hunger = Math.max(0, this.hunger - fed * dt);
     }
 
-    if (!this._grounded && !this._fleeingStorm && this.state === KERERU_STATE.FLYING) {
+    if (!this._grounded && !this._fleeingStorm && !this._refuge && this.state === KERERU_STATE.FLYING) {
       // Spacing: push off nearby non-mate kea so unpartnered birds spread across trees instead of
       // stacking on one. A mate is exempt (they may pair and breed). Below the forage/cache pulls.
       const away = this._separateAway(sim);
@@ -242,6 +245,7 @@ class Kea extends Kereru {
     for (let i = 0; i < trees.length; i++) {
       const p = trees[i];
       if (!p.alive || p._consumed || p.dormant || p.unsprouted || p.growth < 0.5 || !isForest.has(p.type)) continue;
+      if (this._stormAt(sim, p.pos.x, p.pos.y)) continue;   // it would only be flushed off it
       const near = sim.getNearbyPlants(p.pos.x, p.pos.y, 60);
       let food = 0;
       for (let j = 0; j < near.length; j++) {
@@ -291,6 +295,7 @@ class Kea extends Kereru {
     const c = this._lureChoice;
     const r = this._lureRange(c);
     if (!r) return false;
+    if (this._stormAt(this._simRef, c.pos.x, c.pos.y)) return false;   // a storm over it: no draw until it clears
     const dx = c.pos.x - this.pos.x, dy = c.pos.y - this.pos.y;
     return dx * dx + dy * dy <= r * r;
   }
@@ -338,6 +343,7 @@ class Kea extends Kereru {
       const p = list[i];
       const r = this._lureRange(p);
       if (!r) continue;
+      if (this._stormAt(sim, p.pos.x, p.pos.y)) continue;   // under a storm
       const dx = p.pos.x - px, dy = p.pos.y - py, d2 = dx * dx + dy * dy;
       if (d2 <= r * r) caches.push({ c: p, d: Math.sqrt(d2), r });
     }
@@ -421,6 +427,155 @@ class Kea extends Kereru {
     this.edges();
   }
 
+  // A storm flushes the kea (the base _fleeStorm carries it out from under the cloud). Then it
+  // picks a REFUGE outside the storm, somewhere to land (_findStormRefuge), and flies on to it
+  // (_refugeStep). Without one it got just clear of the cloud, its food, perch or lure pulled
+  // it straight back under, and it was flushed again, hovering at the storm's edge until it
+  // starved. Also chosen when it is under a storm with no straight way out (pinned against
+  // the edge of the land), so it can go round.
+  _fleeStorm(sim, dt) {
+    // Escaping to a refuge because the straight flush got nowhere (below): keep to that route,
+    // through the cloud if it must, rather than being flushed back to where it was stuck.
+    if (this._refuge && this._refuge.escape) return false;
+    const fled = super._fleeStorm(sim, dt);
+    // A flush that gets no further from the storm for STUCK_SEC (its way out blocked: the
+    // land's edge, water) gives up and heads for a refuge instead.
+    if (fled) {
+      const s = this._nearestStorm(sim);
+      const d = s ? Math.hypot(this.pos.x - s.pos.x, this.pos.y - s.pos.y) : 0;
+      const pr = this._fleeProgress || (this._fleeProgress = { best: d, t: 0 });
+      if (d > pr.best + 2) { pr.best = d; pr.t = 0; }
+      else if ((pr.t += dt) > Kea.REFUGE.stuckSec * 60) {
+        this._fleeProgress = null;
+        const r = this._findStormRefuge(sim);
+        if (r) { r.escape = true; this._refuge = r; this._fledStorm = false; return false; }
+      }
+    } else this._fleeProgress = null;
+    if (!fled && !this._refuge && this._stormAt(sim, this.pos.x, this.pos.y)) {
+      this._refugeSearch = (this._refugeSearch || 0) - dt;
+      if (this._refugeSearch <= 0) { this._refugeSearch = 30; this._refuge = this._findStormRefuge(sim); }
+    }
+    if (fled) this._fledStorm = true;
+    else if (this._fledStorm) {   // just out from under it: where to land (kept if it had one)
+      this._fledStorm = false;
+      if (!this._refuge) this._refuge = this._findStormRefuge(sim);
+    }
+    return fled;
+  }
+
+  // Somewhere outside every storm (with a margin) for a flushed kea to land: the nearest grown
+  // plant it could feed on or perch in (food first, then any), else a clear spot on the land
+  // further round from the storm. { x, y, plant, t } (t: frames before it gives up), or null.
+  static REFUGE = { radius: 420, pad: 30, giveUpSec: 25, stuckSec: 0.75 };
+  _findStormRefuge(sim) {
+    const R = Kea.REFUGE, px = this.pos.x, py = this.pos.y;
+    const t = this.terrain, W = t.mapWidth, H = t.mapHeight, edge = Math.max(this._edgeMargin(), Kereru.REACH_EDGE);
+    const ins = (typeof CONFIG !== 'undefined' && CONFIG.viewInsetX) ? CONFIG.viewInsetX : 0;
+    const inside = (x, y) => x >= ins + edge && x <= W - ins - edge && y >= edge && y <= H - edge;
+    let best = null, bestScore = Infinity;
+    const plants = sim.getNearbyPlants ? sim.getNearbyPlants(px, py, R.radius) : [];
+    for (let i = 0; i < plants.length; i++) {
+      const p = plants[i];
+      if (!p.alive || p._consumed || p.unsprouted || p.growth < 0.5) continue;
+      if (!inside(p.pos.x, p.pos.y) || !this._passable(p.pos.x, p.pos.y)) continue;
+      if (this._stormAt(sim, p.pos.x, p.pos.y, R.pad)) continue;
+      const d = Math.hypot(p.pos.x - px, p.pos.y - py);
+      let score = d * (p.dormant ? 1.6 : 1);   // a plant in fruit over a bare perch
+      // One whose straight way there crosses a storm only if nothing better: it would be
+      // flushed again on the way.
+      if (!this._clearWay(sim, p.pos.x, p.pos.y)) score *= 3;
+      if (score < bestScore) { bestScore = score; best = p; }
+    }
+    const frames = R.giveUpSec * 60;
+    if (best) return { x: best.pos.x, y: best.pos.y, plant: best, t: frames };
+    // No plant clear of it: a clear spot, out from the storm and fanning round, nearest first.
+    const storm = this._nearestStorm(sim) || this._stormAt(sim, px, py, R.radius);
+    const cx = storm ? storm.pos.x : px, cy = storm ? storm.pos.y : py;
+    const base = Math.atan2(py - cy, px - cx);
+    for (const dist of [90, 160, 240, 340]) {
+      for (const a of [0, 0.5, -0.5, 1.0, -1.0, 1.6, -1.6, 2.3, -2.3, Math.PI]) {
+        const r = (storm ? (storm.radius || 70) * this._stormFlushMult() : 0) + dist;
+        const x = cx + Math.cos(base + a) * r, y = cy + Math.sin(base + a) * r;
+        if (inside(x, y) && this._passable(x, y) && !this._stormAt(sim, x, y, R.pad)) return { x, y, plant: null, t: frames };
+      }
+    }
+    return null;
+  }
+
+  // On the way to the refuge; on arrival it lands: feeding if the plant there is in fruit and
+  // it is hungry, else perching for a rest. Re-chosen when a storm moves over it or the plant
+  // goes; dropped after giveUpSec. Returns true while it takes the tick.
+  _refugeStep(sim, dt) {
+    const r = this._refuge;
+    r.t -= dt;
+    const gone = r.plant && (!r.plant.alive || r.plant._consumed);
+    if (r.t <= 0) { this._refuge = null; return false; }
+    if (gone || this._stormAt(sim, r.x, r.y, Kea.REFUGE.pad * 0.5)) {
+      const next = this._findStormRefuge(sim);
+      this._refuge = next ? Object.assign(next, { t: r.t, escape: r.escape }) : null;
+      return !!this._refuge;
+    }
+    this.state = KERERU_STATE.FLYING;
+    this.maxSpeed = this.speciesData?.config?.baseSpeed || 1.4;
+    const dx = r.x - this.pos.x, dy = r.y - this.pos.y;
+    if (dx * dx + dy * dy < 14 * 14) {
+      this._refuge = null;
+      if (r.plant && this._treeValid(r.plant) && this.crop <= 0) {
+        this._targetTree = r.plant;
+        this.state = KERERU_STATE.FEEDING;
+        this._feedTimer = this._feedFrames;
+      } else {
+        this._targetTree = null;
+        this.state = KERERU_STATE.PERCHED;
+        this._restTimer = this._restFrames;
+      }
+      return true;
+    }
+    this._target.set(r.x, r.y);
+    this.applyForce(this.seek(this._target, 1.2, 24));
+    return true;
+  }
+
+  // A safety net under the storm and edge checks: a kea flying at a food plant that gets no
+  // closer to it for STALL_SEC (something holds it off: an edge, water, a storm's flush) gives
+  // that plant up for AVOID_SEC and looks for another, instead of hovering short of it until
+  // it starves.
+  static STALL_SEC = 3;
+  static AVOID_SEC = 10;
+  _watchTarget(dt) {
+    if (this._avoidT > 0 && (this._avoidT -= dt) <= 0) this._avoidTree = null;
+    const tr = this._targetTree;
+    if (!this.alive || !tr || this.state !== KERERU_STATE.FLYING) { this._stall = null; return; }
+    const d = Math.hypot(tr.pos.x - this.pos.x, tr.pos.y - this.pos.y);
+    const s = (this._stall && this._stall.tree === tr) ? this._stall : (this._stall = { tree: tr, best: d, t: 0 });
+    if (d < s.best - 1) { s.best = d; s.t = 0; return; }
+    if ((s.t += dt) > Kea.STALL_SEC * 60) {
+      this._avoidTree = tr; this._avoidT = Kea.AVOID_SEC * 60;
+      this._targetTree = null; this._treeSearchTimer = 0; this._stall = null;
+    }
+  }
+
+  // Is the straight way from here to (x, y), and (x, y) itself, clear of every storm?
+  _clearWay(sim, x, y) {
+    const px = this.pos.x, py = this.pos.y;
+    for (let f = 0.25; f <= 1; f += 0.25) {
+      if (this._stormAt(sim, px + (x - px) * f, py + (y - py) * f)) return false;
+    }
+    return true;
+  }
+
+  // A dispersal hop never sets down under a storm or flies through one (it would only be
+  // flushed again): a few tries for a clear one, else it flies to a refuge outside the storm.
+  _pickHop() {
+    const sim = this._simRef;
+    for (let i = 0; i < 5; i++) {
+      super._pickHop();
+      if (this._clearWay(sim, this._target.x, this._target.y)) return;
+    }
+    const r = sim && this._findStormRefuge(sim);
+    if (r) { this._refuge = r; this._target.set(r.x, r.y); }
+  }
+
   // Raiding overrides foraging: while airborne and off cooldown, a moa egg in reach makes
   // the kea divert to rob it. Inside _runState so the base bookkeeping still runs.
   _runState(sim, dt) {
@@ -435,6 +590,8 @@ class Kea extends Kereru {
         return;
       }
     }
+    // Flushed by a storm: on to somewhere outside it to land (see _fleeStorm).
+    if (this._refuge && this._refugeStep(sim, dt)) return;
     // A raid of its own (keaRaidsEggs: true, or 'odds'). OFF in Free Play, where the player raids.
     if (this._raidMode() && this._raidCooldown <= 0 && this.state === KERERU_STATE.FLYING) {
       const egg = this._findMoaEgg(sim);
@@ -504,6 +661,7 @@ class Kea extends Kereru {
       const a = i * (Math.PI / 4);
       const rx = this.pos.x + Math.cos(a) * R, ry = this.pos.y + Math.sin(a) * R;
       if (!this._passable(rx, ry)) continue;   // a kea may step across alpine rock, not water
+      if (this._stormAt(this._simRef, rx, ry)) continue;   // nor into a storm
       const e = t.getElevationAt(rx, ry);
       const s = Math.abs(e - band.center);
       if (s < bestScore) { bestScore = s; best = { x: rx, y: ry }; }
@@ -543,9 +701,17 @@ class Kea extends Kereru {
     const canElev = t && typeof t.getElevationAt === 'function';
     const px = this.pos.x, py = this.pos.y;
     let bestIn = null, bestInSq = Infinity, bestOut = null, bestOutSq = Infinity;
+    // Nor a plant too near the map's edge to reach (to within the 14 it lands from): the edge
+    // steering (Boid.edges at 25, _landward at the level's margin) holds the bird off it, and it
+    // hovered there, trying, until it starved.
+    const W = t.mapWidth, H = t.mapHeight, ins = (typeof CONFIG !== 'undefined' && CONFIG.viewInsetX) ? CONFIG.viewInsetX : 0;
+    const E = Math.max(18, this._edgeMargin() - 12);
     for (let i = 0; i < plants.length; i++) {
       const p = plants[i];
       if (!p.alive || p._consumed || p.dormant || p.unsprouted || p.growth < 0.5) continue;
+      if (p.pos.x < ins + E || p.pos.x > W - ins - E || p.pos.y < E || p.pos.y > H - E) continue;
+      if (p === this._avoidTree) continue;   // it stalled short of this one (_watchTarget)
+      if (this._stormAt(sim, p.pos.x, p.pos.y)) continue;   // under a storm: it would only be flushed off it
       const dx = p.pos.x - px, dy = p.pos.y - py;
       let dSq = dx * dx + dy * dy;
       if (p._lured) dSq *= PLANT_LURE.pull * PLANT_LURE.pull;   // tapped by the player (Simulation.lurePlant)
@@ -625,7 +791,7 @@ class Kea extends Kereru {
       w.mode = 'flap'; w.phase = 0; w.beats = 2;
     }
 
-    const busy = this._altitude < this._cruiseAlt - K.climbBy || this._fleeingStorm || !!this._shoo;
+    const busy = this._altitude < this._cruiseAlt - K.climbBy || this._fleeingStorm || !!this._shoo || !!this._refuge;
     if (w.mode === 'soar') {
       w.hold -= dt;
       if (w.hold > 0 && !busy) return;

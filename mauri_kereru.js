@@ -67,6 +67,9 @@ const KERERU_SPECIES = {
 
 class Kereru extends Boid {
   get outlinable() { return true; }   // (its sprite takes an outline mark: EntitySprites.mark)
+  // How far in from the map's edge a fly-to point must be for a bird to reach it: beyond
+  // Boid.edges' 25 band, which pushes it back.
+  static REACH_EDGE = 30;
   constructor(x, y, terrain, config, speciesData) {
     super(x, y, terrain);
     this.config = config || {};
@@ -263,6 +266,22 @@ class Kereru extends Boid {
     return best;
   }
 
+  // The live Storm (if any) whose flush range, plus `pad`, covers (x, y): a place a bird would
+  // only be flushed from again (see _stormFlushMult).
+  _stormAt(sim, x, y, pad = 0) {
+    const list = sim && sim.placeables;
+    if (!list) return null;
+    let flush = 0;
+    for (let i = 0; i < list.length; i++) {
+      const p = list[i];
+      if (!p.alive || p.type !== 'Storm') continue;
+      if (!flush) flush = this._stormFlushMult();
+      const r = (p.radius || 70) * flush + pad, dx = p.pos.x - x, dy = p.pos.y - y;
+      if (dx * dx + dy * dy <= r * r) return p;
+    }
+    return null;
+  }
+
   // How close to the map's edge a bird lets itself go before turning back inward:
   // LEVEL_MECHANICS.flyerEdgeMargin, default 60. A small window whose forest runs to its edges
   // brings it in.
@@ -292,7 +311,9 @@ class Kereru extends Boid {
     // point (on land, inside the map's margins) that gets clear of it. With nowhere further
     // away to go (pinned against the map's edge or the sea), it stays under the cloud and
     // carries on, rather than hovering at the edge, unable to feed, until it starves.
-    const t = this.terrain, w = t.mapWidth, h = t.mapHeight, edge = this._edgeMargin();
+    // (Never inside the band Boid.edges pushes birds out of, 25 from the map's edge: a point
+    // there can't be reached, and a bird aiming at it hovered against the push until it starved.)
+    const t = this.terrain, w = t.mapWidth, h = t.mapHeight, edge = Math.max(this._edgeMargin(), Kereru.REACH_EDGE);
     const ins = (typeof CONFIG !== 'undefined' && CONFIG.viewInsetX) ? CONFIG.viewInsetX : 0;
     const ux = dx / m, uy = dy / m;
     let fx = 0, fy = 0, found = false;

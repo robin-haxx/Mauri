@@ -309,6 +309,30 @@ function openPath(pts) {
   return d;
 }
 
+// An open line as a filled band, w0 wide at its start and wTip at its end (0: a point). The
+// line is sampled along its Catmull-Rom curve and offset either side along its normals.
+function taperPath(pts, w0, wTip) {
+  const P = (i) => pts[Math.max(0, Math.min(pts.length - 1, i))], S = [];
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = P(i - 1), p1 = P(i), p2 = P(i + 1), p3 = P(i + 2);
+    const c1 = [p1[0] + (p2[0] - p0[0]) / 6, p1[1] + (p2[1] - p0[1]) / 6], c2 = [p2[0] - (p3[0] - p1[0]) / 6, p2[1] - (p3[1] - p1[1]) / 6];
+    for (let k = 0; k < 10; k++) {
+      const t = k / 10, u = 1 - t;
+      S.push([0, 1].map(j => u * u * u * p1[j] + 3 * u * u * t * c1[j] + 3 * u * t * t * c2[j] + t * t * t * p2[j]));
+    }
+  }
+  S.push(pts[pts.length - 1]);
+  const len = [0]; for (let i = 1; i < S.length; i++) len.push(len[i - 1] + Math.hypot(S[i][0] - S[i - 1][0], S[i][1] - S[i - 1][1]));
+  const L = len[len.length - 1], left = [], right = [];
+  S.forEach((p, i) => {
+    const a = S[Math.max(0, i - 1)], b = S[Math.min(S.length - 1, i + 1)], dx = b[0] - a[0], dy = b[1] - a[1], n = Math.hypot(dx, dy) || 1;
+    const t = len[i] / L, half = (wTip + (w0 - wTip) * Math.pow(1 - t, 0.75)) / 2;   // (stays full, then narrows quickly)
+    left.push([p[0] - dy / n * half, p[1] + dx / n * half]); right.push([p[0] + dy / n * half, p[1] - dx / n * half]);
+  });
+  const ring = left.concat(right.reverse());
+  return 'M' + ring.map(p => `${n2(p[0])} ${n2(p[1])}`).join('L') + 'Z';
+}
+
 // A field's region above `level`, as one path's data (fill it even-odd: lakes are holes).
 function regionPath(F, W, H, level, { minArea = 0.5, eps = 0.1 } = {}) {
   return contours(F, W, H, level)
@@ -419,7 +443,11 @@ if (require.main === module) {
   const ground = up(K.sea.map(v => 1 - v), 1.4);    // not sea
   const land   = up(sum(landK, alpineK, lakeK), 1.4);              // not sea, shelf or river
   const alpine = up(alpineK, 3.4);
-  const lake   = up(lakeK, 1.2);
+  // The South Island's lakes are glacial; the North Island's (the strip at the right edge, east
+  // of x = NORTH_X in the raster) keep the raster's deep blue.
+  const NORTH_X = 175;
+  const lakeSouth = up(lakeK.map((v, i) => (i % w) < NORTH_X ? v : 0), 1.2);
+  const lakeNorth = up(lakeK.map((v, i) => (i % w) < NORTH_X ? 0 : v), 1.2);
 
   // The raster's average colour where a kind is (nearly) pure.
   const meanWhere = (test) => {
@@ -477,7 +505,8 @@ if (require.main === module) {
     ground: regionPath(ground, W, H, 0.5, { minArea: 2.0 }),
     land:   regionPath(land, W, H, 0.5, { minArea: 3.0 }),
     alpine: regionPath(alpine, W, H, 0.5, { minArea: 6.0 }),
-    lake:   regionPath(lake, W, H, 0.5, { minArea: 1.2 }),
+    lakeSouth: regionPath(lakeSouth, W, H, 0.5, { minArea: 1.2 }),
+    lakeNorth: regionPath(lakeNorth, W, H, 0.5, { minArea: 1.2 }),
     river:  riverBodies.map(m => riverLine(m, bness, w, h)).filter(Boolean).join('')
   };
 
@@ -493,7 +522,9 @@ if (require.main === module) {
   }
   // Its root runs on a little, down into the tip of the land it grows from.
   if (spitPts.length > 2) { const [a, b] = spitPts, dx = a[0] - b[0], dy = a[1] - b[1], L = Math.hypot(dx, dy); spitPts.unshift([a[0] + dx / L * 2, a[1] + dy / L * 2]); }
-  const spitD = spitPts.length > 2 ? openPath(rdp(spitPts.map((p, i, a) => i === 0 || i === a.length - 1 ? p : [p[0], (a[i - 1][1] + 2 * p[1] + a[i + 1][1]) / 4]), 0.05)) : '';
+  const spitLine = spitPts.length > 2 ? rdp(spitPts.map((p, i, a) => i === 0 || i === a.length - 1 ? p : [p[0], (a[i - 1][1] + 2 * p[1] + a[i + 1][1]) / 4]), 0.05) : null;
+  // Drawn as shapes that narrow from the root to a point at the tip (a stroke cannot taper).
+  const spitShape = (w0, wTip) => spitLine ? taperPath(spitLine, w0, wTip) : '';
 
   const lb = landRelief.bands, ab = alpRelief.bands;
   const landBands = lb.slice(0, -1).map((b, i) => ({ colour: lb[i].colour, d: darker(landRelief.shade, b.below, { minArea: 0.6, eps: 0.14 }) })).reverse();
@@ -522,14 +553,11 @@ if (require.main === module) {
     `<path d="${P.land}" fill="none" stroke="#f6f0c4" stroke-width="1.6" stroke-linejoin="round" opacity="0.85"/>`,
     `</g>`,
     `<path d="${P.land}" fill="none" stroke="${hex(C.shelf.map(v => v * 0.75))}" stroke-width="0.45" stroke-linejoin="round" opacity="0.7"/>`,
-    // Farewell Spit: shoal, a dark edge, sand, and a bright crest.
-    ...(spitD ? [
-      `<g fill="none" stroke-linecap="round" stroke-linejoin="round">`,
-      `<path d="${spitD}" stroke="#bfe0cf" stroke-width="4" opacity="0.45"/>`,
-      `<path d="${spitD}" stroke="${hex(C.shelf.map(v => v * 0.62))}" stroke-width="2.2"/>`,
-      `<path d="${spitD}" stroke="#efe0ab" stroke-width="1.45"/>`,
-      `<path d="${spitD}" stroke="#fffbea" stroke-width="0.5" opacity="0.9"/>`,
-      `</g>`] : []),
+    // Farewell Spit: shoal, sand, and a bright crest, all tapering to its point.
+    ...(spitLine ? [
+      `<path d="${spitShape(3.8, 0.9)}" fill="#bfe0cf" opacity="0.45"/>`,
+      `<path d="${spitShape(1.7, 0)}" fill="#efe0ab"/>`,
+      `<path d="${spitShape(0.6, 0)}" fill="#fffbea" opacity="0.9"/>`] : []),
     // The glacier.
     `<path d="${P.alpine}" fill-rule="evenodd" fill="${hex(ab[ab.length - 1].colour)}"/>`,
     `<g clip-path="url(#alpClip)">`,
@@ -537,7 +565,9 @@ if (require.main === module) {
     `</g>`,
     `<path d="${P.alpine}" fill="none" stroke="#8fb1cc" stroke-width="0.45" stroke-linejoin="round"/>`,
     // Lakes, each in its pale ring; the rivers.
-    `<path d="${P.lake}" fill-rule="evenodd" fill="${hex(C.lake)}" stroke="#f3f5e2" stroke-width="1.7" stroke-linejoin="round" paint-order="stroke"/>`,
+    `<path d="${P.lakeSouth}" fill-rule="evenodd" fill="${hex(GLACIER[0])}" stroke="#f3f5e2" stroke-width="1.7" stroke-linejoin="round" paint-order="stroke"/>`,
+    `<path d="${P.lakeSouth}" fill="none" stroke="#8fb1cc" stroke-width="0.45" stroke-linejoin="round"/>`,
+    `<path d="${P.lakeNorth}" fill-rule="evenodd" fill="${hex(C.lake)}" stroke="#f3f5e2" stroke-width="1.7" stroke-linejoin="round" paint-order="stroke"/>`,
     `<g fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="${P.river}" stroke="#d2d8f1" stroke-width="2.3"/><path d="${P.river}" stroke="${hex(C.river)}" stroke-width="1.15"/></g>`,
     `</svg>`, ''
   ].join('\n');

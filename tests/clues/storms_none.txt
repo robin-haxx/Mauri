@@ -1,0 +1,15 @@
+seed 1: loss after 27s (Mama or Papa Moa was lost.) | beats first_hunt:natural | eagle took: upland_moa 1 | cast lost: mama@27.2s | focus animals 2, year 1 | spent nothing, 195 mauri in hand | replay ad132d32
+   problems met: 1 (answered: no hint 0, after the question 0, after being told 0; went away by itself 0; lost 1)
+seed 2: loss after 110s (The Pouākai took Pukepuke.) | beats first_hunt:forced | eagle took: stout_legged_moa 1, upland_moa 1 | cast lost: pukepuke@109.5s | focus animals 2, year 1 | spent nothing, 216 mauri in hand | replay d05f0845
+   problems met: 2 (answered: no hint 0, after the question 0, after being told 0; went away by itself 1; lost 1)
+seed 3: loss after 109s (Mama or Papa Moa was lost.) | beats first_hunt:natural | eagle took: stout_legged_moa 1, upland_moa 1 | cast lost: mama@108.6s | focus animals 2, year 1 | spent nothing, 216 mauri in hand | replay 7176abca
+   problems met: 2 (answered: no hint 0, after the question 0, after being told 0; went away by itself 1; lost 1)
+seed 4: loss after 25s (Mama or Papa Moa was lost.) | beats first_hunt:natural | eagle took: upland_moa 1 | cast lost: papa@24.8s | focus animals 1, year 1 | spent nothing, 115 mauri in hand | replay fe2b0a35
+   problems met: 1 (answered: no hint 0, after the question 0, after being told 0; went away by itself 0; lost 1)
+
+4 run(s): loss 4
+  beat first_hunt: natural 3, forced 1
+  eagle took: upland_moa 4, stout_legged_moa 2; cast lost 4
+  focus animals at the end: 1 to 2 (median 2); years reached: 1 to 1
+  problems met in the lessons' year: 0 of 4 answered with no hint, 0 after a hint, 4 lost; in the unprompted stretch: none
+  files in /home/user/Mauri/tests/clues/storms_none

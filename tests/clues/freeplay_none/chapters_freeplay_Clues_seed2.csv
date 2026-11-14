@@ -1,0 +1,36 @@
+seed,level,sketch,chapter,time_s,year,season,upland_moa,south_island_giant_moa,other_moa,total_moa,eagles,eggs,n_kea,n_kaka,n_kokako,placed_patotara,placed_Storm,event
+2,chapters_freeplay_clues,Clues,summer,0,1,summer,0,6,0,6,1,1,4,4,4,0,0,start
+2,chapters_freeplay_clues,Clues,summer,0,1,summer,0,6,0,6,1,1,4,4,4,0,0,reaction:stage:chapter_start
+2,chapters_freeplay_clues,Clues,summer,0,1,summer,0,6,0,6,1,1,4,4,4,0,0,nest:nestA:homeA
+2,chapters_freeplay_clues,Clues,summer,0,1,summer,0,6,0,6,1,1,4,4,4,0,0,nest:nestB:homeB
+2,chapters_freeplay_clues,Clues,summer,0,1,summer,2,6,0,8,1,1,4,4,4,0,0,spawn:upland_moa:2
+2,chapters_freeplay_clues,Clues,summer,0,1,summer,4,6,0,10,1,1,4,4,4,0,0,spawn:upland_moa:2
+2,chapters_freeplay_clues,Clues,summer,0,1,summer,4,6,0,10,1,1,4,4,4,0,0,cast:mama:adopted
+2,chapters_freeplay_clues,Clues,summer,0,1,summer,4,6,0,10,1,1,4,4,4,0,0,cast:papa:adopted
+2,chapters_freeplay_clues,Clues,summer,0,1,summer,4,6,0,10,1,1,4,4,4,0,0,cast:friendMama:adopted
+2,chapters_freeplay_clues,Clues,summer,0,1,summer,4,6,0,10,1,1,4,4,4,0,0,cast:friendPapa:adopted
+2,chapters_freeplay_clues,Clues,summer,0,1,summer,4,6,0,10,1,2,4,4,4,0,0,lay:upland_moa:1
+2,chapters_freeplay_clues,Clues,summer,0,1,summer,4,6,0,10,1,3,4,4,4,0,0,lay:upland_moa:1
+2,chapters_freeplay_clues,Clues,summer,0,1,summer,4,6,0,10,1,3,4,4,4,0,0,place:Storm:tops
+2,chapters_freeplay_clues,Clues,summer,0,1,summer,4,6,0,10,1,3,4,4,4,0,0,place:Storm:lookout
+2,chapters_freeplay_clues,Clues,summer,0,1,summer,4,6,0,10,1,3,4,4,4,0,0,place:waterhole:tarn
+2,chapters_freeplay_clues,Clues,summer,10,1,summer,4,6,0,10,1,3,4,4,4,0,0,sample
+2,chapters_freeplay_clues,Clues,summer,18.1,1,summer,4,6,0,10,1,3,4,4,4,0,0,reaction:hungry_eagle:when
+2,chapters_freeplay_clues,Clues,summer,20,1,summer,4,6,0,10,1,3,4,4,4,0,0,sample
+2,chapters_freeplay_clues,Clues,summer,26.7,1,summer,6,6,0,12,1,1,4,4,4,0,0,reaction:hatch_pukepuke:egg_hatched
+2,chapters_freeplay_clues,Clues,summer,26.7,1,summer,6,6,0,12,1,1,4,4,4,0,0,moment:$moa:Pukepuke has hatched!
+2,chapters_freeplay_clues,Clues,summer,26.7,1,summer,6,6,0,12,1,1,4,4,4,0,0,cast:pukepuke:adopted
+2,chapters_freeplay_clues,Clues,summer,26.7,1,summer,6,6,0,12,1,1,4,4,4,0,0,reaction:hatch_koukou:egg_hatched
+2,chapters_freeplay_clues,Clues,summer,26.7,1,summer,6,6,0,12,1,1,4,4,4,0,0,moment:$moa:Koukou has hatched!
+2,chapters_freeplay_clues,Clues,summer,26.7,1,summer,6,6,0,12,1,1,4,4,4,0,0,cast:koukou:adopted
+2,chapters_freeplay_clues,Clues,summer,27.8,1,summer,6,6,0,12,1,1,4,4,4,0,0,reaction:cover:eagle_hunting
+2,chapters_freeplay_clues,Clues,summer,28.8,1,summer,6,6,0,12,1,1,4,4,4,0,0,reaction:cover_again:eagle_hunting
+2,chapters_freeplay_clues,Clues,summer,28.8,1,summer,6,6,0,12,1,1,4,4,4,0,0,case:cover:rung 0; 1s; passed
+2,chapters_freeplay_clues,Clues,summer,30,1,summer,6,6,0,12,1,0,4,4,4,0,0,sample
+2,chapters_freeplay_clues,Clues,summer,32.8,1,summer,6,6,0,12,1,0,4,4,4,0,0,hint:cover_again:rung 1
+2,chapters_freeplay_clues,Clues,summer,35.8,1,summer,6,6,0,12,1,0,4,4,4,0,0,hint:cover_again:rung 2
+2,chapters_freeplay_clues,Clues,summer,38.6,1,summer,5,6,0,11,1,0,4,4,4,0,0,cast_lost:koukou:eagle
+2,chapters_freeplay_clues,Clues,summer,38.6,1,summer,5,6,0,11,1,0,4,4,4,0,0,case:cover_again:rung 2; 9.9s; lost
+2,chapters_freeplay_clues,Clues,summer,38.6,1,summer,5,6,0,11,1,0,4,4,4,0,0,reaction:koukou_lost:cast_lost
+2,chapters_freeplay_clues,Clues,summer,38.6,1,summer,5,6,0,11,1,0,4,4,4,0,0,lost:summer:The Pouākai took Koukou.
+2,chapters_freeplay_clues,Clues,summer,38.6,1,summer,5,6,0,11,1,0,4,4,4,0,0,loss

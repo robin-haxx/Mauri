@@ -1,0 +1,17 @@
+seed,level,sketch,chapter,time_s,year,season,upland_moa,stout_legged_moa,other_moa,total_moa,eagles,eggs,placed_Storm,event
+4,chapters_storms_clues,Clues,summer,0,1,summer,2,7,0,9,1,2,0,start
+4,chapters_storms_clues,Clues,summer,10,1,summer,2,7,0,9,1,2,0,beat:first_hunt:start
+4,chapters_storms_clues,Clues,summer,10,1,summer,2,7,0,9,1,2,0,sample
+4,chapters_storms_clues,Clues,summer,10.1,1,summer,2,7,0,9,1,2,0,reaction:hungry_eagle:when
+4,chapters_storms_clues,Clues,summer,15.6,1,summer,2,7,0,9,1,2,0,reaction:cover:eagle_hunting
+4,chapters_storms_clues,Clues,summer,15.6,1,summer,2,7,0,9,1,2,0,beat:first_hunt:done
+4,chapters_storms_clues,Clues,summer,17.6,1,summer,2,7,0,9,1,2,0,hint:cover:rung 1
+4,chapters_storms_clues,Clues,summer,20,1,summer,2,7,0,9,1,2,0,sample
+4,chapters_storms_clues,Clues,summer,20.6,1,summer,2,7,0,9,1,2,0,hint:cover:rung 2
+4,chapters_storms_clues,Clues,summer,24.8,1,summer,1,7,0,8,1,2,0,reaction:family_taken:moa_killed
+4,chapters_storms_clues,Clues,summer,24.8,1,summer,1,7,0,8,1,2,0,cast_lost:papa:eagle
+4,chapters_storms_clues,Clues,summer,24.8,1,summer,1,7,0,8,1,2,0,case:cover:rung 2; 9.2s; lost
+4,chapters_storms_clues,Clues,summer,24.8,1,summer,1,7,0,8,1,2,0,goal:seen_off
+4,chapters_storms_clues,Clues,summer,24.8,1,summer,1,7,0,8,1,2,0,missed:parents:required
+4,chapters_storms_clues,Clues,summer,24.8,1,summer,1,7,0,8,1,2,0,lost:summer:Mama or Papa Moa was lost.
+4,chapters_storms_clues,Clues,summer,24.8,1,summer,1,7,0,8,1,2,0,loss

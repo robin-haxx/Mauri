@@ -33,6 +33,10 @@ const MOA_SPECIES = {
   // Small, forest-dwelling, cold-adapted
   // ==========================================
   upland_moa: {
+    // The breeding year, where a level asks every moa to keep one (mechanics.moaCalendar, with
+    // seasonalBirdBreeding: 'calendar'). optIn: without moaCalendar this species breeds as it
+    // always has. One egg in summer, a hen laying again a year or two later; grown at three.
+    calendar: { optIn: true, lay: 'summer', layFrom: 0.05, layTo: 0.75, clutch: [1, 1], maturityYears: 3, every: [1, 2], success: 1 },
     displayName: "Upland Moa",
     scientificName: "Megalapteryx didinus",
     spriteSet: 'upland',       // dedicated Moa/upland_walk art; renders untinted
@@ -220,6 +224,10 @@ const MOA_SPECIES = {
   // STOUT-LEGGED MOA (Euryapteryx curtus)
   // ==========================================
   stout_legged_moa: {
+    // The breeding year, where a level asks every moa to keep one (mechanics.moaCalendar, with
+    // seasonalBirdBreeding: 'calendar'). optIn: without moaCalendar this species breeds as it
+    // always has. The herd of the flats: an egg or two each spring; grown at two.
+    calendar: { optIn: true, lay: 'spring', layFrom: 0, layTo: 0.9, clutch: [1, 2], maturityYears: 2, every: [1, 1], success: 1 },
     displayName: "Stout-legged Moa",
     scientificName: "Euryapteryx curtus",
     tint: [205, 170, 80],      // yellow-brown; distinct from the rust bush moa
@@ -258,6 +266,10 @@ const MOA_SPECIES = {
   // HEAVY-FOOTED MOA (Pachyornis elephantopus)
   // ==========================================
   heavy_footed_moa: {
+    // The breeding year, where a level asks every moa to keep one (mechanics.moaCalendar, with
+    // seasonalBirdBreeding: 'calendar'). optIn: without moaCalendar this species breeds as it
+    // always has. One egg in spring, every year or two; grown at three.
+    calendar: { optIn: true, lay: 'spring', layFrom: 0.1, layTo: 0.8, clutch: [1, 1], maturityYears: 3, every: [1, 2], success: 1 },
     displayName: "Heavy-footed Moa",
     scientificName: "Pachyornis elephantopus",
     tint: [165, 168, 172],     // Pachyornis; grey
@@ -376,6 +388,10 @@ const MOA_SPECIES = {
   // LITTLE BUSH MOA (Anomalopteryx didiformis)
   // ==========================================
   little_bush_moa: {
+    // The breeding year, where a level asks every moa to keep one (mechanics.moaCalendar, with
+    // seasonalBirdBreeding: 'calendar'). optIn: without moaCalendar this species breeds as it
+    // always has. One egg in spring, every year or two; grown at three.
+    calendar: { optIn: true, lay: 'spring', layFrom: 0.1, layTo: 0.8, clutch: [1, 1], maturityYears: 3, every: [1, 2], success: 1 },
     displayName: "Little Bush Moa",
     scientificName: "Anomalopteryx didiformis",
     spriteSet: 'bush',         // dedicated LB_moa art; renders untinted

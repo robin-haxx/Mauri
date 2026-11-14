@@ -1,0 +1,250 @@
+{
+ "level": "chapters_freeplay_clues",
+ "sketch": "Clues",
+ "seed": 2,
+ "result": "loss",
+ "playTime": 39,
+ "csv": "seed,level,sketch,chapter,time_s,year,season,upland_moa,south_island_giant_moa,other_moa,total_moa,eagles,eggs,n_kea,n_kaka,n_kokako,placed_patotara,placed_Storm,event\n2,chapters_freeplay_clues,Clues,summer,0,1,summer,0,6,0,6,1,1,4,4,4,0,0,start\n2,chapters_freeplay_clues,Clues,summer,0,1,summer,0,6,0,6,1,1,4,4,4,0,0,reaction:stage:chapter_start\n2,chapters_freeplay_clues,Clues,summer,0,1,summer,0,6,0,6,1,1,4,4,4,0,0,nest:nestA:homeA\n2,chapters_freeplay_clues,Clues,summer,0,1,summer,0,6,0,6,1,1,4,4,4,0,0,nest:nestB:homeB\n2,chapters_freeplay_clues,Clues,summer,0,1,summer,2,6,0,8,1,1,4,4,4,0,0,spawn:upland_moa:2\n2,chapters_freeplay_clues,Clues,summer,0,1,summer,4,6,0,10,1,1,4,4,4,0,0,spawn:upland_moa:2\n2,chapters_freeplay_clues,Clues,summer,0,1,summer,4,6,0,10,1,1,4,4,4,0,0,cast:mama:adopted\n2,chapters_freeplay_clues,Clues,summer,0,1,summer,4,6,0,10,1,1,4,4,4,0,0,cast:papa:adopted\n2,chapters_freeplay_clues,Clues,summer,0,1,summer,4,6,0,10,1,1,4,4,4,0,0,cast:friendMama:adopted\n2,chapters_freeplay_clues,Clues,summer,0,1,summer,4,6,0,10,1,1,4,4,4,0,0,cast:friendPapa:adopted\n2,chapters_freeplay_clues,Clues,summer,0,1,summer,4,6,0,10,1,2,4,4,4,0,0,lay:upland_moa:1\n2,chapters_freeplay_clues,Clues,summer,0,1,summer,4,6,0,10,1,3,4,4,4,0,0,lay:upland_moa:1\n2,chapters_freeplay_clues,Clues,summer,0,1,summer,4,6,0,10,1,3,4,4,4,0,0,place:Storm:tops\n2,chapters_freeplay_clues,Clues,summer,0,1,summer,4,6,0,10,1,3,4,4,4,0,0,place:Storm:lookout\n2,chapters_freeplay_clues,Clues,summer,0,1,summer,4,6,0,10,1,3,4,4,4,0,0,place:waterhole:tarn\n2,chapters_freeplay_clues,Clues,summer,10,1,summer,4,6,0,10,1,3,4,4,4,0,0,sample\n2,chapters_freeplay_clues,Clues,summer,18.1,1,summer,4,6,0,10,1,3,4,4,4,0,0,reaction:hungry_eagle:when\n2,chapters_freeplay_clues,Clues,summer,20,1,summer,4,6,0,10,1,3,4,4,4,0,0,sample\n2,chapters_freeplay_clues,Clues,summer,26.7,1,summer,6,6,0,12,1,1,4,4,4,0,0,reaction:hatch_pukepuke:egg_hatched\n2,chapters_freeplay_clues,Clues,summer,26.7,1,summer,6,6,0,12,1,1,4,4,4,0,0,moment:$moa:Pukepuke has hatched!\n2,chapters_freeplay_clues,Clues,summer,26.7,1,summer,6,6,0,12,1,1,4,4,4,0,0,cast:pukepuke:adopted\n2,chapters_freeplay_clues,Clues,summer,26.7,1,summer,6,6,0,12,1,1,4,4,4,0,0,reaction:hatch_koukou:egg_hatched\n2,chapters_freeplay_clues,Clues,summer,26.7,1,summer,6,6,0,12,1,1,4,4,4,0,0,moment:$moa:Koukou has hatched!\n2,chapters_freeplay_clues,Clues,summer,26.7,1,summer,6,6,0,12,1,1,4,4,4,0,0,cast:koukou:adopted\n2,chapters_freeplay_clues,Clues,summer,27.8,1,summer,6,6,0,12,1,1,4,4,4,0,0,reaction:cover:eagle_hunting\n2,chapters_freeplay_clues,Clues,summer,28.8,1,summer,6,6,0,12,1,1,4,4,4,0,0,reaction:cover_again:eagle_hunting\n2,chapters_freeplay_clues,Clues,summer,28.8,1,summer,6,6,0,12,1,1,4,4,4,0,0,case:cover:rung 0; 1s; passed\n2,chapters_freeplay_clues,Clues,summer,30,1,summer,6,6,0,12,1,0,4,4,4,0,0,sample\n2,chapters_freeplay_clues,Clues,summer,32.8,1,summer,6,6,0,12,1,0,4,4,4,0,0,hint:cover_again:rung 1\n2,chapters_freeplay_clues,Clues,summer,35.8,1,summer,6,6,0,12,1,0,4,4,4,0,0,hint:cover_again:rung 2\n2,chapters_freeplay_clues,Clues,summer,38.6,1,summer,5,6,0,11,1,0,4,4,4,0,0,cast_lost:koukou:eagle\n2,chapters_freeplay_clues,Clues,summer,38.6,1,summer,5,6,0,11,1,0,4,4,4,0,0,case:cover_again:rung 2; 9.9s; lost\n2,chapters_freeplay_clues,Clues,summer,38.6,1,summer,5,6,0,11,1,0,4,4,4,0,0,reaction:koukou_lost:cast_lost\n2,chapters_freeplay_clues,Clues,summer,38.6,1,summer,5,6,0,11,1,0,4,4,4,0,0,lost:summer:The Pouākai took Koukou.\n2,chapters_freeplay_clues,Clues,summer,38.6,1,summer,5,6,0,11,1,0,4,4,4,0,0,loss",
+ "log": [
+  {
+   "t": 0,
+   "chapter": "summer",
+   "kind": "chapter",
+   "id": "summer",
+   "info": ""
+  },
+  {
+   "t": 0,
+   "chapter": "summer",
+   "kind": "reaction",
+   "id": "stage",
+   "info": "chapter_start"
+  },
+  {
+   "t": 0,
+   "chapter": "summer",
+   "kind": "nest",
+   "id": "nestA",
+   "info": "homeA"
+  },
+  {
+   "t": 0,
+   "chapter": "summer",
+   "kind": "nest",
+   "id": "nestB",
+   "info": "homeB"
+  },
+  {
+   "t": 0,
+   "chapter": "summer",
+   "kind": "spawn",
+   "id": "upland_moa",
+   "info": "2"
+  },
+  {
+   "t": 0,
+   "chapter": "summer",
+   "kind": "spawn",
+   "id": "upland_moa",
+   "info": "2"
+  },
+  {
+   "t": 0,
+   "chapter": "summer",
+   "kind": "cast",
+   "id": "mama",
+   "info": "adopted"
+  },
+  {
+   "t": 0,
+   "chapter": "summer",
+   "kind": "cast",
+   "id": "papa",
+   "info": "adopted"
+  },
+  {
+   "t": 0,
+   "chapter": "summer",
+   "kind": "cast",
+   "id": "friendMama",
+   "info": "adopted"
+  },
+  {
+   "t": 0,
+   "chapter": "summer",
+   "kind": "cast",
+   "id": "friendPapa",
+   "info": "adopted"
+  },
+  {
+   "t": 0,
+   "chapter": "summer",
+   "kind": "lay",
+   "id": "upland_moa",
+   "info": "1"
+  },
+  {
+   "t": 0,
+   "chapter": "summer",
+   "kind": "lay",
+   "id": "upland_moa",
+   "info": "1"
+  },
+  {
+   "t": 0,
+   "chapter": "summer",
+   "kind": "place",
+   "id": "Storm",
+   "info": "tops"
+  },
+  {
+   "t": 0,
+   "chapter": "summer",
+   "kind": "place",
+   "id": "Storm",
+   "info": "lookout"
+  },
+  {
+   "t": 0,
+   "chapter": "summer",
+   "kind": "place",
+   "id": "waterhole",
+   "info": "tarn"
+  },
+  {
+   "t": 18.1,
+   "chapter": "summer",
+   "kind": "reaction",
+   "id": "hungry_eagle",
+   "info": "when"
+  },
+  {
+   "t": 26.7,
+   "chapter": "summer",
+   "kind": "reaction",
+   "id": "hatch_pukepuke",
+   "info": "egg_hatched"
+  },
+  {
+   "t": 26.7,
+   "chapter": "summer",
+   "kind": "moment",
+   "id": "$moa",
+   "info": "Pukepuke has hatched!"
+  },
+  {
+   "t": 26.7,
+   "chapter": "summer",
+   "kind": "cast",
+   "id": "pukepuke",
+   "info": "adopted"
+  },
+  {
+   "t": 26.7,
+   "chapter": "summer",
+   "kind": "reaction",
+   "id": "hatch_koukou",
+   "info": "egg_hatched"
+  },
+  {
+   "t": 26.7,
+   "chapter": "summer",
+   "kind": "moment",
+   "id": "$moa",
+   "info": "Koukou has hatched!"
+  },
+  {
+   "t": 26.7,
+   "chapter": "summer",
+   "kind": "cast",
+   "id": "koukou",
+   "info": "adopted"
+  },
+  {
+   "t": 27.8,
+   "chapter": "summer",
+   "kind": "reaction",
+   "id": "cover",
+   "info": "eagle_hunting"
+  },
+  {
+   "t": 28.8,
+   "chapter": "summer",
+   "kind": "reaction",
+   "id": "cover_again",
+   "info": "eagle_hunting"
+  },
+  {
+   "t": 28.8,
+   "chapter": "summer",
+   "kind": "case",
+   "id": "cover",
+   "info": "rung 0, 1s, passed"
+  },
+  {
+   "t": 32.8,
+   "chapter": "summer",
+   "kind": "hint",
+   "id": "cover_again",
+   "info": "rung 1"
+  },
+  {
+   "t": 35.8,
+   "chapter": "summer",
+   "kind": "hint",
+   "id": "cover_again",
+   "info": "rung 2"
+  },
+  {
+   "t": 38.6,
+   "chapter": "summer",
+   "kind": "cast_lost",
+   "id": "koukou",
+   "info": "eagle"
+  },
+  {
+   "t": 38.6,
+   "chapter": "summer",
+   "kind": "case",
+   "id": "cover_again",
+   "info": "rung 2, 9.9s, lost"
+  },
+  {
+   "t": 38.6,
+   "chapter": "summer",
+   "kind": "reaction",
+   "id": "koukou_lost",
+   "info": "cast_lost"
+  },
+  {
+   "t": 38.6,
+   "chapter": "summer",
+   "kind": "lost",
+   "id": "summer",
+   "info": "The Pouākai took Koukou."
+  }
+ ],
+ "beats": {},
+ "cases": [
+  {
+   "id": "cover",
+   "t": 28.8,
+   "sec": 1,
+   "rung": 0,
+   "outcome": "passed",
+   "who": "mama",
+   "chapter": "summer",
+   "transfer": false
+  },
+  {
+   "id": "cover_again",
+   "t": 38.6,
+   "sec": 9.9,
+   "rung": 2,
+   "outcome": "lost",
+   "who": "koukou",
+   "chapter": "summer",
+   "transfer": false
+  }
+ ]
+}

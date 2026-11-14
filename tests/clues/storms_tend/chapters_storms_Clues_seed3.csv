@@ -1,0 +1,92 @@
+seed,level,sketch,chapter,time_s,year,season,upland_moa,stout_legged_moa,other_moa,total_moa,eagles,eggs,placed_Storm,event
+3,chapters_storms_clues,Clues,summer,0,1,summer,2,7,0,9,1,2,0,start
+3,chapters_storms_clues,Clues,summer,10,1,summer,2,7,0,9,1,2,0,beat:first_hunt:start
+3,chapters_storms_clues,Clues,summer,10,1,summer,2,7,0,9,1,2,0,sample
+3,chapters_storms_clues,Clues,summer,10.1,1,summer,2,7,0,9,1,2,0,reaction:hungry_eagle:when
+3,chapters_storms_clues,Clues,summer,15.6,1,summer,2,7,0,9,1,2,0,reaction:cover:eagle_hunting
+3,chapters_storms_clues,Clues,summer,15.6,1,summer,2,7,0,9,1,2,0,beat:first_hunt:done
+3,chapters_storms_clues,Clues,summer,16.6,1,summer,2,7,0,9,1,2,0,case:cover:rung 0; 1s; passed
+3,chapters_storms_clues,Clues,summer,16.6,1,summer,2,7,0,9,1,2,0,goal:seen_off
+3,chapters_storms_clues,Clues,summer,20,1,summer,2,7,0,9,1,2,0,sample
+3,chapters_storms_clues,Clues,summer,26.7,1,summer,3,7,0,10,1,1,0,reaction:hatched:egg_hatched
+3,chapters_storms_clues,Clues,summer,26.7,1,summer,3,7,0,10,1,1,0,moment:$moa:Pukepuke has hatched!
+3,chapters_storms_clues,Clues,summer,26.7,1,summer,3,7,0,10,1,1,0,cast:pukepuke:adopted
+3,chapters_storms_clues,Clues,summer,26.7,1,summer,3,7,0,10,1,1,0,goal:hatched
+3,chapters_storms_clues,Clues,summer,30,1,summer,3,7,0,10,1,0,0,sample
+3,chapters_storms_clues,Clues,summer,35,1,summer,3,6,0,9,1,0,0,reaction:herd_taken:moa_killed
+3,chapters_storms_clues,Clues,summer,35,1,summer,3,6,0,9,1,0,0,reaction:herd_taken_again:moa_killed
+3,chapters_storms_clues,Clues,summer,40,1,summer,3,6,0,9,1,0,0,sample
+3,chapters_storms_clues,Clues,summer,45,1,autumn,3,6,0,9,1,0,0,goal:parents
+3,chapters_storms_clues,Clues,summer,45,1,autumn,3,6,0,9,1,0,0,close:summer:-> autumn
+3,chapters_storms_clues,Clues,autumn,45,1,autumn,3,6,0,9,1,0,0,chapter:autumn
+3,chapters_storms_clues,Clues,autumn,45,1,autumn,3,6,0,9,1,0,0,place:waterhole:tarn
+3,chapters_storms_clues,Clues,autumn,45,1,autumn,3,6,0,9,1,0,0,fade:Storm:4
+3,chapters_storms_clues,Clues,autumn,50,1,autumn,3,6,0,9,1,0,0,sample
+3,chapters_storms_clues,Clues,autumn,60,1,autumn,3,6,0,9,1,0,0,sample
+3,chapters_storms_clues,Clues,autumn,70,1,autumn,3,6,0,9,1,0,0,sample
+3,chapters_storms_clues,Clues,autumn,80,1,autumn,3,6,0,9,1,0,0,sample
+3,chapters_storms_clues,Clues,autumn,87.8,1,autumn,3,6,0,9,1,0,0,reaction:hungry_eagle:when
+3,chapters_storms_clues,Clues,autumn,90,1,autumn,3,6,0,9,1,0,0,reaction:storm_gone:placeable_expired
+3,chapters_storms_clues,Clues,autumn,90,1,autumn,3,6,0,9,1,0,0,sample
+3,chapters_storms_clues,Clues,autumn,96,1,autumn,3,6,0,9,1,0,0,hint:storm_gone:rung 1
+3,chapters_storms_clues,Clues,autumn,97.5,1,autumn,3,6,0,9,1,0,0,reaction:cover_again:eagle_hunting
+3,chapters_storms_clues,Clues,autumn,99.5,1,autumn,3,6,0,9,1,0,0,player:placement:Storm
+3,chapters_storms_clues,Clues,autumn,99.5,1,autumn,3,6,0,9,1,0,0,reaction:cover_again:eagle_hunting
+3,chapters_storms_clues,Clues,autumn,99.6,1,autumn,3,6,0,9,1,0,0,case:cover_again:rung 0; 2.1s; solved
+3,chapters_storms_clues,Clues,autumn,99.6,1,autumn,3,6,0,9,1,0,0,case:storm_gone:rung 1; 9.6s; solved
+3,chapters_storms_clues,Clues,autumn,99.6,1,autumn,3,6,0,9,1,0,0,reaction:saw_it_coming:case_closed
+3,chapters_storms_clues,Clues,autumn,100,1,autumn,3,6,0,9,1,0,0,sample
+3,chapters_storms_clues,Clues,autumn,102,1,autumn,3,6,0,9,1,0,0,player:placeable_moved:Storm
+3,chapters_storms_clues,Clues,autumn,102,1,autumn,3,6,0,9,1,0,0,reaction:gave_up:eagle_gave_up
+3,chapters_storms_clues,Clues,autumn,102,1,autumn,3,6,0,9,1,0,0,reaction:gave_up_again:eagle_gave_up
+3,chapters_storms_clues,Clues,autumn,102.1,1,autumn,3,6,0,9,1,0,0,case:cover_again:rung 0; 2.6s; solved
+3,chapters_storms_clues,Clues,autumn,110,1,autumn,3,6,0,9,1,0,0,sample
+3,chapters_storms_clues,Clues,autumn,115.5,1,autumn,3,6,0,9,1,0,0,hold:autumn:released after maxSec
+3,chapters_storms_clues,Clues,autumn,120,1,winter,3,6,0,9,1,0,0,goal:parents2
+3,chapters_storms_clues,Clues,autumn,120,1,winter,3,6,0,9,1,0,0,close:autumn:-> winter
+3,chapters_storms_clues,Clues,winter,120,1,winter,3,6,0,9,1,0,0,chapter:winter
+3,chapters_storms_clues,Clues,winter,120,1,winter,3,6,0,9,1,0,0,fade:Storm:1
+3,chapters_storms_clues,Clues,winter,120,1,winter,3,6,0,9,1,0,0,sample
+3,chapters_storms_clues,Clues,winter,121.6,1,winter,3,5,0,8,1,0,0,reaction:herd_taken_again:moa_killed
+3,chapters_storms_clues,Clues,winter,122,1,winter,3,5,0,8,1,0,0,reaction:storm_gone:placeable_expired
+3,chapters_storms_clues,Clues,winter,128,1,winter,3,5,0,8,1,0,0,hint:storm_gone:rung 1
+3,chapters_storms_clues,Clues,winter,130,1,winter,3,5,0,8,1,0,0,sample
+3,chapters_storms_clues,Clues,winter,133.5,1,winter,3,5,0,8,1,0,0,reaction:winter_press:when
+3,chapters_storms_clues,Clues,winter,133.6,1,winter,3,5,0,8,1,0,0,reaction:hungry_eagle:when
+3,chapters_storms_clues,Clues,winter,136,1,winter,3,5,0,8,1,0,0,hint:storm_gone:rung 2
+3,chapters_storms_clues,Clues,winter,140,1,winter,3,5,0,8,1,0,0,sample
+3,chapters_storms_clues,Clues,winter,150,1,winter,3,4,0,7,1,0,0,sample
+3,chapters_storms_clues,Clues,winter,151.5,1,winter,3,4,0,7,1,0,0,reaction:winter_press2:when
+3,chapters_storms_clues,Clues,winter,159.8,1,winter,3,3,0,6,1,0,0,reaction:herd_taken_again:moa_killed
+3,chapters_storms_clues,Clues,winter,160,1,winter,3,3,0,6,1,0,0,sample
+3,chapters_storms_clues,Clues,winter,165,1,spring,3,3,0,6,1,0,0,goal:through
+3,chapters_storms_clues,Clues,winter,165,1,spring,3,3,0,6,1,0,0,goal:parents3
+3,chapters_storms_clues,Clues,winter,165,1,spring,3,3,0,6,1,0,0,close:winter:-> spring
+3,chapters_storms_clues,Clues,spring,165,1,spring,3,3,0,6,1,0,0,chapter:spring
+3,chapters_storms_clues,Clues,spring,167,1,spring,3,3,0,6,1,0,0,case:storm_gone:rung 2; 45s; passed
+3,chapters_storms_clues,Clues,spring,170,1,spring,3,3,0,6,1,1,0,sample
+3,chapters_storms_clues,Clues,spring,172.1,1,spring,3,3,0,6,1,1,0,goal:home
+3,chapters_storms_clues,Clues,spring,172.1,1,spring,3,3,0,6,1,1,0,reaction:home_again:goal_met
+3,chapters_storms_clues,Clues,spring,172.1,1,spring,3,3,0,6,1,1,0,moment:mama:Home again!
+3,chapters_storms_clues,Clues,spring,180,1,spring,3,3,0,6,1,1,0,sample
+3,chapters_storms_clues,Clues,spring,190,1,spring,3,3,0,6,1,1,0,sample
+3,chapters_storms_clues,Clues,spring,200,1,spring,3,3,0,6,1,1,0,sample
+3,chapters_storms_clues,Clues,spring,210,2,summer,3,4,0,7,1,0,0,close:spring:-> transfer
+3,chapters_storms_clues,Clues,transfer,210,2,summer,3,4,0,7,1,0,0,chapter:transfer
+3,chapters_storms_clues,Clues,transfer,210,2,summer,3,4,0,7,1,0,0,fade:Storm:0
+3,chapters_storms_clues,Clues,transfer,210,2,summer,3,4,0,7,1,0,0,sample
+3,chapters_storms_clues,Clues,transfer,220,2,summer,3,4,0,7,1,0,0,sample
+3,chapters_storms_clues,Clues,transfer,230,2,summer,3,4,0,7,1,0,0,sample
+3,chapters_storms_clues,Clues,transfer,230.3,2,summer,3,3,0,6,1,0,0,reaction:herd_taken_again:moa_killed
+3,chapters_storms_clues,Clues,transfer,232,2,summer,3,3,0,6,1,0,0,reaction:transfer_press:when
+3,chapters_storms_clues,Clues,transfer,233.3,2,summer,3,3,0,6,1,0,0,reaction:cover_again:eagle_hunting
+3,chapters_storms_clues,Clues,transfer,235.5,2,summer,3,3,0,6,1,0,0,player:placement:Storm
+3,chapters_storms_clues,Clues,transfer,235.6,2,summer,3,3,0,6,1,0,0,case:cover_again:rung 0; 2.3s; solved; transfer
+3,chapters_storms_clues,Clues,transfer,235.6,2,summer,3,3,0,6,1,0,0,goal:transfer_own
+3,chapters_storms_clues,Clues,transfer,235.7,2,summer,3,3,0,6,1,0,0,reaction:cover_again:eagle_hunting
+3,chapters_storms_clues,Clues,transfer,238,2,summer,3,3,0,6,1,0,0,player:placeable_moved:Storm
+3,chapters_storms_clues,Clues,transfer,238.1,2,summer,3,3,0,6,1,0,0,case:cover_again:rung 0; 2.4s; solved; transfer
+3,chapters_storms_clues,Clues,transfer,240,2,summer,3,3,0,6,1,0,0,close:transfer:-> win
+3,chapters_storms_clues,Clues,transfer,240,2,summer,3,3,0,6,1,0,0,won:transfer
+3,chapters_storms_clues,Clues,transfer,240,2,summer,3,3,0,6,1,0,0,sample
+3,chapters_storms_clues,Clues,transfer,240,2,summer,3,3,0,6,1,0,0,win

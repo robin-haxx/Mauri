@@ -546,16 +546,19 @@ const MenuStyle = {
   // Draw a stone slab button w × h whose ground footprint has its top-left at (x, y + depth):
   // it stands `lift` px up off the ground (0 = pressed flat, depth = raised high), its side
   // showing below the face and its shadow softening as it rises. Returns the face's top y.
-  drawSlab(key, x, y, w, h, lift, depth) {
-    const s = this._slab(key, w, h), p = s.pad;
+  // `bakeW` (optional): draw the slab baked at that width, stretched to w. A slab whose width
+  // is changing (the menu compacting beside the journey's map) passes it, so no new slab is
+  // baked for every width on the way.
+  drawSlab(key, x, y, w, h, lift, depth, bakeW) {
+    const s = this._slab(key, bakeW || w, h), k = bakeW ? w / bakeW : 1, p = s.pad * k, W = s.W * k;
     const ctx = drawingContext;
     const top = y + depth - lift;
     ctx.save();
     ctx.globalAlpha = 0.45 + 0.55 * Math.max(0, Math.min(1, lift / depth));
-    image(s.shadow, x - p, y + depth + 2 + lift * 0.35 - p, s.W, s.H);
+    image(s.shadow, x - p, y + depth + 2 + lift * 0.35 - s.pad, W, s.H);
     ctx.restore();
-    for (let o = y + depth; o > top; o -= 1) image(s.side, x - p, o - p, s.W, s.H);
-    image(s.face, x - p, top - p, s.W, s.H);
+    for (let o = y + depth; o > top; o -= 1) image(s.side, x - p, o - s.pad, W, s.H);
+    image(s.face, x - p, top - s.pad, W, s.H);
     return top;
   },
 

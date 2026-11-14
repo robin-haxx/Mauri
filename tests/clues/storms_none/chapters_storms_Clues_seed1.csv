@@ -1,0 +1,21 @@
+seed,level,sketch,chapter,time_s,year,season,upland_moa,stout_legged_moa,other_moa,total_moa,eagles,eggs,placed_Storm,event
+1,chapters_storms_clues,Clues,summer,0,1,summer,2,7,0,9,1,2,0,start
+1,chapters_storms_clues,Clues,summer,10,1,summer,2,7,0,9,1,2,0,beat:first_hunt:start
+1,chapters_storms_clues,Clues,summer,10,1,summer,2,7,0,9,1,2,0,sample
+1,chapters_storms_clues,Clues,summer,10.1,1,summer,2,7,0,9,1,2,0,reaction:hungry_eagle:when
+1,chapters_storms_clues,Clues,summer,15.6,1,summer,2,7,0,9,1,2,0,reaction:cover:eagle_hunting
+1,chapters_storms_clues,Clues,summer,15.6,1,summer,2,7,0,9,1,2,0,beat:first_hunt:done
+1,chapters_storms_clues,Clues,summer,17.6,1,summer,2,7,0,9,1,2,0,hint:cover:rung 1
+1,chapters_storms_clues,Clues,summer,20,1,summer,2,7,0,9,1,2,0,sample
+1,chapters_storms_clues,Clues,summer,20.6,1,summer,2,7,0,9,1,2,0,hint:cover:rung 2
+1,chapters_storms_clues,Clues,summer,26.7,1,summer,3,7,0,10,1,1,0,reaction:hatched:egg_hatched
+1,chapters_storms_clues,Clues,summer,26.7,1,summer,3,7,0,10,1,1,0,moment:$moa:Pukepuke has hatched!
+1,chapters_storms_clues,Clues,summer,26.7,1,summer,3,7,0,10,1,1,0,cast:pukepuke:adopted
+1,chapters_storms_clues,Clues,summer,26.7,1,summer,3,7,0,10,1,1,0,goal:hatched
+1,chapters_storms_clues,Clues,summer,27.2,1,summer,2,7,0,9,1,1,0,reaction:family_taken:moa_killed
+1,chapters_storms_clues,Clues,summer,27.2,1,summer,2,7,0,9,1,1,0,cast_lost:mama:eagle
+1,chapters_storms_clues,Clues,summer,27.2,1,summer,2,7,0,9,1,1,0,case:cover:rung 2; 11.6s; lost
+1,chapters_storms_clues,Clues,summer,27.2,1,summer,2,7,0,9,1,1,0,goal:seen_off
+1,chapters_storms_clues,Clues,summer,27.2,1,summer,2,7,0,9,1,1,0,missed:parents:required
+1,chapters_storms_clues,Clues,summer,27.2,1,summer,2,7,0,9,1,1,0,lost:summer:Mama or Papa Moa was lost.
+1,chapters_storms_clues,Clues,summer,27.2,1,summer,2,7,0,9,1,1,0,loss

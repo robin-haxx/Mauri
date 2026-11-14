@@ -1,0 +1,11 @@
+seed 1: year_end after 1620s | beats (no beats) | eagle took: upland_moa 13, stout_legged_moa 4, little_bush_moa 1 | cast lost: friendPapa@90.2s papa@215.6s pukepuke@340.2s mama@1221.6s koukou@1267.4s | focus animals 3, year 10 | spent nothing, 1196 mauri in hand | replay a6fae5a
+seed 2: loss after 217s (No upland hen is left on the tops, in year 2.) | beats (no beats) | eagle took: stout_legged_moa 1, upland_moa 1 | cast lost: pukepuke@159.3s koukou@165.4s friendMama@188.9s mama@217.1s | focus animals 2, year 2 | spent nothing, 237 mauri in hand | replay a125be64
+seed 3: loss after 717s (The upland moa are gone from the tops, in year 4.) | beats (no beats) | eagle took: upland_moa 4, stout_legged_moa 1, south_island_giant_moa 1 | cast lost: pukepuke@86.3s friendMama@191.1s mama@341.5s papa@560.5s friendPapa@591.6s koukou@717.1s | focus animals 0, year 4 | spent nothing, 486 mauri in hand | replay 350d64ce
+seed 4: loss after 905s (No upland hen is left on the tops, in year 6.) | beats (no beats) | eagle took: upland_moa 2, stout_legged_moa 5 | cast lost: friendPapa@86.9s pukepuke@120.2s friendMama@341.6s koukou@875.9s mama@904.8s | focus animals 1, year 6 | spent nothing, 552 mauri in hand | replay 4b5854d8
+seed 5: year_end after 1620s | beats (no beats) | eagle took: upland_moa 4, little_bush_moa 5, stout_legged_moa 6, south_island_giant_moa 4 | cast lost: friendMama@89s koukou@230.5s friendPapa@609.8s papa@1258.1s | focus animals 1, year 10 | spent nothing, 963 mauri in hand | replay 1b9c4a34
+seed 6: year_end after 1620s | beats (no beats) | eagle took: stout_legged_moa 10, upland_moa 5, kea 1, little_bush_moa 3, south_island_giant_moa 1 | cast lost: koukou@164.3s friendMama@219.6s papa@346.4s pukepuke@470.4s friendPapa@1256.1s | focus animals 4, year 10 | spent nothing, 1114 mauri in hand | replay 86f0babb
+
+6 run(s): year_end 3, loss 3
+  eagle took: upland_moa 29, stout_legged_moa 27, little_bush_moa 9, south_island_giant_moa 6, kea 1; cast lost 29
+  focus animals at the end: 0 to 4 (median 2); years reached: 2 to 10
+  files in /home/user/Mauri/tests/endless/none

@@ -1,0 +1,12 @@
+seed 1: win after 900s | beats (no beats) | eagle took: south_island_giant_moa 8, kaka 1, kea 1, kokako 1 | focus animals 6, year 6 | spent wharariki 25, new storm 240, patotara 50, move storm 40, 293 mauri in hand | replay 4ec1d3d3
+   problems met: 16 (answered: no hint 9, after the question 1, after being told 0; went away by itself 6; lost 0)
+seed 2: win after 900s | beats (no beats) | eagle took: south_island_giant_moa 11 | focus animals 12, year 6 | spent move storm 10, wharariki 250, patotara 25, 620 mauri in hand | replay c94a7cf7
+   problems met: 3 (answered: no hint 1, after the question 0, after being told 0; went away by itself 2; lost 0)
+seed 3: win after 900s | beats (no beats) | eagle took: south_island_giant_moa 11, kea 1 | focus animals 7, year 6 | spent new storm 160, wharariki 100, move storm 20, 414 mauri in hand | replay 670b903b
+   problems met: 10 (answered: no hint 5, after the question 2, after being told 0; went away by itself 3; lost 0)
+
+3 run(s): win 3
+  eagle took: south_island_giant_moa 30, kaka 1, kea 2, kokako 1; cast lost 0
+  focus animals at the end: 6 to 12 (median 7); years reached: 6 to 6
+  problems met in the lessons' year: 15 of 18 answered with no hint, 3 after a hint, 0 lost; in the unprompted stretch: none
+  files in /home/user/Mauri/tests/clues/freeplay_tend

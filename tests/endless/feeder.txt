@@ -1,0 +1,11 @@
+seed 1: loss after 1486s (No upland hen is left on the tops, in year 9.) | beats (no beats) | eagle took: little_bush_moa 2, upland_moa 9, stout_legged_moa 5 | cast lost: mama@218.2s friendMama@341.6s koukou@591s papa@970s friendPapa@1092.5s pukepuke@1231.7s | focus animals 1, year 9 | spent patotara 50, wharariki 200, 757 mauri in hand | replay 71327e8
+seed 2: loss after 920s (The upland moa are gone from the tops, in year 6.) | beats (no beats) | eagle took: stout_legged_moa 1, upland_moa 8 | cast lost: pukepuke@217.5s papa@343.4s mama@468.8s friendPapa@592.2s koukou@845.2s friendMama@919.5s | focus animals 0, year 6 | spent wharariki 200, 424 mauri in hand | replay 2163c4da
+seed 3: loss after 1215s (The upland moa are gone from the tops, in year 7.) | beats (no beats) | eagle took: upland_moa 6, south_island_giant_moa 4, little_bush_moa 3, stout_legged_moa 1 | cast lost: papa@86.3s friendPapa@211.1s pukepuke@459s mama@583.7s friendMama@831.8s koukou@1214.9s | focus animals 0, year 7 | spent patotara 25, wharariki 300, 434 mauri in hand | replay d93a6746
+seed 4: loss after 1554s (No upland hen is left on the tops, in year 9.) | beats (no beats) | eagle took: upland_moa 8, stout_legged_moa 7, south_island_giant_moa 2, little_bush_moa 2 | cast lost: friendPapa@86.9s papa@212.5s pukepuke@917.9s koukou@1042s friendMama@1380.2s mama@1553.6s | focus animals 2, year 9 | spent wharariki 375, patotara 50, 616 mauri in hand | replay e6c420b4
+seed 5: year_end after 1620s | beats (no beats) | eagle took: stout_legged_moa 4, upland_moa 4, little_bush_moa 10, south_island_giant_moa 2 | cast lost: koukou@229s papa@488.9s friendMama@1034.5s | focus animals 5, year 10 | spent patotara 150, wharariki 425, 499 mauri in hand | replay 41b63dcc
+seed 6: year_end after 1620s | beats (no beats) | eagle took: stout_legged_moa 6, upland_moa 9, little_bush_moa 5 | cast lost: friendPapa@220.2s koukou@347.2s friendMama@604.6s mama@906s papa@985s pukepuke@1469.2s | focus animals 1, year 10 | spent wharariki 325, patotara 25, 830 mauri in hand | replay 99ab21e5
+
+6 run(s): loss 4, year_end 2
+  eagle took: little_bush_moa 22, upland_moa 44, stout_legged_moa 24, south_island_giant_moa 8; cast lost 33
+  focus animals at the end: 0 to 5 (median 1); years reached: 6 to 10
+  files in /home/user/Mauri/tests/endless/feeder

@@ -37,6 +37,9 @@ function makeTemplateModule(sketchKey) {
     sketch: { of: TEMPLATE_FAMILY, label: D.label, dial: D },
     // The one rule this module teaches, in a line a partner can read. The validator requires it.
     claim: "A moa under cover can't be seen, so the eagle hunts what it can see.",
+    // The rules of the simulation it teaches, by the names in tools/coverage.js (which then
+    // shows which of any level's rules no lesson teaches yet).
+    teaches: ['cover'],
     // The Field Guide entries it rests on (ids from mauri_encyclopedia.js).
     guide: ['haasts_eagle', 'upland_moa'],
     // nextLevel: 'another_level_id',   // the win card's "Next module" button

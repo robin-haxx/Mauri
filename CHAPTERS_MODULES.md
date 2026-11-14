@@ -43,12 +43,14 @@ makes the eagle hungry and brings it over the family), and only if it still has 
 a deadline does it force it. The game records which way it went. Across many runs that record is
 the measure of whether the stage was set well.
 
-**Two sketches of every lesson.** Each lesson comes in a Guided and an Open sketch, as small
-buttons under one card in the menu. Guided guarantees the first demonstration, waits for the
-chick to hatch before the season turns, gives the eagle a long wind-up and pauses play on the
-first prompt of each kind. Open guarantees nothing, has a shorter wind-up, never pauses, and may
-have a second eagle. The lesson is the same; only the dial is different. More sketches can be
-added in a few lines, and a study can compare them on the same seeds.
+**Three sketches of every lesson.** Each lesson comes as small buttons under one card in the
+menu: Guided, Open and Clues. The lesson is the same in all three; what differs is how much is
+guaranteed and how much is said. Guided guarantees the first demonstration, waits for the chick
+to hatch before the season turns, gives the eagle a long wind-up and tells the player what to
+do the moment a problem appears. Open guarantees nothing, has a shorter wind-up and never
+pauses. Clues keeps Guided's guarantees and turns the teaching round: it says nothing when a
+problem appears, asks a question if the player has not acted, and only then says what to do.
+More sketches can be added in a few lines, and a study can compare them on the same seeds.
 
 **The eagle can be read.** The Pouākai is a creature with needs, not a timer. Its hunger bar is
 always visible; it pulses amber as the bird nears hunting; every hunt opens with a wind-up in
@@ -145,21 +147,195 @@ has no floors, and the eagle may breed.
 
 ---
 
+## The endless game on the lessons' rules (The Tops)
+
+**What it is.** The endless game the three lessons lead to, as a new card in the menu's Endless
+section beside the first Endless level, which is unchanged. The two families from the lessons
+live on one stretch of country, with a herd on the flats, bush moa and birds in the forest and
+one Pouākai. The years go round without end, and the same animals live through them: the chick
+that hatches in year one is half grown in year two and a parent in year four.
+
+**Why it is a different game from the first Endless level.** That level sets down a fresh cast
+in a new area every year and asks for herds of eight or ten. This one is built so the player
+knows each animal.
+
+- **Small herds that grow slowly.** Every moa keeps a breeding calendar: one egg in its season,
+  a year or two between clutches, three years to grow up. In stand-in play the upland moa went
+  from four to about ten over six years.
+- **A chick stays with its mother** for its first two years, and is visibly small.
+- **Tended food decides breeding and winters.** Wild browse only partly feeds the upland
+  families. Hens that are fed on the pātōtara and wharariki the player grows lay; hens that are
+  not, mostly do not. Winter falls hardest on each year's chicks.
+- **A hunt is an event.** The eagle has a slow appetite and hunts about once a season. Every
+  hunt opens with a six-second wind-up on the bird it has picked, and it never strikes a bird it
+  has not wound up on. Hide its bird twice and it gives the family up for a while and goes
+  after a herd with numbers to spare.
+- **Nothing is protected from dying out.** When a herd falls low, a few arrive over the pass a
+  season or two later. A lost eagle is replaced the same way.
+- **The clan stays small.** Once there are more than ten upland moa, the oldest grown young walk
+  off over the pass each spring to found families elsewhere. Sending them is the long game:
+  the count of them is the score that keeps rising.
+- **The player defends nests and does not raid them.** Kea raid at odds the gathered moa set,
+  as the Pātōtara lesson taught. From year two a Berry Cache draws kea away from the nests,
+  which is the same rule used from the other side.
+
+**The year.** Summer at the nests (eggs, kea, the first hunts). Autumn (get wharariki growing).
+Winter (keep every upland moa alive). Spring (the year's count, and the grown young leave).
+Kākā arrive in year two. From year three two speargrass patches found a new nest. A second
+eagle may come from year five if the land holds many moa. The cold deepens slowly over about
+fourteen years.
+
+**What carries over from the first Endless level:** its country and biomes, the deepening
+climate, the Berry Cache, nest founding with a favoured plant, the birds. **What is reworked:**
+breeding, goals, income, the eagle, protection. **What is left out of this first version:** the
+tour of a 2×2 world, the mast year and the kākāpō, the player's Nest Raid, and the forest tools.
+
+### How different players fare
+
+A command-line tool plays the game with stand-in players who pay for everything they do. They
+differ in how fast they react to a hunt and in what they bother with. Nine years each, six
+seeds each, on the build container; read the ranges, not single runs.
+
+| Player | Runs ended early | Upland moa at the end | Sent over the pass | Named birds lost (of 6) | Mauri spent | Mauri in hand |
+|---|---|---|---|---|---|---|
+| Careful: reacts in 2 s, feeds | 0 of 6 | 12 to 14 | 4 to 8 | 0 | 1070 to 1630 | 75 to 455 |
+| Slower: reacts in 5 s, feeds | 0 of 6 | 12 to 14 | 3 to 8 | 0 | 845 to 1165 | 269 to 635 |
+| Late: reacts in 8 s, feeds | 0 of 6 | 10 to 13 | 1 to 7 | 0 to 2 | 805 to 1270 | 81 to 549 |
+| Covers but never feeds | 0 of 6 | 5 to 11 | 0 to 5 | 1 to 4 | 150 to 630 | 580 to 1342 |
+| Feeds but never covers | 4 of 6 | 0 to 5 | 0 | 3 to 6 | 200 to 575 | 424 to 830 |
+| Does nothing | 3 of 6 | 0 to 4 | 0 | 4 to 6 | 0 | 237 to 1196 |
+
+Both tools matter: the player who only covers and the player who only feeds each do far worse
+than the one who does both. A five-second reaction is enough, and an eight-second one costs a
+named bird or two over nine years.
+
+### The player's camera
+
+On this level the player can look closer. Two buttons under the pause controls zoom in and out
+in four steps, and they are finger-sized for a touchscreen. The mouse wheel zooms on a desktop,
+and the + and - keys work too. A drag on the land pans when zoomed in. A tap on any animal rings
+it, says who it is (its name if it has one, its kind, sex and age, how well fed it is, what it
+is doing, whose young it is) and makes the view follow it; a second tap, or the cross on the
+"Following" label, lets it go. When the view is zoomed in elsewhere and an eagle starts on an
+upland moa, the view eases over to frame hunter and hunted, and eases back when the hunt is
+over. All of it is drawn-view only and costs nothing the simulation can feel. Any level can
+switch it on with one line (`userCamera: true`); pinch-to-zoom is not built.
+
+### Where your judgement is wanted
+
+These are the numbers that decide how the game feels. Each is one line in the dial at the top
+of `levels/chapters_endless.js`.
+
+| Dial | Now | What it does |
+|---|---|---|
+| The eagle's wind-up | 6 s | The main difficulty dial. At 6 s a five-second player loses nobody. |
+| Wild food for the families | 30% | How much the upland moa depend on what the player grows. |
+| A chick's hunger | 1.5 times an adult's | How hard winter falls on the young. |
+| Income and rewards | about 150 mauri a year for a careful player | A careful stand-in ends nine years with a few hundred in hand. |
+| The clan's full size | 10 | Above it, grown young leave. Named birds never leave. |
+| The eagle's appetite | a meal every few minutes | How often hunts come. |
+| Season length | 45 s | A year is three minutes, as in the lessons. |
+| Years to grow up | 3 | Nine minutes from hatching to breeding. |
+| A second eagle | year 5, if 16 or more moa | When pressure steps up. |
+
+Other choices that are yours: the level's name (a placeholder), names for chicks after
+Pukepuke and Koukou (left to you, since naming in te reo is not mine to do), whether the
+world tour, the mast year and the Nest Raid belong in this version, and whether the camera
+should be switched on in the lessons too.
+
+---
+
+## The Clues sketch: teaching by clue first
+
+The Guided and Open sketches put the answer on screen the moment the eagle locks on: "Move a
+STORM over it". The Clues sketch is built to find out whether a player has learned the rule
+or only followed the prompt.
+
+**The hint ladder.** When the simulation raises a problem, nothing is said at first. What the
+player can see is the clue: the eagle's "!" over the bird it has picked, its amber hunger bar,
+a storm thinning. If the problem is still there a few seconds on, a question is asked ("The
+Pouākai has seen Mama Moa. It can only take what it can see. What could hide Mama Moa?"). Only
+after that is the player told what to do. The first hunt of a lesson climbs the ladder quickly
+and its last rung stops play, so nobody loses a bird to not knowing the rule; later hunts climb
+it slowly. The eagle's wind-up is eight seconds in this sketch, to leave room for the ladder.
+The same ladder is used for a storm blowing out and for kea circling a nest.
+
+**A word for getting there first.** A player who hides the bird before any hint is told so, in
+words that state the rule: "Hidden in time, with no hint. The Pouākai can't take what it can't
+see."
+
+**One more season with nothing said.** After spring, each lesson has one more summer in which
+no hint is given at all. In the Pātōtara lesson the neighbours have a new egg. How the player
+does there is the test of the lesson. The win card says "Without a hint: 3 of 5. On your own at
+the end: 2 of 2."
+
+**Honest ecology.** No species is protected by a floor: when the herd runs low a few arrive over
+the pass, and the lesson says so. Hide its bird twice and the eagle gives the family up and goes
+for the herd. The families are on the breeding calendar, so a chick is small, stays beside its
+mother, and in the five years grows up over years, which makes that lesson's claim true of
+the birds the player is watching.
+
+**What the record gains.** Each problem is logged with the rung at which it was answered, how
+long it took and how it ended, and every storm moved, patch sprouted, plant tapped or animal
+tapped is logged with its second. That is the measure of the learner the earlier record lacked.
+
+### How different players fare in the Clues sketches
+
+Stand-in players on the build container, four seeds per lesson (three for the five years). The
+stand-ins cover and feed but do not lead a family down to the water or home, so in this sketch
+those goals are not required. Read the pattern, not single numbers.
+
+| Lesson | Player | Won | Problems met | Answered with no hint | After the question | After being told | Lost | Unprompted summer: answered | Named birds lost |
+|---|---|---|---|---|---|---|---|---|---|
+| The Storm | Careful (2 s) | 4 of 4 | 11 | 6 | 5 | 0 | 0 | 5 of 5 | 0 |
+| The Storm | Slower (5 s) | 4 of 4 | 12 | 1 | 8 | 3 | 0 | none met | 1 |
+| The Storm | Late (8 s) | 4 of 4 | 10 | 0 | 1 | 9 | 0 | 2 of 2 | 0 |
+| The Storm | Does nothing | 0 of 4 | 4 | 0 | 0 | 0 | 4 | none met | 4 |
+| Pātōtara | Careful (2 s) | 4 of 4 | 12 | 5 | 4 | 3 | 0 | 5 of 8 | 0 |
+| Pātōtara | Slower (5 s) | 4 of 4 | 9 | 0 | 2 | 7 | 0 | 4 of 6 | 0 |
+| Pātōtara | Late (8 s) | 4 of 4 | 13 | 0 | 0 | 13 | 0 | 4 of 7 | 0 |
+| Pātōtara | Does nothing | 0 of 4 | 9 | 0 | 0 | 0 | 9 | none met | 9 |
+| The five years | Careful (2 s) | 3 of 3 | 18 | 15 | 3 | 0 | 0 | n/a | 0 |
+| The five years | Slower (5 s) | 3 of 3 | 23 | 0 | 19 | 4 | 0 | n/a | 0 |
+| The five years | Late (8 s) | 3 of 3 | 28 | 0 | 0 | 28 | 0 | n/a | 0 |
+| The five years | Does nothing | 1 of 3 | 9 | 0 | 0 | 0 | 9 | n/a | 8 |
+
+### Where your judgement is wanted in the Clues sketches
+
+- **How long before each hint.** The first hunt asks its question at two seconds and gives the
+  instruction at five; later hunts at four and seven. The wind-up is eight seconds. These are
+  one line in `levels/_chapters_kit.js`. Too short and it is Guided again; too long and a slow
+  player loses a bird before being told.
+- **Whether the opening should still state the rule.** The lessons' opening lines are the same
+  in all three sketches, so the Storm lesson still says "a moa under a storm can't be seen"
+  before play begins. As built, Clues tests whether the player *applies* a rule they were told.
+  Dropping that line would test whether they *discover* it, which is harder and closer to your
+  first design rule.
+- **Leading the family to the water and home is not required** in this sketch, where it loses
+  the level in Guided. It is still a goal with a reward.
+- **The unprompted summer.** The standing storms thin out in fifteen seconds so the family is
+  in the open when the eagle comes. One summer may be too short to see more than one hunt.
+- **Which sketch a lesson opens on.** The menu card still opens Guided; Clues is its third
+  button.
+
+---
+
 ## Choosing a sketch
 
-| | Guided | Open |
-|---|---|---|
-| First demonstration | Guaranteed by a deadline | Invited, then left to the ecosystem |
-| The season clock | Waits for the lesson's key goal (with a time limit) | Never waits |
-| Eagle wind-up | Six seconds | Three and a half seconds |
-| Prompts | Pause play the first time | Never pause |
-| Eagles | One | May breed to two |
-| Herd protection | A floor of two on the other species | None |
-| Suits | A first session, a younger class, a demonstration on a projector | A second play, confident players, the research condition nearest to open play |
+| | Guided | Open | Clues |
+|---|---|---|---|
+| First demonstration | Guaranteed by a deadline | Invited, then left to the ecosystem | Guaranteed by a deadline |
+| When a problem appears | The instruction, at once | The instruction, at once, without pausing | Nothing; then a question; then the instruction |
+| The season clock | Waits for the lesson's key goal (with a time limit) | Never waits | Waits, as Guided |
+| Eagle wind-up | Six seconds | Three and a half seconds | Eight seconds |
+| Herd protection | A floor of two | A floor of two (none in the five years) | None; newcomers over the pass |
+| The family's breeding | Any season | Any season | By the calendar; chicks grow over years |
+| A stretch with nothing said | No | No | One more summer |
+| The record shows | How the stage behaved | How the stage behaved | Also how each problem was answered |
+| Suits | A first session, a younger class, a projector | Confident players | Finding out what was learned; the research condition |
 
-Both sketches are built for ages eleven to fourteen: short lines, one idea each, te reo names
-beside the English, prompts that name the tool and the target, at most three panels before
-play begins.
+All three are built for ages eleven to fourteen: short lines, one idea each, te reo names
+beside the English, at most three panels before play begins.
 
 ---
 
@@ -201,6 +377,52 @@ What held in all eighteen runs: the first demonstration came on its own, no name
 by the eagle, and every named bird that died had starved. The files in `tests/chapters/` for
 both Storm sketches and the Guided Pātōtara sketch are from that second machine (5 November),
 so they differ from the table above; the rest are from the build container.
+
+---
+
+## What the lessons do not teach yet
+
+Each lesson lists the rules of the simulation it teaches. A tool (`node tools/coverage.js`)
+reads every level, works out which rules it plays by, and reports the ones no lesson teaches.
+This replaces the hand-kept list, and it is the map for the lessons still to be written.
+
+| Level | Rules in force | Taught by a lesson | Untaught | Plays against a taught rule |
+|---|---|---|---|---|
+| Endless: The Tops (the new variant) | 16 | 12 | 4 | 0 |
+| Endless: Mutunga kore (the first Endless level) | 16 | 5 | 9 | 2 |
+
+**Untaught in the new variant:** that wild browse only partly feeds the families, the
+waterhole, where mauri comes from, and the deepening cold.
+
+**Untaught in the first Endless level:** the Nest Raid, the waterhole, the fern shelter, where
+mauri comes from, the yearly focus species, the deepening cold, the mast year, the forest tools
+and the world tour. **It also plays against two taught rules:** its storm stuns the eagle where
+the lessons teach that a storm hides a moa, and it protects species with floors where the Clues
+sketches teach that newcomers come over the pass.
+
+When a new mechanic is built, add it to the table at the top of the tool, and add its name to
+the `teaches` list of the lesson that covers it.
+
+---
+
+## Checking replays between two machines
+
+A seed replays a run exactly on one machine and browser, and not yet across machines. To find
+out why, run this on your own machine and compare the file it writes with the one recorded on
+the build container, `tests/replay/storms_guided_seed1_build_container.txt`:
+
+```bash
+node tools/replaydiff.js --level chapters_storms --sketch Guided --seed 1 --seconds 60 --out mine.txt
+```
+
+```bash
+diff mine.txt tests/replay/storms_guided_seed1_build_container.txt | head
+```
+
+The first line of each file is a fingerprint of the browser's own arithmetic, function by
+function. If that line differs, the browser's math is the cause and the line names the
+functions. If it matches and a later line differs, the cause is elsewhere and the line gives
+the second the runs part.
 
 ---
 

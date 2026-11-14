@@ -1,0 +1,1630 @@
+{
+ "level": "chapters_freeplay_clues",
+ "sketch": "Clues",
+ "seed": 1,
+ "result": "win",
+ "playTime": 900,
+ "csv": "seed,level,sketch,chapter,time_s,year,season,upland_moa,south_island_giant_moa,other_moa,total_moa,eagles,eggs,n_kea,n_kaka,n_kokako,placed_patotara,placed_Storm,event\n1,chapters_freeplay_clues,Clues,summer,0,1,summer,0,6,0,6,1,1,4,4,4,0,0,start\n1,chapters_freeplay_clues,Clues,summer,0,1,summer,0,6,0,6,1,1,4,4,4,0,0,reaction:stage:chapter_start\n1,chapters_freeplay_clues,Clues,summer,0,1,summer,0,6,0,6,1,1,4,4,4,0,0,nest:nestA:homeA\n1,chapters_freeplay_clues,Clues,summer,0,1,summer,0,6,0,6,1,1,4,4,4,0,0,nest:nestB:homeB\n1,chapters_freeplay_clues,Clues,summer,0,1,summer,2,6,0,8,1,1,4,4,4,0,0,spawn:upland_moa:2\n1,chapters_freeplay_clues,Clues,summer,0,1,summer,4,6,0,10,1,1,4,4,4,0,0,spawn:upland_moa:2\n1,chapters_freeplay_clues,Clues,summer,0,1,summer,4,6,0,10,1,1,4,4,4,0,0,cast:mama:adopted\n1,chapters_freeplay_clues,Clues,summer,0,1,summer,4,6,0,10,1,1,4,4,4,0,0,cast:papa:adopted\n1,chapters_freeplay_clues,Clues,summer,0,1,summer,4,6,0,10,1,1,4,4,4,0,0,cast:friendMama:adopted\n1,chapters_freeplay_clues,Clues,summer,0,1,summer,4,6,0,10,1,1,4,4,4,0,0,cast:friendPapa:adopted\n1,chapters_freeplay_clues,Clues,summer,0,1,summer,4,6,0,10,1,2,4,4,4,0,0,lay:upland_moa:1\n1,chapters_freeplay_clues,Clues,summer,0,1,summer,4,6,0,10,1,3,4,4,4,0,0,lay:upland_moa:1\n1,chapters_freeplay_clues,Clues,summer,0,1,summer,4,6,0,10,1,3,4,4,4,0,0,place:Storm:tops\n1,chapters_freeplay_clues,Clues,summer,0,1,summer,4,6,0,10,1,3,4,4,4,0,0,place:Storm:lookout\n1,chapters_freeplay_clues,Clues,summer,0,1,summer,4,6,0,10,1,3,4,4,4,0,0,place:waterhole:tarn\n1,chapters_freeplay_clues,Clues,summer,10,1,summer,4,6,0,10,1,3,4,4,4,0,0,sample\n1,chapters_freeplay_clues,Clues,summer,12.9,1,summer,4,6,0,10,1,2,4,4,4,0,0,reaction:raid_won:nest_raid\n1,chapters_freeplay_clues,Clues,summer,18.1,1,summer,4,6,0,10,1,2,4,4,4,0,0,reaction:hungry_eagle:when\n1,chapters_freeplay_clues,Clues,summer,20,1,summer,4,6,0,10,1,2,4,4,4,0,0,sample\n1,chapters_freeplay_clues,Clues,summer,26.7,1,summer,5,6,0,11,1,1,4,4,4,0,0,reaction:hatch_koukou:egg_hatched\n1,chapters_freeplay_clues,Clues,summer,26.7,1,summer,5,6,0,11,1,1,4,4,4,0,0,moment:$moa:Koukou has hatched!\n1,chapters_freeplay_clues,Clues,summer,26.7,1,summer,5,6,0,11,1,1,4,4,4,0,0,cast:koukou:adopted\n1,chapters_freeplay_clues,Clues,summer,30,1,summer,5,6,0,11,1,0,4,4,4,0,0,sample\n1,chapters_freeplay_clues,Clues,summer,40,1,summer,5,6,0,11,1,0,4,4,4,0,0,sample\n1,chapters_freeplay_clues,Clues,summer,45,1,autumn,5,6,0,11,1,0,4,4,4,0,0,goal:summer_through\n1,chapters_freeplay_clues,Clues,summer,45,1,autumn,5,6,0,11,1,0,4,4,4,0,0,close:summer:-> autumn\n1,chapters_freeplay_clues,Clues,autumn,45,1,autumn,5,6,0,11,1,0,4,4,4,0,0,chapter:autumn\n1,chapters_freeplay_clues,Clues,autumn,45,1,autumn,5,6,0,11,1,0,4,4,4,0,0,fade:Storm:2\n1,chapters_freeplay_clues,Clues,autumn,50,1,autumn,5,6,0,11,1,0,4,4,4,0,0,sample\n1,chapters_freeplay_clues,Clues,autumn,57.2,1,autumn,5,5,0,10,1,0,4,4,4,0,0,reaction:giant_taken:moa_killed\n1,chapters_freeplay_clues,Clues,autumn,57.2,1,autumn,5,5,0,10,1,0,4,4,4,0,0,reaction:taken_again:moa_killed\n1,chapters_freeplay_clues,Clues,autumn,60,1,autumn,5,5,0,10,1,0,4,4,4,0,0,sample\n1,chapters_freeplay_clues,Clues,autumn,70,1,autumn,5,5,0,10,1,0,4,4,4,0,0,sample\n1,chapters_freeplay_clues,Clues,autumn,80,1,autumn,5,5,0,10,1,0,4,4,4,0,0,sample\n1,chapters_freeplay_clues,Clues,autumn,90,1,winter,5,5,0,10,1,0,4,4,4,0,0,reaction:storm_gone:placeable_expired\n1,chapters_freeplay_clues,Clues,autumn,90,1,winter,5,5,0,10,1,0,4,4,4,0,0,close:autumn:-> winter\n1,chapters_freeplay_clues,Clues,winter,90,1,winter,5,5,0,10,1,0,4,4,4,0,0,chapter:winter\n1,chapters_freeplay_clues,Clues,winter,90,1,winter,5,5,0,10,1,0,4,4,4,0,0,fade:Storm:0\n1,chapters_freeplay_clues,Clues,winter,90,1,winter,5,5,0,10,1,0,4,4,4,0,0,sample\n1,chapters_freeplay_clues,Clues,winter,96,1,winter,5,5,0,10,1,0,4,4,4,0,0,hint:storm_gone:rung 1\n1,chapters_freeplay_clues,Clues,winter,99,1,winter,5,5,0,10,1,0,4,4,4,0,0,player:placement:wharariki\n1,chapters_freeplay_clues,Clues,winter,99.1,1,winter,5,5,0,10,1,0,4,4,4,0,0,goal:fed\n1,chapters_freeplay_clues,Clues,winter,100,1,winter,5,5,0,10,1,0,4,4,4,0,0,sample\n1,chapters_freeplay_clues,Clues,winter,104,1,winter,5,5,0,10,1,0,4,4,4,0,0,hint:storm_gone:rung 2\n1,chapters_freeplay_clues,Clues,winter,105.8,1,winter,5,5,0,10,1,0,4,4,4,0,0,reaction:winter_press:when\n1,chapters_freeplay_clues,Clues,winter,105.8,1,winter,5,5,0,10,1,0,4,4,4,0,0,reaction:bird_hunted:eagle_hunting\n1,chapters_freeplay_clues,Clues,winter,105.9,1,winter,5,5,0,10,1,0,4,4,4,0,0,reaction:hungry_eagle:when\n1,chapters_freeplay_clues,Clues,winter,110,1,winter,5,5,0,10,1,0,4,4,4,0,0,sample\n1,chapters_freeplay_clues,Clues,winter,115.5,1,winter,5,5,0,10,1,0,4,3,4,0,0,reaction:bird_taken:bird_killed\n1,chapters_freeplay_clues,Clues,winter,120,1,winter,5,5,0,10,1,0,4,2,4,0,0,sample\n1,chapters_freeplay_clues,Clues,winter,130,1,winter,5,5,0,10,1,0,4,2,4,0,0,sample\n1,chapters_freeplay_clues,Clues,winter,135,1,spring,5,5,0,10,1,0,4,2,4,0,0,case:storm_gone:rung 2; 45s; passed\n1,chapters_freeplay_clues,Clues,winter,135,1,spring,5,5,0,10,1,0,4,2,4,0,0,goal:winter_through\n1,chapters_freeplay_clues,Clues,winter,135,1,spring,5,5,0,10,1,0,4,2,4,0,0,close:winter:-> spring\n1,chapters_freeplay_clues,Clues,spring,135,1,spring,5,5,0,10,1,0,4,2,4,0,0,chapter:spring\n1,chapters_freeplay_clues,Clues,spring,140,1,spring,5,5,0,10,1,0,4,2,4,0,0,sample\n1,chapters_freeplay_clues,Clues,spring,150,1,spring,5,5,0,10,1,5,4,2,4,0,0,sample\n1,chapters_freeplay_clues,Clues,spring,160,1,spring,5,5,0,10,1,6,4,2,4,0,0,sample\n1,chapters_freeplay_clues,Clues,spring,168.4,1,spring,5,5,0,10,1,6,4,2,4,0,0,reaction:hungry_eagle:when\n1,chapters_freeplay_clues,Clues,spring,170,1,spring,5,5,0,10,1,6,4,2,4,0,0,sample\n1,chapters_freeplay_clues,Clues,spring,178,1,spring,5,5,0,10,1,6,4,2,4,0,0,reaction:cover:eagle_hunting\n1,chapters_freeplay_clues,Clues,spring,180,2,summer,5,5,0,10,1,6,4,2,4,0,0,reaction:new_year:season_change\n1,chapters_freeplay_clues,Clues,spring,180,2,summer,5,5,0,10,1,6,4,2,4,0,0,close:spring:-> summer\n1,chapters_freeplay_clues,Clues,summer,180,2,summer,5,5,0,10,1,6,4,2,4,0,0,chapter:summer\n1,chapters_freeplay_clues,Clues,summer,180,2,summer,5,5,0,10,1,6,4,2,4,0,0,sample\n1,chapters_freeplay_clues,Clues,summer,180.1,2,summer,5,5,0,10,1,6,4,2,4,0,0,hint:cover:rung 1\n1,chapters_freeplay_clues,Clues,summer,183.1,2,summer,5,5,0,10,1,6,4,2,4,0,0,hint:cover:rung 2\n1,chapters_freeplay_clues,Clues,summer,186.5,2,summer,5,5,0,10,1,6,4,2,4,0,0,player:placement:Storm\n1,chapters_freeplay_clues,Clues,summer,186.6,2,summer,5,5,0,10,1,6,4,2,4,0,0,case:cover:rung 2; 8.6s; solved\n1,chapters_freeplay_clues,Clues,summer,188.8,2,summer,5,5,0,10,1,4,4,2,6,0,0,reaction:first_kokako:bird_hatched\n1,chapters_freeplay_clues,Clues,summer,188.8,2,summer,5,5,0,10,1,4,4,2,6,0,0,moment:$bird:A kōkako chick: spring\n1,chapters_freeplay_clues,Clues,summer,188.8,2,summer,5,5,0,10,1,4,4,2,6,0,0,reaction:bird_hatch_again:bird_hatched\n1,chapters_freeplay_clues,Clues,summer,190,2,summer,5,5,0,10,1,1,4,2,9,0,0,sample\n1,chapters_freeplay_clues,Clues,summer,190.3,2,summer,5,6,0,11,1,0,4,2,9,0,0,reaction:first_giant:egg_hatched\n1,chapters_freeplay_clues,Clues,summer,190.3,2,summer,5,6,0,11,1,0,4,2,9,0,0,moment:$moa:A giant moa chick\n1,chapters_freeplay_clues,Clues,summer,192.3,2,summer,5,6,0,11,1,0,4,2,9,0,0,reaction:raid_won:nest_raid\n1,chapters_freeplay_clues,Clues,summer,200,2,summer,5,6,0,11,1,0,4,2,9,0,0,sample\n1,chapters_freeplay_clues,Clues,summer,205.3,2,summer,5,5,0,10,1,0,4,2,9,0,0,reaction:taken_again:moa_killed\n1,chapters_freeplay_clues,Clues,summer,206.5,2,summer,5,5,0,10,1,0,4,2,9,0,0,reaction:storm_gone:placeable_expired\n1,chapters_freeplay_clues,Clues,summer,210,2,summer,5,5,0,10,1,0,4,2,9,0,0,sample\n1,chapters_freeplay_clues,Clues,summer,212.5,2,summer,5,5,0,10,1,0,4,2,9,0,0,hint:storm_gone:rung 1\n1,chapters_freeplay_clues,Clues,summer,220,2,summer,5,5,0,10,1,0,4,2,9,0,0,sample\n1,chapters_freeplay_clues,Clues,summer,220.5,2,summer,5,5,0,10,1,0,4,2,9,0,0,hint:storm_gone:rung 2\n1,chapters_freeplay_clues,Clues,summer,225,2,autumn,5,5,0,10,1,0,4,2,9,0,0,goal:summer_through\n1,chapters_freeplay_clues,Clues,summer,225,2,autumn,5,5,0,10,1,0,4,2,9,0,0,close:summer:-> autumn\n1,chapters_freeplay_clues,Clues,autumn,225,2,autumn,5,5,0,10,1,0,4,2,9,0,0,chapter:autumn\n1,chapters_freeplay_clues,Clues,autumn,225,2,autumn,5,5,0,10,1,0,4,2,9,0,0,fade:Storm:0\n1,chapters_freeplay_clues,Clues,autumn,230,2,autumn,5,5,0,10,1,0,4,2,9,0,0,sample\n1,chapters_freeplay_clues,Clues,autumn,240,2,autumn,5,5,0,10,1,0,4,2,9,0,0,sample\n1,chapters_freeplay_clues,Clues,autumn,250,2,autumn,5,5,0,10,1,0,4,2,9,0,0,sample\n1,chapters_freeplay_clues,Clues,autumn,251.5,2,autumn,5,5,0,10,1,0,4,2,9,0,0,case:storm_gone:rung 2; 45s; passed\n1,chapters_freeplay_clues,Clues,autumn,258.1,2,autumn,5,5,0,10,1,0,4,2,9,0,0,reaction:hungry_eagle:when\n1,chapters_freeplay_clues,Clues,autumn,260,2,autumn,5,5,0,10,1,0,4,2,9,0,0,sample\n1,chapters_freeplay_clues,Clues,autumn,270,2,winter,5,5,0,10,1,0,4,2,9,0,0,close:autumn:-> winter\n1,chapters_freeplay_clues,Clues,winter,270,2,winter,5,5,0,10,1,0,4,2,9,0,0,chapter:winter\n1,chapters_freeplay_clues,Clues,winter,270,2,winter,5,5,0,10,1,0,4,2,9,0,0,fade:Storm:0\n1,chapters_freeplay_clues,Clues,winter,270,2,winter,5,5,0,10,1,0,4,2,9,0,0,sample\n1,chapters_freeplay_clues,Clues,winter,280,2,winter,5,5,0,10,1,0,4,2,9,0,0,sample\n1,chapters_freeplay_clues,Clues,winter,290,2,winter,5,5,0,10,1,0,4,2,9,0,0,reaction:winter_food:when\n1,chapters_freeplay_clues,Clues,winter,290,2,winter,5,5,0,10,1,0,4,2,9,0,0,sample\n1,chapters_freeplay_clues,Clues,winter,291,2,winter,5,4,0,9,1,0,4,2,9,0,0,reaction:taken_again:moa_killed\n1,chapters_freeplay_clues,Clues,winter,300,2,winter,5,4,0,9,1,0,4,2,9,0,0,sample\n1,chapters_freeplay_clues,Clues,winter,310,2,winter,5,4,0,9,1,0,4,2,9,0,0,sample\n1,chapters_freeplay_clues,Clues,winter,315,2,spring,5,4,0,9,1,0,4,2,9,0,0,goal:winter_through\n1,chapters_freeplay_clues,Clues,winter,315,2,spring,5,4,0,9,1,0,4,2,9,0,0,close:winter:-> spring\n1,chapters_freeplay_clues,Clues,spring,315,2,spring,5,4,0,9,1,0,4,2,9,0,0,chapter:spring\n1,chapters_freeplay_clues,Clues,spring,320,2,spring,5,4,0,9,1,0,4,2,9,0,0,sample\n1,chapters_freeplay_clues,Clues,spring,330,2,spring,5,4,0,9,1,0,4,2,9,0,0,sample\n1,chapters_freeplay_clues,Clues,spring,340,2,spring,5,4,0,9,1,0,4,2,9,0,0,sample\n1,chapters_freeplay_clues,Clues,spring,343.9,2,spring,5,4,0,9,1,0,4,2,9,0,0,reaction:hungry_eagle:when\n1,chapters_freeplay_clues,Clues,spring,350,2,spring,5,4,0,9,1,0,4,2,9,0,0,sample\n1,chapters_freeplay_clues,Clues,spring,354.9,2,spring,5,4,0,9,1,0,4,2,9,0,0,reaction:cover_again:eagle_hunting\n1,chapters_freeplay_clues,Clues,spring,358.9,2,spring,5,4,0,9,1,0,4,2,9,0,0,hint:cover_again:rung 1\n1,chapters_freeplay_clues,Clues,spring,360,3,summer,5,4,0,9,1,0,4,2,9,0,0,reaction:new_year:season_change\n1,chapters_freeplay_clues,Clues,spring,360,3,summer,5,4,0,9,1,0,4,2,9,0,0,close:spring:-> summer\n1,chapters_freeplay_clues,Clues,summer,360,3,summer,5,4,0,9,1,0,4,2,9,0,0,chapter:summer\n1,chapters_freeplay_clues,Clues,summer,360,3,summer,5,4,0,9,1,0,4,2,9,0,0,sample\n1,chapters_freeplay_clues,Clues,summer,361.9,3,summer,5,4,0,9,1,0,4,2,9,0,0,hint:cover_again:rung 2\n1,chapters_freeplay_clues,Clues,summer,363,3,summer,5,4,0,9,1,0,4,2,9,0,0,player:placement:Storm\n1,chapters_freeplay_clues,Clues,summer,363.1,3,summer,5,4,0,9,1,0,4,2,9,0,0,case:cover_again:rung 2; 8.2s; solved\n1,chapters_freeplay_clues,Clues,summer,363.9,3,summer,5,4,0,9,1,0,4,2,9,0,0,reaction:bird_hunted:eagle_hunting\n1,chapters_freeplay_clues,Clues,summer,370,3,summer,5,4,0,9,1,0,4,2,9,0,0,sample\n1,chapters_freeplay_clues,Clues,summer,377.5,3,summer,5,4,0,9,1,0,4,2,8,0,0,reaction:bird_taken:bird_killed\n1,chapters_freeplay_clues,Clues,summer,380,3,summer,5,4,0,9,1,0,4,2,8,0,0,sample\n1,chapters_freeplay_clues,Clues,summer,383,3,summer,5,4,0,9,1,0,4,2,8,0,0,reaction:storm_gone:placeable_expired\n1,chapters_freeplay_clues,Clues,summer,389,3,summer,5,4,0,9,1,0,4,2,8,0,0,hint:storm_gone:rung 1\n1,chapters_freeplay_clues,Clues,summer,390,3,summer,5,4,0,9,1,0,4,2,8,0,0,sample\n1,chapters_freeplay_clues,Clues,summer,397,3,summer,5,4,0,9,1,0,4,2,8,0,0,hint:storm_gone:rung 2\n1,chapters_freeplay_clues,Clues,summer,400,3,summer,5,4,0,9,1,0,4,2,8,0,0,sample\n1,chapters_freeplay_clues,Clues,summer,405,3,autumn,5,4,0,9,1,0,4,2,8,0,0,goal:summer_through\n1,chapters_freeplay_clues,Clues,summer,405,3,autumn,5,4,0,9,1,0,4,2,8,0,0,close:summer:-> autumn\n1,chapters_freeplay_clues,Clues,autumn,405,3,autumn,5,4,0,9,1,0,4,2,8,0,0,chapter:autumn\n1,chapters_freeplay_clues,Clues,autumn,405,3,autumn,5,4,0,9,1,0,4,2,8,0,0,fade:Storm:0\n1,chapters_freeplay_clues,Clues,autumn,410,3,autumn,5,4,0,9,1,0,4,2,8,0,0,sample\n1,chapters_freeplay_clues,Clues,autumn,420,3,autumn,5,4,0,9,1,0,4,2,8,0,0,sample\n1,chapters_freeplay_clues,Clues,autumn,427.2,3,autumn,5,4,0,9,1,0,4,2,8,0,0,reaction:hungry_eagle:when\n1,chapters_freeplay_clues,Clues,autumn,428,3,autumn,5,4,0,9,1,0,4,2,8,0,0,case:storm_gone:rung 2; 45s; passed\n1,chapters_freeplay_clues,Clues,autumn,430,3,autumn,5,4,0,9,1,0,4,2,8,0,0,sample\n1,chapters_freeplay_clues,Clues,autumn,440,3,autumn,5,4,0,9,1,0,4,2,8,0,0,sample\n1,chapters_freeplay_clues,Clues,autumn,443.8,3,autumn,5,4,0,9,1,0,4,2,8,0,0,reaction:bird_hunted:eagle_hunting\n1,chapters_freeplay_clues,Clues,autumn,450,3,winter,5,4,0,9,1,0,4,2,8,0,0,close:autumn:-> winter\n1,chapters_freeplay_clues,Clues,winter,450,3,winter,5,4,0,9,1,0,4,2,8,0,0,chapter:winter\n1,chapters_freeplay_clues,Clues,winter,450,3,winter,5,4,0,9,1,0,4,2,8,0,0,fade:Storm:0\n1,chapters_freeplay_clues,Clues,winter,450,3,winter,5,4,0,9,1,0,4,2,8,0,0,sample\n1,chapters_freeplay_clues,Clues,winter,457.5,3,winter,5,4,0,9,1,0,3,2,8,0,0,reaction:bird_taken:bird_killed\n1,chapters_freeplay_clues,Clues,winter,460,3,winter,5,4,0,9,1,0,3,2,8,0,0,sample\n1,chapters_freeplay_clues,Clues,winter,470,3,winter,5,4,0,9,1,6,3,2,8,0,0,reaction:winter_food:when\n1,chapters_freeplay_clues,Clues,winter,470,3,winter,5,4,0,9,1,6,3,2,8,0,0,sample\n1,chapters_freeplay_clues,Clues,winter,480,3,winter,5,4,0,9,1,6,3,2,8,0,0,sample\n1,chapters_freeplay_clues,Clues,winter,490,3,winter,5,4,0,9,1,6,3,2,8,0,0,sample\n1,chapters_freeplay_clues,Clues,winter,495,3,spring,5,4,0,9,1,6,3,2,8,0,0,goal:winter_through\n1,chapters_freeplay_clues,Clues,winter,495,3,spring,5,4,0,9,1,6,3,2,8,0,0,close:winter:-> spring\n1,chapters_freeplay_clues,Clues,spring,495,3,spring,5,4,0,9,1,6,3,2,8,0,0,chapter:spring\n1,chapters_freeplay_clues,Clues,spring,500,3,spring,5,4,0,9,1,6,3,2,8,0,0,sample\n1,chapters_freeplay_clues,Clues,spring,507.2,3,spring,5,4,0,9,1,4,5,2,8,0,0,reaction:first_kea:bird_hatched\n1,chapters_freeplay_clues,Clues,spring,507.2,3,spring,5,4,0,9,1,4,5,2,8,0,0,moment:$bird:Kea chicks: late winter\n1,chapters_freeplay_clues,Clues,spring,507.2,3,spring,5,4,0,9,1,4,5,2,8,0,0,reaction:bird_hatch_again:bird_hatched\n1,chapters_freeplay_clues,Clues,spring,510,3,spring,5,4,0,9,1,5,9,2,8,0,0,sample\n1,chapters_freeplay_clues,Clues,spring,510.3,3,spring,5,4,0,9,1,5,9,2,8,0,0,reaction:hungry_eagle:when\n1,chapters_freeplay_clues,Clues,spring,520,3,spring,5,4,0,9,1,6,9,2,8,0,0,reaction:cover_again:eagle_hunting\n1,chapters_freeplay_clues,Clues,spring,520,3,spring,5,4,0,9,1,6,9,2,8,0,0,sample\n1,chapters_freeplay_clues,Clues,spring,524,3,spring,5,4,0,9,1,6,9,2,8,0,0,hint:cover_again:rung 1\n1,chapters_freeplay_clues,Clues,spring,527,3,spring,5,4,0,9,1,6,9,2,8,0,0,hint:cover_again:rung 2\n1,chapters_freeplay_clues,Clues,spring,528,3,spring,5,4,0,9,1,6,9,2,8,0,0,player:placement:Storm\n1,chapters_freeplay_clues,Clues,spring,528,3,spring,5,4,0,9,1,6,9,2,8,0,0,reaction:cover_again:eagle_hunting\n1,chapters_freeplay_clues,Clues,spring,528.1,3,spring,5,4,0,9,1,6,9,2,8,0,0,case:cover_again:rung 2; 8.1s; solved\n1,chapters_freeplay_clues,Clues,spring,530,3,spring,5,4,0,9,1,6,9,2,8,0,0,sample\n1,chapters_freeplay_clues,Clues,spring,532.1,3,spring,5,4,0,9,1,6,9,2,8,0,0,hint:cover_again:rung 1\n1,chapters_freeplay_clues,Clues,spring,535.1,3,spring,5,4,0,9,1,6,9,2,8,0,0,hint:cover_again:rung 2\n1,chapters_freeplay_clues,Clues,spring,536.5,3,spring,5,4,0,9,1,6,9,2,8,0,0,player:placeable_moved:Storm\n1,chapters_freeplay_clues,Clues,spring,536.5,3,spring,5,4,0,9,1,6,9,2,8,0,0,reaction:gave_up:eagle_gave_up\n1,chapters_freeplay_clues,Clues,spring,536.5,3,spring,5,4,0,9,1,6,9,2,8,0,0,reaction:gave_up_again:eagle_gave_up\n1,chapters_freeplay_clues,Clues,spring,536.6,3,spring,5,4,0,9,1,6,9,2,8,0,0,case:cover_again:rung 2; 8.6s; solved\n1,chapters_freeplay_clues,Clues,spring,540,4,summer,5,4,0,9,1,6,9,2,8,0,0,reaction:new_year:season_change\n1,chapters_freeplay_clues,Clues,spring,540,4,summer,5,4,0,9,1,6,9,2,8,0,0,close:spring:-> summer\n1,chapters_freeplay_clues,Clues,summer,540,4,summer,5,4,0,9,1,6,9,2,8,0,0,chapter:summer\n1,chapters_freeplay_clues,Clues,summer,540,4,summer,5,4,0,9,1,6,9,2,8,0,0,sample\n1,chapters_freeplay_clues,Clues,summer,546.5,4,summer,5,3,0,8,1,6,9,2,8,0,0,reaction:taken_again:moa_killed\n1,chapters_freeplay_clues,Clues,summer,548,4,summer,5,3,0,8,1,5,9,5,8,0,0,reaction:first_kaka:bird_hatched\n1,chapters_freeplay_clues,Clues,summer,548,4,summer,5,3,0,8,1,5,9,5,8,0,0,moment:$bird:Kākā chicks: spring\n1,chapters_freeplay_clues,Clues,summer,548,4,summer,5,3,0,8,1,5,9,5,8,0,0,reaction:bird_hatch_again:bird_hatched\n1,chapters_freeplay_clues,Clues,summer,549,4,summer,5,3,0,8,1,5,9,5,8,0,0,player:placement:patotara\n1,chapters_freeplay_clues,Clues,summer,550,4,summer,5,3,0,8,1,3,9,5,10,0,0,sample\n1,chapters_freeplay_clues,Clues,summer,556.5,4,summer,5,3,0,8,1,3,9,5,10,0,0,reaction:storm_gone:placeable_expired\n1,chapters_freeplay_clues,Clues,summer,558,4,summer,5,4,0,9,1,2,9,5,10,0,0,player:plant_sprouted:patotara\n1,chapters_freeplay_clues,Clues,summer,560,4,summer,5,4,0,9,1,2,9,5,10,0,0,sample\n1,chapters_freeplay_clues,Clues,summer,562.5,4,summer,5,4,0,9,1,2,9,5,10,0,0,hint:storm_gone:rung 1\n1,chapters_freeplay_clues,Clues,summer,570,4,summer,5,4,0,9,1,2,9,5,10,0,0,sample\n1,chapters_freeplay_clues,Clues,summer,570.5,4,summer,5,4,0,9,1,2,9,5,10,0,0,hint:storm_gone:rung 2\n1,chapters_freeplay_clues,Clues,summer,580,4,summer,5,4,0,9,1,2,9,5,10,0,0,sample\n1,chapters_freeplay_clues,Clues,summer,582.9,4,summer,5,4,0,9,1,2,9,5,10,0,0,reaction:raid_failed:nest_raid\n1,chapters_freeplay_clues,Clues,summer,585,4,autumn,5,4,0,9,1,2,9,5,10,0,0,goal:summer_through\n1,chapters_freeplay_clues,Clues,summer,585,4,autumn,5,4,0,9,1,2,9,5,10,0,0,close:summer:-> autumn\n1,chapters_freeplay_clues,Clues,autumn,585,4,autumn,5,4,0,9,1,2,9,5,10,0,0,chapter:autumn\n1,chapters_freeplay_clues,Clues,autumn,585,4,autumn,5,4,0,9,1,2,9,5,10,0,0,fade:Storm:0\n1,chapters_freeplay_clues,Clues,autumn,590,4,autumn,7,4,0,11,1,0,9,5,10,0,0,sample\n1,chapters_freeplay_clues,Clues,autumn,594,4,autumn,7,4,0,11,1,0,9,5,10,0,0,player:placement:patotara\n1,chapters_freeplay_clues,Clues,autumn,599.3,4,autumn,7,4,0,11,1,0,9,5,10,0,0,reaction:hungry_eagle:when\n1,chapters_freeplay_clues,Clues,autumn,600,4,autumn,7,4,0,11,1,0,9,5,10,0,0,sample\n1,chapters_freeplay_clues,Clues,autumn,601.5,4,autumn,7,4,0,11,1,0,9,5,10,0,0,case:storm_gone:rung 2; 45s; passed\n1,chapters_freeplay_clues,Clues,autumn,603,4,autumn,7,4,0,11,1,0,9,5,10,0,0,player:plant_sprouted:patotara\n1,chapters_freeplay_clues,Clues,autumn,610,4,autumn,7,4,0,11,1,0,9,5,10,0,0,sample\n1,chapters_freeplay_clues,Clues,autumn,618.9,4,autumn,7,3,0,10,1,0,9,5,10,0,0,reaction:taken_again:moa_killed\n1,chapters_freeplay_clues,Clues,autumn,620,4,autumn,7,3,0,10,1,0,9,5,10,0,0,sample\n1,chapters_freeplay_clues,Clues,autumn,630,4,winter,7,3,0,10,1,0,9,5,10,0,0,close:autumn:-> winter\n1,chapters_freeplay_clues,Clues,winter,630,4,winter,7,3,0,10,1,0,9,5,10,0,0,chapter:winter\n1,chapters_freeplay_clues,Clues,winter,630,4,winter,7,3,0,10,1,0,9,5,10,0,0,fade:Storm:0\n1,chapters_freeplay_clues,Clues,winter,630,4,winter,7,3,0,10,1,0,9,5,10,0,0,sample\n1,chapters_freeplay_clues,Clues,winter,640,4,winter,7,3,0,10,1,0,9,5,10,0,0,sample\n1,chapters_freeplay_clues,Clues,winter,650,4,winter,7,3,0,10,1,0,9,5,10,0,0,reaction:winter_food:when\n1,chapters_freeplay_clues,Clues,winter,650,4,winter,7,3,0,10,1,0,9,5,10,0,0,sample\n1,chapters_freeplay_clues,Clues,winter,660,4,winter,7,3,0,10,1,0,9,5,10,0,0,sample\n1,chapters_freeplay_clues,Clues,winter,670,4,winter,7,3,0,10,1,0,9,5,10,0,0,sample\n1,chapters_freeplay_clues,Clues,winter,671.8,4,winter,7,3,0,10,1,0,9,5,10,0,0,reaction:hungry_eagle:when\n1,chapters_freeplay_clues,Clues,winter,675,4,spring,7,3,0,10,1,0,9,5,10,0,0,goal:winter_through\n1,chapters_freeplay_clues,Clues,winter,675,4,spring,7,3,0,10,1,0,9,5,10,0,0,close:winter:-> spring\n1,chapters_freeplay_clues,Clues,spring,675,4,spring,7,3,0,10,1,0,9,5,10,0,0,chapter:spring\n1,chapters_freeplay_clues,Clues,spring,680,4,spring,7,3,0,10,1,0,9,5,10,0,0,sample\n1,chapters_freeplay_clues,Clues,spring,681.4,4,spring,7,3,0,10,1,0,9,5,10,0,0,reaction:cover_again:eagle_hunting\n1,chapters_freeplay_clues,Clues,spring,685.5,4,spring,7,3,0,10,1,0,9,5,10,0,0,hint:cover_again:rung 1\n1,chapters_freeplay_clues,Clues,spring,688.5,4,spring,7,3,0,10,1,0,9,5,10,0,0,hint:cover_again:rung 2\n1,chapters_freeplay_clues,Clues,spring,689.5,4,spring,7,3,0,10,1,0,9,5,10,0,0,player:placement:Storm\n1,chapters_freeplay_clues,Clues,spring,689.6,4,spring,7,3,0,10,1,0,9,5,10,0,0,case:cover_again:rung 2; 8.2s; solved\n1,chapters_freeplay_clues,Clues,spring,690,4,spring,7,3,0,10,1,0,9,5,10,0,0,sample\n1,chapters_freeplay_clues,Clues,spring,690.3,4,spring,7,3,0,10,1,0,9,5,10,0,0,reaction:gave_up_again:eagle_gave_up\n1,chapters_freeplay_clues,Clues,spring,690.3,4,spring,7,3,0,10,1,0,9,5,10,0,0,reaction:cover_again:eagle_hunting\n1,chapters_freeplay_clues,Clues,spring,694.3,4,spring,7,3,0,10,1,0,9,5,10,0,0,hint:cover_again:rung 1\n1,chapters_freeplay_clues,Clues,spring,697.3,4,spring,7,3,0,10,1,0,9,5,10,0,0,hint:cover_again:rung 2\n1,chapters_freeplay_clues,Clues,spring,698.5,4,spring,7,3,0,10,1,0,9,5,10,0,0,player:placeable_moved:Storm\n1,chapters_freeplay_clues,Clues,spring,698.5,4,spring,7,3,0,10,1,0,9,5,10,0,0,reaction:cover_again:eagle_hunting\n1,chapters_freeplay_clues,Clues,spring,698.6,4,spring,7,3,0,10,1,0,9,5,10,0,0,case:cover_again:rung 2; 8.3s; solved\n1,chapters_freeplay_clues,Clues,spring,700,4,spring,7,3,0,10,1,0,9,5,10,0,0,sample\n1,chapters_freeplay_clues,Clues,spring,702.6,4,spring,7,3,0,10,1,0,9,5,10,0,0,hint:cover_again:rung 1\n1,chapters_freeplay_clues,Clues,spring,705.6,4,spring,7,3,0,10,1,0,9,5,10,0,0,hint:cover_again:rung 2\n1,chapters_freeplay_clues,Clues,spring,707,4,spring,7,3,0,10,1,0,9,5,10,0,0,player:placeable_moved:Storm\n1,chapters_freeplay_clues,Clues,spring,707,4,spring,7,3,0,10,1,0,9,5,10,0,0,reaction:gave_up_again:eagle_gave_up\n1,chapters_freeplay_clues,Clues,spring,707.1,4,spring,7,3,0,10,1,0,9,5,10,0,0,case:cover_again:rung 2; 8.6s; solved\n1,chapters_freeplay_clues,Clues,spring,710,4,spring,7,3,0,10,1,0,9,5,10,0,0,sample\n1,chapters_freeplay_clues,Clues,spring,717,4,spring,7,2,0,9,1,0,8,5,10,0,0,reaction:taken_again:moa_killed\n1,chapters_freeplay_clues,Clues,spring,720,5,summer,7,2,0,9,1,0,8,5,10,0,0,reaction:new_year:season_change\n1,chapters_freeplay_clues,Clues,spring,720,5,summer,7,2,0,9,1,0,8,5,10,0,0,close:spring:-> summer\n1,chapters_freeplay_clues,Clues,summer,720,5,summer,7,2,0,9,1,0,8,5,10,0,0,chapter:summer\n1,chapters_freeplay_clues,Clues,summer,720,5,summer,7,2,0,9,1,0,8,5,10,0,0,sample\n1,chapters_freeplay_clues,Clues,summer,727,5,summer,7,2,0,9,1,0,8,5,10,0,0,reaction:storm_gone:placeable_expired\n1,chapters_freeplay_clues,Clues,summer,730,5,summer,7,2,0,9,1,1,8,5,10,0,0,sample\n1,chapters_freeplay_clues,Clues,summer,733,5,summer,7,2,0,9,1,1,8,5,10,0,0,hint:storm_gone:rung 1\n1,chapters_freeplay_clues,Clues,summer,740,5,summer,7,2,0,9,1,1,8,5,10,0,0,sample\n1,chapters_freeplay_clues,Clues,summer,741,5,summer,7,2,0,9,1,1,8,5,10,0,0,hint:storm_gone:rung 2\n1,chapters_freeplay_clues,Clues,summer,750,5,summer,7,2,0,9,1,1,8,5,10,0,0,sample\n1,chapters_freeplay_clues,Clues,summer,760,5,summer,7,2,0,9,1,1,8,5,10,0,0,sample\n1,chapters_freeplay_clues,Clues,summer,765,5,autumn,7,2,0,9,1,1,8,5,10,0,0,goal:summer_through\n1,chapters_freeplay_clues,Clues,summer,765,5,autumn,7,2,0,9,1,1,8,5,10,0,0,close:summer:-> autumn\n1,chapters_freeplay_clues,Clues,autumn,765,5,autumn,7,2,0,9,1,1,8,5,10,0,0,chapter:autumn\n1,chapters_freeplay_clues,Clues,autumn,765,5,autumn,7,2,0,9,1,1,8,5,10,0,0,fade:Storm:0\n1,chapters_freeplay_clues,Clues,autumn,769.9,5,autumn,8,2,0,10,1,0,8,5,10,0,0,reaction:hungry_eagle:when\n1,chapters_freeplay_clues,Clues,autumn,770,5,autumn,8,2,0,10,1,0,8,5,10,0,0,sample\n1,chapters_freeplay_clues,Clues,autumn,772,5,autumn,8,2,0,10,1,0,8,5,10,0,0,case:storm_gone:rung 2; 45s; passed\n1,chapters_freeplay_clues,Clues,autumn,780,5,autumn,8,2,0,10,1,0,8,5,10,0,0,sample\n1,chapters_freeplay_clues,Clues,autumn,788.6,5,autumn,8,1,0,9,1,0,8,5,10,0,0,reaction:taken_again:moa_killed\n1,chapters_freeplay_clues,Clues,autumn,790,5,autumn,8,1,0,9,1,0,8,5,10,0,0,sample\n1,chapters_freeplay_clues,Clues,autumn,800,5,autumn,8,1,0,9,1,0,8,5,10,0,0,sample\n1,chapters_freeplay_clues,Clues,autumn,810,5,winter,8,1,0,9,1,0,7,5,10,0,0,close:autumn:-> winter\n1,chapters_freeplay_clues,Clues,winter,810,5,winter,8,1,0,9,1,0,7,5,10,0,0,chapter:winter\n1,chapters_freeplay_clues,Clues,winter,810,5,winter,8,1,0,9,1,0,7,5,10,0,0,fade:Storm:0\n1,chapters_freeplay_clues,Clues,winter,810,5,winter,8,1,0,9,1,0,7,5,10,0,0,sample\n1,chapters_freeplay_clues,Clues,winter,820,5,winter,8,1,0,9,1,0,7,5,10,0,0,sample\n1,chapters_freeplay_clues,Clues,winter,830,5,winter,8,1,0,9,1,0,7,5,10,0,0,reaction:winter_food:when\n1,chapters_freeplay_clues,Clues,winter,830,5,winter,8,1,0,9,1,0,7,5,10,0,0,sample\n1,chapters_freeplay_clues,Clues,winter,840,5,winter,8,1,0,9,1,0,6,5,10,0,0,sample\n1,chapters_freeplay_clues,Clues,winter,841.5,5,winter,8,1,0,9,1,0,6,5,10,0,0,reaction:hungry_eagle:when\n1,chapters_freeplay_clues,Clues,winter,850,5,winter,8,1,0,9,1,0,6,5,10,0,0,sample\n1,chapters_freeplay_clues,Clues,winter,851.1,5,winter,8,1,0,9,1,0,6,5,10,0,0,reaction:cover_again:eagle_hunting\n1,chapters_freeplay_clues,Clues,winter,855,5,spring,8,1,0,9,1,0,6,5,10,0,0,goal:winter_through\n1,chapters_freeplay_clues,Clues,winter,855,5,spring,8,1,0,9,1,0,6,5,10,0,0,close:winter:-> spring\n1,chapters_freeplay_clues,Clues,spring,855,5,spring,8,1,0,9,1,0,6,5,10,0,0,chapter:spring\n1,chapters_freeplay_clues,Clues,spring,855.1,5,spring,8,1,0,9,1,0,6,5,10,0,0,goal:home\n1,chapters_freeplay_clues,Clues,spring,855.2,5,spring,8,1,0,9,1,0,6,5,10,0,0,hint:cover_again:rung 1\n1,chapters_freeplay_clues,Clues,spring,858.2,5,spring,8,1,0,9,1,0,6,5,10,0,0,hint:cover_again:rung 2\n1,chapters_freeplay_clues,Clues,spring,859.5,5,spring,8,1,0,9,1,0,6,5,10,0,0,player:placement:Storm\n1,chapters_freeplay_clues,Clues,spring,859.5,5,spring,8,1,0,9,1,0,6,5,10,0,0,reaction:cover_again:eagle_hunting\n1,chapters_freeplay_clues,Clues,spring,859.6,5,spring,8,1,0,9,1,0,6,5,10,0,0,case:cover_again:rung 2; 8.5s; solved\n1,chapters_freeplay_clues,Clues,spring,860,5,spring,8,1,0,9,1,0,6,5,10,0,0,sample\n1,chapters_freeplay_clues,Clues,spring,863.6,5,spring,8,1,0,9,1,0,6,5,10,0,0,hint:cover_again:rung 1\n1,chapters_freeplay_clues,Clues,spring,866.6,5,spring,8,1,0,9,1,0,6,5,10,0,0,hint:cover_again:rung 2\n1,chapters_freeplay_clues,Clues,spring,868,5,spring,8,1,0,9,1,0,6,5,10,0,0,player:placeable_moved:Storm\n1,chapters_freeplay_clues,Clues,spring,868,5,spring,8,1,0,9,1,0,6,5,10,0,0,reaction:gave_up_again:eagle_gave_up\n1,chapters_freeplay_clues,Clues,spring,868,5,spring,8,1,0,9,1,0,6,5,10,0,0,reaction:bird_hunted:eagle_hunting\n1,chapters_freeplay_clues,Clues,spring,868.1,5,spring,8,1,0,9,1,0,6,5,10,0,0,case:cover_again:rung 2; 8.6s; solved\n1,chapters_freeplay_clues,Clues,spring,870,5,spring,8,1,0,9,1,0,6,5,10,0,0,sample\n1,chapters_freeplay_clues,Clues,spring,876.1,5,spring,8,1,0,9,1,0,6,5,9,0,0,reaction:bird_taken:bird_killed\n1,chapters_freeplay_clues,Clues,spring,880,5,spring,8,1,0,9,1,0,6,5,9,0,0,sample\n1,chapters_freeplay_clues,Clues,spring,888,5,spring,8,1,0,9,1,0,6,5,9,0,0,reaction:storm_gone:placeable_expired\n1,chapters_freeplay_clues,Clues,spring,890,5,spring,8,1,0,9,1,0,6,5,9,0,0,sample\n1,chapters_freeplay_clues,Clues,spring,894,5,spring,8,1,0,9,1,0,6,5,9,0,0,hint:storm_gone:rung 1\n1,chapters_freeplay_clues,Clues,spring,900,6,summer,8,3,0,11,1,0,6,5,9,0,0,reaction:arrived:species_arrived\n1,chapters_freeplay_clues,Clues,spring,900,6,summer,8,3,0,11,1,0,6,5,9,0,0,reaction:new_year:season_change\n1,chapters_freeplay_clues,Clues,spring,900,6,summer,8,3,0,11,1,0,6,5,9,0,0,close:spring:-> finale\n1,chapters_freeplay_clues,Clues,finale,900,6,summer,8,3,0,11,1,0,6,5,9,0,0,chapter:finale\n1,chapters_freeplay_clues,Clues,finale,900,6,summer,8,3,0,11,1,0,6,5,9,0,0,sample\n1,chapters_freeplay_clues,Clues,finale,900.1,6,summer,8,3,0,11,1,0,6,5,9,0,0,close:finale:-> win\n1,chapters_freeplay_clues,Clues,finale,900.1,6,summer,8,3,0,11,1,0,6,5,9,0,0,won:finale\n1,chapters_freeplay_clues,Clues,finale,900.1,6,summer,8,3,0,11,1,0,6,5,9,0,0,win",
+ "log": [
+  {
+   "t": 0,
+   "chapter": "summer",
+   "kind": "chapter",
+   "id": "summer",
+   "info": ""
+  },
+  {
+   "t": 0,
+   "chapter": "summer",
+   "kind": "reaction",
+   "id": "stage",
+   "info": "chapter_start"
+  },
+  {
+   "t": 0,
+   "chapter": "summer",
+   "kind": "nest",
+   "id": "nestA",
+   "info": "homeA"
+  },
+  {
+   "t": 0,
+   "chapter": "summer",
+   "kind": "nest",
+   "id": "nestB",
+   "info": "homeB"
+  },
+  {
+   "t": 0,
+   "chapter": "summer",
+   "kind": "spawn",
+   "id": "upland_moa",
+   "info": "2"
+  },
+  {
+   "t": 0,
+   "chapter": "summer",
+   "kind": "spawn",
+   "id": "upland_moa",
+   "info": "2"
+  },
+  {
+   "t": 0,
+   "chapter": "summer",
+   "kind": "cast",
+   "id": "mama",
+   "info": "adopted"
+  },
+  {
+   "t": 0,
+   "chapter": "summer",
+   "kind": "cast",
+   "id": "papa",
+   "info": "adopted"
+  },
+  {
+   "t": 0,
+   "chapter": "summer",
+   "kind": "cast",
+   "id": "friendMama",
+   "info": "adopted"
+  },
+  {
+   "t": 0,
+   "chapter": "summer",
+   "kind": "cast",
+   "id": "friendPapa",
+   "info": "adopted"
+  },
+  {
+   "t": 0,
+   "chapter": "summer",
+   "kind": "lay",
+   "id": "upland_moa",
+   "info": "1"
+  },
+  {
+   "t": 0,
+   "chapter": "summer",
+   "kind": "lay",
+   "id": "upland_moa",
+   "info": "1"
+  },
+  {
+   "t": 0,
+   "chapter": "summer",
+   "kind": "place",
+   "id": "Storm",
+   "info": "tops"
+  },
+  {
+   "t": 0,
+   "chapter": "summer",
+   "kind": "place",
+   "id": "Storm",
+   "info": "lookout"
+  },
+  {
+   "t": 0,
+   "chapter": "summer",
+   "kind": "place",
+   "id": "waterhole",
+   "info": "tarn"
+  },
+  {
+   "t": 12.9,
+   "chapter": "summer",
+   "kind": "reaction",
+   "id": "raid_won",
+   "info": "nest_raid"
+  },
+  {
+   "t": 18.1,
+   "chapter": "summer",
+   "kind": "reaction",
+   "id": "hungry_eagle",
+   "info": "when"
+  },
+  {
+   "t": 26.7,
+   "chapter": "summer",
+   "kind": "reaction",
+   "id": "hatch_koukou",
+   "info": "egg_hatched"
+  },
+  {
+   "t": 26.7,
+   "chapter": "summer",
+   "kind": "moment",
+   "id": "$moa",
+   "info": "Koukou has hatched!"
+  },
+  {
+   "t": 26.7,
+   "chapter": "summer",
+   "kind": "cast",
+   "id": "koukou",
+   "info": "adopted"
+  },
+  {
+   "t": 45,
+   "chapter": "summer",
+   "kind": "goal",
+   "id": "summer_through",
+   "info": ""
+  },
+  {
+   "t": 45,
+   "chapter": "summer",
+   "kind": "close",
+   "id": "summer",
+   "info": "-> autumn"
+  },
+  {
+   "t": 45,
+   "chapter": "autumn",
+   "kind": "chapter",
+   "id": "autumn",
+   "info": ""
+  },
+  {
+   "t": 45,
+   "chapter": "autumn",
+   "kind": "fade",
+   "id": "Storm",
+   "info": "2"
+  },
+  {
+   "t": 57.2,
+   "chapter": "autumn",
+   "kind": "reaction",
+   "id": "giant_taken",
+   "info": "moa_killed"
+  },
+  {
+   "t": 57.2,
+   "chapter": "autumn",
+   "kind": "reaction",
+   "id": "taken_again",
+   "info": "moa_killed"
+  },
+  {
+   "t": 90,
+   "chapter": "autumn",
+   "kind": "reaction",
+   "id": "storm_gone",
+   "info": "placeable_expired"
+  },
+  {
+   "t": 90,
+   "chapter": "autumn",
+   "kind": "close",
+   "id": "autumn",
+   "info": "-> winter"
+  },
+  {
+   "t": 90,
+   "chapter": "winter",
+   "kind": "chapter",
+   "id": "winter",
+   "info": ""
+  },
+  {
+   "t": 90,
+   "chapter": "winter",
+   "kind": "fade",
+   "id": "Storm",
+   "info": "0"
+  },
+  {
+   "t": 96,
+   "chapter": "winter",
+   "kind": "hint",
+   "id": "storm_gone",
+   "info": "rung 1"
+  },
+  {
+   "t": 99,
+   "chapter": "winter",
+   "kind": "player",
+   "id": "placement",
+   "info": "wharariki"
+  },
+  {
+   "t": 99.1,
+   "chapter": "winter",
+   "kind": "goal",
+   "id": "fed",
+   "info": ""
+  },
+  {
+   "t": 104,
+   "chapter": "winter",
+   "kind": "hint",
+   "id": "storm_gone",
+   "info": "rung 2"
+  },
+  {
+   "t": 105.8,
+   "chapter": "winter",
+   "kind": "reaction",
+   "id": "winter_press",
+   "info": "when"
+  },
+  {
+   "t": 105.8,
+   "chapter": "winter",
+   "kind": "reaction",
+   "id": "bird_hunted",
+   "info": "eagle_hunting"
+  },
+  {
+   "t": 105.9,
+   "chapter": "winter",
+   "kind": "reaction",
+   "id": "hungry_eagle",
+   "info": "when"
+  },
+  {
+   "t": 115.5,
+   "chapter": "winter",
+   "kind": "reaction",
+   "id": "bird_taken",
+   "info": "bird_killed"
+  },
+  {
+   "t": 135,
+   "chapter": "winter",
+   "kind": "case",
+   "id": "storm_gone",
+   "info": "rung 2, 45s, passed"
+  },
+  {
+   "t": 135,
+   "chapter": "winter",
+   "kind": "goal",
+   "id": "winter_through",
+   "info": ""
+  },
+  {
+   "t": 135,
+   "chapter": "winter",
+   "kind": "close",
+   "id": "winter",
+   "info": "-> spring"
+  },
+  {
+   "t": 135,
+   "chapter": "spring",
+   "kind": "chapter",
+   "id": "spring",
+   "info": ""
+  },
+  {
+   "t": 168.4,
+   "chapter": "spring",
+   "kind": "reaction",
+   "id": "hungry_eagle",
+   "info": "when"
+  },
+  {
+   "t": 178,
+   "chapter": "spring",
+   "kind": "reaction",
+   "id": "cover",
+   "info": "eagle_hunting"
+  },
+  {
+   "t": 180,
+   "chapter": "spring",
+   "kind": "reaction",
+   "id": "new_year",
+   "info": "season_change"
+  },
+  {
+   "t": 180,
+   "chapter": "spring",
+   "kind": "close",
+   "id": "spring",
+   "info": "-> summer"
+  },
+  {
+   "t": 180,
+   "chapter": "summer",
+   "kind": "chapter",
+   "id": "summer",
+   "info": ""
+  },
+  {
+   "t": 180.1,
+   "chapter": "summer",
+   "kind": "hint",
+   "id": "cover",
+   "info": "rung 1"
+  },
+  {
+   "t": 183.1,
+   "chapter": "summer",
+   "kind": "hint",
+   "id": "cover",
+   "info": "rung 2"
+  },
+  {
+   "t": 186.5,
+   "chapter": "summer",
+   "kind": "player",
+   "id": "placement",
+   "info": "Storm"
+  },
+  {
+   "t": 186.6,
+   "chapter": "summer",
+   "kind": "case",
+   "id": "cover",
+   "info": "rung 2, 8.6s, solved"
+  },
+  {
+   "t": 188.8,
+   "chapter": "summer",
+   "kind": "reaction",
+   "id": "first_kokako",
+   "info": "bird_hatched"
+  },
+  {
+   "t": 188.8,
+   "chapter": "summer",
+   "kind": "moment",
+   "id": "$bird",
+   "info": "A kōkako chick: spring"
+  },
+  {
+   "t": 188.8,
+   "chapter": "summer",
+   "kind": "reaction",
+   "id": "bird_hatch_again",
+   "info": "bird_hatched"
+  },
+  {
+   "t": 190.4,
+   "chapter": "summer",
+   "kind": "reaction",
+   "id": "first_giant",
+   "info": "egg_hatched"
+  },
+  {
+   "t": 190.4,
+   "chapter": "summer",
+   "kind": "moment",
+   "id": "$moa",
+   "info": "A giant moa chick"
+  },
+  {
+   "t": 192.3,
+   "chapter": "summer",
+   "kind": "reaction",
+   "id": "raid_won",
+   "info": "nest_raid"
+  },
+  {
+   "t": 205.3,
+   "chapter": "summer",
+   "kind": "reaction",
+   "id": "taken_again",
+   "info": "moa_killed"
+  },
+  {
+   "t": 206.5,
+   "chapter": "summer",
+   "kind": "reaction",
+   "id": "storm_gone",
+   "info": "placeable_expired"
+  },
+  {
+   "t": 212.5,
+   "chapter": "summer",
+   "kind": "hint",
+   "id": "storm_gone",
+   "info": "rung 1"
+  },
+  {
+   "t": 220.5,
+   "chapter": "summer",
+   "kind": "hint",
+   "id": "storm_gone",
+   "info": "rung 2"
+  },
+  {
+   "t": 225,
+   "chapter": "summer",
+   "kind": "goal",
+   "id": "summer_through",
+   "info": ""
+  },
+  {
+   "t": 225,
+   "chapter": "summer",
+   "kind": "close",
+   "id": "summer",
+   "info": "-> autumn"
+  },
+  {
+   "t": 225,
+   "chapter": "autumn",
+   "kind": "chapter",
+   "id": "autumn",
+   "info": ""
+  },
+  {
+   "t": 225,
+   "chapter": "autumn",
+   "kind": "fade",
+   "id": "Storm",
+   "info": "0"
+  },
+  {
+   "t": 251.5,
+   "chapter": "autumn",
+   "kind": "case",
+   "id": "storm_gone",
+   "info": "rung 2, 45s, passed"
+  },
+  {
+   "t": 258.1,
+   "chapter": "autumn",
+   "kind": "reaction",
+   "id": "hungry_eagle",
+   "info": "when"
+  },
+  {
+   "t": 270,
+   "chapter": "autumn",
+   "kind": "close",
+   "id": "autumn",
+   "info": "-> winter"
+  },
+  {
+   "t": 270,
+   "chapter": "winter",
+   "kind": "chapter",
+   "id": "winter",
+   "info": ""
+  },
+  {
+   "t": 270,
+   "chapter": "winter",
+   "kind": "fade",
+   "id": "Storm",
+   "info": "0"
+  },
+  {
+   "t": 290,
+   "chapter": "winter",
+   "kind": "reaction",
+   "id": "winter_food",
+   "info": "when"
+  },
+  {
+   "t": 291,
+   "chapter": "winter",
+   "kind": "reaction",
+   "id": "taken_again",
+   "info": "moa_killed"
+  },
+  {
+   "t": 315,
+   "chapter": "winter",
+   "kind": "goal",
+   "id": "winter_through",
+   "info": ""
+  },
+  {
+   "t": 315,
+   "chapter": "winter",
+   "kind": "close",
+   "id": "winter",
+   "info": "-> spring"
+  },
+  {
+   "t": 315,
+   "chapter": "spring",
+   "kind": "chapter",
+   "id": "spring",
+   "info": ""
+  },
+  {
+   "t": 343.9,
+   "chapter": "spring",
+   "kind": "reaction",
+   "id": "hungry_eagle",
+   "info": "when"
+  },
+  {
+   "t": 354.9,
+   "chapter": "spring",
+   "kind": "reaction",
+   "id": "cover_again",
+   "info": "eagle_hunting"
+  },
+  {
+   "t": 358.9,
+   "chapter": "spring",
+   "kind": "hint",
+   "id": "cover_again",
+   "info": "rung 1"
+  },
+  {
+   "t": 360,
+   "chapter": "spring",
+   "kind": "reaction",
+   "id": "new_year",
+   "info": "season_change"
+  },
+  {
+   "t": 360,
+   "chapter": "spring",
+   "kind": "close",
+   "id": "spring",
+   "info": "-> summer"
+  },
+  {
+   "t": 360,
+   "chapter": "summer",
+   "kind": "chapter",
+   "id": "summer",
+   "info": ""
+  },
+  {
+   "t": 361.9,
+   "chapter": "summer",
+   "kind": "hint",
+   "id": "cover_again",
+   "info": "rung 2"
+  },
+  {
+   "t": 363,
+   "chapter": "summer",
+   "kind": "player",
+   "id": "placement",
+   "info": "Storm"
+  },
+  {
+   "t": 363.1,
+   "chapter": "summer",
+   "kind": "case",
+   "id": "cover_again",
+   "info": "rung 2, 8.2s, solved"
+  },
+  {
+   "t": 364,
+   "chapter": "summer",
+   "kind": "reaction",
+   "id": "bird_hunted",
+   "info": "eagle_hunting"
+  },
+  {
+   "t": 377.5,
+   "chapter": "summer",
+   "kind": "reaction",
+   "id": "bird_taken",
+   "info": "bird_killed"
+  },
+  {
+   "t": 383,
+   "chapter": "summer",
+   "kind": "reaction",
+   "id": "storm_gone",
+   "info": "placeable_expired"
+  },
+  {
+   "t": 389,
+   "chapter": "summer",
+   "kind": "hint",
+   "id": "storm_gone",
+   "info": "rung 1"
+  },
+  {
+   "t": 397,
+   "chapter": "summer",
+   "kind": "hint",
+   "id": "storm_gone",
+   "info": "rung 2"
+  },
+  {
+   "t": 405,
+   "chapter": "summer",
+   "kind": "goal",
+   "id": "summer_through",
+   "info": ""
+  },
+  {
+   "t": 405,
+   "chapter": "summer",
+   "kind": "close",
+   "id": "summer",
+   "info": "-> autumn"
+  },
+  {
+   "t": 405,
+   "chapter": "autumn",
+   "kind": "chapter",
+   "id": "autumn",
+   "info": ""
+  },
+  {
+   "t": 405,
+   "chapter": "autumn",
+   "kind": "fade",
+   "id": "Storm",
+   "info": "0"
+  },
+  {
+   "t": 427.2,
+   "chapter": "autumn",
+   "kind": "reaction",
+   "id": "hungry_eagle",
+   "info": "when"
+  },
+  {
+   "t": 428,
+   "chapter": "autumn",
+   "kind": "case",
+   "id": "storm_gone",
+   "info": "rung 2, 45s, passed"
+  },
+  {
+   "t": 443.8,
+   "chapter": "autumn",
+   "kind": "reaction",
+   "id": "bird_hunted",
+   "info": "eagle_hunting"
+  },
+  {
+   "t": 450,
+   "chapter": "autumn",
+   "kind": "close",
+   "id": "autumn",
+   "info": "-> winter"
+  },
+  {
+   "t": 450,
+   "chapter": "winter",
+   "kind": "chapter",
+   "id": "winter",
+   "info": ""
+  },
+  {
+   "t": 450,
+   "chapter": "winter",
+   "kind": "fade",
+   "id": "Storm",
+   "info": "0"
+  },
+  {
+   "t": 457.5,
+   "chapter": "winter",
+   "kind": "reaction",
+   "id": "bird_taken",
+   "info": "bird_killed"
+  },
+  {
+   "t": 470,
+   "chapter": "winter",
+   "kind": "reaction",
+   "id": "winter_food",
+   "info": "when"
+  },
+  {
+   "t": 495,
+   "chapter": "winter",
+   "kind": "goal",
+   "id": "winter_through",
+   "info": ""
+  },
+  {
+   "t": 495,
+   "chapter": "winter",
+   "kind": "close",
+   "id": "winter",
+   "info": "-> spring"
+  },
+  {
+   "t": 495,
+   "chapter": "spring",
+   "kind": "chapter",
+   "id": "spring",
+   "info": ""
+  },
+  {
+   "t": 507.2,
+   "chapter": "spring",
+   "kind": "reaction",
+   "id": "first_kea",
+   "info": "bird_hatched"
+  },
+  {
+   "t": 507.2,
+   "chapter": "spring",
+   "kind": "moment",
+   "id": "$bird",
+   "info": "Kea chicks: late winter"
+  },
+  {
+   "t": 507.2,
+   "chapter": "spring",
+   "kind": "reaction",
+   "id": "bird_hatch_again",
+   "info": "bird_hatched"
+  },
+  {
+   "t": 510.3,
+   "chapter": "spring",
+   "kind": "reaction",
+   "id": "hungry_eagle",
+   "info": "when"
+  },
+  {
+   "t": 520,
+   "chapter": "spring",
+   "kind": "reaction",
+   "id": "cover_again",
+   "info": "eagle_hunting"
+  },
+  {
+   "t": 524,
+   "chapter": "spring",
+   "kind": "hint",
+   "id": "cover_again",
+   "info": "rung 1"
+  },
+  {
+   "t": 527,
+   "chapter": "spring",
+   "kind": "hint",
+   "id": "cover_again",
+   "info": "rung 2"
+  },
+  {
+   "t": 528,
+   "chapter": "spring",
+   "kind": "player",
+   "id": "placement",
+   "info": "Storm"
+  },
+  {
+   "t": 528,
+   "chapter": "spring",
+   "kind": "reaction",
+   "id": "cover_again",
+   "info": "eagle_hunting"
+  },
+  {
+   "t": 528.1,
+   "chapter": "spring",
+   "kind": "case",
+   "id": "cover_again",
+   "info": "rung 2, 8.1s, solved"
+  },
+  {
+   "t": 532.1,
+   "chapter": "spring",
+   "kind": "hint",
+   "id": "cover_again",
+   "info": "rung 1"
+  },
+  {
+   "t": 535.1,
+   "chapter": "spring",
+   "kind": "hint",
+   "id": "cover_again",
+   "info": "rung 2"
+  },
+  {
+   "t": 536.5,
+   "chapter": "spring",
+   "kind": "player",
+   "id": "placeable_moved",
+   "info": "Storm"
+  },
+  {
+   "t": 536.5,
+   "chapter": "spring",
+   "kind": "reaction",
+   "id": "gave_up",
+   "info": "eagle_gave_up"
+  },
+  {
+   "t": 536.5,
+   "chapter": "spring",
+   "kind": "reaction",
+   "id": "gave_up_again",
+   "info": "eagle_gave_up"
+  },
+  {
+   "t": 536.6,
+   "chapter": "spring",
+   "kind": "case",
+   "id": "cover_again",
+   "info": "rung 2, 8.6s, solved"
+  },
+  {
+   "t": 540,
+   "chapter": "spring",
+   "kind": "reaction",
+   "id": "new_year",
+   "info": "season_change"
+  },
+  {
+   "t": 540,
+   "chapter": "spring",
+   "kind": "close",
+   "id": "spring",
+   "info": "-> summer"
+  },
+  {
+   "t": 540,
+   "chapter": "summer",
+   "kind": "chapter",
+   "id": "summer",
+   "info": ""
+  },
+  {
+   "t": 546.5,
+   "chapter": "summer",
+   "kind": "reaction",
+   "id": "taken_again",
+   "info": "moa_killed"
+  },
+  {
+   "t": 548.1,
+   "chapter": "summer",
+   "kind": "reaction",
+   "id": "first_kaka",
+   "info": "bird_hatched"
+  },
+  {
+   "t": 548.1,
+   "chapter": "summer",
+   "kind": "moment",
+   "id": "$bird",
+   "info": "Kākā chicks: spring"
+  },
+  {
+   "t": 548.1,
+   "chapter": "summer",
+   "kind": "reaction",
+   "id": "bird_hatch_again",
+   "info": "bird_hatched"
+  },
+  {
+   "t": 549,
+   "chapter": "summer",
+   "kind": "player",
+   "id": "placement",
+   "info": "patotara"
+  },
+  {
+   "t": 556.5,
+   "chapter": "summer",
+   "kind": "reaction",
+   "id": "storm_gone",
+   "info": "placeable_expired"
+  },
+  {
+   "t": 558,
+   "chapter": "summer",
+   "kind": "player",
+   "id": "plant_sprouted",
+   "info": "patotara"
+  },
+  {
+   "t": 562.5,
+   "chapter": "summer",
+   "kind": "hint",
+   "id": "storm_gone",
+   "info": "rung 1"
+  },
+  {
+   "t": 570.5,
+   "chapter": "summer",
+   "kind": "hint",
+   "id": "storm_gone",
+   "info": "rung 2"
+  },
+  {
+   "t": 582.9,
+   "chapter": "summer",
+   "kind": "reaction",
+   "id": "raid_failed",
+   "info": "nest_raid"
+  },
+  {
+   "t": 585,
+   "chapter": "summer",
+   "kind": "goal",
+   "id": "summer_through",
+   "info": ""
+  },
+  {
+   "t": 585,
+   "chapter": "summer",
+   "kind": "close",
+   "id": "summer",
+   "info": "-> autumn"
+  },
+  {
+   "t": 585,
+   "chapter": "autumn",
+   "kind": "chapter",
+   "id": "autumn",
+   "info": ""
+  },
+  {
+   "t": 585,
+   "chapter": "autumn",
+   "kind": "fade",
+   "id": "Storm",
+   "info": "0"
+  },
+  {
+   "t": 594,
+   "chapter": "autumn",
+   "kind": "player",
+   "id": "placement",
+   "info": "patotara"
+  },
+  {
+   "t": 599.3,
+   "chapter": "autumn",
+   "kind": "reaction",
+   "id": "hungry_eagle",
+   "info": "when"
+  },
+  {
+   "t": 601.5,
+   "chapter": "autumn",
+   "kind": "case",
+   "id": "storm_gone",
+   "info": "rung 2, 45s, passed"
+  },
+  {
+   "t": 603,
+   "chapter": "autumn",
+   "kind": "player",
+   "id": "plant_sprouted",
+   "info": "patotara"
+  },
+  {
+   "t": 618.9,
+   "chapter": "autumn",
+   "kind": "reaction",
+   "id": "taken_again",
+   "info": "moa_killed"
+  },
+  {
+   "t": 630,
+   "chapter": "autumn",
+   "kind": "close",
+   "id": "autumn",
+   "info": "-> winter"
+  },
+  {
+   "t": 630,
+   "chapter": "winter",
+   "kind": "chapter",
+   "id": "winter",
+   "info": ""
+  },
+  {
+   "t": 630,
+   "chapter": "winter",
+   "kind": "fade",
+   "id": "Storm",
+   "info": "0"
+  },
+  {
+   "t": 650,
+   "chapter": "winter",
+   "kind": "reaction",
+   "id": "winter_food",
+   "info": "when"
+  },
+  {
+   "t": 671.8,
+   "chapter": "winter",
+   "kind": "reaction",
+   "id": "hungry_eagle",
+   "info": "when"
+  },
+  {
+   "t": 675,
+   "chapter": "winter",
+   "kind": "goal",
+   "id": "winter_through",
+   "info": ""
+  },
+  {
+   "t": 675,
+   "chapter": "winter",
+   "kind": "close",
+   "id": "winter",
+   "info": "-> spring"
+  },
+  {
+   "t": 675,
+   "chapter": "spring",
+   "kind": "chapter",
+   "id": "spring",
+   "info": ""
+  },
+  {
+   "t": 681.4,
+   "chapter": "spring",
+   "kind": "reaction",
+   "id": "cover_again",
+   "info": "eagle_hunting"
+  },
+  {
+   "t": 685.5,
+   "chapter": "spring",
+   "kind": "hint",
+   "id": "cover_again",
+   "info": "rung 1"
+  },
+  {
+   "t": 688.5,
+   "chapter": "spring",
+   "kind": "hint",
+   "id": "cover_again",
+   "info": "rung 2"
+  },
+  {
+   "t": 689.5,
+   "chapter": "spring",
+   "kind": "player",
+   "id": "placement",
+   "info": "Storm"
+  },
+  {
+   "t": 689.6,
+   "chapter": "spring",
+   "kind": "case",
+   "id": "cover_again",
+   "info": "rung 2, 8.2s, solved"
+  },
+  {
+   "t": 690.3,
+   "chapter": "spring",
+   "kind": "reaction",
+   "id": "gave_up_again",
+   "info": "eagle_gave_up"
+  },
+  {
+   "t": 690.3,
+   "chapter": "spring",
+   "kind": "reaction",
+   "id": "cover_again",
+   "info": "eagle_hunting"
+  },
+  {
+   "t": 694.3,
+   "chapter": "spring",
+   "kind": "hint",
+   "id": "cover_again",
+   "info": "rung 1"
+  },
+  {
+   "t": 697.3,
+   "chapter": "spring",
+   "kind": "hint",
+   "id": "cover_again",
+   "info": "rung 2"
+  },
+  {
+   "t": 698.5,
+   "chapter": "spring",
+   "kind": "player",
+   "id": "placeable_moved",
+   "info": "Storm"
+  },
+  {
+   "t": 698.5,
+   "chapter": "spring",
+   "kind": "reaction",
+   "id": "cover_again",
+   "info": "eagle_hunting"
+  },
+  {
+   "t": 698.6,
+   "chapter": "spring",
+   "kind": "case",
+   "id": "cover_again",
+   "info": "rung 2, 8.3s, solved"
+  },
+  {
+   "t": 702.6,
+   "chapter": "spring",
+   "kind": "hint",
+   "id": "cover_again",
+   "info": "rung 1"
+  },
+  {
+   "t": 705.6,
+   "chapter": "spring",
+   "kind": "hint",
+   "id": "cover_again",
+   "info": "rung 2"
+  },
+  {
+   "t": 707,
+   "chapter": "spring",
+   "kind": "player",
+   "id": "placeable_moved",
+   "info": "Storm"
+  },
+  {
+   "t": 707,
+   "chapter": "spring",
+   "kind": "reaction",
+   "id": "gave_up_again",
+   "info": "eagle_gave_up"
+  },
+  {
+   "t": 707.1,
+   "chapter": "spring",
+   "kind": "case",
+   "id": "cover_again",
+   "info": "rung 2, 8.6s, solved"
+  },
+  {
+   "t": 717,
+   "chapter": "spring",
+   "kind": "reaction",
+   "id": "taken_again",
+   "info": "moa_killed"
+  },
+  {
+   "t": 720,
+   "chapter": "spring",
+   "kind": "reaction",
+   "id": "new_year",
+   "info": "season_change"
+  },
+  {
+   "t": 720,
+   "chapter": "spring",
+   "kind": "close",
+   "id": "spring",
+   "info": "-> summer"
+  },
+  {
+   "t": 720,
+   "chapter": "summer",
+   "kind": "chapter",
+   "id": "summer",
+   "info": ""
+  },
+  {
+   "t": 727,
+   "chapter": "summer",
+   "kind": "reaction",
+   "id": "storm_gone",
+   "info": "placeable_expired"
+  },
+  {
+   "t": 733,
+   "chapter": "summer",
+   "kind": "hint",
+   "id": "storm_gone",
+   "info": "rung 1"
+  },
+  {
+   "t": 741,
+   "chapter": "summer",
+   "kind": "hint",
+   "id": "storm_gone",
+   "info": "rung 2"
+  },
+  {
+   "t": 765,
+   "chapter": "summer",
+   "kind": "goal",
+   "id": "summer_through",
+   "info": ""
+  },
+  {
+   "t": 765,
+   "chapter": "summer",
+   "kind": "close",
+   "id": "summer",
+   "info": "-> autumn"
+  },
+  {
+   "t": 765,
+   "chapter": "autumn",
+   "kind": "chapter",
+   "id": "autumn",
+   "info": ""
+  },
+  {
+   "t": 765,
+   "chapter": "autumn",
+   "kind": "fade",
+   "id": "Storm",
+   "info": "0"
+  },
+  {
+   "t": 769.9,
+   "chapter": "autumn",
+   "kind": "reaction",
+   "id": "hungry_eagle",
+   "info": "when"
+  },
+  {
+   "t": 772,
+   "chapter": "autumn",
+   "kind": "case",
+   "id": "storm_gone",
+   "info": "rung 2, 45s, passed"
+  },
+  {
+   "t": 788.6,
+   "chapter": "autumn",
+   "kind": "reaction",
+   "id": "taken_again",
+   "info": "moa_killed"
+  },
+  {
+   "t": 810,
+   "chapter": "autumn",
+   "kind": "close",
+   "id": "autumn",
+   "info": "-> winter"
+  },
+  {
+   "t": 810,
+   "chapter": "winter",
+   "kind": "chapter",
+   "id": "winter",
+   "info": ""
+  },
+  {
+   "t": 810,
+   "chapter": "winter",
+   "kind": "fade",
+   "id": "Storm",
+   "info": "0"
+  },
+  {
+   "t": 830,
+   "chapter": "winter",
+   "kind": "reaction",
+   "id": "winter_food",
+   "info": "when"
+  },
+  {
+   "t": 841.5,
+   "chapter": "winter",
+   "kind": "reaction",
+   "id": "hungry_eagle",
+   "info": "when"
+  },
+  {
+   "t": 851.1,
+   "chapter": "winter",
+   "kind": "reaction",
+   "id": "cover_again",
+   "info": "eagle_hunting"
+  },
+  {
+   "t": 855,
+   "chapter": "winter",
+   "kind": "goal",
+   "id": "winter_through",
+   "info": ""
+  },
+  {
+   "t": 855,
+   "chapter": "winter",
+   "kind": "close",
+   "id": "winter",
+   "info": "-> spring"
+  },
+  {
+   "t": 855,
+   "chapter": "spring",
+   "kind": "chapter",
+   "id": "spring",
+   "info": ""
+  },
+  {
+   "t": 855.1,
+   "chapter": "spring",
+   "kind": "goal",
+   "id": "home",
+   "info": ""
+  },
+  {
+   "t": 855.2,
+   "chapter": "spring",
+   "kind": "hint",
+   "id": "cover_again",
+   "info": "rung 1"
+  },
+  {
+   "t": 858.2,
+   "chapter": "spring",
+   "kind": "hint",
+   "id": "cover_again",
+   "info": "rung 2"
+  },
+  {
+   "t": 859.5,
+   "chapter": "spring",
+   "kind": "player",
+   "id": "placement",
+   "info": "Storm"
+  },
+  {
+   "t": 859.5,
+   "chapter": "spring",
+   "kind": "reaction",
+   "id": "cover_again",
+   "info": "eagle_hunting"
+  },
+  {
+   "t": 859.6,
+   "chapter": "spring",
+   "kind": "case",
+   "id": "cover_again",
+   "info": "rung 2, 8.5s, solved"
+  },
+  {
+   "t": 863.6,
+   "chapter": "spring",
+   "kind": "hint",
+   "id": "cover_again",
+   "info": "rung 1"
+  },
+  {
+   "t": 866.6,
+   "chapter": "spring",
+   "kind": "hint",
+   "id": "cover_again",
+   "info": "rung 2"
+  },
+  {
+   "t": 868,
+   "chapter": "spring",
+   "kind": "player",
+   "id": "placeable_moved",
+   "info": "Storm"
+  },
+  {
+   "t": 868,
+   "chapter": "spring",
+   "kind": "reaction",
+   "id": "gave_up_again",
+   "info": "eagle_gave_up"
+  },
+  {
+   "t": 868.1,
+   "chapter": "spring",
+   "kind": "reaction",
+   "id": "bird_hunted",
+   "info": "eagle_hunting"
+  },
+  {
+   "t": 868.1,
+   "chapter": "spring",
+   "kind": "case",
+   "id": "cover_again",
+   "info": "rung 2, 8.6s, solved"
+  },
+  {
+   "t": 876.1,
+   "chapter": "spring",
+   "kind": "reaction",
+   "id": "bird_taken",
+   "info": "bird_killed"
+  },
+  {
+   "t": 888,
+   "chapter": "spring",
+   "kind": "reaction",
+   "id": "storm_gone",
+   "info": "placeable_expired"
+  },
+  {
+   "t": 894,
+   "chapter": "spring",
+   "kind": "hint",
+   "id": "storm_gone",
+   "info": "rung 1"
+  },
+  {
+   "t": 900,
+   "chapter": "spring",
+   "kind": "reaction",
+   "id": "arrived",
+   "info": "species_arrived"
+  },
+  {
+   "t": 900,
+   "chapter": "spring",
+   "kind": "reaction",
+   "id": "new_year",
+   "info": "season_change"
+  },
+  {
+   "t": 900,
+   "chapter": "spring",
+   "kind": "close",
+   "id": "spring",
+   "info": "-> finale"
+  },
+  {
+   "t": 900,
+   "chapter": "finale",
+   "kind": "chapter",
+   "id": "finale",
+   "info": ""
+  },
+  {
+   "t": 900.1,
+   "chapter": "finale",
+   "kind": "close",
+   "id": "finale",
+   "info": "-> win"
+  },
+  {
+   "t": 900.1,
+   "chapter": "finale",
+   "kind": "won",
+   "id": "finale",
+   "info": ""
+  }
+ ],
+ "beats": {},
+ "cases": [
+  {
+   "id": "storm_gone",
+   "t": 135,
+   "sec": 45,
+   "rung": 2,
+   "outcome": "passed",
+   "who": "",
+   "chapter": "winter",
+   "transfer": false
+  },
+  {
+   "id": "cover",
+   "t": 186.6,
+   "sec": 8.6,
+   "rung": 2,
+   "outcome": "solved",
+   "who": "friendMama",
+   "chapter": "summer",
+   "transfer": false
+  },
+  {
+   "id": "storm_gone",
+   "t": 251.5,
+   "sec": 45,
+   "rung": 2,
+   "outcome": "passed",
+   "who": "",
+   "chapter": "autumn",
+   "transfer": false
+  },
+  {
+   "id": "cover_again",
+   "t": 363.1,
+   "sec": 8.2,
+   "rung": 2,
+   "outcome": "solved",
+   "who": "friendPapa",
+   "chapter": "summer",
+   "transfer": false
+  },
+  {
+   "id": "storm_gone",
+   "t": 428,
+   "sec": 45,
+   "rung": 2,
+   "outcome": "passed",
+   "who": "",
+   "chapter": "autumn",
+   "transfer": false
+  },
+  {
+   "id": "cover_again",
+   "t": 528.1,
+   "sec": 8.1,
+   "rung": 2,
+   "outcome": "solved",
+   "who": "koukou",
+   "chapter": "spring",
+   "transfer": false
+  },
+  {
+   "id": "cover_again",
+   "t": 536.6,
+   "sec": 8.6,
+   "rung": 2,
+   "outcome": "solved",
+   "who": "mama",
+   "chapter": "spring",
+   "transfer": false
+  },
+  {
+   "id": "storm_gone",
+   "t": 601.5,
+   "sec": 45,
+   "rung": 2,
+   "outcome": "passed",
+   "who": "",
+   "chapter": "autumn",
+   "transfer": false
+  },
+  {
+   "id": "cover_again",
+   "t": 689.6,
+   "sec": 8.2,
+   "rung": 2,
+   "outcome": "solved",
+   "who": "koukou",
+   "chapter": "spring",
+   "transfer": false
+  },
+  {
+   "id": "cover_again",
+   "t": 698.6,
+   "sec": 8.3,
+   "rung": 2,
+   "outcome": "solved",
+   "who": "friendMama",
+   "chapter": "spring",
+   "transfer": false
+  },
+  {
+   "id": "cover_again",
+   "t": 707.1,
+   "sec": 8.6,
+   "rung": 2,
+   "outcome": "solved",
+   "who": "upland_moa",
+   "chapter": "spring",
+   "transfer": false
+  },
+  {
+   "id": "storm_gone",
+   "t": 772,
+   "sec": 45,
+   "rung": 2,
+   "outcome": "passed",
+   "who": "",
+   "chapter": "autumn",
+   "transfer": false
+  },
+  {
+   "id": "cover_again",
+   "t": 859.6,
+   "sec": 8.5,
+   "rung": 2,
+   "outcome": "solved",
+   "who": "friendMama",
+   "chapter": "spring",
+   "transfer": false
+  },
+  {
+   "id": "cover_again",
+   "t": 868.1,
+   "sec": 8.6,
+   "rung": 2,
+   "outcome": "solved",
+   "who": "upland_moa",
+   "chapter": "spring",
+   "transfer": false
+  }
+ ]
+}

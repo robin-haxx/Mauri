@@ -1,0 +1,11 @@
+seed 1: year_end after 1620s | beats (no beats) | eagle took: stout_legged_moa 10, little_bush_moa 4, south_island_giant_moa 2, upland_moa 2 | cast lost: pukepuke@1060.8s | focus animals 10, 7 left over the pass, year 10 | spent patotara 150, move storm 120, wharariki 500, new storm 360, 448 mauri in hand | replay 78b0b2e4
+seed 2: year_end after 1620s | beats (no beats) | eagle took: stout_legged_moa 9, little_bush_moa 6, upland_moa 3, south_island_giant_moa 1 | cast lost: friendMama@781.4s papa@1257.6s | focus animals 13, 7 left over the pass, year 10 | spent wharariki 700, new storm 200, move storm 60, patotara 100, 549 mauri in hand | replay da44e427
+seed 3: year_end after 1620s | beats (no beats) | eagle took: little_bush_moa 8, south_island_giant_moa 3, stout_legged_moa 6, upland_moa 1, kokako 1 | cast lost: pukepuke@917.6s | focus animals 11, 4 left over the pass, year 10 | spent wharariki 700, move storm 80, new storm 320, patotara 125, 252 mauri in hand | replay a5205f8a
+seed 4: year_end after 1620s | beats (no beats) | eagle took: stout_legged_moa 8, little_bush_moa 5, south_island_giant_moa 1, upland_moa 5, kea 1 | cast lost: mama@790.3s pukepuke@1155.1s | focus animals 11, 1 left over the pass, year 10 | spent wharariki 800, move storm 40, new storm 280, patotara 150, 81 mauri in hand | replay e30e555f
+seed 5: year_end after 1620s | beats (no beats) | eagle took: stout_legged_moa 9, little_bush_moa 5, upland_moa 2, south_island_giant_moa 3 | cast lost: friendPapa@779.5s | focus animals 13, 1 left over the pass, year 10 | spent patotara 125, move storm 30, wharariki 450, new storm 200, 510 mauri in hand | replay 6af9f396
+seed 6: year_end after 1620s | beats (no beats) | eagle took: stout_legged_moa 9, south_island_giant_moa 4, little_bush_moa 5, upland_moa 1 | focus animals 12, 5 left over the pass, year 10 | spent wharariki 425, new storm 400, move storm 70, patotara 75, 502 mauri in hand | replay 23265a45
+
+6 run(s): year_end 6
+  eagle took: stout_legged_moa 51, little_bush_moa 33, south_island_giant_moa 14, upland_moa 14, kokako 1, kea 1; cast lost 7
+  focus animals at the end: 10 to 13 (median 12); years reached: 10 to 10
+  files in /home/user/Mauri/tests/endless/late

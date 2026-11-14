@@ -1,0 +1,12 @@
+seed 1: win after 900s | beats (no beats) | eagle took: south_island_giant_moa 6, kaka 1, upland_moa 4, kokako 1 | cast lost: friendPapa@266.1s friendMama@504.8s papa@804.7s | focus animals 2, year 6 | spent nothing, 565 mauri in hand | replay 551eb420
+   problems met: 5 (answered: no hint 0, after the question 0, after being told 0; went away by itself 1; lost 4)
+seed 2: loss after 39s (The Pouākai took Koukou.) | beats (no beats) | eagle took: upland_moa 1 | cast lost: koukou@38.6s | focus animals 5, year 1 | spent nothing, 202 mauri in hand | replay 44073dd4
+   problems met: 2 (answered: no hint 0, after the question 0, after being told 0; went away by itself 1; lost 1)
+seed 3: loss after 826s (The Pouākai took Pukepuke.) | beats (no beats) | eagle took: south_island_giant_moa 7, upland_moa 4 | cast lost: friendPapa@111.8s mama@326.3s papa@339.3s pukepuke@825.5s | focus animals 2, year 5 | spent nothing, 546 mauri in hand | replay f7a0af8a
+   problems met: 5 (answered: no hint 0, after the question 0, after being told 0; went away by itself 1; lost 4)
+
+3 run(s): win 1, loss 2
+  eagle took: south_island_giant_moa 13, kaka 1, upland_moa 9, kokako 1; cast lost 8
+  focus animals at the end: 2 to 5 (median 2); years reached: 1 to 6
+  problems met in the lessons' year: 0 of 9 answered with no hint, 0 after a hint, 9 lost; in the unprompted stretch: none
+  files in /home/user/Mauri/tests/clues/freeplay_none

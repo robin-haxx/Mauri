@@ -12,10 +12,33 @@ const MOA_STATE = {
   MATING: 'mating'
 };
 
+// How storms draw moa (Moa.applyStormPull): mechanics.stormAttract, or on a journey level by
+// default, for upland moa. null where storms draw nobody. Fields:
+//   species     who feels it
+//   strength    how far a storm at full weight turns a walk: its heading is the destination's
+//               (weight 1) plus the storm's (this x the pull's weight), so the walk wins
+//   lookahead   how far ahead a walking bird aims along that heading (world px)
+//   reach       how far past a storm's edge it is felt (world px)
+//   inner       inside this fraction of its radius there is no pull (a bird passes through)
+//   minCos      storms further behind than this (cosine to where it is going) don't draw it
+//   hungryMult  the pull on a hungry bird (food comes first)
+const STORM_ATTRACT_DEFAULT = { species: ['upland_moa'], strength: 2.0, lookahead: 40, reach: 110, inner: 0.45, minCos: -0.1, hungryMult: 0.3 };
+let _stormAttractCache = { mech: null, own: null, journey: null, cfg: null };
+function stormAttractCfg() {
+  const M = typeof LEVEL_MECHANICS !== 'undefined' ? LEVEL_MECHANICS : null;
+  const journey = !!(typeof game !== 'undefined' && game && game.currentLevel && game.currentLevel.journey);
+  const own = M && M.stormAttract, c = _stormAttractCache;
+  if (c.mech === M && c.own === own && c.journey === journey) return c.cfg;
+  c.mech = M; c.own = own; c.journey = journey;
+  c.cfg = own === false ? null : (own ? Object.assign({}, STORM_ATTRACT_DEFAULT, own) : (journey ? STORM_ATTRACT_DEFAULT : null));
+  return c.cfg;
+}
+
 const MOA_AGE = {
   JUVENILE_MAX: 600,
   ADULT_MIN: 900,
   MATING_AGE: 900,
+  SIZE_CHICK: 0.45,       // a hatchling of a calendar species (it grows over years: Moa.updateAge)
   SIZE_JUVENILE: 0.6,
   SIZE_ADOLESCENT: 0.9,
   SIZE_ADULT: 1.0
@@ -218,6 +241,19 @@ class Moa extends Boid {
     if (bySex) this.baseSize = this.isFemale ? bySex.female : bySex.male;
     const maleMult = bySex ? 1 : 0.9;
 
+    // On a breeding calendar a hatchling grows by the year, not the minute: small through its
+    // first year (a juvenile), filling out until the year it comes of age.
+    const calYears = this._calYears();
+    if (calYears != null) {
+      const mature = this._calendar().maturityYears || 1;
+      const adultSize = this.isFemale ? MOA_AGE.SIZE_ADULT : MOA_AGE.SIZE_ADULT * maleMult;
+      this.ageStage = calYears >= mature ? 'adult' : (calYears < 1 ? 'juvenile' : 'adolescent');
+      const grown = this.baseSize * (calYears >= mature ? adultSize
+        : MOA_AGE.SIZE_CHICK + (adultSize - MOA_AGE.SIZE_CHICK) * Math.max(0, calYears / mature));
+      if (Math.abs(this.size - grown) > 0.1) this.size = grown;
+      return;
+    }
+
     let sizeMult;
     if (this.age >= MOA_AGE.ADULT_MIN) {
       this.ageStage = 'adult';
@@ -237,14 +273,30 @@ class Moa extends Boid {
     if (Math.abs(this.size - newSize) > 0.1) this.size = newSize;
   }
 
-  isJuvenile() { return this.age < MOA_AGE.JUVENILE_MAX; }
+  isJuvenile() {
+    const y = this._calYears();
+    return y != null ? y < 1 : this.age < MOA_AGE.JUVENILE_MAX;
+  }
+
+  // How many years old a hatchling of a calendar species is (with the part-year), or null for
+  // a founder (no birth on record) and for a species that keeps no calendar on this level.
+  _calYears() {
+    if (this._bornTurn == null || !this._calendar()) return null;
+    const sim = this._sim;
+    if (!sim) return 0;
+    const sm = sim.seasonManager;
+    return Math.max(0, ((sim.seasonTurns || 0) + ((sm && sm.progress) || 0) - this._bornTurn) / 4);
+  }
 
   // The species' breeding calendar, when the level asks for one (seasonalBirdBreeding:
   // 'calendar'; the giant moa has one): the laying season and window, years to come of age,
   // years between clutches. null otherwise.
   _calendar() {
     if (!(typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS && LEVEL_MECHANICS.seasonalBirdBreeding === 'calendar')) return null;
-    return (this.speciesConfig && this.speciesConfig.calendar) || null;
+    const cal = (this.speciesConfig && this.speciesConfig.calendar) || null;
+    // (A calendar marked optIn applies only where the level asks every moa to keep one.)
+    if (cal && cal.optIn && !LEVEL_MECHANICS.moaCalendar) return null;
+    return cal;
   }
   _yearNow() { return Math.floor(((this._sim && this._sim.seasonTurns) || 0) / 4); }
 
@@ -265,22 +317,26 @@ class Moa extends Boid {
       this.hunger < this.matingHungerThreshold && 
       this.securityTime >= this.securityTimeRequired * 0.5;
     if (!ready) return false;
-    // On the calendar: only in the laying season's window, and not again until her next year.
+    return this._calendarAllows();
+  }
+
+  // On the calendar: only in the laying season's window, and not again until her next year.
+  // Asked of the bird that courts (isReadyToMate) and of the one courted (canBeMate): without
+  // the second, a cock in season could court a hen who had already laid, and she laid again.
+  _calendarAllows() {
     const cal = this._calendar();
-    if (cal) {
-      const sm = this._sim && this._sim.seasonManager;
-      if (!sm || sm.currentKey !== cal.lay) return false;
-      const prog = sm.progress ?? 0;
-      if (prog < (cal.layFrom ?? 0) || prog > (cal.layTo ?? 1)) return false;
-      if ((this._nextClutchYear ?? -1) > this._yearNow()) return false;
-    }
-    return true;
+    if (!cal) return true;
+    const sm = this._sim && this._sim.seasonManager;
+    if (!sm || sm.currentKey !== cal.lay) return false;
+    const prog = sm.progress ?? 0;
+    if (prog < (cal.layFrom ?? 0) || prog > (cal.layTo ?? 1)) return false;
+    return (this._nextClutchYear ?? -1) <= this._yearNow();
   }
 
   canBeMate() {
     return this.alive && this.canMate && this.mateCooldown <= 0 && this.canMateByAge() &&
       !this.isPregnant && !this.matingPartner &&
-      this.hunger < this.matingHungerThreshold * 1.5;
+      this.hunger < this.matingHungerThreshold * 1.5 && this._calendarAllows();
   }
 
   // Soft carrying-capacity taper (opt-in via LEVEL_MECHANICS.breedingSoftCap): 1 at/below
@@ -311,6 +367,7 @@ class Moa extends Boid {
     // is attached it does everything, and none of the behaviour below runs.
     if (this.lifeScript) { this.lifeScript.behave(simulation, mauri, seasonManager, dt); return; }
     this._sim = simulation;   // (for the calendar's year and season; see _calendar)
+    if (this._leaving) { this._leaveStep(dt); return; }   // (dispersal: on its way off the land)
 
     this.updateAge(dt);
     this.animTime += dt;
@@ -415,8 +472,26 @@ class Moa extends Boid {
     this._breedDensityFactor = this._computeBreedDensityFactor(simulation);
 
     // Determine and execute state
+    if (this._boundFor) this._keepWalking();
     this.currentState = this.determineState(placeables, sc, moas);
     this.executeState(simulation, mauri, sc, moas, placeables, dt);
+    this.applyStormPull(simulation);
+
+    // juvenileFollow (a level's rule): a young moa keeps near its mother while she lives, so a
+    // family reads as one. It still flees and feeds for itself, and a starving chick goes for
+    // food wherever that is.
+    const _jf = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.juvenileFollow) || null;
+    if (_jf && this.mother && this.mother.alive && this.currentState !== MOA_STATE.FLEEING &&
+        !this.isFeeding && this.hunger <= this.criticalHunger) {
+      const _y = this._calYears();
+      if (_y != null && _y < (_jf.untilYears ?? 2)) {
+        const _dx = this.mother.pos.x - this.pos.x, _dy = this.mother.pos.y - this.pos.y;
+        const _within = (_jf.within ?? 50) * (this.hunger > this.hungerThreshold ? 2 : 1);
+        if (_dx * _dx + _dy * _dy > _within * _within) {
+          this.applyForce(this.seek(this.mother.pos, _jf.pull ?? 0.6, 20));
+        }
+      }
+    }
     
     // Common behaviors
     this.applySeparation(moas);
@@ -627,6 +702,12 @@ class Moa extends Boid {
     return this.matingSearchRadius * mult;
   }
 
+  // Close kin, by the family links a hatchling is given (mother, father).
+  _isKin(o) {
+    return o === this.mother || o === this.father || o.mother === this || o.father === this ||
+      (!!this.mother && this.mother === o.mother);
+  }
+
   findPotentialMate(moas) {
     // Two buckets: any same-species mate beats a cross-species one, so a small founder
     // population pairs within itself instead of hybridising.
@@ -635,11 +716,16 @@ class Moa extends Boid {
     const _mateR = this.effectiveMatingRadius();
     const maxDistSq = _mateR * _mateR;
     const px = this.pos.x, py = this.pos.y;
+    // noKinPairing (a level's rule, for levels that keep family links): a moa does not court
+    // its mother, father, chick, or a sibling by the same hen. Without it a hen left alone
+    // with her grown son breeds with him (found on the journey's tile 4).
+    const _noKin = typeof LEVEL_MECHANICS !== 'undefined' && !!LEVEL_MECHANICS.noKinPairing;
 
     for (let i = 0; i < moas.length; i++) {
       const o = moas[i];
       if (o === this || !o.canBeMate()) continue;
       if (o.isFemale === this.isFemale) continue; // Must be opposite sex
+      if (_noKin && this._isKin(o)) continue;
       if (o.matingPartner && o.matingPartner !== this) continue;
 
       const dx = o.pos.x - px, dy = o.pos.y - py;
@@ -748,6 +834,7 @@ class Moa extends Boid {
     if (female?.alive) {
       female.isPregnant = true;
       female.pregnancyTimer = female.pregnancyDuration;
+      female._lastMate = (female === this) ? partner : this;   // (the egg's father: see layEgg)
     }
     
     // Reset both
@@ -832,6 +919,8 @@ class Moa extends Boid {
     const egg = simulation.addEgg(ex, ey);
     egg.speedBonus = Math.max(this.eggSpeedBonus, nestBonus);
     if (this.speciesKey) egg.parentSpecies = this.speciesKey;
+    egg.mother = this;                       // (the chick's family: Simulation's hatch reads these)
+    egg.father = this._lastMate || null;
     // On the calendar, her next clutch is a year or more away.
     const _cal = this._calendar();
     if (_cal) { const ev = _cal.every || [1, 1]; this._nextClutchYear = this._yearNow() + ev[0] + Math.floor(random(ev[1] - ev[0] + 1)); }
@@ -898,10 +987,13 @@ class Moa extends Boid {
     
     const isMating = this.currentState === MOA_STATE.MATING || this.currentState === MOA_STATE.SEEKING_MATE;
     const sepDist = isMating ? this.separationDistSq * 0.15 : this.separationDistSq;
+    // (Only where the level keeps families together: mechanics.juvenileFollow.)
+    const _family = typeof LEVEL_MECHANICS !== 'undefined' && !!LEVEL_MECHANICS.juvenileFollow;
     
     for (let i = 0; i < moas.length; i++) {
       const o = moas[i];
       if (!o.alive || o === this || o === this.matingPartner || o === this.targetMate || o.targetMate === this) continue;
+      if (_family && (o === this.mother || o.mother === this)) continue;   // (a hen and her young stand close)
       
       const dx = this.pos.x - o.pos.x, dy = this.pos.y - o.pos.y;
       const dSq = dx * dx + dy * dy;
@@ -965,6 +1057,11 @@ class Moa extends Boid {
         const fed = p.feedMoa(this, dt);
         if (fed > 0) {          // a species-exclusive feeder returns 0 to the wrong moa
           feedTotal += fed;
+          // A moa bound for a place (_boundFor: a story's walk, see _keepWalking) that is not
+          // hungry takes a mouthful in passing but does not stop. Otherwise a moa standing in a
+          // feeder's reach counts as feeding whatever its hunger, so a family at a waterhole
+          // never leaves it (which held the journey's first family at the tarn all spring).
+          if (this._boundFor && this.hunger < this.hungerThreshold - 10) continue;
           this.isFeeding = true;
           this.feedingAt = p;
         }
@@ -1066,6 +1163,23 @@ class Moa extends Boid {
             // Cold-season competition ramps in with winterness (smooth, not a cliff).
             per *= 1 + ((LEVEL_MECHANICS.winterCompetitionMult ?? 1.6) - 1) * this._seasonCache.winterness;
             gain *= Math.max(0.25, 1 - over * per);
+            // The sign of it (opt-in): a mark over the moa for a few seconds, and an event a
+            // lesson can answer. Drawn by Game._renderWorldSigns.
+            if (LEVEL_MECHANICS.crowdingSign) simulation.noteShortMeal(this, 'crowded', competitors);
+          }
+        }
+
+        // A flock feeding overhead leaves less on the forest floor (opt-in:
+        // mechanics.flockStripsFloor { species, radius, tolerance, per, min }). Counted where
+        // the moa feeds, so it is the flock's presence that costs, and moving either answers it.
+        if (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.flockStripsFloor
+            && FOREST_BIOMES.has(this.targetPlant.biomeKey)) {
+          const FS = LEVEL_MECHANICS.flockStripsFloor;
+          const birds = simulation.countFlockNear(this.pos.x, this.pos.y, FS.radius ?? 90, FS.species || ['kaka']);
+          const tol = FS.tolerance ?? 1;
+          if (birds > tol) {
+            gain *= Math.max(FS.min ?? 0.3, 1 - (birds - tol) * (FS.per ?? 0.15));
+            simulation.noteShortMeal(this, 'stripped', birds);
           }
         }
 
@@ -1078,6 +1192,13 @@ class Moa extends Boid {
           // else: browsing its own favoured plant; full gain.
         } else if (!this.isFocal && typeof LEVEL_MECHANICS !== 'undefined') {
           gain *= (LEVEL_MECHANICS.nonFocalGeneralistBonus ?? 1); // wild plant + generalist
+        } else if (this.isFocal && typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.focalWildFoodMult != null &&
+                   !this.targetPlant.isSpawned && !Plant.sproutsByHand(this.targetPlant.type)) {
+          // focalWildFoodMult (a level's rule, after the Stories' free play): wild browse only
+          // partly feeds the focal families. What the player grows for them (a patch's plants),
+          // and pātōtara the player has sprouted, feed in full, so tended food is what carries
+          // a family through a winter.
+          gain *= LEVEL_MECHANICS.focalWildFoodMult;
         }
 
         this.hunger = Math.max(0, this.hunger - gain);
@@ -1255,7 +1376,9 @@ class Moa extends Boid {
     let urgency = 0.5 + sc.migrationStrength * 0.5;
     if (this.hunger > 50 && this.localFoodScore < 0.3) urgency *= 1.5;
     
-    const seek = this.seek(this.migrationTarget, urgency, 25);
+    // (A storm near the way bends where it steers: see stormBentTarget.)
+    const aim = this._sim ? this.stormBentTarget(this.migrationTarget, this._sim) : this.migrationTarget;
+    const seek = this.seek(aim, urgency, aim === this.migrationTarget ? 25 : 0);
     seek.mult(sc.migrationStrength);
     this.applyForce(seek);
   }
@@ -1279,6 +1402,157 @@ class Moa extends Boid {
 
   resistEagleAttack() {
     return this.eagleResistance > 0 && random() < this.eagleResistance;
+  }
+
+  // ---- Storms draw a moa (mechanics.stormAttract; on by default for upland moa on a journey
+  // level: see stormAttractCfg) ----------------------------------------------------------------
+  // A moa feels a storm near it as somewhere safe and leans toward it, but where it is GOING is
+  // still its own: its walk (migration, a story's _boundFor) and, when hungry, food.
+  //   - On a walk, the storm bends the way it steers (stormBentTarget): it aims at a point a
+  //     little ahead along a heading between the destination and the storm, so its route bows
+  //     toward the storm and passes through it, and it still arrives where it was going.
+  //   - With nowhere to be, it ambles toward a storm near it and rests under it
+  //     (applyStormPull).
+  //   - Only the storm that draws it most counts; there is no pull inside a storm's inner part;
+  //     a storm behind it (from where it is going) doesn't draw it (Moa.stormPullAt).
+  //   - Hungry, the pull is weaker (cfg.hungryMult) and going to food is not bent at all;
+  //     starving, feeding, mating or bolting, there is none.
+  // The storm preview predicts the bent route with the same rule (Game._predictWalk).
+  applyStormPull(simulation) {
+    const cfg = stormAttractCfg();
+    if (!cfg || !cfg.species.includes(this.speciesKey)) return;
+    const st = this.currentState;
+    if (st !== MOA_STATE.IDLE && st !== MOA_STATE.FORAGING) return;
+    if (this.isFeeding || this.walkDestination() || this.hunger > this.hungerThreshold) return;
+    const pull = Moa.stormPullAt(this.pos.x, this.pos.y, null, simulation.placeables, cfg);
+    if (!pull) return;
+    this.applyForce(this.seekPoint(pull.x, pull.y, 0.35 * pull.w + 0.1, 20));
+  }
+
+  // Where a walking moa steers, bent toward the storm that draws it (see above): the
+  // destination itself when no storm does, it is close, or the walk is not this species'.
+  stormBentTarget(dest, simulation) {
+    const cfg = stormAttractCfg();
+    if (!cfg || !cfg.species.includes(this.speciesKey) || this.hunger > this.criticalHunger) return dest;
+    const dx = dest.x - this.pos.x, dy = dest.y - this.pos.y, d = Math.hypot(dx, dy);
+    if (d < cfg.lookahead * 1.2) return dest;
+    const pull = Moa.stormPullAt(this.pos.x, this.pos.y, dest, simulation.placeables, cfg);
+    if (!pull) return dest;
+    const h = Moa.bentHeading(this.pos.x, this.pos.y, dest, pull, cfg, this.hunger > this.hungerThreshold ? cfg.hungryMult : 1);
+    const v = this._stormBentVec || (this._stormBentVec = createVector(0, 0));
+    v.set(this.pos.x + h.x * cfg.lookahead, this.pos.y + h.y * cfg.lookahead);
+    return v;
+  }
+
+  // The unit heading between a destination and a storm's pull ({ x, y, w }), for a bird at
+  // (x, y). mult scales the pull (hunger).
+  static bentHeading(x, y, dest, pull, cfg, mult = 1) {
+    const dx = dest.x - x, dy = dest.y - y, d = Math.hypot(dx, dy) || 1;
+    const px = pull.x - x, py = pull.y - y, pd = Math.hypot(px, py) || 1, k = cfg.strength * pull.w * mult;
+    const hx = dx / d + px / pd * k, hy = dy / d + py / pd * k, n = Math.hypot(hx, hy) || 1;
+    return { x: hx / n, y: hy / n };
+  }
+
+  // Where this moa is heading: a story's walk, its migration, else (hungry) the plant it is
+  // going to. null when it has nowhere particular to be.
+  walkDestination() {
+    if (this._boundFor) return this._boundFor;
+    if (this.isMigrating && this.migrationTarget) return this.migrationTarget;
+    if (this.hunger > this.hungerThreshold && this.targetPlant && this.targetPlant.alive) return this.targetPlant.pos;
+    return null;
+  }
+
+  // The storm that draws a bird at (x, y) heading for dest (or nowhere): { x, y, w } (its
+  // centre and the pull's weight, 0..1), or null.
+  static stormPullAt(x, y, dest, placeables, cfg, skip = null) {
+    let best = null;
+    const ddx = dest ? dest.x - x : 0, ddy = dest ? dest.y - y : 0, dLen = Math.hypot(ddx, ddy);
+    for (const p of placeables) {
+      if (!p.alive || p.type !== 'Storm' || p === skip) continue;
+      const px = p._previewPos ? p._previewPos.x : p.pos.x, py = p._previewPos ? p._previewPos.y : p.pos.y;
+      const sx = px - x, sy = py - y, d = Math.hypot(sx, sy);
+      const inner = p.radius * cfg.inner, reach = p.radius + cfg.reach;
+      if (d <= inner || d >= reach) continue;
+      let w = 1 - (d - inner) / (reach - inner);
+      if (dest && dLen > 1) {
+        // Ahead of it: full pull; to the side: less; behind: none. And a storm past the end of
+        // the walk is no reason to overshoot it.
+        const cos = (sx * ddx + sy * ddy) / (d * dLen);
+        if (cos < cfg.minCos) continue;
+        w *= 0.35 + 0.65 * Math.max(0, cos);
+        if (d > dLen + p.radius) continue;
+      }
+      if (!best || w > best.w) best = { x: px, y: py, w };
+    }
+    return best;
+  }
+
+  // A story's walk (CHAPTERS_KIT.headFor sets _boundFor = { x, y, r }): the moa is on its way
+  // to a place, by its own migration walk. A fright drops a migration (see FLEEING), so while
+  // it is bound for the place the walk is taken up again; within `r` of it the moa has arrived
+  // and is its own bird once more. Nothing else sets _boundFor, so no other level is touched.
+  _keepWalking() {
+    const b = this._boundFor, dx = b.x - this.pos.x, dy = b.y - this.pos.y, dSq = dx * dx + dy * dy;
+    if (dSq < b.r * b.r) { this._boundFor = null; return; }
+    // (Anything a bird walks at is checked for progress, and dropped when there is none: twelve
+    // seconds of walking and no nearer, and it gives the walk up. Time spent feeding or hiding
+    // on the way is not counted. The place is still its home, and draws it.)
+    if (b.best == null || dSq < b.best - 400) { b.best = dSq; b.stuck = 0; }
+    else if (this.currentState === MOA_STATE.MIGRATING && ++b.stuck > 720) { this._boundFor = null; this.isMigrating = false; this.migrationTarget = null; return; }
+    if (!this.isMigrating || !this.migrationTarget) {
+      if (!this._boundVec) this._boundVec = createVector(b.x, b.y); else this._boundVec.set(b.x, b.y);
+      this.migrationTarget = this._boundVec;
+      this.isMigrating = true;
+      this.migrationCooldown = 0;
+    }
+  }
+
+  // Dispersal (mechanics.dispersal; Game._seasonalArrivals picks the bird): a grown young bird
+  // walks to the edge of the land and is gone, to found a family elsewhere. It can still be
+  // caught on the way. After forty seconds without reaching the edge it is taken as gone.
+  beginLeaving(x, y) {
+    this._leaving = { x, y, t: 0 };
+    this.targetPlant = null; this.targetMate = null; this.matingPartner = null; this.isMigrating = false;
+  }
+  _leaveStep(dt) {
+    const L = this._leaving;
+    L.t += dt;
+    this.currentState = MOA_STATE.MIGRATING;
+    this.maxSpeed = this.baseSpeed * 1.15;
+    this._leaveTarget = this._leaveTarget || createVector(L.x, L.y);
+    this.applyForce(this.seek(this._leaveTarget, 0.9, 10));
+    const avoid = this.avoidUnwalkable();
+    avoid.mult(1.2);
+    this.applyForce(avoid);
+    const dx = L.x - this.pos.x, dy = L.y - this.pos.y;
+    if (dx * dx + dy * dy < 16 * 16 || L.t > 2400) {
+      this.alive = false;
+      this.causeOfDeath = 'dispersed';
+    }
+  }
+
+  // Who this bird is and how it is doing, in a few plain lines, for the label over a selected
+  // animal (Game._renderSelection): its name if a level gave it one, its kind, sex and age; how
+  // well fed it is and what it is doing; and its family.
+  describe(game) {
+    const r = game && game.chapters;
+    const title = (m) => (m && m.castName && r && r.castDefs[m.castName]) ? r.castDefs[m.castName].title : null;
+    const kind = (game && game._freeplaySpeciesName) ? game._freeplaySpeciesName(this.speciesKey) : 'Moa';
+    const sex = this.isFemale ? 'female' : 'male';
+    const y = this._calYears();
+    const age = y == null ? `grown ${sex}`
+      : (y < 1 ? `chick, ${sex}` : `${sex}, ${Math.floor(y)} year${Math.floor(y) === 1 ? '' : 's'} old`);
+    const name = title(this);
+    const fed = this.hunger > this.criticalHunger ? 'starving'
+      : (this.hunger > this.hungerThreshold + 20 ? 'hungry' : (this.hunger > this.hungerThreshold ? 'peckish' : 'well fed'));
+    const doing = this._leaving ? 'leaving for the pass'
+      : ({ fleeing: 'fleeing', mating: 'courting', seeking_mate: 'courting', foraging: 'looking for food',
+           feeding: 'feeding', migrating: 'on the move', idle: 'resting' }[this.currentState] || '');
+    const state = [fed, doing, this.inShelter ? 'under cover' : '', this.isPregnant ? 'about to lay' : ''].filter(Boolean).join(' · ');
+    let family = '';
+    if (this.mother && this.mother.alive && y != null && y < 3) family = `young of ${title(this.mother) || 'a ' + kind.toLowerCase() + ' hen'}`;
+    else if (this.offspring) family = `has raised ${this.offspring} chick${this.offspring === 1 ? '' : 's'}`;
+    return [name ? `${name.charAt(0).toUpperCase() + name.slice(1)} · ${kind}` : kind, age, state, family];
   }
 
   // ============================================

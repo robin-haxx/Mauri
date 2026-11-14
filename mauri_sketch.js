@@ -48,6 +48,10 @@ function _browserFontRenderPath(line, x, y, options) {
 
 let tutorialMantisSprite = null;
 let splashScreenMoa = null;
+// The upper South Island, behind the journey's tiles (level select). A vector traced from
+// sprites/journey_map.png by tools/trace_map.js; Game._journeyMapRaster draws it at the size
+// it is shown at, so it stays crisp at any screen size.
+let journeyMapSvg = null;
 
 let plantSprites = {};
 let portraitPlantSprites = {};
@@ -178,6 +182,8 @@ function preload(){
   }
 
   splashScreenMoa = loadImage('sprites/moa_idle.png')
+  journeyMapSvg = new Image();   // (not loadImage: that would fix it at the SVG's own pixel size)
+  journeyMapSvg.src = 'sprites/journey_map.svg';
   tutorialMantisSprite = loadImage('sprites/mantis_talk.png');
 
   loadPlaceableSprites();
@@ -1205,7 +1211,11 @@ class MauriManager {
 // section draws its levels: 'modules' (small square cards), 'sketches' (one card per family of
 // sketches with a button per sketch under it), or 'cards' (the wide challenge cards). Settings
 // is added last by renderLevelSelect. A section with no levels isn't drawn.
+// The player's zoom steps (Game.zoomStep): the whole land, then three closer views.
+const USER_ZOOMS = [1, 1.5, 2.25, 3.2];
+
 const MENU_SECTIONS = [
+  { key: 'journey',  label: "The journey", style: 'journey' },   // the map of tiles (mauri_campaign.js)
   { key: 'stories',  label: "Stories",  style: 'modules' },
   { key: 'chapters', label: "Chapters", style: 'sketches' },
   { key: 'endless',  label: "Endless",  style: 'cards' },
@@ -1575,6 +1585,9 @@ class Game {
       ? ClimateDrift.cfgFrom(LEVEL_MECHANICS) : null;
     this.coldIndex = 0;
     this.cycle = 0;
+    this._lowSeasons = null;   // (seasonal arrivals: see _seasonalArrivals)
+    this._seenSpecies = null;
+    this._sentByYear = null;   // (...and departures: _seasonalDepartures)
     if (this.seasonManager) this.seasonManager.coldIndex = 0;
     this._freeplayYear = -1;
     this.freeplayFocus = [];
@@ -1807,6 +1820,8 @@ class Game {
   // eases out as a loop widens the country.
   _resetCamera() {
     this.camera = { zoom: 1, cx: 0, cy: 0, ax: 0.5, ay: 0.5, tween: null };
+    this._camHist = null; this._hatchCam = null;
+    this._selected = null; this._follow = false; this._huntCam = null; this._panCand = null;   // (the player's camera)
   }
 
   // Ease the camera to `target` ({ zoom, cx, cy, ax, ay }; omitted keys hold) over `frames`
@@ -1827,23 +1842,331 @@ class Game {
       const b = this._baseView();
       Object.assign(to, pointUnder(b.z, b.x, b.y));
     }
+    const lz0 = Math.log(Math.max(1e-4, from.zoom)), lz1 = Math.log(Math.max(1e-4, to.zoom));
+    // A big change of scale takes its time, whatever the caller asked: about 1.25 s for each
+    // doubling, so a close-in never lurches. (A cut, 1 or 2 frames, stays a cut.)
+    const cutTo = frames <= 2;
+    frames = cutTo ? Math.max(1, frames) : Math.max(frames, Math.round(Math.abs(lz1 - lz0) * 108));
+    // A move that cuts into another (or into the view following a bird) carries on at the speed
+    // the view was already moving, rather than stopping dead and starting again: the view's
+    // rate of change over the last frame, under this move's anchor, is the ease's starting
+    // slope (capped so it can't fling the view far past where it is going).
+    const v0 = { lz: 0, cx: 0, cy: 0 };
+    const h = this._camHist;
+    if (!cutTo && h && h.length === 2 && frameCount - h[1].f <= 2) {
+      const p1 = pointUnder(h[1].z, h[1].x, h[1].y), p0 = pointUnder(h[0].z, h[0].x, h[0].y);
+      const rate = { lz: Math.log(h[1].z / h[0].z), cx: p1.cx - p0.cx, cy: p1.cy - p0.cy };
+      const span = { lz: lz1 - lz0, cx: to.cx - from.cx, cy: to.cy - from.cy };
+      const floor = { lz: 0.04, cx: 12, cy: 12 };
+      // (A cut, not a move: a new level, a resized window. Nothing to carry on from.)
+      const cut = Math.abs(rate.lz) > 0.12 || Math.hypot(rate.cx, rate.cy) > 40;
+      if (!cut) for (const k in v0) {
+        const cap = Math.max(Math.abs(span[k]) * 1.5, floor[k]);
+        v0[k] = Math.max(-cap, Math.min(cap, rate[k] * frames));
+      }
+    }
     Object.assign(c, from);
-    c.tween = { from, to, t: 0, frames: Math.max(1, frames) };
+    c.tween = { from, to, lz0, lz1, v0, t: 0, frames };
   }
 
-  // Advance a camera ease by one frame (called from render) and re-fit the view.
+  // Advance a camera ease by one frame (called from render) and re-fit the view. The ease is a
+  // quintic Hermite curve: it leaves at the slope the view already had (v0; none from rest) and
+  // arrives at rest, with no sudden change of pace at either end.
   _updateCamera() {
     const c = this.camera;
-    if (!c || !c.tween) return;
-    const tw = c.tween;
-    tw.t = Math.min(1, tw.t + 1 / tw.frames);
-    const e = tw.t * tw.t * (3 - 2 * tw.t);   // smoothstep
-    const lerpK = (k) => tw.from[k] + (tw.to[k] - tw.from[k]) * e;
-    // Zoom eases in log space so the scale changes at an even rate.
-    c.zoom = Math.exp(Math.log(tw.from.zoom) + (Math.log(tw.to.zoom) - Math.log(tw.from.zoom)) * e);
-    c.cx = lerpK('cx'); c.cy = lerpK('cy'); c.ax = lerpK('ax'); c.ay = lerpK('ay');
-    if (tw.t >= 1) c.tween = null;
+    if (c && c.tween) {
+      const tw = c.tween;
+      tw.t = Math.min(1, tw.t + 1 / tw.frames);
+      const s = tw.t, s3 = s * s * s, s4 = s3 * s, s5 = s4 * s;
+      const h0 = 1 - 10 * s3 + 15 * s4 - 6 * s5, hv = s - 6 * s3 + 8 * s4 - 3 * s5, h1 = 1 - h0;
+      const ease = (a, b, v) => h0 * a + h1 * b + hv * v;
+      // (Zoom eases in log space, so the scale changes at an even rate.)
+      c.zoom = Math.exp(ease(tw.lz0, tw.lz1, tw.v0.lz));
+      c.cx = ease(tw.from.cx, tw.to.cx, tw.v0.cx);
+      c.cy = ease(tw.from.cy, tw.to.cy, tw.v0.cy);
+      c.ax = tw.to.ax; c.ay = tw.to.ay;
+      if (tw.t >= 1) {
+        c.tween = null;
+        if (tw.normalise) { this._updateViewTransform(); this._normaliseCamera(); }
+      }
+      this._updateViewTransform();
+    }
+    // The last two views shown, for the next ease's starting slope (see cameraTo).
+    if (typeof frameCount !== 'undefined') {
+      const h = this._camHist || (this._camHist = []);
+      if (!h.length || h[h.length - 1].f !== frameCount) {
+        h.push({ z: CONFIG.viewZoom, x: CONFIG.viewX, y: CONFIG.viewY, f: frameCount });
+        if (h.length > 2) h.shift();
+      }
+    }
+  }
+
+  // A story egg's hatching (Egg.hatchScene; the simulation calls this): as it starts to rock
+  // and crack, the camera closes in on the nest, as the modules' did; when the chick is out (or
+  // the egg is lost) it eases back to where the view was. A moment on the chick may take the
+  // view in between; it returns to the same place.
+  onHatchScene(egg, phase) {
+    if (phase === 'start') {
+      if (this._hatchCam || this.state !== GAME_STATE.PLAYING) return;
+      const c = this.camera, v = c ? (c.tween ? c.tween.to : c) : null;
+      this._hatchCam = { egg, back: (v && v.zoom > 1.0001) ? { zoom: v.zoom, cx: v.cx, cy: v.cy, ax: v.ax, ay: v.ay } : { zoom: 1 } };
+      this._huntCam = null;
+      this._follow = false;
+      this.cameraTo({ zoom: Math.max(2.8, v ? v.zoom : 1), cx: egg.pos.x, cy: this._groundPaintY(egg.pos.x, egg.pos.y),
+                      ax: 0.5, ay: 0.5 }, 110);
+      return;
+    }
+    const hc = this._hatchCam;
+    if (!hc || hc.egg !== egg) return;
+    this._hatchCam = null;
+    this.cameraTo(hc.back, 120);
+  }
+
+  // ==========================================================================================
+  // THE PLAYER'S CAMERA (levels with `userCamera: true`)
+  // ==========================================================================================
+  // Built on the render-only camera above, so none of it touches the simulation:
+  //   zoomStep(±1)        the + and - buttons (and keys): 1x, 1.5x, 2.25x, 3.2x
+  //   zoomWheel(delta)    the mouse wheel, about the pointer
+  //   a drag on the land  pans, when zoomed in and nothing is in hand (_updatePan)
+  //   a tap on an animal  selects it: a ring, a label saying who it is (its describe()), and
+  //                       the view follows it; a second tap lets it go (selectAnimal)
+  //   a hunt              with mechanics.huntCamera, when zoomed in elsewhere, the view eases to
+  //                       an eagle starting on a focus animal and back when it is over
+  // Each costs a few numbers a frame. The Stories' directors and a chapter's moments own the
+  // camera while they run, and the player's controls stand down (userCameraOn).
+  userCameraOn() {
+    return !!(this.currentLevel && this.currentLevel.userCamera) && !this.module &&
+      !(this.chapters && this.chapters.moment) && !this._yearTransition && !this._introShot &&
+      (this.state === GAME_STATE.PLAYING || this.state === GAME_STATE.PAUSED);
+  }
+
+  // The zoom the camera is at, or is easing to.
+  _zoomGoal() { const c = this.camera; return (c && c.tween) ? c.tween.to.zoom : (c ? c.zoom : 1); }
+
+  // The paint point now at the middle of the play viewport.
+  _viewCentre() {
+    const v = this._viewport();
+    return { cx: (v.x + v.w / 2 - CONFIG.viewX) / CONFIG.viewZoom, cy: (v.y + v.h / 2 - CONFIG.viewY) / CONFIG.viewZoom };
+  }
+
+  // After the view has been clamped to the land's edge, make the camera's own focus agree with
+  // what is on screen (anchored at the middle), so the next move starts from what the player sees.
+  _normaliseCamera() {
+    const c = this.camera;
+    if (!c || c.zoom <= 1.0001) return;
+    Object.assign(c, this._viewCentre(), { ax: 0.5, ay: 0.5 });
+  }
+
+  // Whether a world point is on screen, inside the viewport shrunk by `margin` (a fraction).
+  _inView(pos, margin = 0) {
+    const v = this._viewport();
+    const sx = CONFIG.viewX + pos.x * CONFIG.viewZoom;
+    const sy = CONFIG.viewY + this._groundPaintY(pos.x, pos.y) * CONFIG.viewZoom;
+    return sx > v.x + v.w * margin && sx < v.x + v.w * (1 - margin) &&
+           sy > v.y + v.h * margin && sy < v.y + v.h * (1 - margin);
+  }
+
+  zoomStep(dir) {
+    if (!this.userCameraOn()) return;
+    const cur = this._zoomGoal();
+    let i = 0;
+    for (let k = 0; k < USER_ZOOMS.length; k++) if (Math.abs(USER_ZOOMS[k] - cur) < Math.abs(USER_ZOOMS[i] - cur)) i = k;
+    // (From between two steps, as the wheel leaves it, a press goes to the next step that way.)
+    if (dir > 0 && USER_ZOOMS[i] > cur + 0.01) i--;
+    if (dir < 0 && USER_ZOOMS[i] < cur - 0.01) i++;
+    const z = USER_ZOOMS[Math.max(0, Math.min(USER_ZOOMS.length - 1, i + dir))];
+    if (Math.abs(z - cur) < 0.01) return;
+    this._huntCam = null;   // the player has the camera
+    const f = (this._follow && this._selected && this._selected.alive) ? this._selected : null;
+    if (z <= 1.0001) this.cameraTo({ zoom: 1 }, 30);
+    else if (f) this.cameraTo({ zoom: z, cx: f.pos.x, cy: this._groundPaintY(f.pos.x, f.pos.y), ax: 0.5, ay: 0.5 }, 30);
+    else this.cameraTo({ zoom: z, ax: 0.5, ay: 0.5 }, 30);
+  }
+
+  // The wheel: zoom smoothly about the pointer (canvas point mx, my). Each notch eases (a short
+  // move from the zoom the last one was heading for), so a run of notches glides rather than
+  // stepping; the point under the pointer stays put.
+  zoomWheel(delta, mx, my) {
+    if (!this.userCameraOn() || !this.isInGameArea(mx, my)) return false;
+    const z0 = this._zoomGoal();
+    const z = Math.max(1, Math.min(USER_ZOOMS[USER_ZOOMS.length - 1], z0 * Math.exp(-delta * 0.0015)));
+    if (Math.abs(z - z0) < 0.001) return true;
+    this._huntCam = null;
+    const v = this._viewport();
+    const ax = (mx - v.x) / v.w, ay = (my - v.y) / v.h;
+    if (z <= 1.0001) { this.cameraTo({ zoom: 1, ax, ay }, 18); return true; }
+    const px = (mx - CONFIG.viewX) / CONFIG.viewZoom, py = (my - CONFIG.viewY) / CONFIG.viewZoom;
+    this.cameraTo({ zoom: z, cx: px, cy: py, ax, ay }, 18);
+    this.camera.tween.normalise = true;   // (anchored back at the middle once it lands)
+    return true;
+  }
+
+  // The animal drawn nearest a world point, within a finger's width: a moa, a bird or an eagle.
+  _animalAt(tx, ty) {
+    const sim = this.simulation;
+    if (!sim) return null;
+    const reach = 20 / Math.sqrt(Math.max(1, this.camera ? this.camera.zoom : 1));
+    let best = null, bestD = reach * reach;
+    const look = (list) => {
+      if (!list) return;
+      for (let i = 0; i < list.length; i++) {
+        const e = list[i];
+        if (!e.alive || !e.pos) continue;
+        const dx = e.pos.x - tx, dy = e.pos.y - ty, d = dx * dx + dy * dy;
+        if (d < bestD) { bestD = d; best = e; }
+      }
+    };
+    look(sim.moas); look(sim.eagles);
+    for (const k in (sim.otherEntities || {})) look(sim.otherEntities[k]);
+    return best;
+  }
+
+  // Select an animal: it is ringed and labelled, and the view follows it (closing in on it
+  // first when the whole land was in view).
+  selectAnimal(e) {
+    if (!e || !e.alive) return;
+    this._selected = e;
+    this._follow = true;
+    this._huntCam = null;
+    if (this.tutorial) this.tutorial.fireEvent(TUTORIAL_EVENTS.ANIMAL_SELECTED, { animal: e, speciesKey: e.speciesKey || (e.hunting !== undefined ? 'haasts_eagle' : '') });
+    const cur = this._zoomGoal();
+    const z = cur <= 1.05 ? USER_ZOOMS[2] : cur;
+    this.cameraTo({ zoom: z, cx: e.pos.x, cy: this._groundPaintY(e.pos.x, e.pos.y), ax: 0.5, ay: 0.5 }, 40);
+  }
+
+  clearSelection() { this._selected = null; this._follow = false; }
+
+  // A tap on the land of a userCamera level, decided on release: on an animal, select it (or
+  // let it go if it was the one selected); else on a plant, rustle it as a tap always has.
+  _tapAt(pc) {
+    const e = this._animalAt(pc.tx, pc.ty);
+    if (e) { if (this._selected === e) this.clearSelection(); else this.selectAnimal(e); return; }
+    if (pc.plantTap) this._tapPlant(pc.tx, pc.ty);
+  }
+
+  // A press on the land that moves more than a few pixels, with nothing in hand and the view
+  // zoomed in, drags the land under the finger. (Called every real frame.)
+  _updatePan() {
+    const pc = this._panCand;
+    if (!pc) return;
+    if (!mouseIsPressed) return;   // (the release itself is handled in handleRelease)
+    const s = spriteSS(), mx = mouseX / s, my = mouseY / s;
+    const c = this.camera;
+    if (!pc.active) {
+      if (Math.hypot(mx - pc.x0, my - pc.y0) <= 14 || this.selectedPlaceable || this.movingPlaceable ||
+          pc.held || c.zoom <= 1.0001) return;
+      pc.active = true;
+      this._holdCandidate = null;
+      this._huntCam = null;
+      this._follow = false;        // the player is looking round: stop following (the ring stays)
+      c.tween = null;
+      this._normaliseCamera();
+      pc.lx = mx; pc.ly = my;
+    }
+    c.cx -= (mx - pc.lx) / CONFIG.viewZoom;
+    c.cy -= (my - pc.ly) / CONFIG.viewZoom;
+    pc.lx = mx; pc.ly = my;
     this._updateViewTransform();
+    this._normaliseCamera();
+  }
+
+  // mechanics.huntCamera { focusOnly }: an eagle has started on `target`. If the player is zoomed
+  // in and the hunt is off screen, ease the view to frame hunter and hunted, remembering where
+  // the view was; _updateHuntCam eases back when the hunt is over. Not while the player's
+  // hands are busy (a drag, an item being moved or placed).
+  _onHuntStart(eagle, target) {
+    const H = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS && LEVEL_MECHANICS.huntCamera) || null;
+    if (!H || !this.userCameraOn() || !eagle || !target || !target.pos) return;
+    if (this._zoomGoal() <= 1.05) return;                       // the whole land is in view already
+    if (H.focusOnly) {
+      const focus = (this.chapters && this.chapters.focus) || this.freeplayFocus || [];
+      if (!focus.includes(target.speciesKey)) return;
+    }
+    if (this._huntCam) { this._huntCam.eagle = eagle; this._huntCam.target = target; return; }   // the same hunt, its next bird
+    if ((this._panCand && this._panCand.active) || this.movingPlaceable || this.selectedPlaceable) return;
+    if (this._inView(target.pos, 0.12) && this._inView(eagle.pos, 0.04)) return;                 // already on screen
+    this._huntCam = { eagle, target, frames: 0, quiet: 0,
+                      back: Object.assign({ zoom: this._zoomGoal(), follow: this._follow }, this._viewCentre()) };
+    this._follow = false;
+    this._frameHunt(this._huntCam, 45);
+  }
+
+  _frameHunt(hc, frames) {
+    const e = hc.eagle, t = hc.target, v = this._viewport(), b = this._baseView();
+    const ey = this._groundPaintY(e.pos.x, e.pos.y), ty = this._groundPaintY(t.pos.x, t.pos.y);
+    const spanW = Math.abs(e.pos.x - t.pos.x) + 170, spanH = Math.abs(ey - ty) + 170;
+    const zoom = Math.max(1.15, Math.min(Math.max(1.5, hc.back.zoom), Math.min(v.w * 0.8 / spanW, v.h * 0.8 / spanH) / b.z));
+    this.cameraTo({ zoom, cx: (e.pos.x + t.pos.x) / 2, cy: (ey + ty) / 2, ax: 0.5, ay: 0.5 }, frames);
+  }
+
+  _updateHuntCam(hc) {
+    hc.frames++;
+    const e = hc.eagle, live = e.alive && e.hunting;
+    const t = (live && e.target && e.target.alive) ? e.target : null;
+    if (t) { hc.target = t; hc.quiet = 0; } else hc.quiet++;
+    const over = !live || hc.quiet > 90 || hc.frames > 60 * 25;
+    if (over && hc.frames > 90) {
+      // Back to where the view was (or to the animal it was following).
+      this._huntCam = null;
+      const b = hc.back, f = (b.follow && this._selected && this._selected.alive) ? this._selected : null;
+      this._follow = !!f;
+      this.cameraTo(f ? { zoom: b.zoom, cx: f.pos.x, cy: this._groundPaintY(f.pos.x, f.pos.y), ax: 0.5, ay: 0.5 }
+                      : { zoom: b.zoom, cx: b.cx, cy: b.cy, ax: 0.5, ay: 0.5 }, 60);
+      return;
+    }
+    const c = this.camera, tt = hc.target;
+    if (!c.tween && tt && tt.pos) {
+      const mx = (e.pos.x + tt.pos.x) / 2;
+      const my = (this._groundPaintY(e.pos.x, e.pos.y) + this._groundPaintY(tt.pos.x, tt.pos.y)) / 2;
+      c.cx += (mx - c.cx) * 0.08; c.cy += (my - c.cy) * 0.08; c.ax = c.ay = 0.5;
+      this._updateViewTransform();
+    }
+  }
+
+  // Every real frame (from render, before the camera's own ease): the drag, the hunt, the follow.
+  _updateUserCamera() {
+    if (!this.currentLevel || !this.currentLevel.userCamera || !this.camera) return;
+    if (this._selected && !this._selected.alive) this.clearSelection();
+    if (!this.userCameraOn()) { this._panCand = null; return; }
+    this._updatePan();
+    if (this._huntCam) { this._updateHuntCam(this._huntCam); return; }
+    const e = this._selected, c = this.camera;
+    if (this._follow && e && !c.tween && c.zoom > 1.0001 && !(this._panCand && this._panCand.active)) {
+      const ty = this._groundPaintY(e.pos.x, e.pos.y);
+      c.cx += (e.pos.x - c.cx) * 0.1; c.cy += (ty - c.cy) * 0.1; c.ax = c.ay = 0.5;
+      this._updateViewTransform();
+    }
+  }
+
+  // The selected animal's ring and its label (who it is and how it is doing: its describe()).
+  // Drawn in the world pass; the label grows less than the land does as the view closes in.
+  _renderSelection() {
+    const e = this._selected;
+    if (!e || !e.alive || !e.pos || !this.currentLevel || !this.currentLevel.userCamera) return;
+    const k = Math.pow(Math.max(1, this.camera ? this.camera.zoom : 1), -0.75);
+    const x = e.pos.x, y = this._groundPaintY(e.pos.x, e.pos.y), sz = e.size || 12;
+    push();
+    noFill();
+    stroke(255, 236, 150, 170 + 60 * Math.sin(frameCount * 0.1));
+    strokeWeight(1.5 * k);
+    ellipse(x, y + 1, sz * 1.6 + 16 * k, sz * 0.8 + 8 * k);
+    const lines = [].concat(e.describe ? e.describe(this) : []).filter(Boolean);
+    if (lines.length) {
+      textAlign(CENTER, BOTTOM);
+      textSize(6.5 * k);
+      let w = 0;
+      for (const l of lines) w = Math.max(w, textWidth(l));
+      const lh = 8.4 * k, h = lh * lines.length + 4 * k, top = y - sz - 12 * k - h;
+      noStroke();
+      fill(16, 22, 28, 215);
+      rect(x - w / 2 - 5 * k, top, w + 10 * k, h, 3 * k);
+      for (let i = 0; i < lines.length; i++) {
+        if (i === 0) fill(255, 240, 170); else fill(226, 226, 214);
+        text(lines[i], x, top + lh * (i + 1) + 1 * k);
+      }
+    }
+    pop();
   }
 
   // Whether `type` could go at (x, y) right now: the ground, biome, forest and spacing rules
@@ -2053,7 +2376,12 @@ class Game {
     if (this._incomeAccumulator >= 64) {
       this._incomeAccumulator -= 64;
       let income;
-      if (this.currentLevel && this.currentLevel.endless) {
+      const _eco = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.ecosystemIncome) || null;
+      if (_eco) {
+        // Small-herd levels: a steady trickle for the families and for every other animal
+        // on the land (see ecosystemIncomePerSec).
+        income = this.ecosystemIncomePerSec(_eco) * (64 / 60);
+      } else if (this.currentLevel && this.currentLevel.endless) {
         // Endless: a healthy, EVEN ecosystem pays (avg pop above floor × balance). See
         // ecosystemStats(). The tick is ~1.07s (64 frames), so scale the per-second rate.
         income = this.ecosystemStats().mauriPerSec * (64 / 60);
@@ -2074,7 +2402,8 @@ class Game {
     this.checkGoals();
     // Endless skips the one-time total-moa milestone bonuses; its economy is the steady
     // ecosystem stream above, not lump-sum growth rewards.
-    if (!(this.currentLevel && this.currentLevel.endless)) {
+    if (!(this.currentLevel && this.currentLevel.endless) &&
+        !(typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.noPopulationMilestones)) {
       this.mauri.checkMilestones(this._cachedMoaCount, this.simulation, this);
     }
 
@@ -2130,6 +2459,7 @@ class Game {
     // eagle egg is still incubating.
     if (this.state === GAME_STATE.PLAYING && !(this.currentLevel && this.currentLevel.endless) &&
         typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.emergentEagles &&
+        !LEVEL_MECHANICS.eagleReturns &&   // (a new bird takes the empty territory: _seasonalArrivals)
         this.simulation.countAliveEagles() === 0) {
       let eagleEggs = 0;
       const eggs = this.simulation.eggs;
@@ -2400,6 +2730,116 @@ class Game {
   // skipped gracefully rather than leaving a dead goal or spawning nothing.
   _speciesUsable(key) {
     return (typeof REGISTRY !== 'undefined') && !!REGISTRY.getSpecies(key);
+  }
+
+  // mechanics.ecosystemIncome { base, perAnimal, perFocusAnimal }: mauri a second on a level of
+  // small herds. `base` while any focus animal lives, `perFocusAnimal` for each of them, and
+  // `perAnimal` for every other moa and bird on the land (eagles never count). After the
+  // Stories' free play: the families, plus a little for every bird.
+  ecosystemIncomePerSec(cfg) {
+    const sim = this.simulation;
+    if (!sim || !cfg) return 0;
+    const focus = (this.chapters && this.chapters.focus) || this.freeplayFocus || [];
+    const keys = [...((this.activeSpecies && this.activeSpecies.moa) || []),
+                  ...((this.activeSpecies && this.activeSpecies.other) || [])];
+    let focusN = 0, otherN = 0;
+    for (const k of keys) {
+      const c = sim.getSpeciesCount(k);
+      if (focus.includes(k)) focusN += c; else otherN += c;
+    }
+    return (focusN > 0 ? (cfg.base ?? 0.3) : 0) + focusN * (cfg.perFocusAnimal ?? 0.06) + otherN * (cfg.perAnimal ?? 0.04);
+  }
+
+  // Newcomers at a season's turn, in place of population floors (both opt-in):
+  //   mechanics.rescueImmigration { species: { below, count, afterSeasons = 2 } }: a species that
+  //     has stood below `below` for `afterSeasons` turns is joined by `count` from over the pass.
+  //   mechanics.eagleReturns { afterSeasons = 2 }: with no eagle left (and none in the egg), a
+  //     new bird takes the empty territory after that many turns, and losing the last one is
+  //     not a loss.
+  // Each fires SPECIES_ARRIVED so a level can say so.
+  _seasonalArrivals() {
+    const M = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS) || null;
+    const sim = this.simulation;
+    if (!M || !sim || !(M.rescueImmigration || M.eagleReturns || M.dispersal)) return;
+    const low = this._lowSeasons || (this._lowSeasons = {});
+    const arrived = (speciesKey, count) => {
+      if (this.tutorial) this.tutorial.fireEvent(TUTORIAL_EVENTS.SPECIES_ARRIVED, { speciesKey, count });
+    };
+    const R = M.rescueImmigration;
+    if (R) for (const key in R) {
+      const r = R[key];
+      if (!this._speciesUsable(key)) continue;
+      // (Only a species that has lived here: one a level brings in later isn't "low" before then.)
+      const seen = this._seenSpecies || (this._seenSpecies = {});
+      const count = sim.getSpeciesCount(key);
+      if (count > 0) seen[key] = true;
+      if (!seen[key]) continue;
+      if (count >= (r.below ?? 2)) { low[key] = 0; continue; }
+      low[key] = (low[key] || 0) + 1;
+      if (low[key] < (r.afterSeasons ?? 2)) continue;
+      low[key] = 0;
+      this._spawnFreeplaySpecies(key, r.count ?? 2);
+      sim._invalidateCache();
+      arrived(key, r.count ?? 2);
+    }
+    this._seasonalDepartures(M, sim);
+    const E = M.eagleReturns;
+    if (E && sim.countAliveEagles() === 0 &&
+        !sim.eggs.some(e => e.alive && !e.hatched && e.offspringType === 'eagle')) {
+      low._eagle = (low._eagle || 0) + 1;
+      if (low._eagle >= (E.afterSeasons ?? 2)) {
+        low._eagle = 0;
+        sim.spawnEagle();
+        arrived('haasts_eagle', 1);
+      }
+    } else if (E) low._eagle = 0;
+  }
+
+  // mechanics.dispersal { species: { above, maxPerYear = 2, season = 'spring' } }: the other half
+  // of arrivals. At the turn into `season`, while a moa species stands above `above`, its oldest
+  // grown young (hatched here, of age, not named by the level) set off for the nearest walkable
+  // edge of the land and are gone (Moa.beginLeaving), so a tended herd stays small and what the
+  // player raised goes on elsewhere. Fires SPECIES_LEFT as each sets off.
+  _seasonalDepartures(M, sim) {
+    const D = M.dispersal;
+    if (!D || !this.terrain) return;
+    const year = Math.floor((sim.seasonTurns || 0) / 4);
+    const sent = this._sentByYear || (this._sentByYear = {});
+    for (const key in D) {
+      const d = D[key];
+      if (this.seasonManager.currentKey !== (d.season || 'spring')) continue;
+      const herd = sim.moas.filter(m => m.alive && m.speciesKey === key && !m._leaving);
+      let over = herd.length - (d.above ?? 10);
+      const young = herd.filter(m => !m.castName && !m.isPregnant && m._bornTurn != null && m._calYears() != null &&
+                                     m._calYears() >= ((m._calendar() || {}).maturityYears || 1))
+                        .sort((a, b) => a._bornTurn - b._bornTurn);
+      const tag = key + ':' + year;
+      while (over > 0 && young.length && (sent[tag] || 0) < (d.maxPerYear ?? 2)) {
+        const m = young.shift();
+        const edge = this._nearestEdge(m.pos.x, m.pos.y);
+        if (!edge) break;
+        m.beginLeaving(edge.x, edge.y);
+        sent[tag] = (sent[tag] || 0) + 1;
+        over--;
+        if (this.tutorial) this.tutorial.fireEvent(TUTORIAL_EVENTS.SPECIES_LEFT, { moa: m, speciesKey: key });
+      }
+    }
+  }
+
+  // The nearest walkable point just inside the edge of the land (for a bird walking off it).
+  _nearestEdge(x, y) {
+    const t = this.terrain, w = t.mapWidth, h = t.mapHeight, inset = 12, n = 28;
+    let best = null, bestD = Infinity;
+    const tryAt = (px, py) => {
+      if (!t.isWalkable(px, py)) return;
+      const d = (px - x) * (px - x) + (py - y) * (py - y);
+      if (d < bestD) { bestD = d; best = { x: px, y: py }; }
+    };
+    for (let i = 0; i <= n; i++) {
+      const fx = inset + (w - 2 * inset) * i / n, fy = inset + (h - 2 * inset) * i / n;
+      tryAt(fx, inset); tryAt(fx, h - inset); tryAt(inset, fy); tryAt(w - inset, fy);
+    }
+    return best;
   }
 
   // Spawn n of a species, routing moa vs other-entity (flighted bird) correctly.
@@ -3697,6 +4137,7 @@ class Game {
     this.addNotification(`Season changed to ${season.name} ${season.icon}`, 'info');
     if (audioManager) audioManager.playSeasonChange(seasonKey);
     if (this.simulation) this.simulation.seasonTurns = (this.simulation.seasonTurns || 0) + 1;
+    this._seasonalArrivals();
 
     // Module levels: the story moves into the new season (its goals, moves and prompts).
     if (this.module) this.module.onSeasonChange(seasonKey);
@@ -3921,6 +4362,14 @@ class Game {
     return (this.activePlaceables && this.activePlaceables[p.type]) || p.def;
   }
 
+  // How much of a moved storm's remaining time it gains: mechanics.stormMoveExtend, else half
+  // (0.5) on a journey level, else none.
+  _stormMoveExtend() {
+    const M = typeof LEVEL_MECHANICS !== 'undefined' ? LEVEL_MECHANICS : null;
+    if (M && M.stormMoveExtend != null) return M.stormMoveExtend;
+    return this.currentLevel && this.currentLevel.journey ? 0.5 : 0;
+  }
+
   // Moving a placed item costs half its price, unless the level gives it its own moveCost.
   _moveCost(p) {
     const def = this._moveDef(p);
@@ -3949,6 +4398,7 @@ class Game {
     hc.heldFrames += dt;
     if (hc.heldFrames >= 60) {   // ~1 second
       this._holdCandidate = null;
+      if (this._panCand) this._panCand.held = true;   // (not a tap: see handleRelease)
       if (hc.action === 'sprout') { this._sprout(hc.p); return; }
       this._beginMove(hc.p);
       // Still held: dragging on from here and letting go sets it down there (handleRelease).
@@ -4007,7 +4457,10 @@ class Game {
     const tool = this._toolDrag, lift = this._moveDrag;
     this._toolDrag = null;
     this._moveDrag = null;
+    const pc = this._panCand;   // (a userCamera level's press on the land: a pan, or a tap)
+    this._panCand = null;
     if (this.state !== GAME_STATE.PLAYING && this.state !== GAME_STATE.PAUSED) return;
+    if (pc && pc.active) return;   // the end of a pan: nothing was tapped or dropped
     const dropsHere = (d) => Math.hypot(mx - d.x0, my - d.y0) > DRAG_SLOP_PX &&
                              this.isInGameArea(mx, my) && !this._pointerOverChrome(mx, my);
     if (tool && this.selectedPlaceable === tool.type && dropsHere(tool)) {
@@ -4016,6 +4469,9 @@ class Game {
     } else if (lift && this.movingPlaceable === lift.p && dropsHere(lift)) {
       const { x, y } = this._pointerWorld(mx, my);
       this.tryDropMove(x, y);
+    } else if (pc && !pc.held && !this.movingPlaceable && !this.selectedPlaceable &&
+               Math.hypot(mx - pc.x0, my - pc.y0) <= 14 && this.userCameraOn()) {
+      this._tapAt(pc);
     }
   }
 
@@ -4069,12 +4525,23 @@ class Game {
       return false;
     }
 
+    // A storm that wears out and is moved gets half again the time it had left (the journey's
+    // rule, mechanics.stormMoveExtend), in place of a level's refreshOnMove top-up.
+    const ext = p.type === 'Storm' ? this._stormMoveExtend() : 0;
+    const lifeBefore = p.life, wears = !p.standing || p.fading;
     p.moveTo(x, y);
+    let extended = false;
+    if (ext > 0 && wears && lifeBefore > 0) {
+      p.life = lifeBefore * (1 + ext);
+      p.maxLife = Math.max(p.maxLife, p.life);
+      extended = true;
+    }
     this._lastPlacedMs = millis();
     if (p.type === 'nest') this.simulation._nestCacheValid = false;
     if (p.type === 'Storm') this.simulation.stats.stormsMoved = (this.simulation.stats.stormsMoved || 0) + 1;
     this.movingPlaceable = null;
-    this.addNotification(`Moved ${def.name} (-${cost} mauri)`, 'info');
+    this.addNotification(extended ? `Moved ${def.name} (-${cost} mauri, +50% time left)`
+                                  : `Moved ${def.name} (-${cost} mauri)`, 'info');
     if (audioManager) p.type === 'Storm' ? audioManager.playBoltStrike() : audioManager.playPlantRustle();
     if (this.tutorial) this.tutorial.fireEvent(TUTORIAL_EVENTS.PLACEABLE_MOVED, { type: p.type });
     return true;
@@ -4308,7 +4775,179 @@ class Game {
 
   // Is the current game year the booked mast year?
   _isMastYear() {
+    if (this._lessonMastYear(0)) return true;
     return this._mastYearTargetCycle >= 0 && this.cycle === this._mastYearTargetCycle;
+  }
+
+  // A lesson can set which years are mast years (mechanics.mastYears: [2], or every: 4 for
+  // years 4, 8, 12...), counted by the turn of the seasons so a held season does not move it.
+  // ahead: 1 asks about next year (the rimu carry green fruit the year before a mast).
+  _lessonMastYear(ahead = 0) {
+    const M = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS) || null;
+    const my = M && M.mastYears;
+    if (!my || !this.simulation) return false;
+    const year = Math.floor((this.simulation.seasonTurns || 0) / 4) + 1 + ahead;
+    return Array.isArray(my) ? my.includes(year) : (!!my.every && year % my.every === 0);
+  }
+
+  // ---- A kea raid's odds, where kea gather at a moa nest -----------------------------------
+  // On a level whose kea raid at the odds (mechanics.keaRaidsEggs 'odds'): wherever kea are
+  // within raid reach of a moa egg, the chance a raid would work right now (Simulation.
+  // raidSuccessChance), with the nest's own moa that guard it on one side of the figure and the
+  // kea on the other. Drawn in the world pass; reads the simulation, changes nothing.
+  _renderRaidOdds() {
+    const M = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS) || null;
+    const sim = this.simulation;
+    if (!M || M.keaRaidsEggs !== 'odds' || !sim || !sim.eggs.length) return;
+    const kea = sim.otherEntities && sim.otherEntities.kea;
+    if (!kea || !kea.length) return;
+    const R = M.keaRaidRadius ?? 95, moaR = (M.keaRaid && M.keaRaid.moaRadius) ?? 90;
+    const done = new Set();
+    for (const egg of sim.eggs) {
+      if (!egg.alive || egg.hatched || (egg.offspringType && egg.offspringType !== 'moa')) continue;
+      const site = (sim.nestingSites || []).find(s => s.alive !== false && s.isInRange && s.isInRange(egg.pos)) || null;
+      if (done.has(site || egg)) continue;
+      done.add(site || egg);
+      const at = site ? site.pos : egg.pos;
+      let keaN = 0;
+      for (const b of kea) if (b.alive && (b.pos.x - at.x) ** 2 + (b.pos.y - at.y) ** 2 <= R * R) keaN++;
+      if (!keaN) continue;
+      this._drawRaidOdds(at, moaR, sim.raidSuccessChance(site, egg.pos), keaN, sim.moaNear(at, moaR),
+                         egg.parentSpecies || 'upland_moa', 0.75);
+    }
+  }
+
+  // A raid's odds over a nest (world pass): a dashed ring round who counts, and over it the
+  // chance in big figures (red when the kea have the better of it, green when the moa do),
+  // flanked by the nest's moa (its species' sprite and how many) and the kea (and how many).
+  // `s` scales the words and sprites (1: module 1's size).
+  _drawRaidOdds(at, radius, chance, keaN, moaN, moaSpecies = 'upland_moa', s = 1) {
+    const px = 1 / CONFIG.viewZoom, k = px * s;   // (one screen pixel, in world units)
+    const col = chance < 0.5 ? [140, 230, 150] : [255, 140, 110];
+    push();
+    translate(at.x, this._groundPaintY(at.x, at.y));
+    noFill();
+    stroke(col[0], col[1], col[2], 200);
+    strokeWeight(2 * px);
+    drawingContext.setLineDash([8 * px, 6 * px]);
+    ellipse(0, 0, radius * 2, radius * 1.24);
+    drawingContext.setLineDash([]);
+    const y0 = -radius * 0.62 - 40 * k;
+    textAlign(CENTER, CENTER);
+    if (typeof FreckleFace !== 'undefined') textFont(FreckleFace);
+    strokeJoin(ROUND);
+    stroke(15, 20, 15, 230);
+    strokeWeight(7 * k);
+    fill(col[0], col[1], col[2]);
+    textSize(52 * k);
+    const label = `RAID ${Math.round(chance * 100)}%`;
+    const half = textWidth(label) / 2 + 16 * k;
+    // (A dark pill behind it all, so it reads over any ground.)
+    textSize(38 * k);
+    const sideW = 64 * k * 1.3 + 6 * k + textWidth('00');
+    noStroke();
+    fill(14, 20, 16, 175);
+    rect(-half - sideW - 14 * k, y0 - 40 * k, (half + sideW + 14 * k) * 2, 80 * k, 40 * k);
+    stroke(15, 20, 15, 230);
+    textSize(52 * k);
+    fill(col[0], col[1], col[2]);
+    text(label, 0, y0);
+    // The moa on the left, facing in; the kea on the right.
+    const sp = (typeof MOA_SPECIES !== 'undefined' && MOA_SPECIES[moaSpecies]) || {};
+    let moaImg = typeof EntitySprites !== 'undefined' ? EntitySprites.getMoaSprite(0, false, false, sp.spriteSet || null) : null;
+    if (moaImg && !sp.spriteSet && sp.tint && EntitySprites.getTintedMoaFrame) moaImg = EntitySprites.getTintedMoaFrame(moaImg, sp.tint);
+    const moaFace = (typeof EntitySprites !== 'undefined' && EntitySprites.getMoaFaceSign) ? EntitySprites.getMoaFaceSign(sp.spriteSet || null) : 1;
+    const keaImg = typeof EntitySprites !== 'undefined' ? EntitySprites.getKeaSprite() : null;
+    this._raidOddsSide(-1, half, y0, moaImg, moaFace, moaN, [228, 238, 214], k);
+    this._raidOddsSide(1, half, y0, keaImg, 1, keaN, [255, 196, 120], k);
+    pop();
+  }
+
+  // One side of the odds: a bird's sprite beside the figure (`dir` -1 left, 1 right; `face`
+  // the art's own facing, flipped to look in toward the figure) and its count beyond it.
+  _raidOddsSide(dir, half, y0, img, face, n, col, k) {
+    const h = 64 * k;
+    let w = h;
+    if (img && img.height > 0) w = img.width * h / img.height;
+    const cx = dir * (half + w / 2);
+    push();
+    translate(cx, y0);
+    if (img) {
+      if (face * -dir < 0) scale(-1, 1);
+      noStroke();
+      imageMode(CENTER);
+      image(img, 0, 0, w, h);
+    } else {
+      stroke(15, 20, 15, 230); strokeWeight(3 * k);
+      fill(col[0], col[1], col[2]);
+      ellipse(0, 0, h * 0.7, h * 0.7);
+    }
+    pop();
+    stroke(15, 20, 15, 230);
+    strokeWeight(6 * k);
+    fill(col[0], col[1], col[2]);
+    textSize(38 * k);
+    textAlign(dir < 0 ? RIGHT : LEFT, CENTER);
+    text(`${n}`, dir * (half + w + 6 * k), y0);
+  }
+
+  // The signs of the journey's rules, drawn in the world pass over the birds: a mark over a
+  // moa whose meal was cut short (by a crowd, or by a flock overhead), green fruit on the
+  // rimu the year before a mast, and a ring round a lone favoured patch that a second patch
+  // would make a nest. Each is switched on by the level's mechanics; none touches the sim.
+  // PLACEHOLDER ART: plain shapes, to be replaced by sprites.
+  _renderWorldSigns() {
+    const M = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS) || null;
+    const sim = this.simulation;
+    if (!M || !sim) return;
+    const k = Math.pow(Math.max(1, this.camera ? this.camera.zoom : 1), -0.75);
+    push();
+    if (M.crowdingSign || M.flockStripsFloor) {
+      const now = this.playTime;
+      for (const m of sim.moas) {
+        const s = m._shortMeal;
+        if (!m.alive || !s || now > s.until) continue;
+        const x = m.pos.x, y = this._groundPaintY(m.pos.x, m.pos.y) - (m.size || 12) - 7 * k;
+        const a = Math.min(1, (s.until - now) / 40);
+        noStroke();
+        fill(16, 22, 28, 200 * a);
+        ellipse(x, y, 11 * k, 11 * k);
+        // crowded: a bitten leaf (amber). stripped: an empty husk (grey-brown).
+        if (s.why === 'crowded') fill(255, 196, 90, 255 * a); else fill(196, 170, 140, 255 * a);
+        arc(x, y, 7.5 * k, 7.5 * k, 0.6, TWO_PI - 0.6, PIE);
+      }
+    }
+    if (M.greenFruitSign && this._lessonMastYear(1)) {
+      // (The rimu list is refreshed once a second; trees do not move.)
+      if (!this._rimuList || this.playTime - (this._rimuListAt || 0) > 60) {
+        this._rimuList = sim.plants.filter(p => p.alive && p.type === 'rimu' && !p.dormant && p.growth >= 0.5);
+        this._rimuListAt = this.playTime;
+      }
+      noStroke();
+      for (const p of this._rimuList) {
+        if (!p.alive) continue;
+        const x = p.pos.x, y = this._groundPaintY(p.pos.x, p.pos.y), s = (p.size || 10) * 0.32;
+        fill(20, 40, 24, 190);
+        ellipse(x - s, y - s * 2.1, 3.4 * k, 3.4 * k); ellipse(x + s * 0.9, y - s * 1.5, 3.4 * k, 3.4 * k); ellipse(x, y - s * 3, 3.4 * k, 3.4 * k);
+        fill(150, 232, 96);
+        ellipse(x - s, y - s * 2.1, 2.2 * k, 2.2 * k); ellipse(x + s * 0.9, y - s * 1.5, 2.2 * k, 2.2 * k); ellipse(x, y - s * 3, 2.2 * k, 2.2 * k);
+      }
+    }
+    if (M.nestFoundingSign && sim.moaNestingWatch) {
+      const r = sim._nestFoundRadius(), r2 = r * r;
+      const patches = sim._focusPlantPatches();
+      noFill();
+      for (const p of patches) {
+        if (patches.some(q => q !== p && (q.pos.x - p.pos.x) ** 2 + (q.pos.y - p.pos.y) ** 2 <= r2)) continue;
+        const x = p.pos.x, y = this._groundPaintY(p.pos.x, p.pos.y);
+        stroke(255, 236, 150, 120 + 50 * Math.sin(frameCount * 0.08));
+        strokeWeight(1.2 * k);
+        drawingContext.setLineDash([5 * k, 5 * k]);
+        ellipse(x, y, r * 2, r * 1.0 * 2 * 0.62);
+        drawingContext.setLineDash([]);
+      }
+    }
+    pop();
   }
 
   // ---- split-resolution ground tier ---------------------------------------
@@ -4390,6 +5029,7 @@ class Game {
       return;
     }
 
+    this._updateUserCamera();   // the player's drag, follow and hunt view (userCamera levels)
     this._updateCamera();   // advance any camera ease (real frames, so it runs while paused)
     if (!CONFIG.fullscreen) this.ui.renderPanels();
 
@@ -4474,7 +5114,10 @@ class Game {
     this.simulation.render();
     if (typeof GLBatch !== 'undefined' && GLBatch.enabled && GLBatch._open) GLBatch.composite(drawingContext);
     if (this.module) this.module.renderOver();   // a module's markers, over the birds
+    else this._renderRaidOdds();                 // (kea at a moa nest: the raid's odds)
     this._renderInspect();
+    this._renderWorldSigns();
+    this._renderSelection();
     this.mauri.renderFloatingTexts();
     if (_castAlpha < 1) drawingContext.globalAlpha = 1;
 
@@ -4620,6 +5263,10 @@ class Game {
       const nextItem = nextDef && nextDef.menu && nextDef.menu.focusItem;
       const buttons = [];
       if (nextDef && PROGRESS.isUnlocked(nextDef.id)) buttons.push({ label: "Next module", action: () => this._startLevel(nextDef.id) });
+      // A journey level offers its ways on (mauri_campaign.js): west or north after the five
+      // years, the free play after a lesson, the next tile.
+      const _journey = (typeof CAMPAIGN !== 'undefined' && L.journey) ? CAMPAIGN : null;
+      if (_journey) for (const w of _journey.waysOn(L)) buttons.push({ label: w.label, action: () => this._startLevel(w.id) });
       buttons.push({ label: "Back to Menu", action: () => this._returnToMenuFromEnd() });
       this._renderOverlay(...CONFIG.col_UI.slice(0,3), 150, {
         title: L.winTitle || (allGoalsMet ? "ECOSYSTEM THRIVING!" : "ECOSYSTEM BALANCED"),
@@ -4627,6 +5274,8 @@ class Game {
         lines: [
           { text: L.winText || this._endMessage(), color: [150, 220, 150], size: 18 },
           ...(this.chapters && L.claim ? [{ text: L.claim, color: [200, 240, 200], size: 15 }] : []),
+          ...(this.chapters && this.chapters.unaidedLine() ? [{ text: this.chapters.unaidedLine(), color: [255, 240, 170], size: 15 }] : []),
+          ...(_journey ? _journey.cardLines(L, this.chapters).map(text => ({ text, color: [226, 226, 214], size: 14 })) : []),
           { text: goalsTally, color: [150, 220, 150], size: 14 },
           { text: `Final population: ${this._cachedMoaCount} moa`, color: [120, 180, 120], size: 14 },
           { text: `Total mauri earned: ${this.mauri.totalEarned | 0}`, color: [120, 180, 120], size: 14 },
@@ -5157,15 +5806,24 @@ class Game {
     pop();
     fill(unlocked ? [140, 180, 150] : [60, 60, 65]);
     smallTextSize(13);
-    text(unlocked ? level.name : '🔒', bx, y + s * 0.82);
+    // (A long name is drawn smaller, to stay inside the card.)
+    const _nm = unlocked ? level.name : '🔒', _nw = textWidth(_nm);
+    if (_nw > s * 0.9) textSize((13 + SMALL_TEXT_BUMP) * s * 0.9 / _nw);
+    text(_nm, bx, y + s * 0.82);
     pop();
     this._levelCardBounds.push({ x, y, w: s, h: s, levelId: level.id, unlocked, module: true, chapters: !!level.chapters });
   }
 
   // A level card's body: a rounded, bevelled panel (lit top-left rim, shaded bottom-right) in
   // the menu's greens; brighter on hover, thicker-edged once completed, grey while locked.
-  _cardFrame(x, y, w, h, unlocked, hover, completed) {
-    if (!unlocked) { fill(30, 30, 35, 200); stroke(50, 50, 55); }
+  // `greenWhenDone`: a completed card is filled bright green (the journey's tiles, which show
+  // they are won that way rather than with a mark).
+  _cardFrame(x, y, w, h, unlocked, hover, completed, greenWhenDone = false) {
+    if (greenWhenDone && completed && unlocked) {
+      if (hover) { fill(74, 172, 92, 245); stroke(186, 246, 186); }
+      else { fill(58, 150, 76, 245); stroke(138, 222, 146); }
+    }
+    else if (!unlocked) { fill(30, 30, 35, 200); stroke(50, 50, 55); }
     else if (hover) { fill(40, 65, 45, 240); stroke(100, 160, 110); }
     else { fill(30, 50, 35, 240); stroke(70, 110, 80); }
     strokeWeight(completed ? 3 : 2);
@@ -5213,27 +5871,72 @@ class Game {
 
     // Each section: a stone slab (its header) standing `depth` px up off the ground at most,
     // over a recessed tray its contents slide open in.
-    const boxW = Math.min(1000, cw - 120), boxX = centerX - boxW / 2, headH = 72, gap = 18;
+    const fullW = Math.min(1000, cw - 120), headH = 72, gap = 18;
     const depth = 9, trayInset = 14;
+    // The boxes stand in a column on the left and the right holds a square panel
+    // (journeySplit): the map of the upper South Island while the journey is open, else the
+    // unlocks box (_renderUnlocksBox). On a canvas too narrow for that (portrait) the boxes are
+    // centred and the map goes under the journey's modules instead, inside its tray.
+    const jGap = 28, jLeftW = Math.min(660, fullW);
+    const jMapW = Math.min(640, cw - 120 - jLeftW - jGap);
+    const journeySplit = typeof CAMPAIGN !== 'undefined' && jMapW >= 440;
+    const jAnim = this._menuAnim && this._menuAnim.journey;
+    const jk = journeySplit && jAnim ? Math.max(0, Math.min(1, jAnim.open.x)) : 0;
+    const jX0 = centerX - (jLeftW + jGap + jMapW) / 2;
+    const boxW = journeySplit ? jLeftW : fullW;
+    const boxX = Math.round(journeySplit ? jX0 : centerX - fullW / 2);
+    const boxMid = boxX + boxW / 2;
+    const slabBake = boxW;
     const mx = mouseX / spriteSS(), my = mouseY / spriteSS();
+    // The column scrolls (wheel, or a finger drag; see mouseWheel/touchMoved) when its open
+    // boxes run past the bottom of the screen. _menuScrollTarget is where it is headed;
+    // _menuScroll eases after it. Both are clamped to last frame's overflow.
+    const colTop = 180, clipTop = 140, clipBot = ch - 62;
+    const maxScroll = this._menuMaxScroll || 0;
+    this._menuScrollTarget = Math.max(0, Math.min(maxScroll, this._menuScrollTarget || 0));
+    this._menuScroll = (this._menuScroll || 0) + (this._menuScrollTarget - (this._menuScroll || 0)) * 0.3;
+    if (Math.abs(this._menuScroll - this._menuScrollTarget) < 0.5) this._menuScroll = this._menuScrollTarget;
+    const scroll = this._menuScroll;
+    // (Clicks in the column above or below its visible window are ignored; see handleClick.)
+    this._menuColClip = { x: boxX - 12, w: boxW + 24, y: clipTop, h: clipBot - clipTop };
     // The sections, from MENU_SECTIONS, each as tall as its rows of cards.
     const sections = [];
-    const cardS = 200, cardGap = 32, perRow = Math.max(1, Math.floor((boxW - 40 + cardGap) / (cardS + cardGap)));
+    const innerW = boxW - 40;
+    const cardS = 200, cardGap = 32, perRow = Math.max(1, Math.floor((innerW + cardGap) / (cardS + cardGap)));
+    this._journeyBtnBounds = [];
+    this._journeyHover = null;
     for (const sec of MENU_SECTIONS) {
+      if (sec.style === 'journey') {   // the sequence of tiles and their map (mauri_campaign.js)
+        if (typeof CAMPAIGN === 'undefined') continue;
+        const modW = Math.min(612, boxW - 48), modH = this._journeyModulesH();
+        if (journeySplit) {
+          sections.push({ key: sec.key, label: sec.label, bodyH: modH + 24,
+            draw: (top) => this._renderJourneyModules(boxMid - modW / 2, top + 14, modW, mx, my) });
+        } else {
+          const pw = Math.min(640, fullW - 60);
+          sections.push({ key: sec.key, label: sec.label, bodyH: modH + 24 + this._journeyPanelH(pw) + 30,
+            draw: (top) => {
+              this._renderJourneyModules(centerX - modW / 2, top + 14, modW, mx, my);
+              this._renderJourneyPanel(centerX - pw / 2, top + 14 + modH + 24, pw, 1, true, mx, my);
+            } });
+        }
+        continue;
+      }
       const list = bySection[sec.key];
       if (!list || !list.length) continue;
       if (sec.style === 'cards') {
-        sections.push({ key: sec.key, label: sec.label, bodyH: 250,
-          draw: (top) => this._renderChallengeCards(list, centerX, top + 25, boxW - 40) });
+        const rows = this._challengeLayout(list.length, innerW).rows;
+        sections.push({ key: sec.key, label: sec.label, bodyH: 50 + rows * 200 + (rows - 1) * 32,
+          draw: (top) => this._renderChallengeCards(list, boxMid, top + 25, innerW) });
       } else {
         const entries = this._moduleEntries(list), withSketches = sec.style === 'sketches';
         const rows = Math.ceil(entries.length / perRow), rowH = cardS + cardGap + (withSketches ? 44 : 0);
         sections.push({ key: sec.key, label: sec.label, bodyH: rows * rowH + 18,
-          draw: (top) => this._renderModuleCards(entries, centerX, top + 25, boxW - 40, withSketches) });
+          draw: (top) => this._renderModuleCards(entries, boxMid, top + 25, innerW, withSketches) });
       }
     }
     sections.push({ key: 'settings', label: "Settings", bodyH: 170,
-      draw: (top) => this._renderRenderSettings(centerX, top + 28, 300) });
+      draw: (top) => this._renderRenderSettings(boxMid, top + 28, 300) });
     // Per-section springs: `open` (0 shut … 1 open, with a little overshoot as the tray lands)
     // and `lift` (the slab's height off the ground: up under the pointer, flat while pressed,
     // sitting low while its section is open).
@@ -5244,7 +5947,12 @@ class Game {
       if (Math.abs(want - st.x) < 0.002 && Math.abs(st.v) < 0.002) { st.x = want; st.v = 0; }
       return st.x;
     };
-    let y = 180;
+    let y = colTop - scroll;
+    push();
+    drawingContext.save();
+    drawingContext.beginPath();
+    drawingContext.rect(this._menuColClip.x, clipTop, this._menuColClip.w, clipBot - clipTop);
+    drawingContext.clip();
     for (const s of sections) {
       const a = anim[s.key] || (anim[s.key] = { open: { x: 0, v: 0 }, lift: { x: depth * 0.6, v: 0 } });
       const isOpen = this._menuOpen === s.key;
@@ -5260,14 +5968,14 @@ class Game {
       if (k > 0.01) MenuStyle.drawTray(boxX + trayInset, trayTop, boxW - trayInset * 2, trayH, 14);
 
       // The slab and its label, painted on the stone (a dark under-stroke so it sits in it).
-      const faceY = MenuStyle.drawSlab(s.key, boxX, y, boxW, headH, lift, depth);
+      const faceY = MenuStyle.drawSlab(s.key, boxX, y, boxW, headH, lift, depth, boxW === slabBake ? undefined : slabBake);
       push();
       textAlign(CENTER, CENTER);
       textFont(FreckleFace); textSize(30);
       fill(20, 26, 20, 170);
-      text(s.label, centerX + 1, faceY + headH / 2 + 2);
+      text(s.label, boxMid + 1, faceY + headH / 2 + 2);
       fill(hover || isOpen ? [250, 244, 222] : [232, 226, 204]);
-      text(s.label, centerX, faceY + headH / 2);
+      text(s.label, boxMid, faceY + headH / 2);
       // An open/closed chevron at the right, cut into the stone.
       translate(boxX + boxW - 44, faceY + headH / 2);
       rotate(Math.min(1, k) * Math.PI);
@@ -5291,16 +5999,311 @@ class Game {
         pop();
         if (k < 0.98) {   // still sliding: nothing in it takes a click yet
           this._levelCardBounds.length = cards;
+          if (s.key === 'journey') this._journeyBtnBounds = [];
           if (s.key === 'settings') this._detailSliderBounds = this._perfToggleBounds = null;
         }
       }
       y += headH + depth + bodyH + gap;
+    }
+    drawingContext.restore();
+    pop();
+    // How far the column overflows its window, for next frame's clamp; and a thin bar at its
+    // right edge while it does.
+    const contentBottom = y + scroll - gap + 12;
+    this._menuMaxScroll = Math.max(0, contentBottom - clipBot);
+    if (this._menuMaxScroll > 0) {
+      const trackH = clipBot - colTop, viewH = clipBot - colTop;
+      const barH = Math.max(40, trackH * viewH / (viewH + this._menuMaxScroll));
+      const barY = colTop + (trackH - barH) * (scroll / this._menuMaxScroll);
+      push(); noStroke();
+      fill(255, 255, 255, 22); rect(boxX + boxW + 6, colTop, 5, trackH, 3);
+      fill(232, 226, 204, 120); rect(boxX + boxW + 6, barY, 5, barH, 3);
+      pop();
+    }
+
+    // The right-hand panel, in its fixed place beside the boxes: the journey's map fades in as
+    // the journey opens (taking clicks once fully there), and the unlocks box fades out.
+    if (journeySplit && jk < 0.99) this._renderUnlocksBox(jX0 + jLeftW + jGap, 190, jMapW, 1 - jk);
+    if (journeySplit && jk > 0.01) {
+      const live = jk >= 0.98;
+      const nb = this._journeyBtnBounds.length, nc = this._levelCardBounds.length;
+      this._renderJourneyPanel(jX0 + jLeftW + jGap, 190, jMapW, jk, live, mx, my);
+      if (!live) { this._journeyBtnBounds.length = nb; this._levelCardBounds.length = nc; }
     }
 
     fill(CACHED_COLORS.menuFooter);
     smallTextSize(11);
     textAlign(CENTER, CENTER);
     text(`Version: ${CONFIG.version}`, centerX, ch - 40);
+  }
+
+  // ---- The unlocks box (DEBUG PLACEHOLDER) -------------------------------------------------
+  // The square beside the boxes while the journey's map is shut: a grid of every tool the
+  // completed levels used (their chapters' `tools` and menu.focusItem). A stand-in for the
+  // encyclopedia that will live here later; it takes no clicks.
+  _unlockedItems() {
+    const seen = new Set(), out = [];
+    const add = (id) => { if (id && !seen.has(id)) { seen.add(id); out.push(id); } };
+    for (const l of LEVEL_REGISTRY.getAll()) {
+      if (!PROGRESS.isCompleted(l.id)) continue;
+      if (l.menu && l.menu.focusItem) add(l.menu.focusItem.placeable);
+      for (const t of [].concat(l.tools || [])) add(t);
+      for (const ch of (Array.isArray(l.chapters) ? l.chapters : [])) for (const t of (ch.tools || [])) add(t);
+    }
+    return out;
+  }
+
+  _renderUnlocksBox(x, y, s, alpha) {
+    const a = Math.max(0, Math.min(1, alpha));
+    const items = this._unlockedItems();
+    push();
+    drawingContext.globalAlpha = a;
+    MenuStyle.drawTray(x, y, s, s, 14);
+    noStroke();
+    textAlign(LEFT, CENTER);
+    push(); textFont(FreckleFace); textSize(26);
+    fill(232, 226, 204);
+    text("Unlocked", x + 24, y + 34);
+    pop();
+    fill(200, 120, 90);
+    smallTextSize(11);
+    textAlign(RIGHT, CENTER);
+    text("DEBUG", x + s - 24, y + 34);
+    const pad = 24, top = y + 66, cell = 104, gap = 12;
+    const cols = Math.max(1, Math.floor((s - pad * 2 + gap) / (cell + gap)));
+    const gx = x + (s - (cols * cell + (cols - 1) * gap)) / 2;
+    if (!items.length) {
+      fill(CACHED_COLORS.menuHint);
+      smallTextSize(14);
+      textAlign(CENTER, CENTER);
+      text("Complete a level to unlock its items.", x + s / 2, y + s / 2);
+    }
+    const ui = this.ui || GameUI.prototype;
+    items.forEach((id, i) => {
+      const cx = gx + (i % cols) * (cell + gap), cy = top + Math.floor(i / cols) * (cell + gap);
+      if (cy + cell > y + s - pad) return;   // (a full box just stops; the encyclopedia will page)
+      this._cardFrame(cx, cy, cell, cell, true, false, false);
+      const def = typeof PLACEABLES !== 'undefined' ? PLACEABLES[id] : null;
+      push();
+      if (def) ui.renderPlaceableIcon(def, cx + cell / 2, cy + cell * 0.42, cell * 0.42, cell * 0.26, 255 * a);
+      pop();
+      fill(200, 240, 210);
+      smallTextSize(12);
+      textAlign(CENTER, CENTER);
+      // (A long name is drawn smaller, to stay inside its cell.)
+      const nm = def && def.name ? def.name : id, nw = textWidth(nm);
+      if (nw > cell - 12) textSize((12 + SMALL_TEXT_BUMP) * (cell - 12) / nw);
+      text(nm, cx + cell / 2, cy + cell * 0.82);
+    });
+    pop();
+  }
+
+  // ---- The journey on the level select ----------------------------------------------------
+  // Two parts. _renderJourneyModules: the tiles as a sequence in four groups (1 2 2f, 3 4 4f,
+  // 5 6 6f, 7 7f; CAMPAIGN.GROUPS), 2×2, with lines showing that 2f opens both 3 and 5 and
+  // that 7 needs both 4 and 6. _renderJourneyPanel: the upper South Island with a marker on
+  // the tile's place in it, and under it the tile's name, the family as the record stands,
+  // and the Start button at the bottom right. A click on a tile chooses it (the marker glides
+  // there; pointing at one previews it); Start plays the chosen tile.
+  // PLACEHOLDER ART: plain cells, and a small map graphic drawn large.
+
+  _journeyModulesH() { return 2 * 110 + 30 + 16; }
+  _journeyPanelH(w) { return Math.round(w * CAMPAIGN.MAP.h / CAMPAIGN.MAP.w) + 196; }
+
+  // The tile the panel is about: the one chosen by a click, else the journey's next tile.
+  _journeyTile() {
+    if (!this._journeySel || !CAMPAIGN.TILES[this._journeySel]) return CAMPAIGN.nextTile();
+    return this._journeySel;
+  }
+
+  _renderJourneyModules(x0, y0, w, mx, my) {
+    const C = CAMPAIGN, card = 72, pad = 10, colGap = 20, rowGap = 30, rowH = 110, labelH = 28;
+    const colW = (w - colGap) / 2, pitch = (colW - 2 * pad - card) / 2;
+    const sel = this._journeyTile();
+    const pos = {};
+    push();
+    // The groups: a tinted frame each, named at its top right.
+    C.GROUPS.forEach((g, gi) => {
+      const gx = x0 + (gi % 2) * (colW + colGap), gy = y0 + Math.floor(gi / 2) * (rowH + rowGap);
+      const col = C.pathColor(g.path);
+      fill(col[0], col[1], col[2], 16); stroke(col[0], col[1], col[2], 70); strokeWeight(1.5);
+      rect(gx, gy, colW, rowH, 10);
+      noStroke(); fill(col[0], col[1], col[2], 210);
+      textAlign(RIGHT, CENTER); smallTextSize(10);
+      text(g.title, gx + colW - 10, gy + 14);
+      g.tiles.forEach((id, i) => { if (id) pos[id] = { x: gx + pad + i * pitch, y: gy + labelH, path: g.path }; });
+    });
+    // The lines: lit where they lead to an open tile.
+    const arrow = (pts, col, lit) => {
+      const a = lit ? 235 : 80;
+      noFill(); stroke(col[0], col[1], col[2], a); strokeWeight(3); strokeJoin(ROUND);
+      beginShape(); for (const p of pts) vertex(p[0], p[1]); endShape();
+      const [ex, ey] = pts[pts.length - 1], [px, py] = pts[pts.length - 2];
+      const ang = Math.atan2(ey - py, ex - px);
+      noStroke(); fill(col[0], col[1], col[2], a);
+      push(); translate(ex, ey); rotate(ang); triangle(1, 0, -8, -5.5, -8, 5.5); pop();
+    };
+    const litTo = (id) => { const t = C.tile(id); return !!(t.level && LEVEL_REGISTRY.get(t.level)) && C.isOpen(id); };
+    for (const g of C.GROUPS) {
+      const ids = g.tiles.filter(Boolean), col = C.pathColor(g.path);
+      for (let i = 1; i < ids.length; i++) {
+        const a = pos[ids[i - 1]], b = pos[ids[i]];
+        arrow([[a.x + card + 3, a.y + card / 2], [b.x - 3, b.y + card / 2]], col, litTo(ids[i]));
+      }
+    }
+    for (const l of C.LINKS) {
+      const a = pos[l.from], b = pos[l.to], col = C.pathColor(l.path);
+      if (!a || !b) continue;
+      const ax = a.x + card / 2, bx = b.x + card / 2;
+      let pts;
+      if (l.route === 'across') pts = [[a.x + card + 3, a.y + card / 2], [b.x - 3, b.y + card / 2]];
+      else if (l.route === 'down') pts = [[ax, a.y + card + 3], [bx, b.y - 3]];
+      else if (l.route === 'under') {   // out of the bottom, along the gap between the rows, in at the top
+        const ly = a.y + card + (rowH - labelH - card) + rowGap / 2;
+        pts = [[ax, a.y + card + 3], [ax, ly], [bx, ly], [bx, b.y - 3]];
+      } else {                          // 'below': under the bottom row and up into the tile
+        const ly = a.y + card + (rowH - labelH - card) + 8;
+        pts = [[ax, a.y + card + 3], [ax, ly], [bx, ly], [bx, b.y + card + 3]];
+      }
+      arrow(pts, col, litTo(l.to));
+    }
+    // The tiles.
+    textAlign(CENTER, CENTER);
+    for (const id in pos) {
+      const p = pos[id], t = C.tile(id), def = t.level ? LEVEL_REGISTRY.get(t.level) : null;
+      const open = !!def && C.isOpen(id), done = C.isWon(id), chosen = id === sel;
+      const hover = mx > p.x && mx < p.x + card && my > p.y && my < p.y + card;
+      if (hover) this._journeyHover = id;
+      this._cardFrame(p.x, p.y, card, card, open, hover || chosen, done, true);
+      if (chosen) {
+        noFill(); stroke(250, 244, 222, 230); strokeWeight(2.5);
+        rect(p.x - 4, p.y - 4, card + 8, card + 8, 15);
+        noStroke();
+      }
+      fill(open ? [226, 246, 228] : [104, 106, 112]);
+      push(); textFont(FreckleFace); textSize(28); text(t.label, p.x + card / 2, p.y + 29); pop();
+      smallTextSize(9);
+      if (!def) { fill(96, 98, 104); text('to come', p.x + card / 2, p.y + 56); }
+      else if (!open) { fill(96, 98, 104); text('🔒', p.x + card / 2, p.y + 56); }
+      this._journeyBtnBounds.push({ x: p.x, y: p.y, w: card, h: card, action: () => { this._journeySel = id; } });
+    }
+    pop();
+  }
+
+  // The journey's map, rasterised once at the size it is drawn on the screen (its layout size
+  // times the canvas's scale), and again only when that size changes. Null until it loads.
+  _journeyMapRaster(w, h) {
+    const svg = journeyMapSvg;
+    if (!svg || !svg.complete || !svg.naturalWidth) return null;
+    const s = Math.abs(drawingContext.getTransform().a) || 1;
+    const pw = Math.max(1, Math.round(w * s)), ph = Math.max(1, Math.round(h * s));
+    const c = this._journeyMapCanvas;
+    if (c && c.width === pw && c.height === ph) return c;
+    const out = c || (this._journeyMapCanvas = document.createElement('canvas'));
+    out.width = pw; out.height = ph;
+    out.getContext('2d').drawImage(svg, 0, 0, pw, ph);
+    return out;
+  }
+
+  _renderJourneyPanel(x, y, w, alpha, live, mx, my) {
+    const C = CAMPAIGN, M = C.MAP, mh = Math.round(w * M.h / M.w), H = this._journeyPanelH(w);
+    const ctx = drawingContext;
+    const sel = this._journeyTile(), shown = this._journeyHover || sel;
+    push();
+    ctx.save();
+    ctx.globalAlpha *= alpha;
+    MenuStyle.drawTray(x - 12, y - 12, w + 24, H + 24, 18);
+
+    // The map, with every tile's place marked faintly on it.
+    ctx.save();
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(x, y, w, mh, 10); else ctx.rect(x, y, w, mh);
+    ctx.clip();
+    const mapRaster = this._journeyMapRaster(w, mh);
+    if (mapRaster) ctx.drawImage(mapRaster, x, y, w, mh);
+    else { noStroke(); fill(40, 60, 50); rect(x, y, w, mh); }
+    const cs = M.pitch / M.w * w;
+    rectMode(CENTER);
+    for (const cell of C.CELLS) {
+      const cx = x + (M.x0 + cell.col * M.pitch) / M.w * w, cy = y + (M.y0 + cell.row * M.pitch) / M.h * mh;
+      const done = cell.tiles.some(id => C.isWon(id));
+      stroke(20, 26, 20, 150); strokeWeight(1.5);
+      fill(done ? [120, 220, 140, 90] : [255, 255, 255, 34]);
+      rect(cx, cy, cs - 3, cs - 3, 4);
+    }
+    // The marker: it glides to the chosen tile's place (a click moves it, not a hover), and a
+    // ring spreads from it.
+    const want = C.place(sel), mk = this._journeyMarker || (this._journeyMarker = Object.assign({}, want));
+    for (const k of ['u', 'v', 's']) mk[k] += (want[k] - mk[k]) * 0.2;
+    const px = x + mk.u * w, py = y + mk.v * mh, ps = mk.s * w + 4;
+    const beat = (millis() % 1600) / 1600;
+    noFill();
+    stroke(255, 246, 200, 190 * (1 - beat)); strokeWeight(3);
+    ellipse(px, py, ps * (1.3 + beat * 2.2), ps * (1.3 + beat * 2.2));
+    stroke(18, 24, 18, 230); strokeWeight(6); rect(px, py, ps, ps, 6);
+    stroke(255, 246, 200); strokeWeight(3); rect(px, py, ps, ps, 6);
+    // Its label, on a pill above it.
+    const tl = C.tile(sel).label;
+    noStroke(); fill(18, 26, 20, 225);
+    rect(px, py - ps / 2 - 20, 40, 26, 13);
+    triangle(px - 6, py - ps / 2 - 8, px + 6, py - ps / 2 - 8, px, py - ps / 2 - 1);
+    fill(255, 246, 200); textAlign(CENTER, CENTER);
+    push(); textFont(FreckleFace); textSize(17); text(tl, px, py - ps / 2 - 20); pop();
+    rectMode(CORNER);
+    ctx.restore();
+    noFill(); stroke(0, 0, 0, 150); strokeWeight(2); rect(x, y, w, mh, 10); noStroke();
+
+    // Under the map: the shown tile, and the family as the record stands.
+    const t = C.tile(shown), def = t.level ? LEVEL_REGISTRY.get(t.level) : null;
+    const open = !!def && C.isOpen(shown), done = C.isWon(shown);
+    const group = C.GROUPS.find(g => g.tiles.includes(shown));
+    const iy = y + mh + 14;
+    textAlign(LEFT, TOP);
+    fill(240, 234, 210);
+    push(); textFont(FreckleFace); textSize(25); text(`${t.label} · ${t.title}`, x + 4, iy); pop();
+    if (group) {
+      const col = C.pathColor(group.path);
+      fill(col[0], col[1], col[2], 220); textAlign(RIGHT, TOP); smallTextSize(11);
+      text(group.title, x + w - 4, iy + 8);
+      textAlign(LEFT, TOP);
+    }
+    let words = C.BLURBS[shown] || '';
+    if (!def) words += ' Still to come.';
+    else if (!open) words += ` Locked: win ${t.needs.filter(n => !C.isWon(n)).map(n => C.tile(n).label).join(' and ')} first.`;
+    else if (done) words += ' Won.';
+    fill(196, 212, 196); smallTextSize(12);
+    text(words, x + 4, iy + 36, w - 8, 40);
+    fill(140, 164, 146); smallTextSize(9);
+    text(C.familyLines().join('  '), x + 4, iy + 80, w - 8, 34);
+
+    // The bottom row: two small buttons at the left, Start at the bottom right.
+    const over = (bx, by, bw, bh) => mx > bx && mx < bx + bw && my > by && my < by + bh;
+    const small = (label, bx, bw, action) => {
+      const bh = 32, by = y + H - bh - 4, hover = live && over(bx, by, bw, bh);
+      this._cardFrame(bx, by, bw, bh, true, hover, false);
+      fill(200, 232, 206); textAlign(CENTER, CENTER);
+      push(); textFont(FreckleFace); textSize(14); text(label, bx + bw / 2, by + bh / 2 + 1); pop();
+      this._journeyBtnBounds.push({ x: bx, y: by, w: bw, h: bh, action });
+    };
+    const sw = Math.min(170, (w - 200) / 2 - 6);
+    small(C.record.openAll ? "Every tile is open" : "Open every tile", x + 4, sw, () => C.toggleOpenAll());
+    small("Start again", x + 4 + sw + 10, sw, () => { C.reset(); this._journeySel = null; });
+
+    const st = C.tile(sel), sdef = st.level ? LEVEL_REGISTRY.get(st.level) : null;
+    const sOpen = !!sdef && C.isOpen(sel);
+    const bw = 180, bh = 54, bx = x + w - bw - 4, by = y + H - bh - 4;
+    const hover = live && sOpen && over(bx, by, bw, bh);
+    stroke(sOpen ? (hover ? [220, 250, 226] : [130, 200, 146]) : [60, 62, 66]); strokeWeight(2.5);
+    fill(sOpen ? (hover ? [76, 150, 96] : [56, 122, 76]) : [38, 40, 44]);
+    rect(bx, by, bw, bh, 14);
+    stroke(255, 255, 255, sOpen ? 50 : 14); strokeWeight(2); line(bx + 14, by + 5, bx + bw - 14, by + 5);
+    noStroke(); fill(sOpen ? [250, 246, 226] : [110, 112, 118]); textAlign(CENTER, CENTER);
+    push(); textFont(FreckleFace); textSize(23);
+    text(!sdef ? "To come" : !sOpen ? `${st.label} is locked` : C.isWon(sel) ? `Replay ${st.label}` : `Start ${st.label}`, bx + bw / 2, by + bh / 2 + 1);
+    pop();
+    if (sdef) this._levelCardBounds.push({ x: bx, y: by, w: bw, h: bh, levelId: sdef.id, unlocked: sOpen, module: true, chapters: true });
+    ctx.restore();
+    pop();
   }
 
   // The levels of a modules section as card entries: a level on its own, or a family of
@@ -5360,21 +6363,27 @@ class Game {
     pop();
   }
 
-  // The prototype levels' cards, in a centred row sized to fit.
-  _renderChallengeCards(levels, centerX, cardY, availableW) {
-    const maxCardW = 320, minCardW = 200, cardH = 200, cardSpacing = 32;
-    let cardW = maxCardW;
-    let totalW = levels.length * cardW + (levels.length - 1) * cardSpacing;
-    if (totalW > availableW && levels.length > 1) {
-      cardW = Math.max(minCardW, (availableW - (levels.length - 1) * cardSpacing) / levels.length);
-      totalW = levels.length * cardW + (levels.length - 1) * cardSpacing;
-    }
-    const startX = centerX - totalW / 2;
+  // How the prototype levels' cards sit in `availableW`: as many to a row as fit at their
+  // narrowest (200), each row's cards as wide as fits up to 320.
+  _challengeLayout(n, availableW) {
+    const maxCardW = 320, minCardW = 200, gap = 32;
+    const perRow = Math.max(1, Math.min(n, Math.floor((availableW + gap) / (minCardW + gap))));
+    const cardW = Math.min(maxCardW, Math.max(minCardW, (availableW - (perRow - 1) * gap) / perRow));
+    return { perRow, cardW, gap, rows: Math.max(1, Math.ceil(n / perRow)) };
+  }
+
+  // The prototype levels' cards, in centred rows sized to fit.
+  _renderChallengeCards(levels, centerX, cardY0, availableW) {
+    const cardH = 200;
+    const { perRow, cardW, gap: cardSpacing } = this._challengeLayout(levels.length, availableW);
     push();
     textAlign(CENTER, CENTER);
     for (let i = 0; i < levels.length; i++) {
       const level = levels[i];
-      const x = startX + i * (cardW + cardSpacing);
+      const row = Math.floor(i / perRow), col = i % perRow;
+      const n = Math.min(perRow, levels.length - row * perRow);
+      const x = centerX - (n * cardW + (n - 1) * cardSpacing) / 2 + col * (cardW + cardSpacing);
+      const cardY = cardY0 + row * (cardH + cardSpacing);
       const unlocked = PROGRESS.isUnlocked(level.id);
       const completed = PROGRESS.isCompleted(level.id);
       const hover = unlocked && mouseX > x && mouseX < x + cardW
@@ -5891,6 +6900,7 @@ class Game {
       strokeWeight(2);
       ellipse(0, 0, p.radius * 2, p.radius * 2);
       pop();
+      this._renderStormCoverPreview(tx, ty, p.radius, p, ok);
       return;
     }
     ellipse(0, 0, def.radius * 2, def.radius * 2);
@@ -5950,6 +6960,7 @@ class Game {
     // target moa nest), the wide invisible-in-play kea draw reach, and every moa nest + kea
     // the cache will touch, highlighted. Helps aim the cache at a real nest.
     if (this.selectedPlaceable === 'keaLure') this._renderKeaLurePreview(tx, ty, def);
+    if (this.selectedPlaceable === 'Storm' && def.blocksEagleVision) this._renderStormCoverPreview(tx, ty, def.radius, null, canPlace);
 
     if (!spacingCheck.allowed && spacingCheck.blocker) {
       push();
@@ -6031,6 +7042,187 @@ class Game {
     }
   }
 
+  // A storm in hand (to call, or being moved), where it would be set down at (tx, ty) with
+  // radius R: what it will do there. Only where the Storm is cover (blocksEagleVision). Where it
+  // can't be set down (ok false) it says only that.
+  //   - The moa it would hide: a cloud-white ring (pulsing green for one the Pouākai is after).
+  //     A moa the moved storm hides now and would leave in the open: an amber dashed ring. A
+  //     hunted moa still in the open: a red ring.
+  //   - The walk of each bird on its way somewhere (a story's walk, a seasonal migration): dots
+  //     to where it is going, bright where the storm would cover them, pale under other cover,
+  //     amber in the open.
+  //   - A label over the ring: whom it hides, whom it leaves, how much of the walk it covers.
+  // The family (the cast) and the focus species are shown wherever they are; other moa only
+  // when inside the ring.
+  _renderStormCoverPreview(tx, ty, R, held, ok = true) {
+    const def = (this.activePlaceables && this.activePlaceables.Storm) || PLACEABLES.Storm;
+    const sim = this.simulation;
+    if (!def || !def.blocksEagleVision || !sim) return;
+    const runner = this.chapters || null;
+    const R2 = R * R;
+    const inNew = (x, y) => (x - tx) * (x - tx) + (y - ty) * (y - ty) < R2;
+    const others = sim.placeables.filter(q => q.alive && q !== held && q.def && q.def.blocksEagleVision && !(q.def.eagleSpotFrac > 0));
+    const inOther = (x, y) => { for (const q of others) { const dx = q.pos.x - x, dy = q.pos.y - y; if (dx * dx + dy * dy < q.radiusSq) return true; } return false; };
+    const hunted = new Set();
+    for (const e of (sim.eagles || [])) if (e.alive && e.hunting && e.target && e.target.alive) hunted.add(e.target);
+    // (One screen pixel, in world units: rings and words keep their size at any zoom.)
+    const u = pixelDensity() / Math.max(0.05, Math.abs(drawingContext.getTransform().a));
+    const gy = (x, y) => this._groundPaintY(x, y);
+    if (!ok) { this._stormPreviewLabel(tx, gy(tx, ty) - R, u, [{ t: "Can't set it down here", c: [255, 130, 110] }]); return; }
+
+    const cast = runner ? Object.values(runner.castEnts || {}).filter(e => e && e.alive && e.pos) : [];
+    const watch = new Set(cast);
+    for (const m of sim.moas) {
+      if (!m.alive) continue;
+      if (hunted.has(m) || inNew(m.pos.x, m.pos.y) || (runner && runner.isFocus(m.speciesKey))) watch.add(m);
+    }
+    const title = (m) => (runner && m.castName && runner.castDefs[m.castName]) ? runner.castDefs[m.castName].title : null;
+
+    const hides = [], leaves = [];
+    let hidesHunted = false, extraHidden = 0;
+    const pulse = 0.5 + 0.5 * Math.sin(frameCount * 0.15);
+    push();
+    noFill();
+    for (const m of watch) {
+      const x = m.pos.x, y = gy(m.pos.x, m.pos.y), r = (m.size || 12) + 10;
+      const under = inNew(m.pos.x, m.pos.y), sheltered = inOther(m.pos.x, m.pos.y);
+      const nowHeld = held && held.isInRange(m.pos);
+      const isHunted = hunted.has(m);
+      if (under) {
+        if (title(m)) hides.push(title(m)); else extraHidden++;
+        if (isHunted) hidesHunted = true;
+        stroke(isHunted ? color(140, 240, 160, 170 + 85 * pulse) : color(235, 244, 255, 225));
+        strokeWeight((isHunted ? 3 : 2.2) * u);
+        ellipse(x, y, r * 2 + (isHunted ? 6 * pulse * u : 0), r * 1.3 + (isHunted ? 4 * pulse * u : 0));
+      } else if (nowHeld && !sheltered) {
+        if (title(m)) leaves.push(title(m));
+        stroke(255, 184, 76, 230);
+        strokeWeight(2.2 * u);
+        drawingContext.setLineDash([5 * u, 4 * u]);
+        ellipse(x, y, r * 2, r * 1.3);
+        drawingContext.setLineDash([]);
+      } else if (isHunted && !sheltered) {
+        stroke(255, 90, 70, 150 + 100 * pulse);
+        strokeWeight(2.4 * u);
+        ellipse(x, y, r * 2, r * 1.3);
+      }
+    }
+
+    // The walks: one route per destination, from the middle of those walking to it. Each is the
+    // route predicted with the storm set down here (_predictWalk: the storms' pull bends it);
+    // the route as things stand is drawn faintly beside it where the two part.
+    const cfg = typeof stormAttractCfg === 'function' ? stormAttractCfg() : null;
+    const groups = new Map();
+    for (const m of watch) {
+      if (!title(m) && !(runner && runner.isFocus(m.speciesKey))) continue;
+      const d = m.walkDestination ? m.walkDestination() : (m._boundFor || (m.isMigrating ? m.migrationTarget : null));
+      if (!d) continue;
+      const key = `${Math.round(d.x / 40)},${Math.round(d.y / 40)}`;
+      if (!groups.has(key)) groups.set(key, { d, ms: [], cfg: cfg && cfg.species.includes(m.speciesKey) ? cfg : null });
+      groups.get(key).ms.push(m);
+    }
+    // The storm in hand where it would be set down (a new one: a stand-in for the prediction).
+    const here = held || { alive: true, type: 'Storm', pos: { x: tx, y: ty }, radius: R };
+    const nowList = sim.placeables, afterList = held ? sim.placeables : sim.placeables.concat([here]);
+    let walkN = 0, walkNew = 0, bent = false;
+    noStroke();
+    for (const { d, ms, cfg: gc } of groups.values()) {
+      let sx = 0, sy = 0;
+      for (const m of ms) { sx += m.pos.x; sy += m.pos.y; }
+      sx /= ms.length; sy /= ms.length;
+      if (Math.hypot(d.x - sx, d.y - sy) < 30) continue;
+      if (held) held._previewPos = { x: tx, y: ty };
+      const after = this._predictWalk(sx, sy, d, afterList, gc);
+      if (held) held._previewPos = null;
+      const before = gc ? this._predictWalk(sx, sy, d, nowList, gc, held ? null : here) : after;
+      // The route as it is now, faint, where it differs from the new one.
+      let apart = 0;
+      for (let i = 0; i < before.length; i++) {
+        const q = after[Math.min(i, after.length - 1)];
+        apart = Math.max(apart, Math.hypot(before[i].x - q.x, before[i].y - q.y));
+      }
+      if (apart > 10) {
+        bent = true;
+        fill(200, 200, 200, 90);
+        const every = Math.max(1, Math.round(9 * u / 5));
+        for (let i = 0; i < before.length; i += every) ellipse(before[i].x, gy(before[i].x, before[i].y), 2.2 * u, 2.2 * u);
+      }
+      const every = Math.max(1, Math.round(9 * u / 5));
+      for (let i = every; i < after.length; i += every) {
+        const { x, y } = after[i];
+        const a = inNew(x, y), b = !a && inOther(x, y);
+        walkN++;
+        if (a) walkNew++;
+        if (a) fill(235, 246, 255, 240);
+        else if (b) fill(190, 210, 235, 130);
+        else fill(255, 196, 110, 150);
+        const s = (a ? 4.4 : 3.2) * u;
+        ellipse(x, gy(x, y), s, s);
+      }
+      // Where they are going.
+      noFill();
+      stroke(255, 236, 190, 200);
+      strokeWeight(1.6 * u);
+      ellipse(d.x, gy(d.x, d.y), 12 * u, 8 * u);
+      noStroke();
+    }
+
+    // The words, over the ring.
+    const lines = [];
+    const list = (a) => a.length <= 2 ? a.join(' and ') : `${a.slice(0, -1).join(', ')} and ${a[a.length - 1]}`;
+    const named = hides.slice();
+    if (extraHidden) named.push(`${extraHidden} other moa`);
+    if (named.length) lines.push({ t: hidesHunted ? `Hides ${list(named)} from the Pouākai` : `Hides ${list(named)}`,
+                                   c: hidesHunted ? [150, 240, 170] : [235, 244, 255] });
+    else lines.push({ t: "Hides no moa here", c: [190, 196, 204] });
+    if (leaves.length) lines.push({ t: `Leaves ${list(leaves)} in the open`, c: [255, 190, 90] });
+    if (walkN && walkNew) lines.push({ t: `Covers ${Math.max(1, Math.round(100 * walkNew / walkN))}% of the walk ahead`, c: [220, 232, 250] });
+    if (bent) lines.push({ t: "Draws their walk this way", c: [220, 232, 250] });
+    pop();
+    this._stormPreviewLabel(tx, gy(tx, ty) - R, u, lines);
+  }
+
+  // The route a bird at (sx, sy) would walk to dest among these storms: points every 5 px.
+  // Its heading eases toward the destination, bent by the storm that draws it most
+  // (Moa.stormPullAt, with cfg; no cfg: a straight walk). `skip`: a storm to leave out. An
+  // approximation of the steering (no terrain, no food, no eagle), for the preview only.
+  _predictWalk(sx, sy, dest, placeables, cfg, skip = null) {
+    const pts = [{ x: sx, y: sy }];
+    let x = sx, y = sy, hx = dest.x - sx, hy = dest.y - sy;
+    const h0 = Math.hypot(hx, hy) || 1;
+    hx /= h0; hy /= h0;
+    const step = 5, maxSteps = Math.min(600, Math.ceil(h0 * 2.5 / step));
+    for (let i = 0; i < maxSteps; i++) {
+      const dx = dest.x - x, dy = dest.y - y, d = Math.hypot(dx, dy);
+      if (d < 16) break;
+      let ux = dx / d, uy = dy / d;
+      // (The bird's own rule: Moa.stormBentTarget.)
+      const pull = cfg && d >= cfg.lookahead * 1.2 ? Moa.stormPullAt(x, y, dest, placeables, cfg, skip) : null;
+      if (pull) ({ x: ux, y: uy } = Moa.bentHeading(x, y, dest, pull, cfg));
+      hx += (ux - hx) * 0.2; hy += (uy - hy) * 0.2;
+      const hn = Math.hypot(hx, hy) || 1;
+      x += hx / hn * step; y += hy / hn * step;
+      pts.push({ x, y });
+    }
+    return pts;
+  }
+
+  // The storm preview's words: lines [{ t, c: [r, g, b] }] on a dark pill whose bottom sits
+  // just above y (world units; u is one screen pixel).
+  _stormPreviewLabel(x, y, u, lines) {
+    push();
+    noStroke();
+    textAlign(CENTER, CENTER);
+    textSize(13 * u);
+    const lh = 17 * u, padX = 8 * u;
+    const w = Math.max(...lines.map(l => textWidth(l.t))) + padX * 2;
+    const top = y - 8 * u - lines.length * lh;
+    fill(14, 20, 28, 185);
+    rect(x - w / 2, top - 4 * u, w, lines.length * lh + 8 * u, 6 * u);
+    lines.forEach((l, i) => { fill(l.c[0], l.c[1], l.c[2]); text(l.t, x, top + lh * (i + 0.5)); });
+    pop();
+  }
+
   // Shared click handling for the level-select render settings (terrain-resolution slider,
   // performance mode). The graphics-mode toggle was removed; GL is the sole path (see
   // _renderRenderSettings).
@@ -6065,12 +7257,16 @@ class Game {
   handleClick(mx, my) {
     // Level select screen
     if (this.state === GAME_STATE.LEVEL_SELECT) {
+      // The column scrolls inside a window: what has scrolled out of it takes no clicks.
+      const cc = this._menuColClip;
+      if (cc && mx > cc.x && mx < cc.x + cc.w && (my < cc.y || my > cc.y + cc.h)) return;
       if (this._levelCardBounds) {
         for (const card of this._levelCardBounds) {
           if (card.unlocked &&
               mx > card.x && mx < card.x + card.w &&
               my > card.y && my < card.y + card.h) {
             this.loadLevel(card.levelId);
+            this._journeySel = null;   // (back on the menu, the journey offers its next tile)
             // A module level starts straight away (its story opens it); a card goes to the
             // level splash first.
             // (A chapters level keeps the splash in debug mode, for its benchmark buttons.)
@@ -6081,6 +7277,9 @@ class Game {
         }
       }
       if (this._handleRenderSettingsClick(mx, my)) return;
+      for (const b of (this._journeyBtnBounds || [])) {
+        if (mx > b.x && mx < b.x + b.w && my > b.y && my < b.y + b.h) { b.action(); return; }
+      }
       // A box's header opens it (closing the one that was open), or closes it if it's open.
       for (const h of (this._menuHeaderBounds || [])) {
         if (mx > h.x && mx < h.x + h.w && my > h.y && my < h.y + h.h) {
@@ -6184,10 +7383,17 @@ class Game {
         return;
       }
 
+      // A userCamera level: this press may turn into a drag (a pan, when zoomed in) or stay a
+      // tap (on an animal: select it; else on a plant: rustle it). Which is decided on release
+      // (handleRelease, _tapAt), so a drag that starts on a plant doesn't lure the moa.
+      const pc = this.userCameraOn()
+        ? (this._panCand = { x0: mx, y0: my, lx: mx, ly: my, tx, ty, active: false, held: false, plantTap: false })
+        : null;
+
       // eagleTelegraph (a chapter level's rule): a tap on an eagle says how it's doing for a few
       // seconds (HaastsEagle.describe, drawn by _renderInspect), so the player can read whether
-      // a hunt is coming.
-      if (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.eagleTelegraph && sim && sim.eagleGrid) {
+      // a hunt is coming. (On a userCamera level the tap selects it instead, with the same words.)
+      if (!pc && typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.eagleTelegraph && sim && sim.eagleGrid) {
         const e = sim.eagleGrid.getClosest(tx, ty, 26, (b) => b.alive);
         if (e) { this._inspect = { e, until: millis() + 3500 }; return; }
       }
@@ -6216,7 +7422,7 @@ class Game {
       const underStorm = !!(sim && sim.stormAt(tx, ty)) &&
         !(typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.lureUnderStorm);
       if (!sproutPatch && !wild && !justPlaced && !(held && held.type === 'Storm') &&
-          !underStorm) this._tapPlant(tx, ty);
+          !underStorm) { if (pc) pc.plantTap = true; else this._tapPlant(tx, ty); }
     }
   }
 
@@ -6269,9 +7475,16 @@ class Game {
     p.shake();
     if (audioManager && audioManager.playPlantRustle) audioManager.playPlantRustle();
     this.simulation.lurePlant(p);
+    if (this.tutorial) this.tutorial.fireEvent(TUTORIAL_EVENTS.PLANT_TAPPED, { plant: p, type: p.type });
   }
   
   handleKey(key) {
+    // The player's camera (userCamera levels): + and - step the zoom, 0 shows the whole land.
+    if (this.userCameraOn()) {
+      if (key === '+' || key === '=') { this.zoomStep(1); return; }
+      if (key === '-' || key === '_') { this.zoomStep(-1); return; }
+      if (key === '0') { this._huntCam = null; this.cameraTo({ zoom: 1 }, 30); return; }
+    }
 
     // The pause card is up: Esc / Space / P / Enter close it (back to play, or to the tip that
     // paused the game) rather than reaching the tip or the world behind it.
@@ -6820,6 +8033,10 @@ function touchEnded(e) {
 // A finger dragging on the canvas (a tool on its way to the map) must not scroll or bounce the
 // page. p5 also routes mouse drags here, harmlessly.
 function touchMoved(e) {
+  // On the level select a finger drag scrolls the column of boxes.
+  if (game && game.state === GAME_STATE.LEVEL_SELECT && e && e.touches && e.touches.length === 1) {
+    game._menuScrollTarget = (game._menuScrollTarget || 0) - (mouseY - pmouseY) / spriteSS();
+  }
   if (e && e.target && e.target.tagName === 'CANVAS') return false;
 }
 
@@ -6869,4 +8086,11 @@ function mouseWheel(e) {
     game.encyclopedia.handleWheel(e.delta);
     return false;
   }
+  // The level select's column of boxes scrolls (clamped in renderLevelSelect).
+  if (game && game.state === GAME_STATE.LEVEL_SELECT) {
+    game._menuScrollTarget = (game._menuScrollTarget || 0) + e.delta;
+    return false;
+  }
+  // The player's camera: the wheel zooms about the pointer (userCamera levels).
+  if (game && game.zoomWheel && game.zoomWheel(e.delta, mouseX / s, mouseY / s)) return false;
 }

@@ -413,7 +413,19 @@ class Kereru extends Boid {
   }
 
   // Flock cap / floor; from the species config, else the kererū LEVEL_MECHANICS knobs.
+  // Who this bird is and how it is doing, for the label over a selected animal
+  // (Game._renderSelection).
+  describe(game) {
+    const kind = (game && game._freeplaySpeciesName) ? game._freeplaySpeciesName(this.speciesKey) : (this.speciesKey || 'Bird');
+    const fed = this.hunger > this.maxHunger * 0.75 ? 'starving' : (this.hunger > this.maxHunger * 0.5 ? 'hungry' : 'well fed');
+    const doing = { flying: 'flying', feeding: 'feeding', perched: 'perched', sheltering: 'sheltering from the storm' }[this.state] || '';
+    return [kind, [fed, doing].filter(Boolean).join(' · ')];
+  }
+
   _maxPopulation() {
+    // (A level of small flocks caps each kind itself: mechanics.birdMaxPopulation { kea: 6 }.)
+    const lv = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.birdMaxPopulation) || null;
+    if (lv && lv[this.speciesKey] != null) return lv[this.speciesKey];
     const c = this.speciesData && this.speciesData.config;
     if (c && c.maxPopulation != null) return c.maxPopulation;
     return (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.kereruMaxPopulation) ?? 16;
@@ -626,7 +638,15 @@ class Kereru extends Boid {
       const every = cal.every || [1, 1];
       this._nextClutchYear = year + every[0] + Math.floor(random(every[1] - every[0] + 1));
       if (random() >= p) return;                            // not her year
-      const n = cal.clutch ? cal.clutch[0] + Math.floor(random(cal.clutch[1] - cal.clutch[0] + 1)) : 1;
+      let n = cal.clutch ? cal.clutch[0] + Math.floor(random(cal.clutch[1] - cal.clutch[0] + 1)) : 1;
+      // Where the level caps the flock itself (birdMaxPopulation), eggs already in the nest
+      // count toward the cap, so several hens laying at once can't carry the flock past it.
+      if (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.birdMaxPopulation) {
+        let pending = 0;
+        for (let i = 0; i < sim.eggs.length; i++) { const g = sim.eggs[i]; if (g.alive && !g.hatched && g.offspringType === this.speciesKey) pending++; }
+        n = Math.min(n, cap - sim.getSpeciesCount(this.speciesKey) - pending);
+        if (n <= 0) return;
+      }
       for (let i = 0; i < n; i++) {
         const a = random(TWO_PI), d = n > 1 ? random(2, 8) : 0;
         const e = sim.addEgg(this.pos.x + Math.cos(a) * d, this.pos.y + Math.sin(a) * d);

@@ -52,8 +52,19 @@ const CHAPTER_EVENTS = {
   placeable_expired: { count: 'expired' },          // a placed item wore out: `type` (expired:Storm)
   plant_sprouted:  { count: 'sprouted' },           // a pātōtara sprouted by hand: `sprouted`, `type`
   bird_hatched:    { subject: 'bird', count: 'hatched' },  // a flighted bird's egg hatched: `$bird`, `$egg`
-  bird_killed:     { subject: 'bird', count: 'killed' }    // an eagle took a flighted bird: `$bird`, `$eagle` (counts with the moa under killed:<species>)
+  bird_killed:     { subject: 'bird', count: 'killed' },   // an eagle took a flighted bird: `$bird`, `$eagle` (counts with the moa under killed:<species>)
+  species_arrived: { count: 'arrived' },                   // newcomers came in (rescueImmigration, eagleReturns): `species`, `count`
+  plant_tapped:    { count: 'tapped' },                    // the player rustled a plant: `type`
+  animal_selected: { subject: 'animal', count: 'selected' },   // the player tapped an animal to read and follow it: `$animal`, `species`
+  case_closed:     {},                                     // a hint ladder's case ended: `case` (the reaction's id), `rung`, `outcome`, `sec`, `transfer`
+  species_left:    { subject: 'moa', count: 'left' },      // a grown young bird set off over the pass (dispersal): `$moa`, `species`
+  moa_crowded:     { subject: 'moa', count: 'crowded' },   // a moa's forest meal was cut short by moa feeding beside it (crowdingSign): `$moa`, `others`
+  forest_stripped: { subject: 'moa', count: 'stripped' },  // ...or by a flock feeding overhead (flockStripsFloor): `$moa`, `birds`
+  eagle_gave_up:   { subject: 'eagle', count: 'gaveUp' }   // hidden prey sent the eagle to other prey (coverSendsEagleAway): `$eagle`, `species` (what it went for), `from`
 };
+
+// The events that are the player's own hand (written to the log as kind 'player').
+const CHAPTER_PLAYER_EVENTS = new Set(['placement', 'placeable_moved', 'plant_sprouted', 'plant_tapped', 'animal_selected']);
 
 // Conditions that read the world as it is right now. A beat whose `until` is made only of these
 // can miss the moment it waits for (an eagle's lock can be gone between two polls), so the
@@ -81,7 +92,10 @@ const CHAPTER_CONDITIONS = {
   flag:    (name) => (x) => !!x.runner.flags[name],
   extinct: (who) => (x) => x.runner.extinct(who),
   alive:   (role) => (x) => { const e = x.runner.entity(role, x.event); return !!(e && e.alive !== false); },
-  hidden:  (role) => (x) => { const e = x.runner.entity(role, x.event); return !!(e && e.alive !== false && e.inShelter); },
+  // (Read from where the cover stands now, not from the bird's inShelter, which only the running
+  // simulation refreshes: a storm set down over a moa while a banner has play stopped hides it
+  // at once.)
+  hidden:  (role) => (x) => { const e = x.runner.entity(role, x.event); return !!(e && e.alive !== false && x.runner.coveredNow(e)); },
   hunting: (role) => (x) => role === true ? x.runner.focusHunted()
     : !!(x.runner.entity(role, x.event) || {}).hunting,
   hunted:  (role) => (x) => {   // an eagle is after this one
@@ -190,11 +204,12 @@ const CHAPTER_LEVERS = [['mechanics', 'mechanics'], ['tools', 'tools'], ['locked
   ['focus', 'focus'], ['introduce', 'introduce'], ['protect', 'protect'], ['nesting', 'nesting']];
 
 // A story moment's camera (MomentPlayer): how close, and how long it takes to ease in and out.
-const CHAPTER_MOMENT = { zoom: 2.4, inSec: 0.7, outSec: 0.9 };
+// (Slow enough in and out that the view glides: see Game.cameraTo.)
+const CHAPTER_MOMENT = { zoom: 2.2, inSec: 1.3, outSec: 1.6 };
 
 // What a chapter may say (the validator flags anything else, e.g. a misspelt lever).
 const CHAPTER_KEYS = new Set(['id', 'title', 'sites', 'start', 'goals', 'reactions', 'beats', 'until',
-  'holdSeason', 'next', ...CHAPTER_LEVERS.map(([key]) => key)]);
+  'holdSeason', 'next', 'transfer', ...CHAPTER_LEVERS.map(([key]) => key)]);
 
 // The ways a site can be found (see ChapterRunner._findSite).
 const CHAPTER_SITE_FINDERS = new Set(['flock', 'nest', 'biome', 'high', 'low', 'open', 'edge']);
@@ -222,6 +237,9 @@ class ChapterRunner {
     this.counters = {};            // event counts for the run (see _count)
     this.focus = [];               // this chapter's focus species
     this.castEnts = {};            // cast name -> the adopted entity (null once lost)
+    this.vars = {};                // values function actions leave for the words ({$name} in text)
+    this._cases = [];              // hint ladders under way: { rx, ev, t0, scope, rung }
+    this.caseLog = [];             // ...and how each ended: { id, t, sec, rung, outcome, who, chapter, transfer }
     this.cueData = {};             // cue id -> the event it answers (for roles and banner scopes)
     this._chain = {};              // a line cue -> the banner cue its last line leads to
     this.seasonTurns = 0;          // season changes since the level began
@@ -416,8 +434,32 @@ class ChapterRunner {
       max: r.max != null ? r.max : Infinity,
       chapters: r.chapters || null,
       actions: this._compileActions(`rx:${id}`, this._ownActions(r)),
+      // A hint ladder (see _updateCases): rungs said one after another while `until` has not
+      // come true; `solved`, the ending that counts as the player's own answer; and `lost`, the
+      // ending that counts as the problem winning.
+      hints: this._compileHints(id, r),
+      until: r.until ? this.compile(r.until) : null,
+      solved: r.solved ? this.compile(r.solved) : null,
+      lost: r.lost ? this.compile(r.lost) : null,
       fired: 0, lastAt: -Infinity, was: false, heldSince: null
     };
+  }
+
+  // hints: [{ after: sec, notify | say | banner | do ... }, ...]: each rung's actions, with the
+  // seconds since the reaction fired at which it is said. A rung's banner with no `until` of
+  // its own waits on the reaction's (and goes after its maxSec, if it has one, whichever is
+  // first: a banner must not stay up once the problem it names is over).
+  _compileHints(id, r) {
+    if (!r.hints) return [];
+    if (!r.until) this._issue(`reaction "${id}": hints need an until (what ends the case)`);
+    let last = -1;
+    return r.hints.map((h, k) => {
+      if ((h.after || 0) < last) this._issue(`reaction "${id}": its hints' after times must rise`);
+      last = h.after || 0;
+      const hh = (h.banner && !h.banner.until && r.until)
+        ? Object.assign({}, h, { banner: Object.assign({ until: r.until }, h.banner) }) : h;
+      return { after: (h.after || 0) * CHAPTER_FPS, actions: this._compileActions(`rx:${id}:hint${k + 1}`, this._ownActions(hh)) };
+    });
   }
 
   // A guaranteed beat: starts `when` its condition holds (the chapter's start, without one) and
@@ -533,16 +575,19 @@ class ChapterRunner {
     const done = (game) => until({ runner: this, game, event: this.cueData[cue], scope: game.tutorial.scratch[scopeKey] }) ||
       (!!b.maxSec && game.tutorial.tipDisplayTime > b.maxSec * CHAPTER_FPS);
     const lit = (game) => game.renderEntitiesAboveUI(this.lit(b.lit, this.cueData[cue]));
+    // needs: what the player must afford for the banner to stand ('place': a new `tool`;
+    // 'move': moving one of them, and one there to move; 'none'). A banner that can't be
+    // answered is not shown, and gives way if it stops being answerable.
     const extra = {
-      needs: b.tool ? 'place' : 'none',
+      needs: b.needs || (b.tool ? 'place' : 'none'),
       showOnce: false,
       onShow: (game) => { game.tutorial.scratch[scopeKey] = this.scope(); }
     };
-    if (b.tool) {
+    if (b.tool && extra.needs !== 'move') {
       this._checkTool(b.tool, cue);
       extra.tool = b.tool;
       extra.highlight = { type: 'element', target: 'tool:' + b.tool };
-    }
+    } else if (extra.needs === 'move') extra.tool = b.tool || 'Storm';
     if (b.pause === false) { extra.pauseGame = false; extra.dim = false; }
     return MODULE_TIP_KIT.banner(cue, chained ? { type: TRIGGER_TYPE.IMMEDIATE } : this._beatTrigger(cue),
       words, done, lit, extra);
@@ -564,11 +609,14 @@ class ChapterRunner {
       return (e && (e.speciesKey || e.parentSpecies)) || (c && c.species) ||
              (this._speciesKeys.has(who) ? who : null);
     };
+    // (A role that turns out to be one of the cast speaks under its own name: "$target" is
+    // "Mama Moa" when it is Mama the eagle is after.)
+    const asCast = () => { const e = ent(); return (e && e.castName && this.castDefs[e.castName]) || null; };
     return {
-      title: (c && c.title) || (() => this._name(species())),
+      title: (c && c.title) || (() => { const cc = asCast(); return (cc && cc.title) || this._name(species()); }),
       sprite: (c && c.sprite) || (() => this._spriteFor(species())),
       scale: (c && c.scale) || 1,
-      sound: (c && c.sound) || (() => this._soundFor(species())),
+      sound: (c && c.sound) || (() => { const cc = asCast(); return (cc && cc.sound) || this._soundFor(species()); }),
       pitch: (c && c.pitch) || 1,
       entities: () => { const e = ent(); return e ? [e] : []; }
     };
@@ -821,7 +869,9 @@ class ChapterRunner {
     return text
       .replace(/\{species\}/g, () => this._name(this.subjectSpecies(ev) || this._extinctKey))
       .replace(/\{chapter\}/g, () => (this.cur ? this.cur.title : ''))
-      .replace(/\{year\}/g, () => String(this.yearNow()));
+      .replace(/\{year\}/g, () => String(this.yearNow()))
+      // {$name}: a value a function action left in runner.vars (a year's tally, a name).
+      .replace(/\{\$(\w+)\}/g, (_, k) => (this.vars[k] != null ? String(this.vars[k]) : ''));
   }
 
   // The tutorial passes every event here first (TutorialManager.fireEvent): counted at once (a
@@ -831,6 +881,8 @@ class ChapterRunner {
     if (this._ended || !CHAPTER_EVENTS[type]) return;
     const ev = Object.assign({ name: type }, data);
     this._count(ev);
+    // What the player's own hand did goes in the record, with the second it was done.
+    if (CHAPTER_PLAYER_EVENTS.has(type)) this._log('player', type, (data && (data.type || data.speciesKey)) || '');
     if (type === 'season_change') this.seasonTurns++;
     this._seenLog.push({ name: type, t: this.game ? this.game.playTime : 0, ev });
     if (this._seenLog.length > 512) this._seenLog.shift();
@@ -858,6 +910,9 @@ class ChapterRunner {
     this._nests = this._counter('nests');
     this._adoptCast();
     this._resolveSites(this.level.sites);
+    // A journey level reads the campaign record as it starts: who is alive becomes story
+    // flags and words (mauri_campaign.js), so its reactions can say `if: { flag: 'papa_lost' }`.
+    if (this.level.journey && typeof CAMPAIGN !== 'undefined') CAMPAIGN.begin(this);
     let first = this.chapters[0] && this.chapters[0].id;
     // ?chapter=<id> starts the level there (the season clock isn't moved).
     const want = (typeof window !== 'undefined' && window.location)
@@ -907,6 +962,7 @@ class ChapterRunner {
 
     this._watchNests();
     this._watchCast();
+    this._updateWeather(CHAPTER_POLL);
     for (const rx of this.reactions) {
       if (!rx.when) continue;
       // A polled reaction fires as its condition turns true (or, a need with `for`, once it has
@@ -921,6 +977,8 @@ class ChapterRunner {
       rx.was = now;
       if (this._ended) return;
     }
+    this._updateCases();
+    if (this._ended) return;
     this._updateBeats();
     if (this._ended) return;
     this._checkGoals();
@@ -1019,7 +1077,7 @@ class ChapterRunner {
 
   // The goal's words with {n} (its live value) and {target} filled.
   _nameGoal(goal) {
-    const p = goal._g.progress, words = goal._g.def.name || goal.id;
+    const p = goal._g.progress, words = this.fill(goal._g.def.name || goal.id, null);
     if (!p) { goal.name = words; return; }
     let n;
     if (p.kind === 'count') n = this.countOf(p.what);
@@ -1078,6 +1136,63 @@ class ChapterRunner {
     rx.lastAt = this.game.playTime;
     this._log('reaction', rx.id, ev && ev.name);
     this._run(rx.actions, ev);
+    if (rx.until && (rx.hints.length || rx.solved)) {
+      this._cases.push({ rx, ev, t0: this.game.playTime, scope: this.scope(), rung: 0 });
+    }
+  }
+
+  // ---- Hint ladders ---------------------------------------------------------------------
+  // A reaction with `hints` and an `until` opens a CASE each time it fires: a problem the
+  // simulation has raised (an eagle on a moa, a storm blown out). Nothing is said at first:
+  // what the player can see is the clue. While `until` has not come true, each rung is said at
+  // its `after` time (a question, then the instruction). When `until` holds the case closes
+  // and the record keeps how far up the ladder it went, how long it took, and whether it ended
+  // the way `solved` describes (the player's own answer) or some other way. In a chapter marked
+  // `transfer: true` no rung is said at all: the stretch that tests what was learned.
+  // The record (caseLog, exported with the run) is the measure of the learner, as natural or
+  // forced beats are the measure of the stage.
+  _updateCases() {
+    const now = this.game.playTime, quiet = !!(this.cur && this.cur.def.transfer);
+    for (let i = this._cases.length - 1; i >= 0; i--) {
+      const c = this._cases[i], rx = c.rx, x = this._ctx(c.ev, c.scope);
+      // (A case is dropped as stale after two minutes; a slow problem, such as a riddle that
+      // takes a year to answer, says how long it may stand with `staleSec`.)
+      const done = rx.until(x), stale = now - c.t0 > (rx.def.staleSec || 120) * CHAPTER_FPS;
+      if (done || stale) {
+        this._cases.splice(i, 1);
+        // solved: it ended the way the player's own answer ends it. lost: it ended badly (the
+        // reaction's `lost`). passed: it went away some other way (the bird hid itself, the
+        // eagle turned elsewhere).
+        const outcome = stale && !done ? 'timed out'
+          : (rx.solved && rx.solved(x) ? 'solved' : (rx.lost && rx.lost(x) ? 'lost' : (rx.solved ? 'passed' : 'over')));
+        const subj = this.subject(c.ev);
+        const rec = { id: rx.id, t: Math.round(now / CHAPTER_FPS * 10) / 10, sec: Math.round((now - c.t0) / CHAPTER_FPS * 10) / 10,
+                      rung: c.rung, outcome, who: (subj && (subj.castName || subj.speciesKey)) || '',
+                      chapter: this.cur ? this.cur.id : '', transfer: quiet };
+        this.caseLog.push(rec);
+        const add = (k) => { this.counters[k] = (this.counters[k] || 0) + 1; };
+        add('cases'); if (outcome === 'solved') { add('solved'); if (c.rung === 0) add('unaided'); }
+        this._log('case', rx.id, `rung ${c.rung}, ${rec.sec}s, ${outcome}${quiet ? ', transfer' : ''}`);
+        this._emit('case_closed', { case: rx.id, rung: c.rung, outcome, sec: rec.sec, transfer: quiet });
+        continue;
+      }
+      if (!quiet && c.rung < rx.hints.length && now - c.t0 >= rx.hints[c.rung].after) {
+        this._run(rx.hints[c.rung].actions, c.ev);
+        c.rung++;
+        this._log('hint', rx.id, `rung ${c.rung}`);
+        if (this._ended) return;
+      }
+    }
+  }
+
+  // For the win card: how many of the problems with a "solved" ending the player answered
+  // before any hint was said, and (where the level has one) how the unprompted stretch went.
+  unaidedLine() {
+    const all = this.caseLog.filter(c => c.outcome === 'solved' || c.outcome === 'lost');
+    if (!all.length) return '';
+    const tr = all.filter(c => c.transfer), main = all.filter(c => !c.transfer);
+    const part = (list) => `${list.filter(c => c.outcome === 'solved' && c.rung === 0).length} of ${list.length}`;
+    return tr.length ? `Without a hint: ${part(main)}. On your own at the end: ${part(tr)}.` : `Without a hint: ${part(main)}.`;
   }
 
   _run(actions, ev) {
@@ -1198,14 +1313,59 @@ class ChapterRunner {
 
   // { which, hunger, watch, grace }: set their hunger (0 to 100; they hunt past about 45), move
   // their patrol over a place (they fly there and circle it), or give a "last chance" of `grace`
-  // seconds (it chases but can't strike: HaastsEagle.tutorialGraceTimer).
+  // seconds (it chases but can't strike: HaastsEagle.tutorialGraceTimer). With `away` (seconds)
+  // it flies off the land on an errand and comes back to its patrol (HaastsEagle.sendAway);
+  // `hunger` is then its hunger as it comes back.
   eaglePressure(spec, ev) {
     const p = spec.watch ? this.point(spec.watch, ev) : null;
     for (const e of this._eagles(spec, ev)) {
+      // hold { at, from | awayFrom, dist = 200, r = 22, place = true }: the story's entrance, as
+      // module 0's. It is set down `dist` from `at` toward `from` (its lookout), or away from
+      // `awayFrom` (the low ground), and circles there, out of the
+      // hunt and no hungrier, until a `release`. Then `hunger` and `watch` apply as usual.
+      if (spec.hold && e.holdOver) {
+        const q = this._holdPoint(spec.hold, ev);
+        if (!q) { this._log('issue', 'eagle', `no place "${spec.hold.at}"`); continue; }
+        if (spec.hold.place !== false) { e.pos.set(q.x, q.y); e.vel.mult(0); }
+        e.holdOver(q.x, q.y, spec.hold.r || 22);
+        if (spec.hunger != null) e.hunger = Math.max(0, Math.min(e.maxHunger, spec.hunger));
+        this._log('eagle_hold', typeof spec.hold.at === 'string' ? spec.hold.at : '');
+        continue;
+      }
+      if (spec.release && e.release) e.release();
+      // shun { species, sec }: it passes over that kind for `sec` seconds (0: no longer), as an
+      // eagle that has given them up does (HaastsEagle._shunSpecies). Tile 1 keeps the herd off
+      // its first hunt, so the family is the one it tries for.
+      if (spec.shun) {
+        e._shunSpecies = spec.shun.sec ? spec.shun.species : null;
+        e._shunUntil = (e._clock || 0) + (spec.shun.sec || 0) * CHAPTER_FPS;
+      }
+      if (spec.away && e.sendAway) {
+        if (p) e._relocateTerritory(p.x, p.y);
+        e.sendAway(spec.away, { hungerBack: spec.hunger });
+        this._log('eagle_away', `${spec.away}`);
+        continue;
+      }
       if (spec.hunger != null) e.hunger = Math.max(0, Math.min(e.maxHunger, spec.hunger));
       if (p) e._relocateTerritory(p.x, p.y);
       if (spec.grace) e.tutorialGraceTimer = spec.grace * CHAPTER_FPS;
     }
+  }
+
+  // Where an eagle is held (eaglePressure's hold): `dist` from `at` toward `from`, or straight
+  // away from `awayFrom`, kept on the land. With neither, over `at` itself.
+  _holdPoint(h, ev) {
+    const a = this.point(h.at, ev);
+    if (!a) return null;
+    const t = this.game.terrain, m = 24;
+    const f = h.from ? this.point(h.from, ev) : null, o = !f && h.awayFrom ? this.point(h.awayFrom, ev) : null;
+    let dx, dy;
+    if (f) { dx = f.x - a.x; dy = f.y - a.y; }
+    else if (o) { dx = a.x - o.x; dy = a.y - o.y; }
+    else return { x: a.x, y: a.y };
+    const d = Math.hypot(dx, dy) || 1, want = h.dist ?? 200;
+    return { x: Math.max(m, Math.min(t.mapWidth - m, a.x + dx * want / d)),
+             y: Math.max(m, Math.min(t.mapHeight - m, a.y + dy * want / d)) };
   }
 
   // { at, which, sec }: an eagle (the nearest, unless `which` says) goes for a named bird for
@@ -1217,6 +1377,7 @@ class ChapterRunner {
     if (!target) { this._log('issue', 'aim', 'nothing to aim at'); return; }
     const [e] = this._eagles(Object.assign({ which: 'nearest' }, spec, { near: target }), ev);
     if (!e) return;
+    if (e.release) e.release();   // (a held eagle is let go to make its run)
     e.aimAt = target;
     e.aimTimer = (spec.sec || 20) * CHAPTER_FPS;
     e._relocateTerritory(target.pos.x, target.pos.y);
@@ -1228,7 +1389,7 @@ class ChapterRunner {
 
   eagleHungerMax() {
     let h = -1;
-    for (const e of (this.sim.eagles || [])) if (e.alive && e.hunger > h) h = e.hunger;
+    for (const e of (this.sim.eagles || [])) if (e.alive && !e._away && e.hunger > h) h = e.hunger;   // (not one off the land)
     return h;
   }
 
@@ -1282,8 +1443,10 @@ class ChapterRunner {
     return site;
   }
 
-  // { species, at, count = 1, incubationSec }: an egg (or a clutch) at a place. Scripted, so it
-  // is not counted as laid (the player's and the birds' own eggs are).
+  // { species, at, count = 1, incubationSec, scene }: an egg (or a clutch) at a place. Scripted,
+  // so it is not counted as laid (the player's and the birds' own eggs are). `scene` (true, or
+  // { sec = 3 }): when its time is up it hatches as the modules' eggs did, rocking and cracking
+  // for a few seconds with the camera close in, and leaves its shell (Game.onHatchScene).
   lay(spec, ev) {
     const p = this.point(spec.at, ev);
     if (!p || !this.sim.addEggAt) { this._log('issue', 'lay', `no place "${spec.at}"`); return; }
@@ -1291,7 +1454,8 @@ class ChapterRunner {
     for (let i = 0; i < n; i++) {
       const a = random(TWO_PI), d = n > 1 ? random(2, 10) : 0;
       this.sim.addEggAt(p.x + Math.cos(a) * d, p.y + Math.sin(a) * d, spec.species,
-        { incubationFrames: spec.incubationSec != null ? spec.incubationSec * CHAPTER_FPS : undefined });
+        { incubationFrames: spec.incubationSec != null ? spec.incubationSec * CHAPTER_FPS : undefined,
+          hatchScene: spec.scene ? (spec.scene === true ? {} : spec.scene) : null });
     }
     this._log('lay', spec.species, `${n}`);
   }
@@ -1335,6 +1499,73 @@ class ChapterRunner {
       n++;
     }
     this._log('fade', type, `${n}`);
+  }
+
+  // Whether something that hides a moa from the eagle (a storm, a fern shelter) stands over `e`
+  // right now. Fully hiding cover only: a partial one (eagleSpotFrac) still lets it be seen.
+  coveredNow(e) {
+    if (!e || !e.pos) return false;
+    for (const p of this.sim.placeables) {
+      if (!p.alive || !p.def || !p.def.blocksEagleVision || p.def.eagleSpotFrac > 0) continue;
+      if (p.isInRange(e.pos)) return true;
+    }
+    return false;
+  }
+
+  // ---- The weather on the tops ------------------------------------------------------------
+  // A journey level's storms gather by themselves on the high ground (level.weather; on by
+  // default where the level has the Storm): now and then, while fewer than `max` storms stand
+  // anywhere, a new one swells up on one of the highest spots, away from the other storms and
+  // from the cast. The family lives lower down for half the year, so the player brings the
+  // weather down to them. Each wears out over lifeSec (winterLifeSec in winter); moving one
+  // gives it half again its time left (Game.tryDropMove). It is the weather's (p.natural): a
+  // storm the player calls is counted apart.
+  //   { everySec = 20, max = 3, lifeSec = 75, winterLifeSec = 40, firstSec = 8 }, or false.
+  _weatherCfg() {
+    if (this._weather !== undefined) return this._weather;
+    const w = this.level.weather;
+    const has = !!(this.game && this.game.activePlaceables && this.game.activePlaceables.Storm);
+    this._weather = (w === false || !has || (!w && !this.level.journey)) ? null
+      : Object.assign({ everySec: 20, max: 3, lifeSec: 75, winterLifeSec: 40, firstSec: 8 }, w || {});
+    return this._weather;
+  }
+
+  _updateWeather(frames) {
+    const W = this._weatherCfg();
+    if (!W) return;
+    this._weatherT = (this._weatherT == null ? (W.everySec - W.firstSec) * CHAPTER_FPS : this._weatherT) + frames;
+    if (this._weatherT < W.everySec * CHAPTER_FPS) return;
+    const storms = this.sim.placeables.filter(p => p.alive && p.type === 'Storm');
+    if (storms.length >= W.max) return;   // (it tries again next poll: a gap opens when one blows out)
+    this._weatherT = 0;
+    // (The storm's size from the toolbar, else from the level: a chapter with an empty toolbar,
+    // such as a walk off the land at the end, must not stop the weather with an error.)
+    const def = (this.game.activePlaceables && this.game.activePlaceables.Storm) ||
+                (this.level.availablePlaceables && this.level.availablePlaceables.Storm) || {};
+    const t = this.game.terrain, R = def.radius || 64;
+    const away = Object.values(this.castEnts).filter(e => e && e.alive).map(e => e.pos);
+    const clear = (q) => storms.every(p => Math.hypot(p.pos.x - q.x, p.pos.y - q.y) > R * 1.6) &&
+                         away.every(c => Math.hypot(c.x - q.x, c.y - q.y) > R * 1.5);
+    const W0 = t.mapWidth, H0 = t.mapHeight, spots = [];
+    for (let i = 0; i < 260; i++) {
+      const q = { x: random(R * 0.6, W0 - R * 0.6), y: random(R * 0.6, H0 - R * 0.6) };
+      if (t.canPlace(q.x, q.y) && clear(q)) spots.push({ q, h: t.getElevationAt(q.x, q.y) });
+    }
+    if (!spots.length) return;
+    // One of the highest few (not always the one peak).
+    spots.sort((a, b) => b.h - a.h);
+    const q = spots[Math.floor(random(Math.min(6, spots.length)))].q;
+    const st = this.sim.addStandingStorm(q.x, q.y, R);
+    st.natural = true;
+    st.swellTo(R * 0.3, 1);
+    st.swellTo(R, 3 * CHAPTER_FPS);
+    const winter = this.game.seasonManager && this.game.seasonManager.currentKey === 'winter';
+    st.fadeOver(winter ? W.winterLifeSec : W.lifeSec, false);
+    this._log('weather', 'Storm', `gathered at ${Math.round(q.x)},${Math.round(q.y)}`);
+    if (!this._weatherSaid) {
+      this._weatherSaid = true;
+      this.game.addNotification("A storm is gathering on the tops. Press and hold it to bring it down.", 'info');
+    }
   }
 
   // Open the Field Guide at an entry (there are no locks: every entry is always there).
@@ -1563,7 +1794,7 @@ class ChapterRunner {
     const at = this.point(spec.on, ev);
     if (!at || !this.moments) return;
     this.moments.start({
-      kind: 'story', dur: (spec.sec || 2.5) * CHAPTER_FPS, zoom: spec.zoom,
+      kind: 'story', dur: (spec.sec || 3) * CHAPTER_FPS, zoom: spec.zoom,
       text: this.fill(spec.text || '', ev),
       at: () => (e && e.pos) ? e.pos : at
     });
@@ -1632,6 +1863,9 @@ class ChapterRunner {
       const e = this.castEnts[name];
       if (!e || e.alive) continue;
       this.castEnts[name] = null;
+      // A named bird that walked off the land (the journey's travel: CHAPTERS_KIT.walkOff) is
+      // not lost: it is on its way to the next tile.
+      if (e.causeOfDeath === 'dispersed') { (this.walked || (this.walked = {}))[name] = true; this._log('cast_left', name); continue; }
       // How it died, when the simulation says (Moa.causeOfDeath: 'eagle' or 'starved'), so a
       // lesson can answer each differently (the `cause` filter).
       const cause = e.causeOfDeath || (e.hunger >= (e.maxHunger || 100) ? 'starved' : 'unknown');
@@ -1667,6 +1901,8 @@ class ChapterRunner {
     g.state = GAME_STATE.WON;
     if (audioManager) audioManager.playWin();
     PROGRESS.completeLevel(this.level.id, computeLevelScore(this.level, g._scoreContext()));
+    // A journey level hands on what its `outcome` block lists (mauri_campaign.js).
+    if (this.level.journey && typeof CAMPAIGN !== 'undefined') CAMPAIGN.finish(this);
     this._log('won', this.cur ? this.cur.id : '');
   }
 

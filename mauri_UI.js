@@ -324,6 +324,10 @@ class GameUI {
     this.layout.fsBtnX    = _btnOX + _btnBs + _btnGap; this.layout.fsBtnY    = _btnOY;
     this.layout.pauseBtnX = _btnOX;                    this.layout.pauseBtnY = _btnOY + _btnBs + _btnGap;
     this.layout.ffBtnX    = _btnOX + _btnBs + _btnGap; this.layout.ffBtnY    = _btnOY + _btnBs + _btnGap;
+    // The zoom pair (levels with the player's camera) sits under that square, over the top-left
+    // corner of the land, in the same spot docked or fullscreen: "-" then "+".
+    this.layout.zoomOutX = _btnOX; this.layout.zoomInX = _btnOX + _btnBs + _btnGap;
+    this.layout.zoomY = _btnOY + (_btnBs + _btnGap) * 2;
 
     // Fullscreen overlay HUD layout: the top-bar essentials, fullscreen/pause buttons and
     // goals panel sit exactly where they do in the docked full UI, so nothing jumps when
@@ -451,6 +455,9 @@ class GameUI {
   // ==========================================
 
   handleClick(mx, my) {
+    // The zoom pair and the following chip sit in the same spot docked or fullscreen.
+    if (this.handleZoomClick(mx, my)) return true;
+
     // Fullscreen overlay HUD gets its own hit-testing
     if (this.config.fullscreen) {
       return this.handleFullscreenClick(mx, my);
@@ -496,6 +503,7 @@ class GameUI {
   pointerOverHud(mx, my) {
     const enc = this.game.encyclopedia;
     if (enc && enc.open && enc.pointerOverPanel(mx, my)) return true;
+    if (this._overZoomControls(mx, my)) return true;
     if (!this.config.fullscreen) return false;
 
     const fs = this.layout.fs, bs = fs.btnSize;
@@ -751,6 +759,75 @@ class GameUI {
 
     // Sidebar content
     this.renderSidebar();
+
+    // The player's camera controls, over the corner of the land
+    this.renderZoomControls();
+  }
+
+  // ==========================================
+  // THE PLAYER'S CAMERA: the zoom pair and the "following" chip (levels with userCamera)
+  // ==========================================
+  _zoomControlsShown() {
+    const g = this.game;
+    return !!(g && g.currentLevel && g.currentLevel.userCamera && !g.module &&
+              (g.state === GAME_STATE.PLAYING || g.state === GAME_STATE.PAUSED));
+  }
+
+  renderZoomControls() {
+    this._followChipBounds = null;
+    if (!this._zoomControlsShown()) return;
+    const g = this.game, size = this.layout.pauseBtnSize, y = this.layout.zoomY;
+    const goal = g._zoomGoal ? g._zoomGoal() : 1;
+    const top = USER_ZOOMS[USER_ZOOMS.length - 1];
+    push();
+    for (const [x, sign, dead] of [[this.layout.zoomOutX, -1, goal <= 1.01], [this.layout.zoomInX, 1, goal >= top - 0.01]]) {
+      const hov = !dead && mouseX > x && mouseX < x + size && mouseY > y && mouseY < y + size;
+      if (hov) { fill(50, 85, 60); stroke(100, 160, 120); strokeWeight(2); }
+      else { fill(35, 55, 40, dead ? 120 : 215); stroke(70, 110, 80, dead ? 120 : 255); strokeWeight(1); }
+      rect(x, y, size, size, 10);
+      noStroke();
+      fill(180, 200, 190, dead ? 90 : 255);
+      const cx = x + size / 2, cy = y + size / 2;
+      rect(cx - 14, cy - 3, 28, 6, 2);                    // the bar of "-" and "+"
+      if (sign > 0) rect(cx - 3, cy - 14, 6, 28, 2);      // ...and the upright of "+"
+    }
+    // Following: the selected animal's name, and a cross to let it go.
+    const e = g._selected;
+    if (e && e.alive) {
+      const first = [].concat(e.describe ? e.describe(g) : [])[0] || 'an animal';
+      const label = `${g._follow ? 'Following' : 'Selected'}: ${String(first).split(' · ')[0]}`;
+      textSize(15 * (typeof SMALL_TEXT_BUMP !== 'undefined' ? SMALL_TEXT_BUMP : 1));
+      textAlign(LEFT, CENTER);
+      const w = textWidth(label) + 52, h = 38, x = this.layout.zoomOutX, cy = y + size + 10;
+      const hov = mouseX > x && mouseX < x + w && mouseY > cy && mouseY < cy + h;
+      fill(hov ? 50 : 35, hov ? 85 : 55, hov ? 60 : 40, 225); stroke(120, 150, 110); strokeWeight(1);
+      rect(x, cy, w, h, 10);
+      noStroke(); fill(255, 240, 170);
+      text(label, x + 12, cy + h / 2 + 1);
+      stroke(220, 220, 205); strokeWeight(2.5);
+      const kx = x + w - 20, ky = cy + h / 2;
+      line(kx - 6, ky - 6, kx + 6, ky + 6); line(kx - 6, ky + 6, kx + 6, ky - 6);
+      this._followChipBounds = { x, y: cy, w, h };
+    }
+    pop();
+  }
+
+  // A click on the zoom pair or the chip (docked and fullscreen alike).
+  handleZoomClick(mx, my) {
+    if (!this._zoomControlsShown()) return false;
+    const g = this.game, size = this.layout.pauseBtnSize, y = this.layout.zoomY;
+    if (this._inRect(mx, my, this.layout.zoomOutX, y, size, size)) { g.zoomStep(-1); return true; }
+    if (this._inRect(mx, my, this.layout.zoomInX, y, size, size)) { g.zoomStep(1); return true; }
+    const b = this._followChipBounds;
+    if (b && this._inRect(mx, my, b.x, b.y, b.w, b.h)) { g.clearSelection(); return true; }
+    return false;
+  }
+
+  _overZoomControls(mx, my) {
+    if (!this._zoomControlsShown()) return false;
+    const size = this.layout.pauseBtnSize, y = this.layout.zoomY, b = this._followChipBounds;
+    return this._inRect(mx, my, this.layout.zoomOutX, y, size, size) || this._inRect(mx, my, this.layout.zoomInX, y, size, size) ||
+           !!(b && this._inRect(mx, my, b.x, b.y, b.w, b.h));
   }
 
   // ==========================================
@@ -797,6 +874,7 @@ class GameUI {
     this.renderFullscreenButton(fs.fsBtnX, fs.fsBtnY);
     this.renderPauseButton(fs.pauseBtnX, fs.pauseBtnY);
     this.renderFastForwardButton(fs.ffBtnX, fs.ffBtnY);
+    this.renderZoomControls();
 
     // Extend the goals panel's own green backing 12px past the content on
     // every side (same colour as the panel body, so it reads as one panel).
@@ -1036,7 +1114,10 @@ class GameUI {
     const g = this.game;
     // The gain/sec line: Free Play's ecosystem income, or a module director's own steady
     // income (the Free Play years: the families plus every bird in the forest).
-    const modRate = (g && g.module && g.module.mauriPerSec) ? g.module.mauriPerSec() : null;
+    // (...or a small-herd level's trickle: mechanics.ecosystemIncome.)
+    const _eco = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS && LEVEL_MECHANICS.ecosystemIncome) || null;
+    const modRate = (g && g.module && g.module.mauriPerSec) ? g.module.mauriPerSec()
+      : ((_eco && g && g.ecosystemIncomePerSec) ? g.ecosystemIncomePerSec(_eco) : null);
     const showGain = modRate != null || !!(g && g.currentLevel && g.currentLevel.endless && g.ecosystemStats);
     let gainStr = '';
     if (showGain) {

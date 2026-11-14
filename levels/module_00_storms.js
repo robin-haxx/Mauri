@@ -13,7 +13,7 @@
 //           a tarn. The family walks from storm to storm, so drag the storms into a path. The
 //           eagle attacks twice; the second time their storm breaks up, the Storm tool
 //           unlocks, and a new storm is needed. Birds caught in the open run.
-//   winter  They stay by the tarn. Storms fade away, so new ones have to be called, and the
+//   winter  They stay by the lake. Storms fade away, so new ones have to be called, and the
 //           eagle keeps coming back.
 //   spring  They walk back up to the nest; the Storm tool has no recharge, so a path of
 //           storms can be called. Getting home wins, and "Continue" walks them north off the

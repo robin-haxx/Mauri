@@ -53,7 +53,7 @@ const scene = sceneWith({
   chick:   { title: "Pukepuke",  sprite: 'upland_moa',   who: (d) => d.chick,  sound: 'chick', scale: 0.55 }
 });
 
-// The way down to the wharariki, lit up; and the wharariki growing by the tarn.
+// The way down to the wharariki, lit up; and the wharariki growing by the lake.
 const theWayDown = (game) => game.module && trail(game, game.module.sites.path);
 const wharariki = (d) => d.wharariki || [];
 // A line said while the way down is talked about: the trail lit under whoever is speaking
@@ -196,7 +196,7 @@ const TIPS = Object.assign({},
       urgency: 'high'
     },
 
-    // ==== WINTER: by the tarn ================================================================
+    // ==== WINTER: by the lake ================================================================
     // Storms fade away in winter: call new ones. Not if one was just called (still recharging):
     // the player already has, and it couldn't be called again until the recharge is done.
     winter: placeBanner('winter', onBeat('winter', (d, game) => !recharging(game)),

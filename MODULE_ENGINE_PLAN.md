@@ -453,9 +453,11 @@ modules share one engine and the modules can grow into it.
 - `loop` on the chapter list (endless: never wins) and the mast goal as a branching goal.
 - Then `_beginFreeplayYear`'s schedule-reading shrinks to those systems.
 
-### Phase 6: new modules **[later]**
-Module 2 (YEARS_PLAN's planned food-security and moa–eagle module) and on, built as chapters.
-Whatever they need that the toolboxes lack is the next set of tools.
+### Phase 6: new modules **[planned 2026-11-13, not built]**
+The owner's outline for the journey replaces the earlier idea of a single Module 2. It adds
+five lessons (tiles 3 to 7), three free plays (4f, 6f and 7f) and a campaign record that
+carries the family and the herds from one level to the next. The plan, with its build order,
+the engine work it needs and the decisions still open, is in `CAMPAIGN_PLAN.md`.
 
 ### Phase 7: tooling **[later]**
 - Season-aligned jumps, and a snapshot at each chapter start to restart from.
@@ -537,20 +539,35 @@ What the review found, in one line each:
   are also too few to quote win counts from.
 
 The proposals, in order (detail in §16.6):
-1. **[proposed]** One rulebook (`rules: 'tops'`) and a shared lesson kit, proven to change
-   nothing by matching replay hashes.
-2. **[proposed]** A hint ladder (clue, then a question, then the instruction), the player's
-   actions in the record, a transfer stretch per lesson, and the dial split into three axes
-   (what is guaranteed, how much is said, how hard the eagle presses).
-3. **[proposed]** A new Endless variant on the shared rules, beside the existing one.
-4. **[proposed]** The family on the breeding calendar and visibly growing; floors replaced by
-   visible arrivals; powers named apart from the world's rules; Field Guide entries marked
-   known, inferred or imagined.
-5. **[proposed]** A curriculum map (`teaches` / `assumes` and a coverage tool that prints the
-   untaught rules of any level) and an optional before-and-after question.
-6. **[proposed]** Batches of twenty or more seeds reported as ranges; and either one named
-   research machine for replays, or the simulation's own sine, cosine and angle functions so a
-   run is the same everywhere.
+1. **[partly done 2026-11-11]** A shared lesson kit (`levels/_chapters_kit.js`), used by the
+   new Clues sketches. Still **[proposed]**: a named rulebook (`rules: 'tops'`) and moving the
+   Guided and Open sketches onto the kit. They were left as they are on purpose, so the three
+   sketches can be compared; their replay hashes are unchanged.
+2. **[done 2026-11-11, as a third sketch]** The hint ladder (`hints` / `until` / `solved` /
+   `lost` on a reaction; cases recorded with the rung reached), the player's actions in the
+   record, and an unprompted last season (`transfer: true`), built as a **Clues** sketch of each
+   lesson beside Guided and Open. Still **[proposed]**: the dial split into three named axes
+   that a study can change one at a time from the address bar.
+3. **[done 2026-11-11]** A new Endless variant on the shared rules, beside the existing one:
+   `levels/chapters_endless.js` ("The Tops"). Built on the chapters engine, so it is also the
+   first step of phase 5. One persistent land in place of the world tour; every moa on a
+   breeding calendar and growing by the year; arrivals, departures and a returning eagle in
+   place of floors; income and goals sized for small herds; the player's camera (zoom, pan,
+   follow, hunt view). Two flaws in the eagle's wind-up were found and fixed on the way, which
+   also makes the lessons fairer (`MISTAKES.md`). How six kinds of stand-in player fare, and
+   the dials that want the owner's judgement, are in `CHAPTERS_MODULES.md`.
+4. **[partly done 2026-11-11]** In the Clues sketches and the new Endless variant the family
+   is on the breeding calendar and visibly growing, and floors are replaced by visible
+   arrivals. Still **[proposed]**: powers named apart from the world's rules, and Field Guide
+   entries marked known, inferred or imagined.
+5. **[partly done 2026-11-11]** The curriculum map: a `teaches` list on each lesson and
+   `tools/coverage.js`, which prints the untaught rules of any level. Still **[proposed]**: the
+   optional before-and-after question.
+6. **[partly done 2026-11-11]** Stand-in players of different speed and habit in
+   `tools/batch.js`, results reported as ranges; `tools/replaydiff.js`, which shows where two
+   machines' runs of one seed part and whether the browser's arithmetic differs. Still
+   **[proposed]**: twenty-seed batches as routine, and the simulation's own trigonometry if the
+   comparison shows that is the cause.
 
 On the framework itself the review recommends one rulebook with several framings, and each
 lesson ending in one or two unprompted situations; see §16.5 for the options weighed.

@@ -284,3 +284,50 @@ fixed; **[process]** a testing trap, not a bug; **[rule]** a design guardrail, b
   Before a replay is promised across machines, run one seed on two of them and compare the
   hash `tools/batch.js` prints. Until that passes, research replays are made on the machine
   that made the original, and results are reported over many seeds as a range.
+
+## [fixed] A bird could be struck with no wind-up of its own: two gaps in the eagle's telegraph
+
+- **What happened.** In the endless variant a stand-in player with a five-second reaction lost
+  named birds in the first autumn, although the eagle's wind-up was six seconds. Two traces
+  showed why. In one the eagle locked onto Papa with a full six seconds, lost sight of him,
+  and locked onto another bird with the 2.5 seconds left on the same timer. In the other it
+  was winding up on one bird when Mama walked out of cover beside it; it turned to her, the
+  nearer bird, and struck at once.
+- **Root cause.** The wind-up (`tutorialGraceTimer`) was only started when it stood at zero, so
+  a second lock inherited the first lock's leftover time. And a change to a nearer target
+  mid-chase was deliberately not a fresh lock (to stop a herd's flicker resetting the wind-up
+  for ever), so the new bird got no wind-up at all.
+- **Rule.** Under `eagleTelegraph` the eagle commits to the bird it picked for as long as it
+  can see it and it is in range, so there is no flicker to guard against; any change of target
+  is then a fresh hunt, with the full wind-up and the `eagle_hunting` event on that bird.
+  Nothing a level calls a focus animal may be struck without a wind-up on it. Test it with a
+  stand-in that reacts slower than the wind-up is long minus a second: `tools/batch.js --player slow`.
+  `mauri_eagle.js`.
+
+## [fixed] A rule written for one level changed every level; the replay hashes caught it
+
+- **What happened.** After the endless variant was built, the old Endless level and Level 2 no
+  longer replayed to their recorded hashes; Level 2's seeded run even ended in a loss it had
+  not had.
+- **Root cause.** "A hen and her young stand close" (no separation push between a moa and its
+  mother) was written straight into `Moa.applySeparation`, and every hatchling now knows its
+  mother, so it applied in every level. Every other change in that batch was behind a flag;
+  this one line was not.
+- **Rule.** Before changing shared simulation code, record a seeded replay hash for a level of
+  each kind that should not change (`tools/batch.js` prints it), and compare afterwards. A new
+  behaviour reads its flag even when it "can't matter" elsewhere. The hashes hold on one machine
+  and browser only (see the replay entry above), which is all this check needs.
+
+## [fixed] A courted hen laid out of season's turn; a flock overshot its cap
+
+- **What happened.** With every moa on a breeding calendar, hens still laid several eggs a
+  year, and the upland moa went from four to nine in one year. Kea, capped at six, reached ten.
+- **Root cause.** The calendar's "not again until her next year" was checked only on the bird
+  that starts a courtship (`isReadyToMate`). A cock in season could court a hen who had already
+  laid, and `canBeMate` (the check on the bird courted) knew nothing of the calendar. For the
+  birds, the flock cap was tested before laying, so four hens under the cap each laid a full
+  clutch at once.
+- **Rule.** A limit on breeding is asked of both partners (`Moa._calendarAllows`), and a cap on
+  numbers counts the eggs already in the nest (`Kereru._tryReproduce`, where the level sets
+  `birdMaxPopulation`). The first of these also tightens the five-year lesson's giant moa, which
+  could be courted out of turn the same way.

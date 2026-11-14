@@ -1,0 +1,326 @@
+seed,level,sketch,chapter,time_s,year,season,upland_moa,south_island_giant_moa,other_moa,total_moa,eagles,eggs,n_kea,n_kaka,n_kokako,placed_patotara,placed_Storm,event
+3,chapters_freeplay_clues,Clues,summer,0,1,summer,0,6,0,6,1,1,4,4,4,0,0,start
+3,chapters_freeplay_clues,Clues,summer,0,1,summer,0,6,0,6,1,1,4,4,4,0,0,reaction:stage:chapter_start
+3,chapters_freeplay_clues,Clues,summer,0,1,summer,0,6,0,6,1,1,4,4,4,0,0,nest:nestA:homeA
+3,chapters_freeplay_clues,Clues,summer,0,1,summer,0,6,0,6,1,1,4,4,4,0,0,nest:nestB:homeB
+3,chapters_freeplay_clues,Clues,summer,0,1,summer,2,6,0,8,1,1,4,4,4,0,0,spawn:upland_moa:2
+3,chapters_freeplay_clues,Clues,summer,0,1,summer,4,6,0,10,1,1,4,4,4,0,0,spawn:upland_moa:2
+3,chapters_freeplay_clues,Clues,summer,0,1,summer,4,6,0,10,1,1,4,4,4,0,0,cast:mama:adopted
+3,chapters_freeplay_clues,Clues,summer,0,1,summer,4,6,0,10,1,1,4,4,4,0,0,cast:papa:adopted
+3,chapters_freeplay_clues,Clues,summer,0,1,summer,4,6,0,10,1,1,4,4,4,0,0,cast:friendMama:adopted
+3,chapters_freeplay_clues,Clues,summer,0,1,summer,4,6,0,10,1,1,4,4,4,0,0,cast:friendPapa:adopted
+3,chapters_freeplay_clues,Clues,summer,0,1,summer,4,6,0,10,1,2,4,4,4,0,0,lay:upland_moa:1
+3,chapters_freeplay_clues,Clues,summer,0,1,summer,4,6,0,10,1,3,4,4,4,0,0,lay:upland_moa:1
+3,chapters_freeplay_clues,Clues,summer,0,1,summer,4,6,0,10,1,3,4,4,4,0,0,place:Storm:tops
+3,chapters_freeplay_clues,Clues,summer,0,1,summer,4,6,0,10,1,3,4,4,4,0,0,place:Storm:lookout
+3,chapters_freeplay_clues,Clues,summer,0,1,summer,4,6,0,10,1,3,4,4,4,0,0,place:waterhole:tarn
+3,chapters_freeplay_clues,Clues,summer,10,1,summer,4,6,0,10,1,3,4,4,4,0,0,sample
+3,chapters_freeplay_clues,Clues,summer,13.2,1,summer,4,6,0,10,1,3,4,4,4,0,0,reaction:raid_failed:nest_raid
+3,chapters_freeplay_clues,Clues,summer,18.1,1,summer,4,6,0,10,1,3,4,4,4,0,0,reaction:hungry_eagle:when
+3,chapters_freeplay_clues,Clues,summer,20,1,summer,4,6,0,10,1,3,4,4,4,0,0,sample
+3,chapters_freeplay_clues,Clues,summer,26.7,1,summer,6,6,0,12,1,1,4,4,4,0,0,reaction:hatch_pukepuke:egg_hatched
+3,chapters_freeplay_clues,Clues,summer,26.7,1,summer,6,6,0,12,1,1,4,4,4,0,0,moment:$moa:Pukepuke has hatched!
+3,chapters_freeplay_clues,Clues,summer,26.7,1,summer,6,6,0,12,1,1,4,4,4,0,0,cast:pukepuke:adopted
+3,chapters_freeplay_clues,Clues,summer,26.7,1,summer,6,6,0,12,1,1,4,4,4,0,0,reaction:hatch_koukou:egg_hatched
+3,chapters_freeplay_clues,Clues,summer,26.7,1,summer,6,6,0,12,1,1,4,4,4,0,0,moment:$moa:Koukou has hatched!
+3,chapters_freeplay_clues,Clues,summer,26.7,1,summer,6,6,0,12,1,1,4,4,4,0,0,cast:koukou:adopted
+3,chapters_freeplay_clues,Clues,summer,30,1,summer,6,6,0,12,1,0,4,4,4,0,0,sample
+3,chapters_freeplay_clues,Clues,summer,37.8,1,summer,6,5,0,11,1,0,4,4,4,0,0,reaction:giant_taken:moa_killed
+3,chapters_freeplay_clues,Clues,summer,37.8,1,summer,6,5,0,11,1,0,4,4,4,0,0,reaction:taken_again:moa_killed
+3,chapters_freeplay_clues,Clues,summer,40,1,summer,6,5,0,11,1,0,4,4,4,0,0,sample
+3,chapters_freeplay_clues,Clues,summer,45,1,autumn,6,5,0,11,1,0,4,4,4,0,0,goal:summer_through
+3,chapters_freeplay_clues,Clues,summer,45,1,autumn,6,5,0,11,1,0,4,4,4,0,0,close:summer:-> autumn
+3,chapters_freeplay_clues,Clues,autumn,45,1,autumn,6,5,0,11,1,0,4,4,4,0,0,chapter:autumn
+3,chapters_freeplay_clues,Clues,autumn,45,1,autumn,6,5,0,11,1,0,4,4,4,0,0,fade:Storm:2
+3,chapters_freeplay_clues,Clues,autumn,50,1,autumn,6,5,0,11,1,0,4,4,4,0,0,sample
+3,chapters_freeplay_clues,Clues,autumn,60,1,autumn,6,5,0,11,1,0,4,4,4,0,0,sample
+3,chapters_freeplay_clues,Clues,autumn,70,1,autumn,6,5,0,11,1,0,4,4,4,0,0,sample
+3,chapters_freeplay_clues,Clues,autumn,80,1,autumn,6,5,0,11,1,0,4,4,4,0,0,sample
+3,chapters_freeplay_clues,Clues,autumn,90,1,winter,6,5,0,11,1,0,4,4,4,0,0,reaction:storm_gone:placeable_expired
+3,chapters_freeplay_clues,Clues,autumn,90,1,winter,6,5,0,11,1,0,4,4,4,0,0,close:autumn:-> winter
+3,chapters_freeplay_clues,Clues,winter,90,1,winter,6,5,0,11,1,0,4,4,4,0,0,chapter:winter
+3,chapters_freeplay_clues,Clues,winter,90,1,winter,6,5,0,11,1,0,4,4,4,0,0,fade:Storm:0
+3,chapters_freeplay_clues,Clues,winter,90,1,winter,6,5,0,11,1,0,4,4,4,0,0,sample
+3,chapters_freeplay_clues,Clues,winter,90.7,1,winter,6,5,0,11,1,0,4,4,4,0,0,reaction:hungry_eagle:when
+3,chapters_freeplay_clues,Clues,winter,96,1,winter,6,5,0,11,1,0,4,4,4,0,0,hint:storm_gone:rung 1
+3,chapters_freeplay_clues,Clues,winter,100,1,winter,6,5,0,11,1,0,4,4,4,0,0,sample
+3,chapters_freeplay_clues,Clues,winter,100.3,1,winter,6,5,0,11,1,0,4,4,4,0,0,reaction:cover:eagle_hunting
+3,chapters_freeplay_clues,Clues,winter,102.4,1,winter,6,5,0,11,1,0,4,4,4,0,0,hint:cover:rung 1
+3,chapters_freeplay_clues,Clues,winter,104,1,winter,6,5,0,11,1,0,4,4,4,0,0,hint:storm_gone:rung 2
+3,chapters_freeplay_clues,Clues,winter,105.4,1,winter,6,5,0,11,1,0,4,4,4,0,0,hint:cover:rung 2
+3,chapters_freeplay_clues,Clues,winter,105.8,1,winter,6,5,0,11,1,0,4,4,4,0,0,reaction:winter_press:when
+3,chapters_freeplay_clues,Clues,winter,108.5,1,winter,6,5,0,11,1,0,4,4,4,0,0,player:placement:Storm
+3,chapters_freeplay_clues,Clues,winter,108.5,1,winter,6,5,0,11,1,0,4,4,4,0,0,reaction:cover_again:eagle_hunting
+3,chapters_freeplay_clues,Clues,winter,108.6,1,winter,6,5,0,11,1,0,4,4,4,0,0,case:cover:rung 2; 8.3s; solved
+3,chapters_freeplay_clues,Clues,winter,108.6,1,winter,6,5,0,11,1,0,4,4,4,0,0,case:storm_gone:rung 2; 18.6s; solved
+3,chapters_freeplay_clues,Clues,winter,110,1,winter,6,5,0,11,1,0,4,4,4,0,0,reaction:winter_food:when
+3,chapters_freeplay_clues,Clues,winter,110,1,winter,6,5,0,11,1,0,4,4,4,0,0,sample
+3,chapters_freeplay_clues,Clues,winter,112.6,1,winter,6,5,0,11,1,0,4,4,4,0,0,hint:cover_again:rung 1
+3,chapters_freeplay_clues,Clues,winter,115.6,1,winter,6,5,0,11,1,0,4,4,4,0,0,hint:cover_again:rung 2
+3,chapters_freeplay_clues,Clues,winter,117,1,winter,6,5,0,11,1,0,4,4,4,0,0,player:placeable_moved:Storm
+3,chapters_freeplay_clues,Clues,winter,117,1,winter,6,5,0,11,1,0,4,4,4,0,0,player:placement:wharariki
+3,chapters_freeplay_clues,Clues,winter,117,1,winter,6,5,0,11,1,0,4,4,4,0,0,reaction:gave_up:eagle_gave_up
+3,chapters_freeplay_clues,Clues,winter,117,1,winter,6,5,0,11,1,0,4,4,4,0,0,reaction:gave_up_again:eagle_gave_up
+3,chapters_freeplay_clues,Clues,winter,117.1,1,winter,6,5,0,11,1,0,4,4,4,0,0,case:cover_again:rung 2; 8.6s; solved
+3,chapters_freeplay_clues,Clues,winter,117.1,1,winter,6,5,0,11,1,0,4,4,4,0,0,goal:fed
+3,chapters_freeplay_clues,Clues,winter,120,1,winter,6,5,0,11,1,0,4,4,4,0,0,sample
+3,chapters_freeplay_clues,Clues,winter,130,1,winter,6,5,0,11,1,0,4,4,3,0,0,sample
+3,chapters_freeplay_clues,Clues,winter,135,1,spring,6,5,0,11,1,0,4,4,3,0,0,goal:winter_through
+3,chapters_freeplay_clues,Clues,winter,135,1,spring,6,5,0,11,1,0,4,4,3,0,0,close:winter:-> spring
+3,chapters_freeplay_clues,Clues,spring,135,1,spring,6,5,0,11,1,0,4,4,3,0,0,chapter:spring
+3,chapters_freeplay_clues,Clues,spring,135.1,1,spring,6,5,0,11,1,0,4,4,3,0,0,goal:home
+3,chapters_freeplay_clues,Clues,spring,137,1,spring,6,5,0,11,1,0,4,4,3,0,0,reaction:storm_gone:placeable_expired
+3,chapters_freeplay_clues,Clues,spring,137.4,1,spring,6,4,0,10,1,0,4,4,3,0,0,reaction:taken_again:moa_killed
+3,chapters_freeplay_clues,Clues,spring,140,1,spring,6,4,0,10,1,0,4,4,3,0,0,sample
+3,chapters_freeplay_clues,Clues,spring,143,1,spring,6,4,0,10,1,0,4,4,3,0,0,hint:storm_gone:rung 1
+3,chapters_freeplay_clues,Clues,spring,150,1,spring,6,4,0,10,1,1,4,4,3,0,0,sample
+3,chapters_freeplay_clues,Clues,spring,151,1,spring,6,4,0,10,1,1,4,4,3,0,0,hint:storm_gone:rung 2
+3,chapters_freeplay_clues,Clues,spring,155.2,1,spring,6,4,0,10,1,2,4,3,3,0,0,reaction:raid_won:nest_raid
+3,chapters_freeplay_clues,Clues,spring,160,1,spring,6,4,0,10,1,8,4,3,3,0,0,sample
+3,chapters_freeplay_clues,Clues,spring,170,1,spring,6,4,0,10,1,8,4,3,3,0,0,sample
+3,chapters_freeplay_clues,Clues,spring,180,2,summer,6,4,0,10,1,8,4,3,3,0,0,reaction:new_year:season_change
+3,chapters_freeplay_clues,Clues,spring,180,2,summer,6,4,0,10,1,8,4,3,3,0,0,close:spring:-> summer
+3,chapters_freeplay_clues,Clues,summer,180,2,summer,6,4,0,10,1,8,4,3,3,0,0,chapter:summer
+3,chapters_freeplay_clues,Clues,summer,180,2,summer,6,4,0,10,1,8,4,3,3,0,0,sample
+3,chapters_freeplay_clues,Clues,summer,182,2,summer,6,4,0,10,1,8,4,3,3,0,0,case:storm_gone:rung 2; 45s; passed
+3,chapters_freeplay_clues,Clues,summer,190,2,summer,6,4,0,10,1,8,4,3,3,0,0,sample
+3,chapters_freeplay_clues,Clues,summer,190.3,2,summer,6,4,0,10,1,8,4,3,3,0,0,reaction:hungry_eagle:when
+3,chapters_freeplay_clues,Clues,summer,193.2,2,summer,6,4,0,10,1,6,4,3,5,0,0,reaction:first_kokako:bird_hatched
+3,chapters_freeplay_clues,Clues,summer,193.2,2,summer,6,4,0,10,1,6,4,3,5,0,0,moment:$bird:A kōkako chick: spring
+3,chapters_freeplay_clues,Clues,summer,193.2,2,summer,6,4,0,10,1,6,4,3,5,0,0,reaction:bird_hatch_again:bird_hatched
+3,chapters_freeplay_clues,Clues,summer,196.7,2,summer,6,4,0,10,1,3,4,6,5,0,0,reaction:first_kaka:bird_hatched
+3,chapters_freeplay_clues,Clues,summer,196.7,2,summer,6,4,0,10,1,3,4,6,5,0,0,moment:$bird:Kākā chicks: spring
+3,chapters_freeplay_clues,Clues,summer,200,2,summer,6,4,0,10,1,0,4,9,5,0,0,sample
+3,chapters_freeplay_clues,Clues,summer,210,2,summer,6,4,0,10,1,0,4,9,5,0,0,sample
+3,chapters_freeplay_clues,Clues,summer,219.4,2,summer,6,3,0,9,1,0,4,9,5,0,0,reaction:taken_again:moa_killed
+3,chapters_freeplay_clues,Clues,summer,220,2,summer,6,3,0,9,1,0,4,9,5,0,0,sample
+3,chapters_freeplay_clues,Clues,summer,225,2,autumn,6,3,0,9,1,0,4,9,5,0,0,goal:summer_through
+3,chapters_freeplay_clues,Clues,summer,225,2,autumn,6,3,0,9,1,0,4,9,5,0,0,close:summer:-> autumn
+3,chapters_freeplay_clues,Clues,autumn,225,2,autumn,6,3,0,9,1,0,4,9,5,0,0,chapter:autumn
+3,chapters_freeplay_clues,Clues,autumn,225,2,autumn,6,3,0,9,1,0,4,9,5,0,0,fade:Storm:0
+3,chapters_freeplay_clues,Clues,autumn,230,2,autumn,6,3,0,9,1,0,4,9,5,0,0,sample
+3,chapters_freeplay_clues,Clues,autumn,240,2,autumn,6,3,0,9,1,0,4,9,5,0,0,sample
+3,chapters_freeplay_clues,Clues,autumn,250,2,autumn,6,3,0,9,1,0,4,9,5,0,0,sample
+3,chapters_freeplay_clues,Clues,autumn,260,2,autumn,6,3,0,9,1,0,4,9,5,0,0,sample
+3,chapters_freeplay_clues,Clues,autumn,270,2,winter,6,3,0,9,1,0,4,9,5,0,0,close:autumn:-> winter
+3,chapters_freeplay_clues,Clues,winter,270,2,winter,6,3,0,9,1,0,4,9,5,0,0,chapter:winter
+3,chapters_freeplay_clues,Clues,winter,270,2,winter,6,3,0,9,1,0,4,9,5,0,0,fade:Storm:0
+3,chapters_freeplay_clues,Clues,winter,270,2,winter,6,3,0,9,1,0,4,9,5,0,0,sample
+3,chapters_freeplay_clues,Clues,winter,272.2,2,winter,6,3,0,9,1,0,4,9,5,0,0,reaction:hungry_eagle:when
+3,chapters_freeplay_clues,Clues,winter,280,2,winter,6,3,0,9,1,0,4,9,5,0,0,sample
+3,chapters_freeplay_clues,Clues,winter,281.9,2,winter,6,3,0,9,1,0,4,9,5,0,0,reaction:cover_again:eagle_hunting
+3,chapters_freeplay_clues,Clues,winter,285.9,2,winter,6,3,0,9,1,0,4,9,5,0,0,hint:cover_again:rung 1
+3,chapters_freeplay_clues,Clues,winter,288.9,2,winter,6,3,0,9,1,0,4,9,5,0,0,hint:cover_again:rung 2
+3,chapters_freeplay_clues,Clues,winter,290,2,winter,6,3,0,9,1,0,4,9,5,0,0,reaction:winter_food:when
+3,chapters_freeplay_clues,Clues,winter,290,2,winter,6,3,0,9,1,0,4,9,5,0,0,sample
+3,chapters_freeplay_clues,Clues,winter,290,2,winter,6,3,0,9,1,0,4,9,5,0,0,player:placement:Storm
+3,chapters_freeplay_clues,Clues,winter,290.1,2,winter,6,3,0,9,1,0,4,9,5,0,0,case:cover_again:rung 2; 8.2s; solved
+3,chapters_freeplay_clues,Clues,winter,300,2,winter,6,3,0,9,1,0,4,9,5,0,0,sample
+3,chapters_freeplay_clues,Clues,winter,300,2,winter,6,2,0,8,1,0,4,9,5,0,0,reaction:taken_again:moa_killed
+3,chapters_freeplay_clues,Clues,winter,306,2,winter,6,2,0,8,1,0,4,9,5,0,0,player:placement:wharariki
+3,chapters_freeplay_clues,Clues,winter,306.1,2,winter,6,2,0,8,1,0,4,9,5,0,0,goal:fed
+3,chapters_freeplay_clues,Clues,winter,310,2,winter,6,2,0,8,1,0,4,9,5,0,0,reaction:storm_gone:placeable_expired
+3,chapters_freeplay_clues,Clues,winter,310,2,winter,6,2,0,8,1,0,4,9,5,0,0,sample
+3,chapters_freeplay_clues,Clues,winter,315,2,spring,6,2,0,8,1,0,4,9,5,0,0,goal:winter_through
+3,chapters_freeplay_clues,Clues,winter,315,2,spring,6,2,0,8,1,0,4,9,5,0,0,close:winter:-> spring
+3,chapters_freeplay_clues,Clues,spring,315,2,spring,6,2,0,8,1,0,4,9,5,0,0,chapter:spring
+3,chapters_freeplay_clues,Clues,spring,315.1,2,spring,6,2,0,8,1,0,4,9,5,0,0,goal:home
+3,chapters_freeplay_clues,Clues,spring,316,2,spring,6,2,0,8,1,0,4,9,5,0,0,hint:storm_gone:rung 1
+3,chapters_freeplay_clues,Clues,spring,320,2,spring,6,2,0,8,1,0,4,9,5,0,0,sample
+3,chapters_freeplay_clues,Clues,spring,324,2,spring,6,2,0,8,1,0,4,9,5,0,0,hint:storm_gone:rung 2
+3,chapters_freeplay_clues,Clues,spring,330,2,spring,6,2,0,8,1,3,4,9,5,0,0,sample
+3,chapters_freeplay_clues,Clues,spring,340,2,spring,6,2,0,8,1,6,4,9,5,0,0,sample
+3,chapters_freeplay_clues,Clues,spring,350,2,spring,6,2,0,8,1,6,4,9,5,0,0,sample
+3,chapters_freeplay_clues,Clues,spring,352.8,2,spring,6,2,0,8,1,6,4,9,5,0,0,reaction:hungry_eagle:when
+3,chapters_freeplay_clues,Clues,spring,355,2,spring,6,2,0,8,1,6,4,9,5,0,0,case:storm_gone:rung 2; 45s; passed
+3,chapters_freeplay_clues,Clues,spring,360,3,summer,6,2,0,8,1,6,4,9,5,0,0,reaction:new_year:season_change
+3,chapters_freeplay_clues,Clues,spring,360,3,summer,6,2,0,8,1,6,4,9,5,0,0,close:spring:-> summer
+3,chapters_freeplay_clues,Clues,summer,360,3,summer,6,2,0,8,1,6,4,9,5,0,0,chapter:summer
+3,chapters_freeplay_clues,Clues,summer,360,3,summer,6,2,0,8,1,6,4,9,5,0,0,sample
+3,chapters_freeplay_clues,Clues,summer,362.5,3,summer,6,2,0,8,1,6,4,9,5,0,0,reaction:cover_again:eagle_hunting
+3,chapters_freeplay_clues,Clues,summer,365.9,3,summer,6,2,0,8,1,3,4,12,5,0,0,reaction:bird_hatch_again:bird_hatched
+3,chapters_freeplay_clues,Clues,summer,366.6,3,summer,6,2,0,8,1,3,4,12,5,0,0,hint:cover_again:rung 1
+3,chapters_freeplay_clues,Clues,summer,369.6,3,summer,6,2,0,8,1,3,4,12,5,0,0,hint:cover_again:rung 2
+3,chapters_freeplay_clues,Clues,summer,370,3,summer,6,2,0,8,1,3,4,12,5,0,0,sample
+3,chapters_freeplay_clues,Clues,summer,370.5,3,summer,6,2,0,8,1,3,4,12,5,0,0,player:placement:Storm
+3,chapters_freeplay_clues,Clues,summer,370.5,3,summer,6,2,0,8,1,3,4,12,5,0,0,reaction:cover_again:eagle_hunting
+3,chapters_freeplay_clues,Clues,summer,370.6,3,summer,6,2,0,8,1,3,4,12,5,0,0,case:cover_again:rung 2; 8.1s; solved
+3,chapters_freeplay_clues,Clues,summer,374.6,3,summer,6,2,0,8,1,3,4,12,5,0,0,hint:cover_again:rung 1
+3,chapters_freeplay_clues,Clues,summer,377.6,3,summer,6,2,0,8,1,0,4,12,8,0,0,hint:cover_again:rung 2
+3,chapters_freeplay_clues,Clues,summer,379,3,summer,6,2,0,8,1,0,4,12,8,0,0,player:placeable_moved:Storm
+3,chapters_freeplay_clues,Clues,summer,379,3,summer,6,2,0,8,1,0,4,12,8,0,0,reaction:gave_up_again:eagle_gave_up
+3,chapters_freeplay_clues,Clues,summer,379.1,3,summer,6,2,0,8,1,0,4,12,8,0,0,case:cover_again:rung 2; 8.6s; solved
+3,chapters_freeplay_clues,Clues,summer,380,3,summer,6,2,0,8,1,0,4,12,8,0,0,sample
+3,chapters_freeplay_clues,Clues,summer,389.2,3,summer,6,1,0,7,1,0,4,12,8,0,0,reaction:taken_again:moa_killed
+3,chapters_freeplay_clues,Clues,summer,390,3,summer,6,1,0,7,1,0,4,12,8,0,0,sample
+3,chapters_freeplay_clues,Clues,summer,399,3,summer,6,1,0,7,1,0,4,12,8,0,0,reaction:storm_gone:placeable_expired
+3,chapters_freeplay_clues,Clues,summer,400,3,summer,6,1,0,7,1,0,4,12,8,0,0,sample
+3,chapters_freeplay_clues,Clues,summer,405,3,autumn,6,1,0,7,1,0,4,12,8,0,0,hint:storm_gone:rung 1
+3,chapters_freeplay_clues,Clues,summer,405,3,autumn,6,1,0,7,1,0,4,12,8,0,0,goal:summer_through
+3,chapters_freeplay_clues,Clues,summer,405,3,autumn,6,1,0,7,1,0,4,12,8,0,0,close:summer:-> autumn
+3,chapters_freeplay_clues,Clues,autumn,405,3,autumn,6,1,0,7,1,0,4,12,8,0,0,chapter:autumn
+3,chapters_freeplay_clues,Clues,autumn,405,3,autumn,6,1,0,7,1,0,4,12,8,0,0,fade:Storm:0
+3,chapters_freeplay_clues,Clues,autumn,410,3,autumn,6,1,0,7,1,0,4,12,8,0,0,sample
+3,chapters_freeplay_clues,Clues,autumn,413,3,autumn,6,1,0,7,1,0,4,12,8,0,0,hint:storm_gone:rung 2
+3,chapters_freeplay_clues,Clues,autumn,420,3,autumn,6,1,0,7,1,0,4,12,8,0,0,sample
+3,chapters_freeplay_clues,Clues,autumn,430,3,autumn,6,1,0,7,1,0,4,12,8,0,0,sample
+3,chapters_freeplay_clues,Clues,autumn,440,3,autumn,6,1,0,7,1,0,4,12,8,0,0,sample
+3,chapters_freeplay_clues,Clues,autumn,442,3,autumn,6,1,0,7,1,0,4,12,8,0,0,reaction:hungry_eagle:when
+3,chapters_freeplay_clues,Clues,autumn,444,3,autumn,6,1,0,7,1,0,4,12,8,0,0,case:storm_gone:rung 2; 45s; passed
+3,chapters_freeplay_clues,Clues,autumn,450,3,winter,6,1,0,7,1,0,4,12,8,0,0,close:autumn:-> winter
+3,chapters_freeplay_clues,Clues,winter,450,3,winter,6,1,0,7,1,0,4,12,8,0,0,chapter:winter
+3,chapters_freeplay_clues,Clues,winter,450,3,winter,6,1,0,7,1,0,4,12,8,0,0,fade:Storm:0
+3,chapters_freeplay_clues,Clues,winter,450,3,winter,6,1,0,7,1,0,4,12,8,0,0,sample
+3,chapters_freeplay_clues,Clues,winter,451.7,3,winter,6,1,0,7,1,0,4,12,8,0,0,reaction:cover_again:eagle_hunting
+3,chapters_freeplay_clues,Clues,winter,455.7,3,winter,6,1,0,7,1,0,4,12,8,0,0,hint:cover_again:rung 1
+3,chapters_freeplay_clues,Clues,winter,458.7,3,winter,6,1,0,7,1,0,4,12,8,0,0,hint:cover_again:rung 2
+3,chapters_freeplay_clues,Clues,winter,460,3,winter,6,1,0,7,1,0,4,12,8,0,0,sample
+3,chapters_freeplay_clues,Clues,winter,460,3,winter,6,1,0,7,1,0,4,12,8,0,0,player:placement:Storm
+3,chapters_freeplay_clues,Clues,winter,460,3,winter,6,1,0,7,1,0,4,12,8,0,0,reaction:bird_hunted:eagle_hunting
+3,chapters_freeplay_clues,Clues,winter,460.1,3,winter,6,1,0,7,1,0,4,12,8,0,0,case:cover_again:rung 2; 8.4s; solved
+3,chapters_freeplay_clues,Clues,winter,470,3,winter,6,1,0,7,1,0,4,12,8,0,0,reaction:winter_food:when
+3,chapters_freeplay_clues,Clues,winter,470,3,winter,6,1,0,7,1,0,4,12,8,0,0,sample
+3,chapters_freeplay_clues,Clues,winter,470.5,3,winter,6,1,0,7,1,0,3,12,8,0,0,reaction:bird_taken:bird_killed
+3,chapters_freeplay_clues,Clues,winter,480,3,winter,6,1,0,7,1,0,3,12,8,0,0,reaction:storm_gone:placeable_expired
+3,chapters_freeplay_clues,Clues,winter,480,3,winter,6,1,0,7,1,0,3,12,8,0,0,sample
+3,chapters_freeplay_clues,Clues,winter,486,3,winter,6,1,0,7,1,0,3,12,8,0,0,hint:storm_gone:rung 1
+3,chapters_freeplay_clues,Clues,winter,486,3,winter,6,1,0,7,1,0,3,12,8,0,0,player:placement:wharariki
+3,chapters_freeplay_clues,Clues,winter,486.1,3,winter,6,1,0,7,1,0,3,12,8,0,0,goal:fed
+3,chapters_freeplay_clues,Clues,winter,490,3,winter,6,1,0,7,1,0,3,12,8,0,0,sample
+3,chapters_freeplay_clues,Clues,winter,494,3,winter,6,1,0,7,1,0,3,12,7,0,0,hint:storm_gone:rung 2
+3,chapters_freeplay_clues,Clues,winter,495,3,spring,6,3,0,9,1,0,3,12,7,0,0,reaction:arrived:species_arrived
+3,chapters_freeplay_clues,Clues,winter,495,3,spring,6,3,0,9,1,0,3,12,7,0,0,goal:winter_through
+3,chapters_freeplay_clues,Clues,winter,495,3,spring,6,3,0,9,1,0,3,12,7,0,0,close:winter:-> spring
+3,chapters_freeplay_clues,Clues,spring,495,3,spring,6,3,0,9,1,0,3,12,7,0,0,chapter:spring
+3,chapters_freeplay_clues,Clues,spring,495.1,3,spring,6,3,0,9,1,0,3,12,7,0,0,goal:home
+3,chapters_freeplay_clues,Clues,spring,500,3,spring,6,3,0,9,1,0,3,12,7,0,0,sample
+3,chapters_freeplay_clues,Clues,spring,510,3,spring,6,3,0,9,1,1,3,12,6,0,0,sample
+3,chapters_freeplay_clues,Clues,spring,520,3,spring,6,3,0,9,1,5,3,12,6,0,0,sample
+3,chapters_freeplay_clues,Clues,spring,523.3,3,spring,6,3,0,9,1,5,3,12,6,0,0,reaction:hungry_eagle:when
+3,chapters_freeplay_clues,Clues,spring,525,3,spring,6,3,0,9,1,5,3,12,6,0,0,case:storm_gone:rung 2; 45s; passed
+3,chapters_freeplay_clues,Clues,spring,530,3,spring,6,3,0,9,1,5,3,12,6,0,0,sample
+3,chapters_freeplay_clues,Clues,spring,540,4,summer,6,3,0,9,1,5,3,12,6,0,0,reaction:new_year:season_change
+3,chapters_freeplay_clues,Clues,spring,540,4,summer,6,3,0,9,1,5,3,12,6,0,0,close:spring:-> summer
+3,chapters_freeplay_clues,Clues,summer,540,4,summer,6,3,0,9,1,5,3,12,6,0,0,chapter:summer
+3,chapters_freeplay_clues,Clues,summer,540,4,summer,6,3,0,9,1,5,3,12,6,0,0,sample
+3,chapters_freeplay_clues,Clues,summer,541.9,4,summer,6,2,0,8,1,5,3,12,6,0,0,reaction:taken_again:moa_killed
+3,chapters_freeplay_clues,Clues,summer,548.2,4,summer,6,3,0,9,1,6,3,12,6,0,0,reaction:first_giant:egg_hatched
+3,chapters_freeplay_clues,Clues,summer,548.2,4,summer,6,3,0,9,1,6,3,12,6,0,0,moment:$moa:A giant moa chick
+3,chapters_freeplay_clues,Clues,summer,550,4,summer,6,3,0,9,1,6,3,12,6,0,0,sample
+3,chapters_freeplay_clues,Clues,summer,556.4,4,summer,6,3,0,9,1,2,3,14,6,0,0,reaction:bird_hatch_again:bird_hatched
+3,chapters_freeplay_clues,Clues,summer,560,4,summer,6,3,0,9,1,2,3,14,6,0,0,sample
+3,chapters_freeplay_clues,Clues,summer,570,4,summer,6,3,0,9,1,2,3,14,6,0,0,sample
+3,chapters_freeplay_clues,Clues,summer,580,4,summer,8,3,0,11,1,0,2,14,5,0,0,sample
+3,chapters_freeplay_clues,Clues,summer,585,4,autumn,8,3,0,11,1,0,2,14,5,0,0,goal:summer_through
+3,chapters_freeplay_clues,Clues,summer,585,4,autumn,8,3,0,11,1,0,2,14,5,0,0,close:summer:-> autumn
+3,chapters_freeplay_clues,Clues,autumn,585,4,autumn,8,3,0,11,1,0,2,14,5,0,0,chapter:autumn
+3,chapters_freeplay_clues,Clues,autumn,585,4,autumn,8,3,0,11,1,0,2,14,5,0,0,fade:Storm:0
+3,chapters_freeplay_clues,Clues,autumn,590,4,autumn,8,3,0,11,1,0,2,14,5,0,0,sample
+3,chapters_freeplay_clues,Clues,autumn,594.7,4,autumn,8,3,0,11,1,0,2,14,5,0,0,reaction:hungry_eagle:when
+3,chapters_freeplay_clues,Clues,autumn,600,4,autumn,8,3,0,11,1,0,2,14,5,0,0,sample
+3,chapters_freeplay_clues,Clues,autumn,604.4,4,autumn,8,3,0,11,1,0,2,14,5,0,0,reaction:cover_again:eagle_hunting
+3,chapters_freeplay_clues,Clues,autumn,608.5,4,autumn,8,3,0,11,1,0,2,14,5,0,0,hint:cover_again:rung 1
+3,chapters_freeplay_clues,Clues,autumn,610,4,autumn,8,3,0,11,1,0,2,14,5,0,0,sample
+3,chapters_freeplay_clues,Clues,autumn,611.5,4,autumn,8,3,0,11,1,0,2,14,5,0,0,hint:cover_again:rung 2
+3,chapters_freeplay_clues,Clues,autumn,612.5,4,autumn,8,3,0,11,1,0,2,14,5,0,0,player:placement:Storm
+3,chapters_freeplay_clues,Clues,autumn,612.5,4,autumn,8,3,0,11,1,0,2,14,5,0,0,reaction:cover_again:eagle_hunting
+3,chapters_freeplay_clues,Clues,autumn,612.6,4,autumn,8,3,0,11,1,0,2,14,5,0,0,case:cover_again:rung 2; 8.2s; solved
+3,chapters_freeplay_clues,Clues,autumn,616.6,4,autumn,8,3,0,11,1,0,2,14,5,0,0,hint:cover_again:rung 1
+3,chapters_freeplay_clues,Clues,autumn,619.6,4,autumn,8,3,0,11,1,0,2,14,5,0,0,hint:cover_again:rung 2
+3,chapters_freeplay_clues,Clues,autumn,620,4,autumn,8,3,0,11,1,0,2,14,5,0,0,sample
+3,chapters_freeplay_clues,Clues,autumn,621,4,autumn,8,3,0,11,1,0,2,14,5,0,0,player:placeable_moved:Storm
+3,chapters_freeplay_clues,Clues,autumn,621,4,autumn,8,3,0,11,1,0,2,14,5,0,0,reaction:gave_up_again:eagle_gave_up
+3,chapters_freeplay_clues,Clues,autumn,621,4,autumn,8,3,0,11,1,0,2,14,5,0,0,reaction:bird_hunted:eagle_hunting
+3,chapters_freeplay_clues,Clues,autumn,621.1,4,autumn,8,3,0,11,1,0,2,14,5,0,0,case:cover_again:rung 2; 8.6s; solved
+3,chapters_freeplay_clues,Clues,autumn,630,4,winter,8,3,0,11,1,0,2,14,5,0,0,close:autumn:-> winter
+3,chapters_freeplay_clues,Clues,winter,630,4,winter,8,3,0,11,1,0,2,14,5,0,0,chapter:winter
+3,chapters_freeplay_clues,Clues,winter,630,4,winter,8,3,0,11,1,0,2,14,5,0,0,fade:Storm:1
+3,chapters_freeplay_clues,Clues,winter,630,4,winter,8,3,0,11,1,0,2,14,5,0,0,sample
+3,chapters_freeplay_clues,Clues,winter,631,4,winter,8,3,0,11,1,0,2,14,4,0,0,reaction:bird_taken:bird_killed
+3,chapters_freeplay_clues,Clues,winter,640,4,winter,8,3,0,11,1,0,2,14,4,0,0,sample
+3,chapters_freeplay_clues,Clues,winter,641,4,winter,8,3,0,11,1,0,2,14,4,0,0,reaction:storm_gone:placeable_expired
+3,chapters_freeplay_clues,Clues,winter,647,4,winter,8,3,0,11,1,0,2,14,4,0,0,hint:storm_gone:rung 1
+3,chapters_freeplay_clues,Clues,winter,648,4,winter,8,3,0,11,1,0,2,14,4,0,0,player:placement:wharariki
+3,chapters_freeplay_clues,Clues,winter,650,4,winter,8,3,0,11,1,0,2,14,4,0,0,reaction:winter_food:when
+3,chapters_freeplay_clues,Clues,winter,650,4,winter,8,3,0,11,1,0,2,14,4,0,0,sample
+3,chapters_freeplay_clues,Clues,winter,655,4,winter,8,3,0,11,1,0,2,14,4,0,0,hint:storm_gone:rung 2
+3,chapters_freeplay_clues,Clues,winter,660,4,winter,8,3,0,11,1,0,2,14,4,0,0,sample
+3,chapters_freeplay_clues,Clues,winter,670,4,winter,8,3,0,11,1,0,2,14,4,0,0,sample
+3,chapters_freeplay_clues,Clues,winter,670.3,4,winter,8,3,0,11,1,0,2,14,4,0,0,goal:fed
+3,chapters_freeplay_clues,Clues,winter,675,4,spring,8,3,0,11,1,0,2,14,4,0,0,goal:winter_through
+3,chapters_freeplay_clues,Clues,winter,675,4,spring,8,3,0,11,1,0,2,14,4,0,0,close:winter:-> spring
+3,chapters_freeplay_clues,Clues,spring,675,4,spring,8,3,0,11,1,0,2,14,4,0,0,chapter:spring
+3,chapters_freeplay_clues,Clues,spring,675.1,4,spring,8,3,0,11,1,0,2,14,4,0,0,goal:home
+3,chapters_freeplay_clues,Clues,spring,678.1,4,spring,8,3,0,11,1,0,2,14,4,0,0,reaction:hungry_eagle:when
+3,chapters_freeplay_clues,Clues,spring,680,4,spring,8,3,0,11,1,0,2,14,4,0,0,sample
+3,chapters_freeplay_clues,Clues,spring,686,4,spring,8,3,0,11,1,0,2,14,4,0,0,case:storm_gone:rung 2; 45s; passed
+3,chapters_freeplay_clues,Clues,spring,690,4,spring,8,3,0,11,1,0,2,14,4,0,0,sample
+3,chapters_freeplay_clues,Clues,spring,696.7,4,spring,8,2,0,10,1,0,2,14,4,0,0,reaction:taken_again:moa_killed
+3,chapters_freeplay_clues,Clues,spring,700,4,spring,8,2,0,10,1,3,2,14,4,0,0,sample
+3,chapters_freeplay_clues,Clues,spring,710,4,spring,8,2,0,10,1,3,2,14,4,0,0,sample
+3,chapters_freeplay_clues,Clues,spring,720,5,summer,8,2,0,10,1,3,2,14,4,0,0,reaction:new_year:season_change
+3,chapters_freeplay_clues,Clues,spring,720,5,summer,8,2,0,10,1,3,2,14,4,0,0,close:spring:-> summer
+3,chapters_freeplay_clues,Clues,summer,720,5,summer,8,2,0,10,1,3,2,14,4,0,0,chapter:summer
+3,chapters_freeplay_clues,Clues,summer,720,5,summer,8,2,0,10,1,3,2,14,4,0,0,sample
+3,chapters_freeplay_clues,Clues,summer,730,5,summer,8,2,0,10,1,5,2,14,4,0,0,sample
+3,chapters_freeplay_clues,Clues,summer,737.1,5,summer,8,2,0,10,1,2,2,14,7,0,0,reaction:bird_hatch_again:bird_hatched
+3,chapters_freeplay_clues,Clues,summer,739.6,5,summer,8,2,0,10,1,1,2,14,7,0,0,reaction:raid_won:nest_raid
+3,chapters_freeplay_clues,Clues,summer,740,5,summer,8,2,0,10,1,0,2,14,7,0,0,sample
+3,chapters_freeplay_clues,Clues,summer,749.5,5,summer,8,2,0,10,1,1,2,14,7,0,0,reaction:hungry_eagle:when
+3,chapters_freeplay_clues,Clues,summer,750,5,summer,8,2,0,10,1,1,2,14,7,0,0,sample
+3,chapters_freeplay_clues,Clues,summer,759.2,5,summer,8,2,0,10,1,1,2,14,7,0,0,reaction:cover_again:eagle_hunting
+3,chapters_freeplay_clues,Clues,summer,760,5,summer,8,2,0,10,1,1,2,14,7,0,0,sample
+3,chapters_freeplay_clues,Clues,summer,763.3,5,summer,8,2,0,10,1,1,2,14,7,0,0,hint:cover_again:rung 1
+3,chapters_freeplay_clues,Clues,summer,765,5,autumn,8,2,0,10,1,1,2,14,7,0,0,goal:summer_through
+3,chapters_freeplay_clues,Clues,summer,765,5,autumn,8,2,0,10,1,1,2,14,7,0,0,close:summer:-> autumn
+3,chapters_freeplay_clues,Clues,autumn,765,5,autumn,8,2,0,10,1,1,2,14,7,0,0,chapter:autumn
+3,chapters_freeplay_clues,Clues,autumn,765,5,autumn,8,2,0,10,1,1,2,14,7,0,0,fade:Storm:0
+3,chapters_freeplay_clues,Clues,autumn,766.3,5,autumn,8,2,0,10,1,1,2,14,7,0,0,hint:cover_again:rung 2
+3,chapters_freeplay_clues,Clues,autumn,767.5,5,autumn,8,2,0,10,1,1,2,14,7,0,0,player:placement:Storm
+3,chapters_freeplay_clues,Clues,autumn,767.5,5,autumn,8,2,0,10,1,1,2,14,7,0,0,reaction:cover_again:eagle_hunting
+3,chapters_freeplay_clues,Clues,autumn,767.6,5,autumn,8,2,0,10,1,1,2,14,7,0,0,case:cover_again:rung 2; 8.4s; solved
+3,chapters_freeplay_clues,Clues,autumn,770,5,autumn,8,2,0,10,1,1,2,14,7,0,0,sample
+3,chapters_freeplay_clues,Clues,autumn,771.6,5,autumn,8,2,0,10,1,1,2,14,7,0,0,hint:cover_again:rung 1
+3,chapters_freeplay_clues,Clues,autumn,774.6,5,autumn,8,2,0,10,1,1,2,14,7,0,0,hint:cover_again:rung 2
+3,chapters_freeplay_clues,Clues,autumn,776,5,autumn,8,2,0,10,1,1,2,14,7,0,0,player:placeable_moved:Storm
+3,chapters_freeplay_clues,Clues,autumn,776,5,autumn,8,2,0,10,1,1,2,14,7,0,0,reaction:gave_up_again:eagle_gave_up
+3,chapters_freeplay_clues,Clues,autumn,776,5,autumn,8,2,0,10,1,1,2,14,7,0,0,reaction:bird_hunted:eagle_hunting
+3,chapters_freeplay_clues,Clues,autumn,776.1,5,autumn,8,2,0,10,1,1,2,14,7,0,0,case:cover_again:rung 2; 8.6s; solved
+3,chapters_freeplay_clues,Clues,autumn,780,5,autumn,8,2,0,10,1,1,2,14,7,0,0,sample
+3,chapters_freeplay_clues,Clues,autumn,785.9,5,autumn,8,2,0,10,1,1,2,14,6,0,0,reaction:bird_taken:bird_killed
+3,chapters_freeplay_clues,Clues,autumn,790,5,autumn,9,2,0,11,1,0,2,14,6,0,0,sample
+3,chapters_freeplay_clues,Clues,autumn,796,5,autumn,9,2,0,11,1,0,2,14,6,0,0,reaction:storm_gone:placeable_expired
+3,chapters_freeplay_clues,Clues,autumn,800,5,autumn,9,2,0,11,1,0,2,14,6,0,0,sample
+3,chapters_freeplay_clues,Clues,autumn,802,5,autumn,9,2,0,11,1,0,2,14,6,0,0,hint:storm_gone:rung 1
+3,chapters_freeplay_clues,Clues,autumn,810,5,winter,9,2,0,11,1,0,2,14,6,0,0,hint:storm_gone:rung 2
+3,chapters_freeplay_clues,Clues,autumn,810,5,winter,9,2,0,11,1,0,2,14,6,0,0,close:autumn:-> winter
+3,chapters_freeplay_clues,Clues,winter,810,5,winter,9,2,0,11,1,0,2,14,6,0,0,chapter:winter
+3,chapters_freeplay_clues,Clues,winter,810,5,winter,9,2,0,11,1,0,2,14,6,0,0,fade:Storm:0
+3,chapters_freeplay_clues,Clues,winter,810,5,winter,9,2,0,11,1,0,2,14,6,0,0,sample
+3,chapters_freeplay_clues,Clues,winter,810,5,winter,9,2,0,11,1,0,2,14,6,0,0,player:placement:wharariki
+3,chapters_freeplay_clues,Clues,winter,819,5,winter,9,2,0,11,1,0,2,14,6,0,0,player:placement:wharariki
+3,chapters_freeplay_clues,Clues,winter,819.1,5,winter,9,2,0,11,1,0,2,14,6,0,0,goal:fed
+3,chapters_freeplay_clues,Clues,winter,820,5,winter,9,2,0,11,1,0,2,14,6,0,0,sample
+3,chapters_freeplay_clues,Clues,winter,828,5,winter,9,2,0,11,1,0,2,14,6,0,0,player:placement:wharariki
+3,chapters_freeplay_clues,Clues,winter,830,5,winter,9,2,0,11,1,0,2,14,6,0,0,sample
+3,chapters_freeplay_clues,Clues,winter,832.9,5,winter,9,2,0,11,1,0,2,14,6,0,0,reaction:hungry_eagle:when
+3,chapters_freeplay_clues,Clues,winter,840,5,winter,9,2,0,11,1,0,2,14,6,0,0,sample
+3,chapters_freeplay_clues,Clues,winter,841,5,winter,9,2,0,11,1,0,2,14,6,0,0,case:storm_gone:rung 2; 45s; passed
+3,chapters_freeplay_clues,Clues,winter,850,5,winter,9,2,0,11,1,0,2,14,6,0,0,sample
+3,chapters_freeplay_clues,Clues,winter,852.3,5,winter,9,1,0,10,1,0,2,14,6,0,0,reaction:taken_again:moa_killed
+3,chapters_freeplay_clues,Clues,winter,855,5,spring,9,1,0,10,1,0,2,14,6,0,0,goal:winter_through
+3,chapters_freeplay_clues,Clues,winter,855,5,spring,9,1,0,10,1,0,2,14,6,0,0,close:winter:-> spring
+3,chapters_freeplay_clues,Clues,spring,855,5,spring,9,1,0,10,1,0,2,14,6,0,0,chapter:spring
+3,chapters_freeplay_clues,Clues,spring,855.1,5,spring,9,1,0,10,1,0,2,14,6,0,0,goal:home
+3,chapters_freeplay_clues,Clues,spring,860,5,spring,9,1,0,10,1,0,2,14,6,0,0,sample
+3,chapters_freeplay_clues,Clues,spring,870,5,spring,9,1,0,10,1,3,2,14,6,0,0,sample
+3,chapters_freeplay_clues,Clues,spring,880,5,spring,9,1,0,10,1,3,2,14,6,0,0,sample
+3,chapters_freeplay_clues,Clues,spring,890,5,spring,9,1,0,10,1,3,2,14,6,0,0,sample
+3,chapters_freeplay_clues,Clues,spring,900,6,summer,9,1,0,10,1,3,2,14,6,0,0,reaction:new_year:season_change
+3,chapters_freeplay_clues,Clues,spring,900,6,summer,9,1,0,10,1,3,2,14,6,0,0,close:spring:-> finale
+3,chapters_freeplay_clues,Clues,finale,900,6,summer,9,1,0,10,1,3,2,14,6,0,0,chapter:finale
+3,chapters_freeplay_clues,Clues,finale,900,6,summer,9,1,0,10,1,3,2,14,6,0,0,moment:pukepuke:Grown up
+3,chapters_freeplay_clues,Clues,finale,900,6,summer,9,1,0,10,1,3,2,14,6,0,0,sample
+3,chapters_freeplay_clues,Clues,finale,900.1,6,summer,9,1,0,10,1,3,2,14,6,0,0,close:finale:-> win
+3,chapters_freeplay_clues,Clues,finale,900.1,6,summer,9,1,0,10,1,3,2,14,6,0,0,won:finale
+3,chapters_freeplay_clues,Clues,finale,900.1,6,summer,9,1,0,10,1,3,2,14,6,0,0,win

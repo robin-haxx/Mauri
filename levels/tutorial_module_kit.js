@@ -207,6 +207,8 @@ const MODULE_TIP_KIT = (function () {
     if (needs === 'none') return false;
     const def = toolDef(game, type);
     const cost = needs === 'place' ? def.cost : (def.moveCost != null ? def.moveCost : Math.ceil((def.cost || 0) / 2));
+    // (Nothing on the land to move is as good as broke for a banner asking for a move.)
+    if (needs === 'move' && !game.simulation.placeables.some(p => p.alive && p.type === type)) return true;
     return !game.mauri.canAfford(cost || 0);
   };
 

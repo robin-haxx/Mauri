@@ -1,0 +1,15 @@
+seed 1: win after 255s | beats first_hunt:natural | eagle took: stout_legged_moa 5 | focus animals 3, year 2 | spent move storm 20, 282 mauri in hand | replay bca201f4
+   problems met: 3 (answered: no hint 0, after the question 1, after being told 1; went away by itself 1; lost 0)
+seed 2: win after 265s | beats first_hunt:forced | eagle took: stout_legged_moa 5 | focus animals 4, year 2 | spent new storm 40, move storm 10, 289 mauri in hand | replay 761db9df
+   problems met: 5 (answered: no hint 1, after the question 2, after being told 0; went away by itself 2; lost 0)
+seed 3: win after 255s | beats first_hunt:natural | eagle took: stout_legged_moa 6 | cast lost: mama@203.6s | focus animals 2, year 2 | spent new storm 40, move storm 10, 263 mauri in hand | replay 20a35e8f
+   problems met: 5 (answered: no hint 0, after the question 3, after being told 0; went away by itself 2; lost 0)
+seed 4: win after 255s | beats first_hunt:natural | eagle took: stout_legged_moa 6 | focus animals 3, year 2 | spent move storm 20, new storm 40, 257 mauri in hand | replay df7d892
+   problems met: 5 (answered: no hint 0, after the question 2, after being told 2; went away by itself 1; lost 0)
+
+4 run(s): win 4
+  beat first_hunt: natural 3, forced 1
+  eagle took: stout_legged_moa 22; cast lost 1
+  focus animals at the end: 2 to 4 (median 3); years reached: 2 to 2
+  problems met in the lessons' year: 1 of 12 answered with no hint, 11 after a hint, 0 lost; in the unprompted stretch: none
+  files in /home/user/Mauri/tests/clues/storms_slow

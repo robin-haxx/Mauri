@@ -146,7 +146,15 @@ class HaastsEagle extends Boid {
     // (How long it has been without a target: a lock after a real gap is a new attempt, with
     // its wind-up; one that flickers off and on within half a second is not. eagleTelegraph.)
     this._noTargetFrames = this.target ? 0 : (this._noTargetFrames || 0) + dt;
+
+    // Held over a place by a story (holdOver): it circles there, not hunting and not getting
+    // hungrier, until the story releases it (as module 0's eagle waits through the opening).
+    if (this._hold) { this._holdFlight(dt); return; }
+
     this.hunger = Math.min(this.hunger + this.hungerRate * dt, this.maxHunger);
+
+    // On an errand off the land (sendAway): nothing else it does runs until it is back.
+    if (this._away) { this._awayFlight(dt); return; }
 
     // A chapter level's `aim` (mauri_chapters.js): for a while this bird hunts a named moa
     // first, whatever its hunger, cutting short a rest. It's still blind to it under cover
@@ -246,6 +254,7 @@ class HaastsEagle extends Boid {
       this._huntEventFired = false;
       this._graceGiven = false;
       this._chaseLoop = null;
+      this._coverFoils = 0;   // (fed, or not hungry: the next hunger starts its count afresh)
       this.patrol(dt);
     }
     
@@ -443,6 +452,8 @@ class HaastsEagle extends Boid {
         const spotR = this.huntRadius * frac;
         if (frac <= 0 || dSq > spotR * spotR) continue;
       }
+      // (coverSendsEagleAway: the kind it has given up on for now reads as not there.)
+      if (this._shunSpecies === moa.speciesKey && this._clock < (this._shunUntil || 0) && moa !== this.aimAt) continue;
       // (A moa's eagleResistance is rolled at the strike, not here: rolled on every scan it made
       // the bird's pick flicker between herd members, so no wind-up ever finished.)
       // Camouflage: chance the eagle doesn't spot this moa during a scan. Once it's the
@@ -489,6 +500,22 @@ class HaastsEagle extends Boid {
       }
     }
 
+    // eagleTelegraph: the bird commits to the one it has picked for as long as it can still see
+    // it and it is in range, and does not turn to a nearer one part-way through a dive. So a
+    // change of target only happens when the first is truly lost, every change is a new hunt
+    // with its own wind-up (see `retarget` below), and nothing is struck without warning.
+    const cur = this.target;
+    if (_M.eagleTelegraph && cur && cur.alive && cur !== target && cur.pos) {
+      const dx = cur.pos.x - px, dy = cur.pos.y - py, dSq = dx * dx + dy * dy;
+      const frac = cur.shelterSpotFrac || 0;
+      const hidden = !!cur.inShelter && (frac <= 0 || dSq > this.huntRadius * this.huntRadius * frac * frac);
+      const shunned = this._shunSpecies === cur.speciesKey && this._clock < (this._shunUntil || 0);
+      const guarded = simulation.isSpeciesProtected && simulation.isSpeciesProtected(cur.speciesKey);
+      if (!hidden && !shunned && !guarded && dSq <= this.huntRadius * this.huntRadius * 1.3) {
+        target = cur; targetDistSq = dSq; targetIsFlyer = !!cur.isFlyer;
+      }
+    }
+
     // An aimed moa out in the open (a chapter level's `aim`) is gone after from any distance,
     // ahead of nearer prey. Under cover it can't be seen, so the scan above decides.
     const aim = this.aimAt;
@@ -497,13 +524,28 @@ class HaastsEagle extends Boid {
       target = aim; targetDistSq = dx * dx + dy * dy; targetIsFlyer = false;
     }
 
+    // coverSendsEagleAway { after = 2, sec = 45 } (a level's rule): each time the bird it was on
+    // gets under cover counts as a foil. After `after` of them in one hunger it gives that kind
+    // up for `sec` seconds and takes its hunt to other prey, by preference a species with
+    // numbers to spare (see _leaveForOtherPrey). So hiding the family sends the eagle to the herd.
+    const _away = _M.coverSendsEagleAway;
+    const _prev = this.target;
+    if (_away && _prev && _prev !== target && _prev.alive && _prev.inShelter && !_prev.isFlyer) {
+      this._coverFoils = (this._coverFoils || 0) + 1;
+      if (this._coverFoils >= (_away.after ?? 2) && this._leaveForOtherPrey(simulation, _prev.speciesKey, _away, _M)) {
+        this.edges();
+        return;
+      }
+    }
+
     if (target) {
       const hadNoTarget = this.target === null;
-      // Under coverBreaksLock a change of target because the last one is gone from view (under
-      // cover, or dead) counts as a fresh lock: a new wind-up, and the hunt event again, so a
-      // lesson can answer it. Turning to a nearer bird mid-chase is not: the dive carries on.
-      const retarget = !hadNoTarget && this.target !== target && !!_M.coverBreaksLock &&
-        (!this.target.alive || !!this.target.inShelter);
+      // A change of target counts as a fresh lock (a new wind-up, and the hunt event again, so a
+      // lesson can answer it): under eagleTelegraph always, since the bird only changes when its
+      // first is lost (above); under coverBreaksLock alone, when the last one is gone from view
+      // (under cover, or dead), and not when it merely turns to a nearer bird mid-chase.
+      const retarget = !hadNoTarget && this.target !== target &&
+        (!!_M.eagleTelegraph || (!!_M.coverBreaksLock && (!this.target.alive || !!this.target.inShelter)));
 
       this.state = 'hunting';
       this.hunting = true;
@@ -522,8 +564,10 @@ class HaastsEagle extends Boid {
       if (hadNoTarget || retarget) {
         const fresh = retarget || (this._noTargetFrames || 0) >= 30 || target !== this._lastTarget;
         this._lastTarget = target;
-        if (_T && fresh && this.tutorialGraceTimer <= 0) {
-          this.tutorialGraceTimer = Math.round((_T.graceSec ?? 4) * 60);
+        // (The full window for each fresh lock: a bird it turns to part-way through another's
+        // wind-up gets its own, not the seconds left over. A longer one a tutorial set stands.)
+        if (_T && fresh) {
+          this.tutorialGraceTimer = Math.max(this.tutorialGraceTimer, Math.round((_T.graceSec ?? 4) * 60));
         }
       }
 
@@ -583,6 +627,7 @@ class HaastsEagle extends Boid {
         const pr = _M.eaglePursuitRadius ?? 320;
         const prey = simulation.getClosestMoa(this.pos.x, this.pos.y, pr, m =>
           m.alive && !m.inShelter &&
+          !(this._shunSpecies === m.speciesKey && this._clock < (this._shunUntil || 0)) &&
           !(simulation.isSpeciesProtected && simulation.isSpeciesProtected(m.speciesKey)));
         if (prey) {
           this.huntSearchTimer = 0;            // an active chase never "times out" into a relocate
@@ -790,6 +835,107 @@ class HaastsEagle extends Boid {
 
   // Move this bird's territory onto (x, y) and drag a bonded partner to a nearby offset,
   // so a relocating pair stays inside mate range.
+  // Give up on `shun` (a species whose birds keep getting under cover) and take the hunt to
+  // other prey: the nearest moa in the open of another kind, a plentiful kind reading as nearer
+  // and a scarce one as further. The territory moves there, and the shunned kind is not seen
+  // for cfg.sec seconds. false (and nothing changes) when there is no other prey to go to.
+  _leaveForOtherPrey(simulation, shun, cfg, M) {
+    const thresh = M.eaglePreyPopThreshold ?? 12, scarce = M.eagleScarcePreyPenalty ?? 6;
+    let best = null, bestScore = Infinity;
+    const moas = simulation.moas;
+    for (let i = 0; i < moas.length; i++) {
+      const m = moas[i];
+      if (!m.alive || m.inShelter || m.speciesKey === shun) continue;
+      if (simulation.isSpeciesProtected && simulation.isSpeciesProtected(m.speciesKey)) continue;
+      const n = simulation.getCachedSpeciesCount ? simulation.getCachedSpeciesCount(m.speciesKey) : 1;
+      const dx = m.pos.x - this.pos.x, dy = m.pos.y - this.pos.y;
+      let score = Math.sqrt(dx * dx + dy * dy) / Math.max(1, n);
+      if (n <= thresh) score *= scarce;
+      if (score < bestScore) { bestScore = score; best = m; }
+    }
+    if (!best) return false;
+    this._relocateTerritory(best.pos.x, best.pos.y);
+    this._shunSpecies = shun;
+    this._shunUntil = this._clock + (cfg.sec ?? 45) * 60;
+    this._coverFoils = 0;
+    this.target = null;
+    this._huntEventFired = false;
+    this.huntSearchTimer = 0;
+    if (simulation.game && simulation.game.tutorial && typeof TUTORIAL_EVENTS !== 'undefined') {
+      simulation.game.tutorial.fireEvent(TUTORIAL_EVENTS.EAGLE_GAVE_UP, { eagle: this, speciesKey: best.speciesKey, from: shun });
+    }
+    return true;
+  }
+
+  // A scripted errand off the land (a chapter's `eagle: { away }`; tile 1's Pouākai going to
+  // scuffle with the kea for scraps, as module 0's did): it flies off over the nearest edge,
+  // fading out, is gone for `sec` seconds, and flies back in to its patrol. `hungerBack`: its
+  // hunger when it returns (it ate something out there). One discrete event: nothing it does
+  // on its own is changed, and it takes up where it left off.
+  sendAway(sec, { hungerBack = null } = {}) {
+    const t = this.terrain, W = t.mapWidth, H = t.mapHeight, x = this.pos.x, y = this.pos.y;
+    const out = [[x, -90, y], [x, H + 90, H - y], [-90, y, x], [W + 90, y, W - x]].sort((a, b) => a[2] - b[2])[0];
+    this._away = { phase: 'out', to: { x: out[0], y: out[1] }, t: 0, frames: Math.max(1, sec) * 60, hungerBack, fade: 1 };
+    this.hunting = false; this.target = null; this.aimAt = null;
+    this.state = 'patrol'; this._chaseLoop = null; this._huntEventFired = false;
+    this._coverFoils = 0; this.tutorialGraceTimer = 0;
+  }
+
+  // A story's entrance (a chapter's `eagle: { hold }`; tile 1, as module 0): it circles a
+  // point, out of the hunt, until release(). Its patrol is moved there too.
+  holdOver(x, y, r = 22) {
+    this._hold = { x, y, r, a: random(TWO_PI) };
+    this.hunting = false; this.target = null; this.aimAt = null;
+    this.state = 'patrol'; this._chaseLoop = null; this._huntEventFired = false; this.restTimer = 0;
+    this._relocateTerritory(x, y);
+  }
+
+  release() {
+    if (!this._hold) return;
+    this._hold = null;
+    this._noTargetFrames = 30;   // (its first hunt is a fresh one, with its wind-up)
+  }
+
+  _holdFlight(dt) {
+    const h = this._hold;
+    this.hunting = false; this.target = null; this.state = 'patrol';
+    this.maxSpeed = this.baseSpeed * 0.6;
+    h.a += 0.02 * dt * (this.personality ? this.personality.turniness || 1 : 1);
+    this.applyForce(this.seekPoint(h.x + Math.cos(h.a) * h.r, h.y + Math.sin(h.a) * h.r, 0.7));
+    this.edges();
+  }
+
+  // Whether it is off on an errand (sendAway) and not back over the land yet.
+  get isAway() { return !!this._away; }
+
+  _awayFlight(dt) {
+    const a = this._away;
+    this.hunting = false; this.target = null; this.state = 'patrol';
+    if (a.phase === 'out') {
+      this.maxSpeed = this.baseSpeed * 1.1;
+      this.applyForce(this.seekPoint(a.to.x, a.to.y, 1));
+      const d = Math.hypot(this.pos.x - a.to.x, this.pos.y - a.to.y);
+      a.fade = Math.min(a.fade, Math.max(0, Math.min(1, (d - 20) / 140)));
+      if (d < 20) { a.phase = 'gone'; a.t = 0; a.fade = 0; }
+    } else if (a.phase === 'gone') {
+      this.vel.mult(0);
+      a.t += dt;
+      if (a.t >= a.frames) {
+        a.phase = 'back';
+        if (a.hungerBack != null) this.hunger = Math.max(0, Math.min(this.maxHunger, a.hungerBack));
+      }
+    } else {
+      const c = this.patrolCenter, t = this.terrain, m = 30;
+      this.maxSpeed = this.baseSpeed;
+      this.applyForce(this.seekPoint(c.x, c.y, 0.9, 30));
+      a.fade = Math.min(1, a.fade + dt / 50);
+      if (a.fade >= 1 && this.pos.x > m && this.pos.y > m && this.pos.x < t.mapWidth - m && this.pos.y < t.mapHeight - m) {
+        this._away = null;
+        this._noTargetFrames = 30;   // (its next hunt is a fresh one, with its wind-up)
+      }
+    }
+  }
+
   _relocateTerritory(x, y) {
     this.nest.set(x, y);
     this.patrolCenter.set(x, y);
@@ -901,7 +1047,8 @@ class HaastsEagle extends Boid {
   render() {
     // A module's scripted eagle fades out as it flies off the map and is unseen while it's
     // away (EagleLife.fade).
-    const fade = (this.lifeScript && this.lifeScript.fade != null) ? this.lifeScript.fade : 1;
+    const fade = (this.lifeScript && this.lifeScript.fade != null) ? this.lifeScript.fade
+               : this._away ? this._away.fade : 1;
     if (fade <= 0) return;
     const isActiveHunt = this.hunting && this.target !== null;
     const spriteState = isActiveHunt ? 'hunting' : (this.state === 'resting' ? 'resting' : 'flying');
@@ -938,7 +1085,8 @@ class HaastsEagle extends Boid {
 
       pop();
     }
-    
+    if (this._away) return;   // (on its errand: no rings or bars over a bird half gone)
+
     if (this.state === 'distracted') {
       fill(255, 200, 100);
       noStroke();

@@ -1,0 +1,12 @@
+seed 1: win after 900s | beats (no beats) | eagle took: south_island_giant_moa 7, kaka 1, kokako 2, kea 1 | focus animals 8, year 6 | spent wharariki 25, new storm 200, move storm 40, patotara 50, 307 mauri in hand | replay eee92c4f
+   problems met: 14 (answered: no hint 0, after the question 0, after being told 9; went away by itself 5; lost 0)
+seed 2: win after 900s | beats (no beats) | eagle took: south_island_giant_moa 9, kokako 1, kea 1 | focus animals 12, year 6 | spent move storm 40, wharariki 225, new storm 120, 477 mauri in hand | replay 27fe7c23
+   problems met: 12 (answered: no hint 0, after the question 0, after being told 8; went away by itself 4; lost 0)
+seed 3: win after 900s | beats (no beats) | eagle took: south_island_giant_moa 8, kea 1, kokako 2 | focus animals 9, year 6 | spent new storm 240, move storm 40, wharariki 175, 348 mauri in hand | replay 27221500
+   problems met: 17 (answered: no hint 0, after the question 0, after being told 11; went away by itself 6; lost 0)
+
+3 run(s): win 3
+  eagle took: south_island_giant_moa 24, kaka 1, kokako 5, kea 3; cast lost 0
+  focus animals at the end: 8 to 12 (median 9); years reached: 6 to 6
+  problems met in the lessons' year: 0 of 28 answered with no hint, 28 after a hint, 0 lost; in the unprompted stretch: none
+  files in /home/user/Mauri/tests/clues/freeplay_late

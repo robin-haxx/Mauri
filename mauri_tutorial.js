@@ -36,7 +36,14 @@ const TUTORIAL_EVENTS = {
   STORY_BEAT: 'story_beat',           // a chapter level's line or banner (mauri_chapters.js), data: { cue }
   PLANT_SPROUTED: 'plant_sprouted',   // a pātōtara (patch or wild plant) sprouted by hand, data: { sprouted, type }
   BIRD_HATCHED: 'bird_hatched',       // a flighted bird's (or kākāpō's) egg hatched, data: { egg, bird, speciesKey }
-  BIRD_KILLED: 'bird_killed'          // an eagle took a flighted bird, data: { bird, eagle, speciesKey }
+  BIRD_KILLED: 'bird_killed',         // an eagle took a flighted bird, data: { bird, eagle, speciesKey }
+  SPECIES_ARRIVED: 'species_arrived', // newcomers walked or flew in (mechanics.rescueImmigration, eagleReturns), data: { speciesKey, count }
+  PLANT_TAPPED: 'plant_tapped',       // the player tapped a plant to rustle it (lures hungry moa), data: { plant, type }
+  ANIMAL_SELECTED: 'animal_selected', // the player tapped an animal to read and follow it (userCamera levels), data: { animal, speciesKey }
+  SPECIES_LEFT: 'species_left',       // a grown young bird has set off over the pass (mechanics.dispersal), data: { moa, speciesKey }
+  MOA_CROWDED: 'moa_crowded',         // a moa's forest meal was cut short by other moa feeding beside it (mechanics.forestCompetition + crowdingSign), data: { moa, speciesKey, others }
+  FOREST_STRIPPED: 'forest_stripped', // a moa's forest meal was cut short by a flock feeding overhead (mechanics.flockStripsFloor), data: { moa, speciesKey, birds }
+  EAGLE_GAVE_UP: 'eagle_gave_up'      // its prey kept getting under cover, so it went for other prey (mechanics.coverSendsEagleAway), data: { eagle, speciesKey (what it went for), from }
 };
 
 // Named toolbar-button highlight targets → the placeable key each one shows.
@@ -364,6 +371,16 @@ class TutorialManager {
   // Item tips only run while the player can pay for the item they point at, so the guide
   // never asks for a tool that's greyed out. Tools outside the level's palette aren't gated.
   _tipAffordable(tip) {
+    // A banner asking the player to MOVE one (needs 'move'): there must be one on the land to
+    // pick up, and its move price in hand.
+    if (tip.needs === 'move') {
+      const type = tip.tool || 'Storm';
+      const def = (this.game.activePlaceables && this.game.activePlaceables[type]) ||
+                  (typeof PLACEABLES !== 'undefined' && PLACEABLES[type]) || {};
+      const cost = def.moveCost != null ? def.moveCost : Math.ceil((def.cost || 0) / 2);
+      const any = (this.game.simulation && this.game.simulation.placeables || []).some(p => p.alive && p.type === type);
+      return any && this.game.mauri.canAfford(cost || 0);
+    }
     const key = this._tipPlaceable(tip);
     const def = key && this.game.activePlaceables && this.game.activePlaceables[key];
     return !def || this.game.mauri.canAfford(def.cost);
@@ -1010,12 +1027,17 @@ class TutorialManager {
       };
     }
 
+    // center, top and bottom: the panel and the guide beside it (to its left in landscape, its
+    // sprite and gap 210 px at scale) centred as one in the play area.
+    const { x: pax, y: pay, w: paw, h: pah } = this.playArea();
+    const lead = CONFIG.portrait ? 0 : 210 * TIP_PANEL_SCALE * ((this.currentTip && this.currentTip.guideScale) || 1);
+    const midX = Math.max(lead + 20, Math.min(cw - panelWidth - 20, pax + (paw - panelWidth + lead) / 2));
     const positions = {
-      center:      { x: (cw - panelWidth) / 3, y: (ch - panelHeight) / 2 },
+      center:      { x: midX, y: Math.max(topMargin, pay + (pah - panelHeight) / 2) },
       left:        { x: CONFIG.gameAreaWidth - panelWidth * 1.2, y: (ch - panelHeight) / 2 },
       right:       { x: CONFIG.rightSidebarX - panelWidth - margin, y: (ch - panelHeight) / 2 },
-      top:         { x: (CONFIG.gameAreaWidth - panelWidth) / 2, y: topMargin },
-      bottom:      { x: (CONFIG.gameAreaWidth - panelWidth) / 2, y: ch - panelHeight - bottomMargin },
+      top:         { x: midX, y: topMargin },
+      bottom:      { x: midX, y: ch - panelHeight - bottomMargin },
       topLeft:     { x: CONFIG.gameAreaWidth - panelWidth * 1.2, y: topMargin },
       topRight:    { x: CONFIG.rightSidebarX - panelWidth - margin, y: topMargin },
       bottomLeft:  { x: CONFIG.gameAreaWidth - panelWidth * 1.2, y: ch - panelHeight - bottomMargin },

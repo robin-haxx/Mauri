@@ -113,6 +113,7 @@ The runner only runs while the game is playing. Moments and pausing tips hold it
 | `sketch` | `{ of, label, dial }`: this level is one variant (one setting of the emergence dial) of a module family (§18). |
 | `nextLevel` | A level id: the win card's "Next module" button. |
 | `teaches` | The rules of the simulation this lesson teaches, by name (`['cover', 'eagle_reads']`). `node tools/coverage.js` uses them to show which of any level's rules no lesson teaches (§16). |
+| `weather` | Storms that gather by themselves on the highest ground: `{ everySec = 20, max = 3, lifeSec = 75, winterLifeSec = 40, firstSec = 8 }`, or `false`. On by default on a journey level with the Storm. A new one swells up while fewer than `max` storms stand anywhere, away from the other storms and the cast; it is `natural` (not counted as placed). |
 | `userCamera` | `true`: the player's camera on this level. Zoom buttons (and the wheel, and + / -), a drag to pan when zoomed in, a tap on an animal to ring it, read who it is and follow it. With `mechanics.huntCamera` the view also eases to a hunt and back (§19). |
 
 The game's own loss (every moa gone) still applies.
@@ -245,16 +246,16 @@ An action is an object with **one** verb, or a function `(x) => {}`. Actions go 
 | `say` | `[[speaker, text, extras?], ...]` (§9) |
 | `banner` | `{ words, until, lit, tool, pause, maxSec }` (§9) |
 | `notify` | `"text"` or `["text", 'info' / 'success' / 'error']` |
-| `moment` | `{ on, text, sec = 2.5, zoom = 2.4 }`: holds the world and closes in on `on`, with big words. |
+| `moment` | `{ on, text, sec = 3, zoom = 2.2 }`: holds the world and closes in on `on`, with big words. (Every camera move eases in and out and takes up the motion of the one before it; a big change of zoom takes about 1.25 s per doubling: `Game.cameraTo`.) |
 | `camera` | `{ on, zoom = 1.6, sec = 1.5 }`, or `'home'` |
 | `tools`, `unlock`, `lock` | The toolbar (key or keys) |
 | `place` | `{ type, at, standing }`: a placeable, free. `standing: true` never wears out. |
 | `sow` | `{ plant, at, count = 4, radius = 30, growth = 0.9, sprouted = true }` |
 | `spawn` | `{ type, at, count = 1, radius = 20, sexes, female, hunger, age }`: adult moa or birds at a place. `sexes: 'pair'` alternates female, male, ...; `female: true` / `false` sets them all; `hunger` (0–100) is how hungry they start (a hungry pair goes out to feed at once); `age: 'juvenile'` makes a half-grown moa chick. |
 | `nest` | `{ at, radius = 40, hideClutch, reservedFor, as }`: an established nesting site at a place. `as` names it as a site, so later actions and conditions can say `at: 'home'`. |
-| `lay` | `{ species, at, count = 1, incubationSec }`: an egg, or a clutch, at a place. Scripted, so it is not counted as `laid`. |
+| `lay` | `{ species, at, count = 1, incubationSec, scene }`: an egg, or a clutch, at a place. Scripted, so it is not counted as `laid`. `scene` (`true` or `{ sec = 3 }`): when its time is up it hatches as the modules' eggs did, rocking and cracking with the camera close in, then leaves its shell and the view eases back (`Game.onHatchScene`). When it hatches is still the simulation's. |
 | `adopt` | `{ name: '$role' }` or `{ name: { species, near, female, pick } }`: binds a cast name to a live bird: the one the event names (`{ pukepuke: '$moa' }` on `egg_hatched`), or the nearest of a species to a place. The name must be in `cast` with `manual: true` (§13). |
-| `fade` | `{ type = 'Storm', sec = 20, refreshOnMove }`: every placed item of that type wears out within `sec` seconds, standing ones too. With `refreshOnMove`, moving one gives it its time again. |
+| `fade` | `{ type = 'Storm', sec = 20, refreshOnMove }`: every placed item of that type wears out within `sec` seconds, standing ones too. With `refreshOnMove`, moving one gives it its time again. (On a journey level, or with `mechanics.stormMoveExtend`, a moved storm instead gains that fraction of its time left: half, by default.) |
 | `guide` | An entry id: opens the Field Guide at it. |
 | `aim` | `{ at, which = 'nearest', sec = 20 }`: an eagle goes for that moa, whatever its hunger. It still can't see a moa in cover; given a list, it takes the first that is alive and in the open. The validator warns when `aim` is used anywhere but a beat's `force`: it is a scripted attack, and only a forced beat is marked as such in the log. |
 | `flag`, `unflag` | A story flag name |
@@ -267,7 +268,7 @@ An action is an object with **one** verb, or a function `(x) => {}`. Actions go 
 
 | Verb | Value |
 |---|---|
-| `eagle` | `{ which = 'all', near, hunger, watch, grace }`. `which`: `'all'`, `'nearest'` (to `near` or `watch`), or a ref. `hunger`: 0–100 (they hunt above about 45). `watch`: move their patrol over a place. `grace`: seconds the eagle chases but can't strike (a "last chance"). |
+| `eagle` | `{ which = 'all', near, hunger, watch, grace }`. `which`: `'all'`, `'nearest'` (to `near` or `watch`), or a ref. `hunger`: 0–100 (they hunt above about 45). `watch`: move their patrol over a place. `grace`: seconds the eagle chases but can't strike (a "last chance"). `away`: seconds it flies off over the nearest edge on an errand (tile 1: scuffling with the kea), out of sight and out of the hunt, then back to its patrol (over `watch`, if given); `hunger` is then its hunger on its return (`HaastsEagle.sendAway`). |
 
 ---
 
@@ -310,6 +311,7 @@ so a goal can count toward a target that moves (`name: "The clan: {$clan} of {$c
 | `words` | `"text"` or `[idle, inHand]`: the second shows while `tool` is selected or being moved. |
 | `until` | Condition, in the banner's own scope (§7). |
 | `tool` | Highlights its toolbar button. The banner gives way if the player can't afford it. |
+| `needs` | What the player must be able to do for the banner to stand: `'place'` (a new `tool`; the default with a `tool`), `'move'` (move one of `tool`, default Storm: one must be on the land and its move price in hand) or `'none'`. A banner that can't be answered isn't shown, and gives way if it stops being answerable. |
 | `lit` | As above, drawn through the dimming. |
 | `pause` | Default `true`. `false`: play goes on and the screen isn't dimmed. |
 | `maxSec` | Gives way after this long. |
@@ -359,7 +361,7 @@ how far up the ladder it went, how long it took and how it ended.
 | Field | What |
 |---|---|
 | `until` | The case is over when this holds. Counted in the case's own scope (`placed`, `gained`, `seen` and `after` count from when the reaction fired), with the event's roles. |
-| `hints` | `[{ after: sec, ...own actions }]`, in rising order of `after`. A rung's banner with no `until` of its own waits on the reaction's. |
+| `hints` | `[{ after: sec, ...own actions }]`, in rising order of `after`. A rung's banner with no `until` of its own waits on the reaction's, and goes at its `maxSec` if that comes first. |
 | `solved` | The ending that counts as the player's own answer. |
 | `lost` | The ending that counts as the problem winning. Any other ending is recorded as `passed` (it went away by itself). |
 
@@ -707,6 +709,7 @@ per-level override of a placeable. The ones added for the modules, and the file 
 | `availablePlaceables.Storm: { blocksEagleVision: true, distractsEagles: false }` (a level key, not a flag) | The Storm is cover, not a stun: a moa under it can't be seen. | `mauri_placeable.js` |
 | `coverBreaksLock: true` | An eagle loses a target that reaches full cover and turns to other prey, and a strike on a covered moa fails. A change of target because the last one is gone from view counts as a fresh hunt: a new wind-up, `eagle_hunting` again. | `mauri_eagle.js`, `mauri_simulation.js` |
 | `coverCalmsMoa: true` | A moa fully under cover holds still for an eagle that isn't on it, instead of bolting into the open. | `mauri_moa.js` |
+| `stormAttract: { species, strength, lookahead, reach, inner, minCos, hungryMult }`, or `false` | Storms draw moa (on by default for upland moa on a journey level; `STORM_ATTRACT_DEFAULT`). Where a bird is going is still its own: a storm near its walk bends the way it steers (a heading between the destination and the storm), so the route bows through the storm and still arrives. One with nowhere to be ambles over and rests under it. Only the storm that draws it most counts; none inside a storm's inner part, none behind it; weaker when hungry, no bend on the way to food, none when starving, feeding or bolting. The held-storm preview predicts the bent route with the same rule. | `mauri_moa.js`, `mauri_sketch.js` |
 | `lureUnderStorm: true` | A tap on a plant under a storm lures moa as usual. | `mauri_sketch.js` |
 | `placeableQueryRadius: 100` | How far a moa notices placed items (80 otherwise; storms are wide). | `mauri_moa.js` |
 | `eagleTelegraph: { graceSec, warnBelow }` | The visible wind-up. Every fresh hunt opens with `graceSec` seconds in which the eagle chases slowly and can't strike, its "!" showing. The eagle commits to the bird it picked while it can see it and it is in range; any change of target is a fresh hunt with the full window, so no bird is struck without a wind-up on it. Within `warnBelow` of its hunt threshold its hunger bar pulses amber. A tap on an eagle says in words how hungry it is and what it is doing. | `mauri_eagle.js`, `mauri_sketch.js` |

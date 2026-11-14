@@ -73,10 +73,20 @@ class Egg {
   
   update() {
     if (!this.alive || this.hatched) return;
-    
+
+    // A story egg (hatchScene { frames }, a chapter's `lay` with `scene`): its time up, it rocks
+    // and cracks for a few seconds (hatchProgress 0..1, drawn in render) before the chick is out.
+    if (this.hatchScene && this.hatchProgress != null) {
+      this.hatchT += 1;
+      this.hatchProgress = Math.min(1, this.hatchT / this.hatchScene.frames);
+      if (this.hatchProgress >= 1) this.hatched = true;
+      return;
+    }
+
     this.currentTime += this.speedBonus;
-    
+
     if (this.currentTime >= this.incubationTime) {
+      if (this.hatchScene) { this.currentTime = this.incubationTime; this.hatchT = 0; this.hatchProgress = 0; return; }
       this.hatched = true;
     }
   }
@@ -246,5 +256,46 @@ class Egg {
       textAlign(CENTER, TOP);
       text(this.parentSpecies.substring(0, 8), px, barY + 4);
     }
+  }
+}
+// The broken shell a story egg leaves (Egg.hatchScene), as module 0 drew it: two halves tipped
+// apart and a scatter of chips, there for six seconds and fading out over the last three. Kept
+// in Simulation.shells and drawn with the eggs.
+class EggShell {
+  constructor(x, y, size) {
+    this.pos = createVector(x, y);
+    this.size = size;
+    this.t = 0;
+    this.alive = true;
+    this.spin = random(TWO_PI);
+  }
+
+  update(dt = 1) {
+    this.t += dt;
+    if (this.t >= 360) this.alive = false;
+  }
+
+  render() {
+    if (!this.alive) return;
+    const a = 255 * Math.max(0, Math.min(1, 2 - this.t / 180));
+    const out = Math.min(1, this.t / 12), r = this.size;
+    push();
+    translate(this.pos.x, this.pos.y);
+    stroke(200, 195, 180, a);
+    strokeWeight(0.5);
+    fill(245, 238, 220, a);
+    for (const side of [-1, 1]) {
+      push();
+      translate(side * (1.5 + out * 3), out * 1.2);
+      rotate(side * (0.5 + out * 0.6));
+      arc(0, 0, r * 1.3, r * 1.5, side < 0 ? HALF_PI : -HALF_PI, side < 0 ? PI + HALF_PI : HALF_PI, CHORD);
+      pop();
+    }
+    noStroke();
+    for (let i = 0; i < 5; i++) {
+      const ang = this.spin + i * 1.26, d = 3 + out * (4 + (i % 3) * 2);
+      ellipse(Math.cos(ang) * d, Math.sin(ang) * d * 0.6, 1.2, 1);
+    }
+    pop();
   }
 }

@@ -1816,6 +1816,7 @@ class Game {
   // eases out as a loop widens the country.
   _resetCamera() {
     this.camera = { zoom: 1, cx: 0, cy: 0, ax: 0.5, ay: 0.5, tween: null };
+    this._camHist = null; this._hatchCam = null;
     this._selected = null; this._follow = false; this._huntCam = null; this._panCand = null;   // (the player's camera)
   }
 
@@ -1837,23 +1838,84 @@ class Game {
       const b = this._baseView();
       Object.assign(to, pointUnder(b.z, b.x, b.y));
     }
+    const lz0 = Math.log(Math.max(1e-4, from.zoom)), lz1 = Math.log(Math.max(1e-4, to.zoom));
+    // A big change of scale takes its time, whatever the caller asked: about 1.25 s for each
+    // doubling, so a close-in never lurches. (A cut, 1 or 2 frames, stays a cut.)
+    const cutTo = frames <= 2;
+    frames = cutTo ? Math.max(1, frames) : Math.max(frames, Math.round(Math.abs(lz1 - lz0) * 108));
+    // A move that cuts into another (or into the view following a bird) carries on at the speed
+    // the view was already moving, rather than stopping dead and starting again: the view's
+    // rate of change over the last frame, under this move's anchor, is the ease's starting
+    // slope (capped so it can't fling the view far past where it is going).
+    const v0 = { lz: 0, cx: 0, cy: 0 };
+    const h = this._camHist;
+    if (!cutTo && h && h.length === 2 && frameCount - h[1].f <= 2) {
+      const p1 = pointUnder(h[1].z, h[1].x, h[1].y), p0 = pointUnder(h[0].z, h[0].x, h[0].y);
+      const rate = { lz: Math.log(h[1].z / h[0].z), cx: p1.cx - p0.cx, cy: p1.cy - p0.cy };
+      const span = { lz: lz1 - lz0, cx: to.cx - from.cx, cy: to.cy - from.cy };
+      const floor = { lz: 0.04, cx: 12, cy: 12 };
+      // (A cut, not a move: a new level, a resized window. Nothing to carry on from.)
+      const cut = Math.abs(rate.lz) > 0.12 || Math.hypot(rate.cx, rate.cy) > 40;
+      if (!cut) for (const k in v0) {
+        const cap = Math.max(Math.abs(span[k]) * 1.5, floor[k]);
+        v0[k] = Math.max(-cap, Math.min(cap, rate[k] * frames));
+      }
+    }
     Object.assign(c, from);
-    c.tween = { from, to, t: 0, frames: Math.max(1, frames) };
+    c.tween = { from, to, lz0, lz1, v0, t: 0, frames };
   }
 
-  // Advance a camera ease by one frame (called from render) and re-fit the view.
+  // Advance a camera ease by one frame (called from render) and re-fit the view. The ease is a
+  // quintic Hermite curve: it leaves at the slope the view already had (v0; none from rest) and
+  // arrives at rest, with no sudden change of pace at either end.
   _updateCamera() {
     const c = this.camera;
-    if (!c || !c.tween) return;
-    const tw = c.tween;
-    tw.t = Math.min(1, tw.t + 1 / tw.frames);
-    const e = tw.t * tw.t * (3 - 2 * tw.t);   // smoothstep
-    const lerpK = (k) => tw.from[k] + (tw.to[k] - tw.from[k]) * e;
-    // Zoom eases in log space so the scale changes at an even rate.
-    c.zoom = Math.exp(Math.log(tw.from.zoom) + (Math.log(tw.to.zoom) - Math.log(tw.from.zoom)) * e);
-    c.cx = lerpK('cx'); c.cy = lerpK('cy'); c.ax = lerpK('ax'); c.ay = lerpK('ay');
-    if (tw.t >= 1) c.tween = null;
-    this._updateViewTransform();
+    if (c && c.tween) {
+      const tw = c.tween;
+      tw.t = Math.min(1, tw.t + 1 / tw.frames);
+      const s = tw.t, s3 = s * s * s, s4 = s3 * s, s5 = s4 * s;
+      const h0 = 1 - 10 * s3 + 15 * s4 - 6 * s5, hv = s - 6 * s3 + 8 * s4 - 3 * s5, h1 = 1 - h0;
+      const ease = (a, b, v) => h0 * a + h1 * b + hv * v;
+      // (Zoom eases in log space, so the scale changes at an even rate.)
+      c.zoom = Math.exp(ease(tw.lz0, tw.lz1, tw.v0.lz));
+      c.cx = ease(tw.from.cx, tw.to.cx, tw.v0.cx);
+      c.cy = ease(tw.from.cy, tw.to.cy, tw.v0.cy);
+      c.ax = tw.to.ax; c.ay = tw.to.ay;
+      if (tw.t >= 1) {
+        c.tween = null;
+        if (tw.normalise) { this._updateViewTransform(); this._normaliseCamera(); }
+      }
+      this._updateViewTransform();
+    }
+    // The last two views shown, for the next ease's starting slope (see cameraTo).
+    if (typeof frameCount !== 'undefined') {
+      const h = this._camHist || (this._camHist = []);
+      if (!h.length || h[h.length - 1].f !== frameCount) {
+        h.push({ z: CONFIG.viewZoom, x: CONFIG.viewX, y: CONFIG.viewY, f: frameCount });
+        if (h.length > 2) h.shift();
+      }
+    }
+  }
+
+  // A story egg's hatching (Egg.hatchScene; the simulation calls this): as it starts to rock
+  // and crack, the camera closes in on the nest, as the modules' did; when the chick is out (or
+  // the egg is lost) it eases back to where the view was. A moment on the chick may take the
+  // view in between; it returns to the same place.
+  onHatchScene(egg, phase) {
+    if (phase === 'start') {
+      if (this._hatchCam || this.state !== GAME_STATE.PLAYING) return;
+      const c = this.camera, v = c ? (c.tween ? c.tween.to : c) : null;
+      this._hatchCam = { egg, back: (v && v.zoom > 1.0001) ? { zoom: v.zoom, cx: v.cx, cy: v.cy, ax: v.ax, ay: v.ay } : { zoom: 1 } };
+      this._huntCam = null;
+      this._follow = false;
+      this.cameraTo({ zoom: Math.max(2.8, v ? v.zoom : 1), cx: egg.pos.x, cy: this._groundPaintY(egg.pos.x, egg.pos.y),
+                      ax: 0.5, ay: 0.5 }, 110);
+      return;
+    }
+    const hc = this._hatchCam;
+    if (!hc || hc.egg !== egg) return;
+    this._hatchCam = null;
+    this.cameraTo(hc.back, 120);
   }
 
   // ==========================================================================================
@@ -1918,20 +1980,21 @@ class Game {
     else this.cameraTo({ zoom: z, ax: 0.5, ay: 0.5 }, 30);
   }
 
-  // The wheel: zoom smoothly about the pointer (canvas point mx, my).
+  // The wheel: zoom smoothly about the pointer (canvas point mx, my). Each notch eases (a short
+  // move from the zoom the last one was heading for), so a run of notches glides rather than
+  // stepping; the point under the pointer stays put.
   zoomWheel(delta, mx, my) {
     if (!this.userCameraOn() || !this.isInGameArea(mx, my)) return false;
-    const c = this.camera, z0 = this._zoomGoal();
+    const z0 = this._zoomGoal();
     const z = Math.max(1, Math.min(USER_ZOOMS[USER_ZOOMS.length - 1], z0 * Math.exp(-delta * 0.0015)));
     if (Math.abs(z - z0) < 0.001) return true;
     this._huntCam = null;
     const v = this._viewport();
+    const ax = (mx - v.x) / v.w, ay = (my - v.y) / v.h;
+    if (z <= 1.0001) { this.cameraTo({ zoom: 1, ax, ay }, 18); return true; }
     const px = (mx - CONFIG.viewX) / CONFIG.viewZoom, py = (my - CONFIG.viewY) / CONFIG.viewZoom;
-    c.tween = null;
-    if (z <= 1.0001) { c.zoom = 1; this._updateViewTransform(); return true; }
-    Object.assign(c, { zoom: z, cx: px, cy: py, ax: (mx - v.x) / v.w, ay: (my - v.y) / v.h });
-    this._updateViewTransform();
-    this._normaliseCamera();
+    this.cameraTo({ zoom: z, cx: px, cy: py, ax, ay }, 18);
+    this.camera.tween.normalise = true;   // (anchored back at the middle once it lands)
     return true;
   }
 
@@ -4295,6 +4358,14 @@ class Game {
     return (this.activePlaceables && this.activePlaceables[p.type]) || p.def;
   }
 
+  // How much of a moved storm's remaining time it gains: mechanics.stormMoveExtend, else half
+  // (0.5) on a journey level, else none.
+  _stormMoveExtend() {
+    const M = typeof LEVEL_MECHANICS !== 'undefined' ? LEVEL_MECHANICS : null;
+    if (M && M.stormMoveExtend != null) return M.stormMoveExtend;
+    return this.currentLevel && this.currentLevel.journey ? 0.5 : 0;
+  }
+
   // Moving a placed item costs half its price, unless the level gives it its own moveCost.
   _moveCost(p) {
     const def = this._moveDef(p);
@@ -4450,12 +4521,23 @@ class Game {
       return false;
     }
 
+    // A storm that wears out and is moved gets half again the time it had left (the journey's
+    // rule, mechanics.stormMoveExtend), in place of a level's refreshOnMove top-up.
+    const ext = p.type === 'Storm' ? this._stormMoveExtend() : 0;
+    const lifeBefore = p.life, wears = !p.standing || p.fading;
     p.moveTo(x, y);
+    let extended = false;
+    if (ext > 0 && wears && lifeBefore > 0) {
+      p.life = lifeBefore * (1 + ext);
+      p.maxLife = Math.max(p.maxLife, p.life);
+      extended = true;
+    }
     this._lastPlacedMs = millis();
     if (p.type === 'nest') this.simulation._nestCacheValid = false;
     if (p.type === 'Storm') this.simulation.stats.stormsMoved = (this.simulation.stats.stormsMoved || 0) + 1;
     this.movingPlaceable = null;
-    this.addNotification(`Moved ${def.name} (-${cost} mauri)`, 'info');
+    this.addNotification(extended ? `Moved ${def.name} (-${cost} mauri, +50% time left)`
+                                  : `Moved ${def.name} (-${cost} mauri)`, 'info');
     if (audioManager) p.type === 'Storm' ? audioManager.playBoltStrike() : audioManager.playPlantRustle();
     if (this.tutorial) this.tutorial.fireEvent(TUTORIAL_EVENTS.PLACEABLE_MOVED, { type: p.type });
     return true;
@@ -4704,6 +4786,107 @@ class Game {
     return Array.isArray(my) ? my.includes(year) : (!!my.every && year % my.every === 0);
   }
 
+  // ---- A kea raid's odds, where kea gather at a moa nest -----------------------------------
+  // On a level whose kea raid at the odds (mechanics.keaRaidsEggs 'odds'): wherever kea are
+  // within raid reach of a moa egg, the chance a raid would work right now (Simulation.
+  // raidSuccessChance), with the nest's own moa that guard it on one side of the figure and the
+  // kea on the other. Drawn in the world pass; reads the simulation, changes nothing.
+  _renderRaidOdds() {
+    const M = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS) || null;
+    const sim = this.simulation;
+    if (!M || M.keaRaidsEggs !== 'odds' || !sim || !sim.eggs.length) return;
+    const kea = sim.otherEntities && sim.otherEntities.kea;
+    if (!kea || !kea.length) return;
+    const R = M.keaRaidRadius ?? 95, moaR = (M.keaRaid && M.keaRaid.moaRadius) ?? 90;
+    const done = new Set();
+    for (const egg of sim.eggs) {
+      if (!egg.alive || egg.hatched || (egg.offspringType && egg.offspringType !== 'moa')) continue;
+      const site = (sim.nestingSites || []).find(s => s.alive !== false && s.isInRange && s.isInRange(egg.pos)) || null;
+      if (done.has(site || egg)) continue;
+      done.add(site || egg);
+      const at = site ? site.pos : egg.pos;
+      let keaN = 0;
+      for (const b of kea) if (b.alive && (b.pos.x - at.x) ** 2 + (b.pos.y - at.y) ** 2 <= R * R) keaN++;
+      if (!keaN) continue;
+      this._drawRaidOdds(at, moaR, sim.raidSuccessChance(site, egg.pos), keaN, sim.moaNear(at, moaR),
+                         egg.parentSpecies || 'upland_moa', 0.75);
+    }
+  }
+
+  // A raid's odds over a nest (world pass): a dashed ring round who counts, and over it the
+  // chance in big figures (red when the kea have the better of it, green when the moa do),
+  // flanked by the nest's moa (its species' sprite and how many) and the kea (and how many).
+  // `s` scales the words and sprites (1: module 1's size).
+  _drawRaidOdds(at, radius, chance, keaN, moaN, moaSpecies = 'upland_moa', s = 1) {
+    const px = 1 / CONFIG.viewZoom, k = px * s;   // (one screen pixel, in world units)
+    const col = chance < 0.5 ? [140, 230, 150] : [255, 140, 110];
+    push();
+    translate(at.x, this._groundPaintY(at.x, at.y));
+    noFill();
+    stroke(col[0], col[1], col[2], 200);
+    strokeWeight(2 * px);
+    drawingContext.setLineDash([8 * px, 6 * px]);
+    ellipse(0, 0, radius * 2, radius * 1.24);
+    drawingContext.setLineDash([]);
+    const y0 = -radius * 0.62 - 40 * k;
+    textAlign(CENTER, CENTER);
+    if (typeof FreckleFace !== 'undefined') textFont(FreckleFace);
+    strokeJoin(ROUND);
+    stroke(15, 20, 15, 230);
+    strokeWeight(7 * k);
+    fill(col[0], col[1], col[2]);
+    textSize(52 * k);
+    const label = `RAID ${Math.round(chance * 100)}%`;
+    const half = textWidth(label) / 2 + 16 * k;
+    // (A dark pill behind it all, so it reads over any ground.)
+    textSize(38 * k);
+    const sideW = 64 * k * 1.3 + 6 * k + textWidth('00');
+    noStroke();
+    fill(14, 20, 16, 175);
+    rect(-half - sideW - 14 * k, y0 - 40 * k, (half + sideW + 14 * k) * 2, 80 * k, 40 * k);
+    stroke(15, 20, 15, 230);
+    textSize(52 * k);
+    fill(col[0], col[1], col[2]);
+    text(label, 0, y0);
+    // The moa on the left, facing in; the kea on the right.
+    const sp = (typeof MOA_SPECIES !== 'undefined' && MOA_SPECIES[moaSpecies]) || {};
+    let moaImg = typeof EntitySprites !== 'undefined' ? EntitySprites.getMoaSprite(0, false, false, sp.spriteSet || null) : null;
+    if (moaImg && !sp.spriteSet && sp.tint && EntitySprites.getTintedMoaFrame) moaImg = EntitySprites.getTintedMoaFrame(moaImg, sp.tint);
+    const moaFace = (typeof EntitySprites !== 'undefined' && EntitySprites.getMoaFaceSign) ? EntitySprites.getMoaFaceSign(sp.spriteSet || null) : 1;
+    const keaImg = typeof EntitySprites !== 'undefined' ? EntitySprites.getKeaSprite() : null;
+    this._raidOddsSide(-1, half, y0, moaImg, moaFace, moaN, [228, 238, 214], k);
+    this._raidOddsSide(1, half, y0, keaImg, 1, keaN, [255, 196, 120], k);
+    pop();
+  }
+
+  // One side of the odds: a bird's sprite beside the figure (`dir` -1 left, 1 right; `face`
+  // the art's own facing, flipped to look in toward the figure) and its count beyond it.
+  _raidOddsSide(dir, half, y0, img, face, n, col, k) {
+    const h = 64 * k;
+    let w = h;
+    if (img && img.height > 0) w = img.width * h / img.height;
+    const cx = dir * (half + w / 2);
+    push();
+    translate(cx, y0);
+    if (img) {
+      if (face * -dir < 0) scale(-1, 1);
+      noStroke();
+      imageMode(CENTER);
+      image(img, 0, 0, w, h);
+    } else {
+      stroke(15, 20, 15, 230); strokeWeight(3 * k);
+      fill(col[0], col[1], col[2]);
+      ellipse(0, 0, h * 0.7, h * 0.7);
+    }
+    pop();
+    stroke(15, 20, 15, 230);
+    strokeWeight(6 * k);
+    fill(col[0], col[1], col[2]);
+    textSize(38 * k);
+    textAlign(dir < 0 ? RIGHT : LEFT, CENTER);
+    text(`${n}`, dir * (half + w + 6 * k), y0);
+  }
+
   // The signs of the journey's rules, drawn in the world pass over the birds: a mark over a
   // moa whose meal was cut short (by a crowd, or by a flock overhead), green fruit on the
   // rimu the year before a mast, and a ring round a lone favoured patch that a second patch
@@ -4927,6 +5110,7 @@ class Game {
     this.simulation.render();
     if (typeof GLBatch !== 'undefined' && GLBatch.enabled && GLBatch._open) GLBatch.composite(drawingContext);
     if (this.module) this.module.renderOver();   // a module's markers, over the birds
+    else this._renderRaidOdds();                 // (kea at a moa nest: the raid's odds)
     this._renderInspect();
     this._renderWorldSigns();
     this._renderSelection();
@@ -5679,30 +5863,42 @@ class Game {
     // over a recessed tray its contents slide open in.
     const fullW = Math.min(1000, cw - 120), headH = 72, gap = 18;
     const depth = 9, trayInset = 14;
-    // While the journey is open the boxes compact to the left and the map of the upper South
-    // Island stands beside them (journeySplit). On a canvas too narrow for that (portrait) the
-    // map goes under the journey's modules instead, inside its tray.
+    // The boxes stand in a column on the left and the right holds a square panel
+    // (journeySplit): the map of the upper South Island while the journey is open, else the
+    // unlocks box (_renderUnlocksBox). On a canvas too narrow for that (portrait) the boxes are
+    // centred and the map goes under the journey's modules instead, inside its tray.
     const jGap = 28, jLeftW = Math.min(660, fullW);
     const jMapW = Math.min(640, cw - 120 - jLeftW - jGap);
     const journeySplit = typeof CAMPAIGN !== 'undefined' && jMapW >= 440;
     const jAnim = this._menuAnim && this._menuAnim.journey;
     const jk = journeySplit && jAnim ? Math.max(0, Math.min(1, jAnim.open.x)) : 0;
     const jX0 = centerX - (jLeftW + jGap + jMapW) / 2;
-    const boxW = Math.round(fullW + (jLeftW - fullW) * jk);
-    const boxX = Math.round((centerX - fullW / 2) + (jX0 - (centerX - fullW / 2)) * jk);
+    const boxW = journeySplit ? jLeftW : fullW;
+    const boxX = Math.round(journeySplit ? jX0 : centerX - fullW / 2);
     const boxMid = boxX + boxW / 2;
-    // (A slab on the move is the nearer resting slab stretched; see MenuStyle.drawSlab.)
-    const slabBake = jk > 0.98 ? jLeftW : fullW;
+    const slabBake = boxW;
     const mx = mouseX / spriteSS(), my = mouseY / spriteSS();
+    // The column scrolls (wheel, or a finger drag; see mouseWheel/touchMoved) when its open
+    // boxes run past the bottom of the screen. _menuScrollTarget is where it is headed;
+    // _menuScroll eases after it. Both are clamped to last frame's overflow.
+    const colTop = 180, clipTop = 140, clipBot = ch - 62;
+    const maxScroll = this._menuMaxScroll || 0;
+    this._menuScrollTarget = Math.max(0, Math.min(maxScroll, this._menuScrollTarget || 0));
+    this._menuScroll = (this._menuScroll || 0) + (this._menuScrollTarget - (this._menuScroll || 0)) * 0.3;
+    if (Math.abs(this._menuScroll - this._menuScrollTarget) < 0.5) this._menuScroll = this._menuScrollTarget;
+    const scroll = this._menuScroll;
+    // (Clicks in the column above or below its visible window are ignored; see handleClick.)
+    this._menuColClip = { x: boxX - 12, w: boxW + 24, y: clipTop, h: clipBot - clipTop };
     // The sections, from MENU_SECTIONS, each as tall as its rows of cards.
     const sections = [];
-    const cardS = 200, cardGap = 32, perRow = Math.max(1, Math.floor((fullW - 40 + cardGap) / (cardS + cardGap)));
+    const innerW = boxW - 40;
+    const cardS = 200, cardGap = 32, perRow = Math.max(1, Math.floor((innerW + cardGap) / (cardS + cardGap)));
     this._journeyBtnBounds = [];
     this._journeyHover = null;
     for (const sec of MENU_SECTIONS) {
       if (sec.style === 'journey') {   // the sequence of tiles and their map (mauri_campaign.js)
         if (typeof CAMPAIGN === 'undefined') continue;
-        const modW = Math.min(612, fullW - 48), modH = this._journeyModulesH();
+        const modW = Math.min(612, boxW - 48), modH = this._journeyModulesH();
         if (journeySplit) {
           sections.push({ key: sec.key, label: sec.label, bodyH: modH + 24,
             draw: (top) => this._renderJourneyModules(boxMid - modW / 2, top + 14, modW, mx, my) });
@@ -5719,13 +5915,14 @@ class Game {
       const list = bySection[sec.key];
       if (!list || !list.length) continue;
       if (sec.style === 'cards') {
-        sections.push({ key: sec.key, label: sec.label, bodyH: 250,
-          draw: (top) => this._renderChallengeCards(list, centerX, top + 25, fullW - 40) });
+        const rows = this._challengeLayout(list.length, innerW).rows;
+        sections.push({ key: sec.key, label: sec.label, bodyH: 50 + rows * 200 + (rows - 1) * 32,
+          draw: (top) => this._renderChallengeCards(list, boxMid, top + 25, innerW) });
       } else {
         const entries = this._moduleEntries(list), withSketches = sec.style === 'sketches';
         const rows = Math.ceil(entries.length / perRow), rowH = cardS + cardGap + (withSketches ? 44 : 0);
         sections.push({ key: sec.key, label: sec.label, bodyH: rows * rowH + 18,
-          draw: (top) => this._renderModuleCards(entries, centerX, top + 25, fullW - 40, withSketches) });
+          draw: (top) => this._renderModuleCards(entries, boxMid, top + 25, innerW, withSketches) });
       }
     }
     sections.push({ key: 'settings', label: "Settings", bodyH: 170,
@@ -5740,7 +5937,12 @@ class Game {
       if (Math.abs(want - st.x) < 0.002 && Math.abs(st.v) < 0.002) { st.x = want; st.v = 0; }
       return st.x;
     };
-    let y = 180;
+    let y = colTop - scroll;
+    push();
+    drawingContext.save();
+    drawingContext.beginPath();
+    drawingContext.rect(this._menuColClip.x, clipTop, this._menuColClip.w, clipBot - clipTop);
+    drawingContext.clip();
     for (const s of sections) {
       const a = anim[s.key] || (anim[s.key] = { open: { x: 0, v: 0 }, lift: { x: depth * 0.6, v: 0 } });
       const isOpen = this._menuOpen === s.key;
@@ -5793,9 +5995,25 @@ class Game {
       }
       y += headH + depth + bodyH + gap;
     }
+    drawingContext.restore();
+    pop();
+    // How far the column overflows its window, for next frame's clamp; and a thin bar at its
+    // right edge while it does.
+    const contentBottom = y + scroll - gap + 12;
+    this._menuMaxScroll = Math.max(0, contentBottom - clipBot);
+    if (this._menuMaxScroll > 0) {
+      const trackH = clipBot - colTop, viewH = clipBot - colTop;
+      const barH = Math.max(40, trackH * viewH / (viewH + this._menuMaxScroll));
+      const barY = colTop + (trackH - barH) * (scroll / this._menuMaxScroll);
+      push(); noStroke();
+      fill(255, 255, 255, 22); rect(boxX + boxW + 6, colTop, 5, trackH, 3);
+      fill(232, 226, 204, 120); rect(boxX + boxW + 6, barY, 5, barH, 3);
+      pop();
+    }
 
-    // The journey's map, in its fixed place to the right of the compacted boxes: it fades in as
-    // the journey opens, and takes clicks once it is fully there.
+    // The right-hand panel, in its fixed place beside the boxes: the journey's map fades in as
+    // the journey opens (taking clicks once fully there), and the unlocks box fades out.
+    if (journeySplit && jk < 0.99) this._renderUnlocksBox(jX0 + jLeftW + jGap, 190, jMapW, 1 - jk);
     if (journeySplit && jk > 0.01) {
       const live = jk >= 0.98;
       const nb = this._journeyBtnBounds.length, nc = this._levelCardBounds.length;
@@ -5807,6 +6025,67 @@ class Game {
     smallTextSize(11);
     textAlign(CENTER, CENTER);
     text(`Version: ${CONFIG.version}`, centerX, ch - 40);
+  }
+
+  // ---- The unlocks box (DEBUG PLACEHOLDER) -------------------------------------------------
+  // The square beside the boxes while the journey's map is shut: a grid of every tool the
+  // completed levels used (their chapters' `tools` and menu.focusItem). A stand-in for the
+  // encyclopedia that will live here later; it takes no clicks.
+  _unlockedItems() {
+    const seen = new Set(), out = [];
+    const add = (id) => { if (id && !seen.has(id)) { seen.add(id); out.push(id); } };
+    for (const l of LEVEL_REGISTRY.getAll()) {
+      if (!PROGRESS.isCompleted(l.id)) continue;
+      if (l.menu && l.menu.focusItem) add(l.menu.focusItem.placeable);
+      for (const t of [].concat(l.tools || [])) add(t);
+      for (const ch of (Array.isArray(l.chapters) ? l.chapters : [])) for (const t of (ch.tools || [])) add(t);
+    }
+    return out;
+  }
+
+  _renderUnlocksBox(x, y, s, alpha) {
+    const a = Math.max(0, Math.min(1, alpha));
+    const items = this._unlockedItems();
+    push();
+    drawingContext.globalAlpha = a;
+    MenuStyle.drawTray(x, y, s, s, 14);
+    noStroke();
+    textAlign(LEFT, CENTER);
+    push(); textFont(FreckleFace); textSize(26);
+    fill(232, 226, 204);
+    text("Unlocked", x + 24, y + 34);
+    pop();
+    fill(200, 120, 90);
+    smallTextSize(11);
+    textAlign(RIGHT, CENTER);
+    text("DEBUG", x + s - 24, y + 34);
+    const pad = 24, top = y + 66, cell = 104, gap = 12;
+    const cols = Math.max(1, Math.floor((s - pad * 2 + gap) / (cell + gap)));
+    const gx = x + (s - (cols * cell + (cols - 1) * gap)) / 2;
+    if (!items.length) {
+      fill(CACHED_COLORS.menuHint);
+      smallTextSize(14);
+      textAlign(CENTER, CENTER);
+      text("Complete a level to unlock its items.", x + s / 2, y + s / 2);
+    }
+    const ui = this.ui || GameUI.prototype;
+    items.forEach((id, i) => {
+      const cx = gx + (i % cols) * (cell + gap), cy = top + Math.floor(i / cols) * (cell + gap);
+      if (cy + cell > y + s - pad) return;   // (a full box just stops; the encyclopedia will page)
+      this._cardFrame(cx, cy, cell, cell, true, false, false);
+      const def = typeof PLACEABLES !== 'undefined' ? PLACEABLES[id] : null;
+      push();
+      if (def) ui.renderPlaceableIcon(def, cx + cell / 2, cy + cell * 0.42, cell * 0.42, cell * 0.26, 255 * a);
+      pop();
+      fill(200, 240, 210);
+      smallTextSize(12);
+      textAlign(CENTER, CENTER);
+      // (A long name is drawn smaller, to stay inside its cell.)
+      const nm = def && def.name ? def.name : id, nw = textWidth(nm);
+      if (nw > cell - 12) textSize((12 + SMALL_TEXT_BUMP) * (cell - 12) / nw);
+      text(nm, cx + cell / 2, cy + cell * 0.82);
+    });
+    pop();
   }
 
   // ---- The journey on the level select ----------------------------------------------------
@@ -6058,21 +6337,27 @@ class Game {
     pop();
   }
 
-  // The prototype levels' cards, in a centred row sized to fit.
-  _renderChallengeCards(levels, centerX, cardY, availableW) {
-    const maxCardW = 320, minCardW = 200, cardH = 200, cardSpacing = 32;
-    let cardW = maxCardW;
-    let totalW = levels.length * cardW + (levels.length - 1) * cardSpacing;
-    if (totalW > availableW && levels.length > 1) {
-      cardW = Math.max(minCardW, (availableW - (levels.length - 1) * cardSpacing) / levels.length);
-      totalW = levels.length * cardW + (levels.length - 1) * cardSpacing;
-    }
-    const startX = centerX - totalW / 2;
+  // How the prototype levels' cards sit in `availableW`: as many to a row as fit at their
+  // narrowest (200), each row's cards as wide as fits up to 320.
+  _challengeLayout(n, availableW) {
+    const maxCardW = 320, minCardW = 200, gap = 32;
+    const perRow = Math.max(1, Math.min(n, Math.floor((availableW + gap) / (minCardW + gap))));
+    const cardW = Math.min(maxCardW, Math.max(minCardW, (availableW - (perRow - 1) * gap) / perRow));
+    return { perRow, cardW, gap, rows: Math.max(1, Math.ceil(n / perRow)) };
+  }
+
+  // The prototype levels' cards, in centred rows sized to fit.
+  _renderChallengeCards(levels, centerX, cardY0, availableW) {
+    const cardH = 200;
+    const { perRow, cardW, gap: cardSpacing } = this._challengeLayout(levels.length, availableW);
     push();
     textAlign(CENTER, CENTER);
     for (let i = 0; i < levels.length; i++) {
       const level = levels[i];
-      const x = startX + i * (cardW + cardSpacing);
+      const row = Math.floor(i / perRow), col = i % perRow;
+      const n = Math.min(perRow, levels.length - row * perRow);
+      const x = centerX - (n * cardW + (n - 1) * cardSpacing) / 2 + col * (cardW + cardSpacing);
+      const cardY = cardY0 + row * (cardH + cardSpacing);
       const unlocked = PROGRESS.isUnlocked(level.id);
       const completed = PROGRESS.isCompleted(level.id);
       const hover = unlocked && mouseX > x && mouseX < x + cardW
@@ -6589,6 +6874,7 @@ class Game {
       strokeWeight(2);
       ellipse(0, 0, p.radius * 2, p.radius * 2);
       pop();
+      this._renderStormCoverPreview(tx, ty, p.radius, p, ok);
       return;
     }
     ellipse(0, 0, def.radius * 2, def.radius * 2);
@@ -6648,6 +6934,7 @@ class Game {
     // target moa nest), the wide invisible-in-play kea draw reach, and every moa nest + kea
     // the cache will touch, highlighted. Helps aim the cache at a real nest.
     if (this.selectedPlaceable === 'keaLure') this._renderKeaLurePreview(tx, ty, def);
+    if (this.selectedPlaceable === 'Storm' && def.blocksEagleVision) this._renderStormCoverPreview(tx, ty, def.radius, null, canPlace);
 
     if (!spacingCheck.allowed && spacingCheck.blocker) {
       push();
@@ -6729,6 +7016,187 @@ class Game {
     }
   }
 
+  // A storm in hand (to call, or being moved), where it would be set down at (tx, ty) with
+  // radius R: what it will do there. Only where the Storm is cover (blocksEagleVision). Where it
+  // can't be set down (ok false) it says only that.
+  //   - The moa it would hide: a cloud-white ring (pulsing green for one the Pouākai is after).
+  //     A moa the moved storm hides now and would leave in the open: an amber dashed ring. A
+  //     hunted moa still in the open: a red ring.
+  //   - The walk of each bird on its way somewhere (a story's walk, a seasonal migration): dots
+  //     to where it is going, bright where the storm would cover them, pale under other cover,
+  //     amber in the open.
+  //   - A label over the ring: whom it hides, whom it leaves, how much of the walk it covers.
+  // The family (the cast) and the focus species are shown wherever they are; other moa only
+  // when inside the ring.
+  _renderStormCoverPreview(tx, ty, R, held, ok = true) {
+    const def = (this.activePlaceables && this.activePlaceables.Storm) || PLACEABLES.Storm;
+    const sim = this.simulation;
+    if (!def || !def.blocksEagleVision || !sim) return;
+    const runner = this.chapters || null;
+    const R2 = R * R;
+    const inNew = (x, y) => (x - tx) * (x - tx) + (y - ty) * (y - ty) < R2;
+    const others = sim.placeables.filter(q => q.alive && q !== held && q.def && q.def.blocksEagleVision && !(q.def.eagleSpotFrac > 0));
+    const inOther = (x, y) => { for (const q of others) { const dx = q.pos.x - x, dy = q.pos.y - y; if (dx * dx + dy * dy < q.radiusSq) return true; } return false; };
+    const hunted = new Set();
+    for (const e of (sim.eagles || [])) if (e.alive && e.hunting && e.target && e.target.alive) hunted.add(e.target);
+    // (One screen pixel, in world units: rings and words keep their size at any zoom.)
+    const u = pixelDensity() / Math.max(0.05, Math.abs(drawingContext.getTransform().a));
+    const gy = (x, y) => this._groundPaintY(x, y);
+    if (!ok) { this._stormPreviewLabel(tx, gy(tx, ty) - R, u, [{ t: "Can't set it down here", c: [255, 130, 110] }]); return; }
+
+    const cast = runner ? Object.values(runner.castEnts || {}).filter(e => e && e.alive && e.pos) : [];
+    const watch = new Set(cast);
+    for (const m of sim.moas) {
+      if (!m.alive) continue;
+      if (hunted.has(m) || inNew(m.pos.x, m.pos.y) || (runner && runner.isFocus(m.speciesKey))) watch.add(m);
+    }
+    const title = (m) => (runner && m.castName && runner.castDefs[m.castName]) ? runner.castDefs[m.castName].title : null;
+
+    const hides = [], leaves = [];
+    let hidesHunted = false, extraHidden = 0;
+    const pulse = 0.5 + 0.5 * Math.sin(frameCount * 0.15);
+    push();
+    noFill();
+    for (const m of watch) {
+      const x = m.pos.x, y = gy(m.pos.x, m.pos.y), r = (m.size || 12) + 10;
+      const under = inNew(m.pos.x, m.pos.y), sheltered = inOther(m.pos.x, m.pos.y);
+      const nowHeld = held && held.isInRange(m.pos);
+      const isHunted = hunted.has(m);
+      if (under) {
+        if (title(m)) hides.push(title(m)); else extraHidden++;
+        if (isHunted) hidesHunted = true;
+        stroke(isHunted ? color(140, 240, 160, 170 + 85 * pulse) : color(235, 244, 255, 225));
+        strokeWeight((isHunted ? 3 : 2.2) * u);
+        ellipse(x, y, r * 2 + (isHunted ? 6 * pulse * u : 0), r * 1.3 + (isHunted ? 4 * pulse * u : 0));
+      } else if (nowHeld && !sheltered) {
+        if (title(m)) leaves.push(title(m));
+        stroke(255, 184, 76, 230);
+        strokeWeight(2.2 * u);
+        drawingContext.setLineDash([5 * u, 4 * u]);
+        ellipse(x, y, r * 2, r * 1.3);
+        drawingContext.setLineDash([]);
+      } else if (isHunted && !sheltered) {
+        stroke(255, 90, 70, 150 + 100 * pulse);
+        strokeWeight(2.4 * u);
+        ellipse(x, y, r * 2, r * 1.3);
+      }
+    }
+
+    // The walks: one route per destination, from the middle of those walking to it. Each is the
+    // route predicted with the storm set down here (_predictWalk: the storms' pull bends it);
+    // the route as things stand is drawn faintly beside it where the two part.
+    const cfg = typeof stormAttractCfg === 'function' ? stormAttractCfg() : null;
+    const groups = new Map();
+    for (const m of watch) {
+      if (!title(m) && !(runner && runner.isFocus(m.speciesKey))) continue;
+      const d = m.walkDestination ? m.walkDestination() : (m._boundFor || (m.isMigrating ? m.migrationTarget : null));
+      if (!d) continue;
+      const key = `${Math.round(d.x / 40)},${Math.round(d.y / 40)}`;
+      if (!groups.has(key)) groups.set(key, { d, ms: [], cfg: cfg && cfg.species.includes(m.speciesKey) ? cfg : null });
+      groups.get(key).ms.push(m);
+    }
+    // The storm in hand where it would be set down (a new one: a stand-in for the prediction).
+    const here = held || { alive: true, type: 'Storm', pos: { x: tx, y: ty }, radius: R };
+    const nowList = sim.placeables, afterList = held ? sim.placeables : sim.placeables.concat([here]);
+    let walkN = 0, walkNew = 0, bent = false;
+    noStroke();
+    for (const { d, ms, cfg: gc } of groups.values()) {
+      let sx = 0, sy = 0;
+      for (const m of ms) { sx += m.pos.x; sy += m.pos.y; }
+      sx /= ms.length; sy /= ms.length;
+      if (Math.hypot(d.x - sx, d.y - sy) < 30) continue;
+      if (held) held._previewPos = { x: tx, y: ty };
+      const after = this._predictWalk(sx, sy, d, afterList, gc);
+      if (held) held._previewPos = null;
+      const before = gc ? this._predictWalk(sx, sy, d, nowList, gc, held ? null : here) : after;
+      // The route as it is now, faint, where it differs from the new one.
+      let apart = 0;
+      for (let i = 0; i < before.length; i++) {
+        const q = after[Math.min(i, after.length - 1)];
+        apart = Math.max(apart, Math.hypot(before[i].x - q.x, before[i].y - q.y));
+      }
+      if (apart > 10) {
+        bent = true;
+        fill(200, 200, 200, 90);
+        const every = Math.max(1, Math.round(9 * u / 5));
+        for (let i = 0; i < before.length; i += every) ellipse(before[i].x, gy(before[i].x, before[i].y), 2.2 * u, 2.2 * u);
+      }
+      const every = Math.max(1, Math.round(9 * u / 5));
+      for (let i = every; i < after.length; i += every) {
+        const { x, y } = after[i];
+        const a = inNew(x, y), b = !a && inOther(x, y);
+        walkN++;
+        if (a) walkNew++;
+        if (a) fill(235, 246, 255, 240);
+        else if (b) fill(190, 210, 235, 130);
+        else fill(255, 196, 110, 150);
+        const s = (a ? 4.4 : 3.2) * u;
+        ellipse(x, gy(x, y), s, s);
+      }
+      // Where they are going.
+      noFill();
+      stroke(255, 236, 190, 200);
+      strokeWeight(1.6 * u);
+      ellipse(d.x, gy(d.x, d.y), 12 * u, 8 * u);
+      noStroke();
+    }
+
+    // The words, over the ring.
+    const lines = [];
+    const list = (a) => a.length <= 2 ? a.join(' and ') : `${a.slice(0, -1).join(', ')} and ${a[a.length - 1]}`;
+    const named = hides.slice();
+    if (extraHidden) named.push(`${extraHidden} other moa`);
+    if (named.length) lines.push({ t: hidesHunted ? `Hides ${list(named)} from the Pouākai` : `Hides ${list(named)}`,
+                                   c: hidesHunted ? [150, 240, 170] : [235, 244, 255] });
+    else lines.push({ t: "Hides no moa here", c: [190, 196, 204] });
+    if (leaves.length) lines.push({ t: `Leaves ${list(leaves)} in the open`, c: [255, 190, 90] });
+    if (walkN && walkNew) lines.push({ t: `Covers ${Math.max(1, Math.round(100 * walkNew / walkN))}% of the walk ahead`, c: [220, 232, 250] });
+    if (bent) lines.push({ t: "Draws their walk this way", c: [220, 232, 250] });
+    pop();
+    this._stormPreviewLabel(tx, gy(tx, ty) - R, u, lines);
+  }
+
+  // The route a bird at (sx, sy) would walk to dest among these storms: points every 5 px.
+  // Its heading eases toward the destination, bent by the storm that draws it most
+  // (Moa.stormPullAt, with cfg; no cfg: a straight walk). `skip`: a storm to leave out. An
+  // approximation of the steering (no terrain, no food, no eagle), for the preview only.
+  _predictWalk(sx, sy, dest, placeables, cfg, skip = null) {
+    const pts = [{ x: sx, y: sy }];
+    let x = sx, y = sy, hx = dest.x - sx, hy = dest.y - sy;
+    const h0 = Math.hypot(hx, hy) || 1;
+    hx /= h0; hy /= h0;
+    const step = 5, maxSteps = Math.min(600, Math.ceil(h0 * 2.5 / step));
+    for (let i = 0; i < maxSteps; i++) {
+      const dx = dest.x - x, dy = dest.y - y, d = Math.hypot(dx, dy);
+      if (d < 16) break;
+      let ux = dx / d, uy = dy / d;
+      // (The bird's own rule: Moa.stormBentTarget.)
+      const pull = cfg && d >= cfg.lookahead * 1.2 ? Moa.stormPullAt(x, y, dest, placeables, cfg, skip) : null;
+      if (pull) ({ x: ux, y: uy } = Moa.bentHeading(x, y, dest, pull, cfg));
+      hx += (ux - hx) * 0.2; hy += (uy - hy) * 0.2;
+      const hn = Math.hypot(hx, hy) || 1;
+      x += hx / hn * step; y += hy / hn * step;
+      pts.push({ x, y });
+    }
+    return pts;
+  }
+
+  // The storm preview's words: lines [{ t, c: [r, g, b] }] on a dark pill whose bottom sits
+  // just above y (world units; u is one screen pixel).
+  _stormPreviewLabel(x, y, u, lines) {
+    push();
+    noStroke();
+    textAlign(CENTER, CENTER);
+    textSize(13 * u);
+    const lh = 17 * u, padX = 8 * u;
+    const w = Math.max(...lines.map(l => textWidth(l.t))) + padX * 2;
+    const top = y - 8 * u - lines.length * lh;
+    fill(14, 20, 28, 185);
+    rect(x - w / 2, top - 4 * u, w, lines.length * lh + 8 * u, 6 * u);
+    lines.forEach((l, i) => { fill(l.c[0], l.c[1], l.c[2]); text(l.t, x, top + lh * (i + 0.5)); });
+    pop();
+  }
+
   // Shared click handling for the level-select render settings (terrain-resolution slider,
   // performance mode). The graphics-mode toggle was removed; GL is the sole path (see
   // _renderRenderSettings).
@@ -6763,6 +7231,9 @@ class Game {
   handleClick(mx, my) {
     // Level select screen
     if (this.state === GAME_STATE.LEVEL_SELECT) {
+      // The column scrolls inside a window: what has scrolled out of it takes no clicks.
+      const cc = this._menuColClip;
+      if (cc && mx > cc.x && mx < cc.x + cc.w && (my < cc.y || my > cc.y + cc.h)) return;
       if (this._levelCardBounds) {
         for (const card of this._levelCardBounds) {
           if (card.unlocked &&
@@ -7536,6 +8007,10 @@ function touchEnded(e) {
 // A finger dragging on the canvas (a tool on its way to the map) must not scroll or bounce the
 // page. p5 also routes mouse drags here, harmlessly.
 function touchMoved(e) {
+  // On the level select a finger drag scrolls the column of boxes.
+  if (game && game.state === GAME_STATE.LEVEL_SELECT && e && e.touches && e.touches.length === 1) {
+    game._menuScrollTarget = (game._menuScrollTarget || 0) - (mouseY - pmouseY) / spriteSS();
+  }
   if (e && e.target && e.target.tagName === 'CANVAS') return false;
 }
 
@@ -7583,6 +8058,11 @@ function mouseWheel(e) {
   if (game && game.encyclopedia && game.encyclopedia.open &&
       game.encyclopedia.pointerOverPanel(mouseX / s, mouseY / s)) {
     game.encyclopedia.handleWheel(e.delta);
+    return false;
+  }
+  // The level select's column of boxes scrolls (clamped in renderLevelSelect).
+  if (game && game.state === GAME_STATE.LEVEL_SELECT) {
+    game._menuScrollTarget = (game._menuScrollTarget || 0) + e.delta;
     return false;
   }
   // The player's camera: the wheel zooms about the pointer (userCamera levels).

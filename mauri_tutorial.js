@@ -371,6 +371,16 @@ class TutorialManager {
   // Item tips only run while the player can pay for the item they point at, so the guide
   // never asks for a tool that's greyed out. Tools outside the level's palette aren't gated.
   _tipAffordable(tip) {
+    // A banner asking the player to MOVE one (needs 'move'): there must be one on the land to
+    // pick up, and its move price in hand.
+    if (tip.needs === 'move') {
+      const type = tip.tool || 'Storm';
+      const def = (this.game.activePlaceables && this.game.activePlaceables[type]) ||
+                  (typeof PLACEABLES !== 'undefined' && PLACEABLES[type]) || {};
+      const cost = def.moveCost != null ? def.moveCost : Math.ceil((def.cost || 0) / 2);
+      const any = (this.game.simulation && this.game.simulation.placeables || []).some(p => p.alive && p.type === type);
+      return any && this.game.mauri.canAfford(cost || 0);
+    }
     const key = this._tipPlaceable(tip);
     const def = key && this.game.activePlaceables && this.game.activePlaceables[key];
     return !def || this.game.mauri.canAfford(def.cost);
@@ -1017,12 +1027,17 @@ class TutorialManager {
       };
     }
 
+    // center, top and bottom: the panel and the guide beside it (to its left in landscape, its
+    // sprite and gap 210 px at scale) centred as one in the play area.
+    const { x: pax, y: pay, w: paw, h: pah } = this.playArea();
+    const lead = CONFIG.portrait ? 0 : 210 * TIP_PANEL_SCALE * ((this.currentTip && this.currentTip.guideScale) || 1);
+    const midX = Math.max(lead + 20, Math.min(cw - panelWidth - 20, pax + (paw - panelWidth + lead) / 2));
     const positions = {
-      center:      { x: (cw - panelWidth) / 3, y: (ch - panelHeight) / 2 },
+      center:      { x: midX, y: Math.max(topMargin, pay + (pah - panelHeight) / 2) },
       left:        { x: CONFIG.gameAreaWidth - panelWidth * 1.2, y: (ch - panelHeight) / 2 },
       right:       { x: CONFIG.rightSidebarX - panelWidth - margin, y: (ch - panelHeight) / 2 },
-      top:         { x: (CONFIG.gameAreaWidth - panelWidth) / 2, y: topMargin },
-      bottom:      { x: (CONFIG.gameAreaWidth - panelWidth) / 2, y: ch - panelHeight - bottomMargin },
+      top:         { x: midX, y: topMargin },
+      bottom:      { x: midX, y: ch - panelHeight - bottomMargin },
       topLeft:     { x: CONFIG.gameAreaWidth - panelWidth * 1.2, y: topMargin },
       topRight:    { x: CONFIG.rightSidebarX - panelWidth - margin, y: topMargin },
       bottomLeft:  { x: CONFIG.gameAreaWidth - panelWidth * 1.2, y: ch - panelHeight - bottomMargin },

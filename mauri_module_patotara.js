@@ -736,8 +736,8 @@ class PatotaraDirector extends ModuleDirector {
   }
 
   // A raid's odds over where it's happening: the chance in big figures (red when the kea have
-  // the better of it, green when the moa do), the kea and moa counted under it, and a ring
-  // round who counts.
+  // the better of it, green when the moa do), the moa on one side of it and the kea on the
+  // other, each counted, and a ring round who counts.
   renderOver() {
     super.renderOver();   // (the walk's guide)
     const r = this.raid, kr = this.keaRaid;
@@ -749,32 +749,10 @@ class PatotaraDirector extends ModuleDirector {
     }
   }
 
+  // (The upland moa on one side of the figure and the kea on the other: Game._drawRaidOdds,
+  // shared with the journey's kea raids.)
   _drawOdds(at, radius, chance, kea, moa) {
-    const g = this.game, px = 1 / CONFIG.viewZoom;   // one screen pixel, in world units
-    const good = chance < 0.5;                       // the moa have the better of it
-    const col = good ? [140, 230, 150] : [255, 140, 110];
-    push();
-    translate(at.x, g._groundPaintY(at.x, at.y));
-    noFill();
-    stroke(col[0], col[1], col[2], 200);
-    strokeWeight(2 * px);
-    drawingContext.setLineDash([8 * px, 6 * px]);
-    ellipse(0, 0, radius * 2, radius * 1.24);
-    drawingContext.setLineDash([]);
-    // The odds, in screen-sized type above the ring.
-    const y0 = -radius * 0.62 - 40 * px;
-    textAlign(CENTER, CENTER);
-    if (typeof FreckleFace !== 'undefined') textFont(FreckleFace);
-    stroke(15, 20, 15, 230);
-    strokeWeight(7 * px);
-    strokeJoin(ROUND);
-    fill(col[0], col[1], col[2]);
-    textSize(52 * px);
-    text(`RAID ${Math.round(chance * 100)}%`, 0, y0);
-    fill(235, 240, 225);
-    textSize(24 * px);
-    text(`${kea} kea  vs  ${moa} moa`, 0, y0 + 40 * px);
-    pop();
+    this.game._drawRaidOdds(at, radius, chance, kea, moa, 'upland_moa', 1);
   }
 
   // ==========================================================================

@@ -59,7 +59,7 @@ const CHAPTERS_KIT = {
         hints: [
           { after: first[0], do: [name, { notify: ["The Pouākai has seen {$who}. It can only take what it can see. What could hide {$who}?", 'error'] }] },
           { after: first[1], banner: { words: ["Move a STORM over the hunted moa", "Set the STORM down over the moa"],
-                                       lit: ['$target', '$eagle'], pause: pauseFirst, maxSec: 25 } }
+                                       lit: ['$target', '$eagle'], pause: pauseFirst, maxSec: 25, needs: 'move' } }
         ] },
       { id: 'cover_again', on: 'eagle_hunting', once: false,
         // (every hunt but the one the first reaction took)
@@ -68,7 +68,7 @@ const CHAPTERS_KIT = {
         hints: [
           { after: later[0], do: [name, { notify: ["The Pouākai is watching {$who}.", 'error'] }] },
           { after: later[1], banner: { words: ["Cover the hunted moa with a STORM", "Set the STORM down over the moa"],
-                                       lit: ['$target', '$eagle'], pause: false, maxSec: 20 } }
+                                       lit: ['$target', '$eagle'], pause: false, maxSec: 20, needs: 'move' } }
         ] }
     ];
   },
@@ -89,7 +89,8 @@ const CHAPTERS_KIT = {
   stormLadder({ lit = [], unlock = true, notice = 6, tell = 14, chapters = null } = {}) {
     return [
       Object.assign({ id: 'storm_gone', on: 'placeable_expired', if: { type: 'Storm' }, once: false, cooldown: 25, chapters,
-        until: { any: [{ placed: 'Storm' }, { after: 45 }] }, solved: { placed: 'Storm' },
+        until: { any: [{ placed: 'Storm' }, { gained: ['moved:Storm', '>=', 1] }, { after: 45 }] },
+        solved: { any: [{ placed: 'Storm' }, { gained: ['moved:Storm', '>=', 1] }] },
         hints: [
           { after: notice, notify: "A storm has blown out." },
           { after: tell, banner: { words: ["Tap the STORM button and call a new one", "Tap beside the family to call the STORM"],
@@ -388,7 +389,9 @@ Object.assign(CHAPTERS_KIT, {
     return [
       { id: 'black', on: 'chapter_start', if: first, do: [(x) => x.game.fadeScreen(1, 0)] },
       ...(lines.length ? [{ id: 'prologue', on: 'chapter_start', if: (x) => first(x) && !x.game[seenKey],
-        say: lines.map(l => (typeof l === 'string' ? ['guide', l] : ['guide', l[0], l[1]])),
+        // (On black there is nothing to stand clear of: Te Whē speaks from the middle.)
+        say: lines.map(l => ['guide', typeof l === 'string' ? l : l[0],
+                             Object.assign({ guidePosition: 'center' }, typeof l === 'string' ? {} : l[1])]),
         do: [(x) => { x.game[seenKey] = true; }] }] : []),
       { id: 'prologued', on: 'chapter_start', if: first, do: [{ flag: 'prologued' }] },
       { id: 'fade_in', when: (x) => !!x.runner.flags.prologued && K.idle(x),
@@ -416,7 +419,7 @@ Object.assign(CHAPTERS_KIT, {
       hints: [
         { after: later[0], do: [name, { notify: ['Pouākai: "I spy with my little eye... {$who}, out in the open!"', 'error'] }] },
         { after: later[1], do: [name], banner: { words: ["The Pouākai has seen {$who}! Cover them with a STORM", "Set the STORM down over {$who}"],
-                                                 lit: ['$target', '$eagle', 'Storm'], pause: false, maxSec: 20 } }
+                                                 lit: ['$target', '$eagle', 'Storm'], pause: false, maxSec: 20, needs: 'move' } }
       ]
     };
     const out = [];
@@ -429,7 +432,7 @@ Object.assign(CHAPTERS_KIT, {
               P("Mmm, mmm... MOA! Tasty Moa in these Mmm.. M... Mountains!", { lit: ['$eagle', '$target'] }),
               ['$target', "Eeek!"]],
         banner: { words: ["Tap and hold a STORM to move it", "Move the STORM to cover {$WHO}"],
-                  lit: ['Storm', '$target', '$eagle'], pause: true, maxSec: 40 } }]
+                  lit: ['Storm', '$target', '$eagle'], pause: true, maxSec: 40, needs: 'move' } }]
     });
     out.push(again);
     // Hidden before anything was said: the Pouākai says so (the rule, in the hunter's words).
@@ -444,7 +447,8 @@ Object.assign(CHAPTERS_KIT, {
   // with Te Whē's one line on what calling a storm costs. Later ones climb the ladder: nothing
   // (the storm thinning is the clue), a word from `voice`, the instruction.
   stormInVoice({ teach = false, voice = "Pukepuke", lit = [], notice = 6, tell = 14, chapters = null } = {}) {
-    const until = { any: [{ placed: 'Storm' }, { after: 45 }] }, solved = { placed: 'Storm' };
+    // (Calling a new one answers it, and so does bringing one over: storms gather on the tops.)
+    const solved = { any: [{ placed: 'Storm' }, { gained: ['moved:Storm', '>=', 1] }] }, until = { any: [solved, { after: 45 }] };
     const out = [];
     if (teach) out.push({
       id: 'storm_gone', on: 'placeable_expired', if: { type: 'Storm' }, unlock: 'Storm',

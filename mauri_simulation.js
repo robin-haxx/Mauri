@@ -1149,6 +1149,8 @@ class Simulation {
     const ns = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.nestingSites) || null;
     egg.speedBonus = Math.max(egg.speedBonus || 1, opts.speedBonus ?? ((ns && ns.eggSpeedBonus) || 1));
     egg.scripted = true;
+    // (A story egg: it hatches in a scene, rocking and cracking with the camera close in.)
+    if (opts.hatchScene) egg.hatchScene = { frames: Math.round((opts.hatchScene.sec || 3) * 60) };
     return egg;
   }
 
@@ -1884,9 +1886,15 @@ class Simulation {
   }
 
   updateEggs(mauri, dt = 1) {
+    // The shells story eggs leave behind (EggShell), until they fade.
+    const sh = this.shells;
+    if (sh && sh.length) {
+      for (let i = 0; i < sh.length; i++) sh[i].update(dt);
+      this.shells = sh.filter(s => s.alive);
+    }
     const eggs = this.eggs;
     if (eggs.length === 0) return;
-    
+
     if (!this._nestCacheValid) this._updateNestCache();
     
     const nests = this._nestCache;
@@ -1906,8 +1914,15 @@ class Simulation {
         }
       }
       
+      const _wasRocking = egg.hatchProgress != null;
       egg.update(dt);
-      
+      // A story egg's hatching (Egg.hatchScene) begins, or its egg is lost while it rocks: the
+      // game's camera closes in on it, or lets it go (Game.onHatchScene).
+      if (egg.hatchScene && this.game && this.game.onHatchScene) {
+        if (!_wasRocking && egg.hatchProgress != null) this.game.onHatchScene(egg, 'start');
+        else if (!egg.alive && _wasRocking && !egg.hatched) this.game.onHatchScene(egg, 'end');
+      }
+
       if (egg.hatched && egg.alive) {
         if (egg.offspringType === 'eagle') {
           // Emergent eagle reproduction: hatch a juvenile Pouākai, then consume
@@ -1975,6 +1990,14 @@ class Simulation {
             const _hatchReward = this._hatchRewardFor(newMoa.speciesKey, mauri);
             if (_hatchReward > 0) mauri.earn(_hatchReward, egg.pos.x, egg.pos.y, 'hatch');
 
+            // A story egg: the shell left in pieces, and the camera eased back out (before the
+            // hatch is told, so a moment on the chick returns to the wide view).
+            if (egg.hatchScene) {
+              (this.shells || (this.shells = [])).push(new EggShell(egg.pos.x, egg.pos.y, egg.size));
+              if (audioManager && audioManager.playPlantRustle) audioManager.playPlantRustle();
+              if (this.game && this.game.onHatchScene) this.game.onHatchScene(egg, 'end');
+            }
+
             if (this.game.tutorial) {
               this.game.tutorial.fireEvent(TUTORIAL_EVENTS.EGG_HATCHED, { egg, moa: newMoa });
             }
@@ -2019,7 +2042,8 @@ class Simulation {
       eagle.behave(this, mauri, dt);
       eagle.update(dt);
       // A module's eagle can fly off the map and back (EagleLife.offMap).
-      if (!(eagle.lifeScript && eagle.lifeScript.offMap)) this.constrainToBounds(eagle.pos);
+      // (Or a chapter's eagle on an errand off the land: HaastsEagle.sendAway.)
+      if (!(eagle.lifeScript && eagle.lifeScript.offMap) && !eagle._away) this.constrainToBounds(eagle.pos);
     }
   }
   
@@ -2184,8 +2208,9 @@ class Simulation {
     // Layer 2: Placeables (not Storms)
     this._renderFiltered(placeables, 50, p => p.type !== 'Storm', true, inView);
 
-    // Layer 3: Eggs
+    // Layer 3: Eggs (and the shells story eggs leave)
     this._renderFiltered(eggs, 0, null, true, inView);
+    if (this.shells && this.shells.length) this._renderFiltered(this.shells, 0, null, true, inView);
 
     // Layer 4: Moas (body)
     this._renderFiltered(moas, 0, null, true, inView, 'render');
@@ -2266,6 +2291,7 @@ class Simulation {
     cast.length = 0;
     this._collectCast(this.placeables, cast, inView, lift, p => p.type !== 'Storm');
     this._collectCast(this.eggs, cast, inView, lift, null);
+    if (this.shells && this.shells.length) this._collectCast(this.shells, cast, inView, lift, null);
     this._collectCast(this.moas, cast, inView, lift, null);
     for (const type in this.otherEntities) {
       this._collectCast(this.otherEntities[type], cast, inView, lift, null);

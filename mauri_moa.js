@@ -12,6 +12,28 @@ const MOA_STATE = {
   MATING: 'mating'
 };
 
+// How storms draw moa (Moa.applyStormPull): mechanics.stormAttract, or on a journey level by
+// default, for upland moa. null where storms draw nobody. Fields:
+//   species     who feels it
+//   strength    how far a storm at full weight turns a walk: its heading is the destination's
+//               (weight 1) plus the storm's (this x the pull's weight), so the walk wins
+//   lookahead   how far ahead a walking bird aims along that heading (world px)
+//   reach       how far past a storm's edge it is felt (world px)
+//   inner       inside this fraction of its radius there is no pull (a bird passes through)
+//   minCos      storms further behind than this (cosine to where it is going) don't draw it
+//   hungryMult  the pull on a hungry bird (food comes first)
+const STORM_ATTRACT_DEFAULT = { species: ['upland_moa'], strength: 2.0, lookahead: 40, reach: 110, inner: 0.45, minCos: -0.1, hungryMult: 0.3 };
+let _stormAttractCache = { mech: null, own: null, journey: null, cfg: null };
+function stormAttractCfg() {
+  const M = typeof LEVEL_MECHANICS !== 'undefined' ? LEVEL_MECHANICS : null;
+  const journey = !!(typeof game !== 'undefined' && game && game.currentLevel && game.currentLevel.journey);
+  const own = M && M.stormAttract, c = _stormAttractCache;
+  if (c.mech === M && c.own === own && c.journey === journey) return c.cfg;
+  c.mech = M; c.own = own; c.journey = journey;
+  c.cfg = own === false ? null : (own ? Object.assign({}, STORM_ATTRACT_DEFAULT, own) : (journey ? STORM_ATTRACT_DEFAULT : null));
+  return c.cfg;
+}
+
 const MOA_AGE = {
   JUVENILE_MAX: 600,
   ADULT_MIN: 900,
@@ -453,6 +475,7 @@ class Moa extends Boid {
     if (this._boundFor) this._keepWalking();
     this.currentState = this.determineState(placeables, sc, moas);
     this.executeState(simulation, mauri, sc, moas, placeables, dt);
+    this.applyStormPull(simulation);
 
     // juvenileFollow (a level's rule): a young moa keeps near its mother while she lives, so a
     // family reads as one. It still flees and feeds for itself, and a starving chick goes for
@@ -1342,7 +1365,9 @@ class Moa extends Boid {
     let urgency = 0.5 + sc.migrationStrength * 0.5;
     if (this.hunger > 50 && this.localFoodScore < 0.3) urgency *= 1.5;
     
-    const seek = this.seek(this.migrationTarget, urgency, 25);
+    // (A storm near the way bends where it steers: see stormBentTarget.)
+    const aim = this._sim ? this.stormBentTarget(this.migrationTarget, this._sim) : this.migrationTarget;
+    const seek = this.seek(aim, urgency, aim === this.migrationTarget ? 25 : 0);
     seek.mult(sc.migrationStrength);
     this.applyForce(seek);
   }
@@ -1366,6 +1391,89 @@ class Moa extends Boid {
 
   resistEagleAttack() {
     return this.eagleResistance > 0 && random() < this.eagleResistance;
+  }
+
+  // ---- Storms draw a moa (mechanics.stormAttract; on by default for upland moa on a journey
+  // level: see stormAttractCfg) ----------------------------------------------------------------
+  // A moa feels a storm near it as somewhere safe and leans toward it, but where it is GOING is
+  // still its own: its walk (migration, a story's _boundFor) and, when hungry, food.
+  //   - On a walk, the storm bends the way it steers (stormBentTarget): it aims at a point a
+  //     little ahead along a heading between the destination and the storm, so its route bows
+  //     toward the storm and passes through it, and it still arrives where it was going.
+  //   - With nowhere to be, it ambles toward a storm near it and rests under it
+  //     (applyStormPull).
+  //   - Only the storm that draws it most counts; there is no pull inside a storm's inner part;
+  //     a storm behind it (from where it is going) doesn't draw it (Moa.stormPullAt).
+  //   - Hungry, the pull is weaker (cfg.hungryMult) and going to food is not bent at all;
+  //     starving, feeding, mating or bolting, there is none.
+  // The storm preview predicts the bent route with the same rule (Game._predictWalk).
+  applyStormPull(simulation) {
+    const cfg = stormAttractCfg();
+    if (!cfg || !cfg.species.includes(this.speciesKey)) return;
+    const st = this.currentState;
+    if (st !== MOA_STATE.IDLE && st !== MOA_STATE.FORAGING) return;
+    if (this.isFeeding || this.walkDestination() || this.hunger > this.hungerThreshold) return;
+    const pull = Moa.stormPullAt(this.pos.x, this.pos.y, null, simulation.placeables, cfg);
+    if (!pull) return;
+    this.applyForce(this.seekPoint(pull.x, pull.y, 0.35 * pull.w + 0.1, 20));
+  }
+
+  // Where a walking moa steers, bent toward the storm that draws it (see above): the
+  // destination itself when no storm does, it is close, or the walk is not this species'.
+  stormBentTarget(dest, simulation) {
+    const cfg = stormAttractCfg();
+    if (!cfg || !cfg.species.includes(this.speciesKey) || this.hunger > this.criticalHunger) return dest;
+    const dx = dest.x - this.pos.x, dy = dest.y - this.pos.y, d = Math.hypot(dx, dy);
+    if (d < cfg.lookahead * 1.2) return dest;
+    const pull = Moa.stormPullAt(this.pos.x, this.pos.y, dest, simulation.placeables, cfg);
+    if (!pull) return dest;
+    const h = Moa.bentHeading(this.pos.x, this.pos.y, dest, pull, cfg, this.hunger > this.hungerThreshold ? cfg.hungryMult : 1);
+    const v = this._stormBentVec || (this._stormBentVec = createVector(0, 0));
+    v.set(this.pos.x + h.x * cfg.lookahead, this.pos.y + h.y * cfg.lookahead);
+    return v;
+  }
+
+  // The unit heading between a destination and a storm's pull ({ x, y, w }), for a bird at
+  // (x, y). mult scales the pull (hunger).
+  static bentHeading(x, y, dest, pull, cfg, mult = 1) {
+    const dx = dest.x - x, dy = dest.y - y, d = Math.hypot(dx, dy) || 1;
+    const px = pull.x - x, py = pull.y - y, pd = Math.hypot(px, py) || 1, k = cfg.strength * pull.w * mult;
+    const hx = dx / d + px / pd * k, hy = dy / d + py / pd * k, n = Math.hypot(hx, hy) || 1;
+    return { x: hx / n, y: hy / n };
+  }
+
+  // Where this moa is heading: a story's walk, its migration, else (hungry) the plant it is
+  // going to. null when it has nowhere particular to be.
+  walkDestination() {
+    if (this._boundFor) return this._boundFor;
+    if (this.isMigrating && this.migrationTarget) return this.migrationTarget;
+    if (this.hunger > this.hungerThreshold && this.targetPlant && this.targetPlant.alive) return this.targetPlant.pos;
+    return null;
+  }
+
+  // The storm that draws a bird at (x, y) heading for dest (or nowhere): { x, y, w } (its
+  // centre and the pull's weight, 0..1), or null.
+  static stormPullAt(x, y, dest, placeables, cfg, skip = null) {
+    let best = null;
+    const ddx = dest ? dest.x - x : 0, ddy = dest ? dest.y - y : 0, dLen = Math.hypot(ddx, ddy);
+    for (const p of placeables) {
+      if (!p.alive || p.type !== 'Storm' || p === skip) continue;
+      const px = p._previewPos ? p._previewPos.x : p.pos.x, py = p._previewPos ? p._previewPos.y : p.pos.y;
+      const sx = px - x, sy = py - y, d = Math.hypot(sx, sy);
+      const inner = p.radius * cfg.inner, reach = p.radius + cfg.reach;
+      if (d <= inner || d >= reach) continue;
+      let w = 1 - (d - inner) / (reach - inner);
+      if (dest && dLen > 1) {
+        // Ahead of it: full pull; to the side: less; behind: none. And a storm past the end of
+        // the walk is no reason to overshoot it.
+        const cos = (sx * ddx + sy * ddy) / (d * dLen);
+        if (cos < cfg.minCos) continue;
+        w *= 0.35 + 0.65 * Math.max(0, cos);
+        if (d > dLen + p.radius) continue;
+      }
+      if (!best || w > best.w) best = { x: px, y: py, w };
+    }
+    return best;
   }
 
   // A story's walk (CHAPTERS_KIT.headFor sets _boundFor = { x, y, r }): the moa is on its way

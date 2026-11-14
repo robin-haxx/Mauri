@@ -45,8 +45,8 @@
 // prologue is the modules' (levels/tutorial_module_bookends.js), and his two lines on the
 // Pouākai's place are the free play's. The lines marked NEW were written for moments the
 // first module did not have, in its manner, and are the author's to replace:
-//   gave_up        the Pouākai turning to the herd (module 0 sent it to "scuffle with the Kea",
-//                  which the simulation does not do: here it really hunts the stout-legged moa)
+//   gave_up        the Pouākai turning to the herd, once it is back from the kea (the first time
+//                  it is seen off it goes to "scuffle with the Kea", module 0's line and scene)
 //   eagle_fed      Papa, once the Pouākai has eaten
 //   amber          Te Whē on the amber ring and the "!" (what the two signs mean)
 //   eagle_back     the Pouākai's first line in autumn when it did eat in summer
@@ -65,6 +65,26 @@ const JOURNEY_STORM = (() => {
   const fedOnHerd = (x) => (x.runner.counters['killed:stout_legged_moa'] || 0) > 0;
   const hungryOnes = (x) => FAMILY.map(n => x.runner.castEnts[n]).filter(m => m && m.alive && m.hunger >= 62);
   const homeNow = { all: [{ near: ['mama', 'home', 110] }, { near: ['pukepuke', 'home', 130] }] };
+  const SCUFFLE_SEC = 30;   // how long the Pouākai is off scuffling with the kea
+  const NORTH_FADE_SEC = 11;   // the walk north is watched this long at most before the fade
+  // The family's walk to the next tile: one point on the north edge, the nearest to Mama, and
+  // each of them sets off for it (Moa.beginLeaving), a step apart. The runner counts a bird
+  // that walks off the land as walked on, not lost.
+  const walkNorth = (x) => {
+    const r = x.runner, lead = FAMILY.map(n => r.castEnts[n]).find(e => e && e.alive);
+    if (!lead) return;
+    const edge = r._findSite({ find: 'edge', side: 'north', near: lead.castName }) || x.game._nearestEdge(lead.pos.x, lead.pos.y);
+    if (!edge) return;
+    FAMILY.forEach((n, i) => {
+      const e = r.castEnts[n];
+      if (e && e.alive) e.beginLeaving(edge.x + (i - 1) * 9, edge.y);
+    });
+    r._log('walk_off', FAMILY.join(','), 'north');
+  };
+  const leader = (x) => {
+    const live = FAMILY.map(n => x.runner.castEnts[n]).filter(e => e && e.alive);
+    return live.length ? live.reduce((a, b) => (a.pos.y <= b.pos.y ? a : b)) : null;
+  };
 
   return Object.assign({}, base, {
     id: 'journey_storm',
@@ -73,6 +93,10 @@ const JOURNEY_STORM = (() => {
     nextLevel: undefined,
     waysOn: [{ label: "North, to the pātōtara glade", tile: 't2' }],
     outcome: { birds: FAMILY },
+
+    // The herd on the flats: one more stout-legged moa than the Storm lesson's seven.
+    initialSpeciesDistribution: { stout_legged_moa: 8 },
+    initialEntityCounts: Object.assign({}, base.initialEntityCounts, { moa: 8 }),
 
     cast: {
       mama:     { title: "Mama Moa", species: 'upland_moa', manual: true, pitch: 0.85 },
@@ -196,6 +220,33 @@ const JOURNEY_STORM = (() => {
       // says so. Either way the year is won: only a bird lost loses it.
       { id: 'closing', title: "North", tools: [],
         until: { all: [{ after: 2 }, K.saidAndRead('home_said')] },
+        next: 'onward'
+      },
+
+      // "Let's head north": the family sets off together for the north edge of the land, toward
+      // the next tile, the view going with them, and the screen fades as they reach it. A
+      // discrete scene, after the year is won; the Pouākai is fed and leaves them be.
+      { id: 'onward', title: "North, to the pātōtara glade", tools: [],
+        start: [
+          { eagle: { which: 'nearest', near: 'home', hunger: 0 } },
+          walkNorth,
+          (x) => { x.runner.vars._northAt = x.game.playTime; }
+        ],
+        reactions: [
+          // The view goes with them, a little ahead (each ease takes up the last one's motion).
+          { id: 'with_them', when: { after: 0.5 }, once: false, cooldown: 1,
+            do: [(x) => {
+              const lead = leader(x);
+              if (!lead) return;
+              const g = x.game, gy = g._groundPaintY(lead.pos.x, lead.pos.y - 40);
+              g.cameraTo({ zoom: 1.6, cx: lead.pos.x, cy: gy, ax: 0.5, ay: 0.5 }, 90);
+            }] },
+          // The first of them over the edge, or long enough: the screen fades to black.
+          { id: 'fade_north', when: (x) => Object.keys(x.runner.walked || {}).length > 0 ||
+                                           x.game.playTime - (x.runner.vars._northAt || 0) >= NORTH_FADE_SEC * 60,
+            do: [(x) => { x.game.fadeScreen(1, 80); x.runner.vars._fadedAt = x.game.playTime; }, { flag: 'north_faded' }] }
+        ],
+        until: (x) => !!x.runner.flags.north_faded && x.game.playTime - x.runner.vars._fadedAt >= 95,
         next: 'win'
       }
     ],
@@ -212,7 +263,9 @@ const JOURNEY_STORM = (() => {
           { adopt: { mama: { species: 'upland_moa', near: 'grove', female: true } } },
           // (Her home is the nest: fed, she walks back to it.)
           (x) => { const m = x.runner.castEnts.mama, n = x.runner.point('nest'); if (m && n && m.homeRange) m.homeRange.set(n.x, n.y); },
-          { lay: { species: 'upland_moa', at: 'nest' } },
+          // (Pukepuke's egg hatches in a scene, as module 0's did: it rocks and cracks with the
+          // camera close in, and leaves its shell. When is still the simulation's.)
+          { lay: { species: 'upland_moa', at: 'nest', scene: true } },
           K.hensHaveLaid(['mama']),
           { sow: { plant: 'patotara', at: 'grove', count: 5, radius: 26, sprouted: true } },
           ...['tops', 'lookout', 'tops2', 'lookout2'].map(at => ({ place: { type: 'Storm', at, standing: true } })),
@@ -249,13 +302,20 @@ const JOURNEY_STORM = (() => {
           P("Blast these clouds! Where'd my big, tasty lunch go?", { lit: ['Storm'] }),          // (M0)
           ['mama', "Who do you think you're calling big, huh?"]                                  // (M0)
         ] },
-      // Hidden twice, it gives the family up and goes for the herd (the simulation's own rule).
-      { id: 'gave_up', on: 'eagle_gave_up',
-        say: [
-          P("SKRAHH! I'm so hungry... I'll have to S... settle for those S... stout-legged moa down on the flats!", { lit: ['$eagle', 'stout_legged_moa'] }),   // NEW (after M0's line)
-          ['papa', "Maybe the atua are watching over us. But get back to the nest before the clouds clear!", { lit: ['nests'] }]   // (M0)
-        ] },
-      { id: 'gave_up_again', on: 'eagle_gave_up', once: false, cooldown: 5,
+      // After its first hunt (seen off, or given up on the family), it goes off over the ridge to
+      // scuffle with the kea for scraps, as in module 0, and is gone a while: one errand, the
+      // story's (HaastsEagle.sendAway). It comes back a little fed and hunts as it will.
+      { id: 'scuffle', chapters: ['summer'],
+        when: { all: [{ any: [{ goal: 'seen_off' }, { seen: ['eagle_gave_up'] }] }, K.idle] },
+        say: [P("SKRAHH! I'm so hungry... I'll have to S... scuffle with the Kea for S... Scraps!", { lit: ['haasts_eagle'] })],   // (M0)
+        do: [{ flag: 'scuffled' }, { eagle: { which: 'nearest', near: 'grove', away: SCUFFLE_SEC, hunger: 12 } }] },
+      { id: 'eagle_left', when: (x) => !!x.runner.flags.scuffled && x.runner.sim.eagles.some(e => e._away && e._away.phase === 'gone'),
+        say: [['papa', "Maybe the atua are watching over us. But get back to the nest before the clouds clear!", { lit: ['nests'] }]] },   // (M0)
+      // Hidden twice after that, it gives the family up and goes for the herd (the simulation's
+      // own rule).
+      { id: 'gave_up', on: 'eagle_gave_up', if: (x) => !!x.runner.flags.scuffled,
+        say: [P("SKRAHH! Those Kea had nothing! I'll have to S... settle for those S... stout-legged moa down on the flats!", { lit: ['$eagle', 'stout_legged_moa'] })] },   // NEW (after M0's line)
+      { id: 'gave_up_again', on: 'eagle_gave_up', if: (x) => !!x.runner.flags.scuffled, once: false, cooldown: 5,
         notify: ['Pouākai: "SKRAHH! Off to the flats, then..."', 'success'] },                    // NEW
       // It has eaten: why that is all right, and who is the player's to keep.
       { id: 'eagle_fed', on: 'moa_killed', if: { all: [{ species: 'stout_legged_moa' }, { beat: 'first_hunt' }] },
@@ -298,7 +358,9 @@ const JOURNEY_STORM = (() => {
         moment: { on: 'mama', text: "The wharariki, by the tarn" } },
       { id: 'hungry', when: (x) => hungryOnes(x).length > 0, chapters: ['autumn', 'winter'],
         banner: { words: ["Moa need to eat PLANTS to sustain Mauri (life force).", "Tap a PLANT near a hungry moa to call it over"],   // (M0), and how
-                  until: (x) => hungryOnes(x).length === 0, lit: FAMILY, pause: false, maxSec: 14 } },
+                  // (Gone once a plant has been tapped: the moa still has to walk to it and eat.)
+                  until: { any: [(x) => hungryOnes(x).length === 0, { gained: ['tapped', '>=', 1] }] },
+                  lit: FAMILY, pause: false, maxSec: 14 } },
       ...K.stormInVoice({ teach: true, lit: FAMILY, chapters: TAUGHT }),
 
       // ---- Losses ----------------------------------------------------------------------------------

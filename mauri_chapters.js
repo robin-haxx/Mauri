@@ -92,7 +92,10 @@ const CHAPTER_CONDITIONS = {
   flag:    (name) => (x) => !!x.runner.flags[name],
   extinct: (who) => (x) => x.runner.extinct(who),
   alive:   (role) => (x) => { const e = x.runner.entity(role, x.event); return !!(e && e.alive !== false); },
-  hidden:  (role) => (x) => { const e = x.runner.entity(role, x.event); return !!(e && e.alive !== false && e.inShelter); },
+  // (Read from where the cover stands now, not from the bird's inShelter, which only the running
+  // simulation refreshes: a storm set down over a moa while a banner has play stopped hides it
+  // at once.)
+  hidden:  (role) => (x) => { const e = x.runner.entity(role, x.event); return !!(e && e.alive !== false && x.runner.coveredNow(e)); },
   hunting: (role) => (x) => role === true ? x.runner.focusHunted()
     : !!(x.runner.entity(role, x.event) || {}).hunting,
   hunted:  (role) => (x) => {   // an eagle is after this one
@@ -201,7 +204,8 @@ const CHAPTER_LEVERS = [['mechanics', 'mechanics'], ['tools', 'tools'], ['locked
   ['focus', 'focus'], ['introduce', 'introduce'], ['protect', 'protect'], ['nesting', 'nesting']];
 
 // A story moment's camera (MomentPlayer): how close, and how long it takes to ease in and out.
-const CHAPTER_MOMENT = { zoom: 2.4, inSec: 0.7, outSec: 0.9 };
+// (Slow enough in and out that the view glides: see Game.cameraTo.)
+const CHAPTER_MOMENT = { zoom: 2.2, inSec: 1.3, outSec: 1.6 };
 
 // What a chapter may say (the validator flags anything else, e.g. a misspelt lever).
 const CHAPTER_KEYS = new Set(['id', 'title', 'sites', 'start', 'goals', 'reactions', 'beats', 'until',
@@ -443,7 +447,8 @@ class ChapterRunner {
 
   // hints: [{ after: sec, notify | say | banner | do ... }, ...]: each rung's actions, with the
   // seconds since the reaction fired at which it is said. A rung's banner with no `until` of
-  // its own waits on the reaction's.
+  // its own waits on the reaction's (and goes after its maxSec, if it has one, whichever is
+  // first: a banner must not stay up once the problem it names is over).
   _compileHints(id, r) {
     if (!r.hints) return [];
     if (!r.until) this._issue(`reaction "${id}": hints need an until (what ends the case)`);
@@ -451,7 +456,7 @@ class ChapterRunner {
     return r.hints.map((h, k) => {
       if ((h.after || 0) < last) this._issue(`reaction "${id}": its hints' after times must rise`);
       last = h.after || 0;
-      const hh = (h.banner && !h.banner.until && !h.banner.maxSec && r.until)
+      const hh = (h.banner && !h.banner.until && r.until)
         ? Object.assign({}, h, { banner: Object.assign({ until: r.until }, h.banner) }) : h;
       return { after: (h.after || 0) * CHAPTER_FPS, actions: this._compileActions(`rx:${id}:hint${k + 1}`, this._ownActions(hh)) };
     });
@@ -570,16 +575,19 @@ class ChapterRunner {
     const done = (game) => until({ runner: this, game, event: this.cueData[cue], scope: game.tutorial.scratch[scopeKey] }) ||
       (!!b.maxSec && game.tutorial.tipDisplayTime > b.maxSec * CHAPTER_FPS);
     const lit = (game) => game.renderEntitiesAboveUI(this.lit(b.lit, this.cueData[cue]));
+    // needs: what the player must afford for the banner to stand ('place': a new `tool`;
+    // 'move': moving one of them, and one there to move; 'none'). A banner that can't be
+    // answered is not shown, and gives way if it stops being answerable.
     const extra = {
-      needs: b.tool ? 'place' : 'none',
+      needs: b.needs || (b.tool ? 'place' : 'none'),
       showOnce: false,
       onShow: (game) => { game.tutorial.scratch[scopeKey] = this.scope(); }
     };
-    if (b.tool) {
+    if (b.tool && extra.needs !== 'move') {
       this._checkTool(b.tool, cue);
       extra.tool = b.tool;
       extra.highlight = { type: 'element', target: 'tool:' + b.tool };
-    }
+    } else if (extra.needs === 'move') extra.tool = b.tool || 'Storm';
     if (b.pause === false) { extra.pauseGame = false; extra.dim = false; }
     return MODULE_TIP_KIT.banner(cue, chained ? { type: TRIGGER_TYPE.IMMEDIATE } : this._beatTrigger(cue),
       words, done, lit, extra);
@@ -951,6 +959,7 @@ class ChapterRunner {
 
     this._watchNests();
     this._watchCast();
+    this._updateWeather(CHAPTER_POLL);
     for (const rx of this.reactions) {
       if (!rx.when) continue;
       // A polled reaction fires as its condition turns true (or, a need with `for`, once it has
@@ -1301,10 +1310,18 @@ class ChapterRunner {
 
   // { which, hunger, watch, grace }: set their hunger (0 to 100; they hunt past about 45), move
   // their patrol over a place (they fly there and circle it), or give a "last chance" of `grace`
-  // seconds (it chases but can't strike: HaastsEagle.tutorialGraceTimer).
+  // seconds (it chases but can't strike: HaastsEagle.tutorialGraceTimer). With `away` (seconds)
+  // it flies off the land on an errand and comes back to its patrol (HaastsEagle.sendAway);
+  // `hunger` is then its hunger as it comes back.
   eaglePressure(spec, ev) {
     const p = spec.watch ? this.point(spec.watch, ev) : null;
     for (const e of this._eagles(spec, ev)) {
+      if (spec.away && e.sendAway) {
+        if (p) e._relocateTerritory(p.x, p.y);
+        e.sendAway(spec.away, { hungerBack: spec.hunger });
+        this._log('eagle_away', `${spec.away}`);
+        continue;
+      }
       if (spec.hunger != null) e.hunger = Math.max(0, Math.min(e.maxHunger, spec.hunger));
       if (p) e._relocateTerritory(p.x, p.y);
       if (spec.grace) e.tutorialGraceTimer = spec.grace * CHAPTER_FPS;
@@ -1331,7 +1348,7 @@ class ChapterRunner {
 
   eagleHungerMax() {
     let h = -1;
-    for (const e of (this.sim.eagles || [])) if (e.alive && e.hunger > h) h = e.hunger;
+    for (const e of (this.sim.eagles || [])) if (e.alive && !e._away && e.hunger > h) h = e.hunger;   // (not one off the land)
     return h;
   }
 
@@ -1385,8 +1402,10 @@ class ChapterRunner {
     return site;
   }
 
-  // { species, at, count = 1, incubationSec }: an egg (or a clutch) at a place. Scripted, so it
-  // is not counted as laid (the player's and the birds' own eggs are).
+  // { species, at, count = 1, incubationSec, scene }: an egg (or a clutch) at a place. Scripted,
+  // so it is not counted as laid (the player's and the birds' own eggs are). `scene` (true, or
+  // { sec = 3 }): when its time is up it hatches as the modules' eggs did, rocking and cracking
+  // for a few seconds with the camera close in, and leaves its shell (Game.onHatchScene).
   lay(spec, ev) {
     const p = this.point(spec.at, ev);
     if (!p || !this.sim.addEggAt) { this._log('issue', 'lay', `no place "${spec.at}"`); return; }
@@ -1394,7 +1413,8 @@ class ChapterRunner {
     for (let i = 0; i < n; i++) {
       const a = random(TWO_PI), d = n > 1 ? random(2, 10) : 0;
       this.sim.addEggAt(p.x + Math.cos(a) * d, p.y + Math.sin(a) * d, spec.species,
-        { incubationFrames: spec.incubationSec != null ? spec.incubationSec * CHAPTER_FPS : undefined });
+        { incubationFrames: spec.incubationSec != null ? spec.incubationSec * CHAPTER_FPS : undefined,
+          hatchScene: spec.scene ? (spec.scene === true ? {} : spec.scene) : null });
     }
     this._log('lay', spec.species, `${n}`);
   }
@@ -1438,6 +1458,69 @@ class ChapterRunner {
       n++;
     }
     this._log('fade', type, `${n}`);
+  }
+
+  // Whether something that hides a moa from the eagle (a storm, a fern shelter) stands over `e`
+  // right now. Fully hiding cover only: a partial one (eagleSpotFrac) still lets it be seen.
+  coveredNow(e) {
+    if (!e || !e.pos) return false;
+    for (const p of this.sim.placeables) {
+      if (!p.alive || !p.def || !p.def.blocksEagleVision || p.def.eagleSpotFrac > 0) continue;
+      if (p.isInRange(e.pos)) return true;
+    }
+    return false;
+  }
+
+  // ---- The weather on the tops ------------------------------------------------------------
+  // A journey level's storms gather by themselves on the high ground (level.weather; on by
+  // default where the level has the Storm): now and then, while fewer than `max` storms stand
+  // anywhere, a new one swells up on one of the highest spots, away from the other storms and
+  // from the cast. The family lives lower down for half the year, so the player brings the
+  // weather down to them. Each wears out over lifeSec (winterLifeSec in winter); moving one
+  // gives it half again its time left (Game.tryDropMove). It is the weather's (p.natural): a
+  // storm the player calls is counted apart.
+  //   { everySec = 20, max = 3, lifeSec = 75, winterLifeSec = 40, firstSec = 8 }, or false.
+  _weatherCfg() {
+    if (this._weather !== undefined) return this._weather;
+    const w = this.level.weather;
+    const has = !!(this.game && this.game.activePlaceables && this.game.activePlaceables.Storm);
+    this._weather = (w === false || !has || (!w && !this.level.journey)) ? null
+      : Object.assign({ everySec: 20, max: 3, lifeSec: 75, winterLifeSec: 40, firstSec: 8 }, w || {});
+    return this._weather;
+  }
+
+  _updateWeather(frames) {
+    const W = this._weatherCfg();
+    if (!W) return;
+    this._weatherT = (this._weatherT == null ? (W.everySec - W.firstSec) * CHAPTER_FPS : this._weatherT) + frames;
+    if (this._weatherT < W.everySec * CHAPTER_FPS) return;
+    const storms = this.sim.placeables.filter(p => p.alive && p.type === 'Storm');
+    if (storms.length >= W.max) return;   // (it tries again next poll: a gap opens when one blows out)
+    this._weatherT = 0;
+    const t = this.game.terrain, R = (this.game.activePlaceables.Storm.radius) || 64;
+    const away = Object.values(this.castEnts).filter(e => e && e.alive).map(e => e.pos);
+    const clear = (q) => storms.every(p => Math.hypot(p.pos.x - q.x, p.pos.y - q.y) > R * 1.6) &&
+                         away.every(c => Math.hypot(c.x - q.x, c.y - q.y) > R * 1.5);
+    const W0 = t.mapWidth, H0 = t.mapHeight, spots = [];
+    for (let i = 0; i < 260; i++) {
+      const q = { x: random(R * 0.6, W0 - R * 0.6), y: random(R * 0.6, H0 - R * 0.6) };
+      if (t.canPlace(q.x, q.y) && clear(q)) spots.push({ q, h: t.getElevationAt(q.x, q.y) });
+    }
+    if (!spots.length) return;
+    // One of the highest few (not always the one peak).
+    spots.sort((a, b) => b.h - a.h);
+    const q = spots[Math.floor(random(Math.min(6, spots.length)))].q;
+    const st = this.sim.addStandingStorm(q.x, q.y, R);
+    st.natural = true;
+    st.swellTo(R * 0.3, 1);
+    st.swellTo(R, 3 * CHAPTER_FPS);
+    const winter = this.game.seasonManager && this.game.seasonManager.currentKey === 'winter';
+    st.fadeOver(winter ? W.winterLifeSec : W.lifeSec, false);
+    this._log('weather', 'Storm', `gathered at ${Math.round(q.x)},${Math.round(q.y)}`);
+    if (!this._weatherSaid) {
+      this._weatherSaid = true;
+      this.game.addNotification("A storm is gathering on the tops. Press and hold it to bring it down.", 'info');
+    }
   }
 
   // Open the Field Guide at an entry (there are no locks: every entry is always there).
@@ -1666,7 +1749,7 @@ class ChapterRunner {
     const at = this.point(spec.on, ev);
     if (!at || !this.moments) return;
     this.moments.start({
-      kind: 'story', dur: (spec.sec || 2.5) * CHAPTER_FPS, zoom: spec.zoom,
+      kind: 'story', dur: (spec.sec || 3) * CHAPTER_FPS, zoom: spec.zoom,
       text: this.fill(spec.text || '', ev),
       at: () => (e && e.pos) ? e.pos : at
     });

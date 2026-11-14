@@ -702,6 +702,12 @@ class Moa extends Boid {
     return this.matingSearchRadius * mult;
   }
 
+  // Close kin, by the family links a hatchling is given (mother, father).
+  _isKin(o) {
+    return o === this.mother || o === this.father || o.mother === this || o.father === this ||
+      (!!this.mother && this.mother === o.mother);
+  }
+
   findPotentialMate(moas) {
     // Two buckets: any same-species mate beats a cross-species one, so a small founder
     // population pairs within itself instead of hybridising.
@@ -710,11 +716,16 @@ class Moa extends Boid {
     const _mateR = this.effectiveMatingRadius();
     const maxDistSq = _mateR * _mateR;
     const px = this.pos.x, py = this.pos.y;
+    // noKinPairing (a level's rule, for levels that keep family links): a moa does not court
+    // its mother, father, chick, or a sibling by the same hen. Without it a hen left alone
+    // with her grown son breeds with him (found on the journey's tile 4).
+    const _noKin = typeof LEVEL_MECHANICS !== 'undefined' && !!LEVEL_MECHANICS.noKinPairing;
 
     for (let i = 0; i < moas.length; i++) {
       const o = moas[i];
       if (o === this || !o.canBeMate()) continue;
       if (o.isFemale === this.isFemale) continue; // Must be opposite sex
+      if (_noKin && this._isKin(o)) continue;
       if (o.matingPartner && o.matingPartner !== this) continue;
 
       const dx = o.pos.x - px, dy = o.pos.y - py;

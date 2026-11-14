@@ -324,6 +324,7 @@ Object.assign(CHAPTERS_KIT, {
       maxPerSpecies: 12,
       seasonalBirdBreeding: 'calendar', moaCalendar: true, familyLinks: true,
       juvenileFollow: { within: 50, untilYears: 2, pull: 0.6 },
+      noKinPairing: true,
       placedPlantsSeasonal: true,
       emergentEagles: true, eagleMaxPopulation: 1, eagleHungerRate: 0.011,
       eagleStarveThreshold: 88, eagleStarveTimeout: 7200, eagleTargetRatio: 1 / 5,
@@ -396,7 +397,10 @@ Object.assign(CHAPTERS_KIT, {
       { id: 'prologued', on: 'chapter_start', if: first, do: [{ flag: 'prologued' }] },
       { id: 'fade_in', when: (x) => !!x.runner.flags.prologued && K.idle(x),
         do: [(x) => { x.game.fadeScreen(0, fadeFrames); x.runner.vars._fadeAt = x.game.playTime; }, { flag: 'fading' }] },
-      Object.assign({ id: 'opening', when: (x) => !!x.runner.flags.fading && x.game.playTime - x.runner.vars._fadeAt >= fadeFrames + 20,
+      // (The fade is drawn, not simulated, so on a slow machine it can lag the simulation's
+      // clock: wait for it to finish, or seven seconds where nothing is being drawn at all.)
+      Object.assign({ id: 'opening', when: (x) => !!x.runner.flags.fading && x.game.playTime - x.runner.vars._fadeAt >= 20 &&
+                                                   (x.game.screenFadeDone() || x.game.playTime - x.runner.vars._fadeAt >= 420),
         do: [{ flag: 'opened' }] }, opening.length ? { say: opening } : {})
     ];
   },

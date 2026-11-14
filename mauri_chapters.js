@@ -609,11 +609,14 @@ class ChapterRunner {
       return (e && (e.speciesKey || e.parentSpecies)) || (c && c.species) ||
              (this._speciesKeys.has(who) ? who : null);
     };
+    // (A role that turns out to be one of the cast speaks under its own name: "$target" is
+    // "Mama Moa" when it is Mama the eagle is after.)
+    const asCast = () => { const e = ent(); return (e && e.castName && this.castDefs[e.castName]) || null; };
     return {
-      title: (c && c.title) || (() => this._name(species())),
+      title: (c && c.title) || (() => { const cc = asCast(); return (cc && cc.title) || this._name(species()); }),
       sprite: (c && c.sprite) || (() => this._spriteFor(species())),
       scale: (c && c.scale) || 1,
-      sound: (c && c.sound) || (() => this._soundFor(species())),
+      sound: (c && c.sound) || (() => { const cc = asCast(); return (cc && cc.sound) || this._soundFor(species()); }),
       pitch: (c && c.pitch) || 1,
       entities: () => { const e = ent(); return e ? [e] : []; }
     };

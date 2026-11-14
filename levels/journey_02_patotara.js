@@ -178,7 +178,8 @@ const JOURNEY_PATOTARA = (() => {
                      friendPapa: { species: 'upland_moa', near: 'friendsHome', female: false } } },
           // (A slower egg than the Clues setting's: it hatches late in summer, after the kea
           // have had time to come for it. The raid is the lesson.)
-          { lay: { species: 'upland_moa', at: 'friendsHome', incubationSec: 75 } },
+          // (It hatches in a scene, as module 1's did: when is still the simulation's.)
+          { lay: { species: 'upland_moa', at: 'friendsHome', incubationSec: 75, scene: true } },
           { spawn: { type: 'upland_moa', at: 'arrive', count: 2, sexes: 'pair', radius: 10, hunger: 30 } },
           { spawn: { type: 'upland_moa', at: 'arrive', count: 1, age: 'juvenile', radius: 8, hunger: 25 } },
           { adopt: { mama: { species: 'upland_moa', near: 'arrive', female: true },
@@ -230,8 +231,9 @@ const JOURNEY_PATOTARA = (() => {
         ] },
       // All three at the nest, with an egg in it: the lesson's ladder. Their scene is the clue
       // (nothing is told). Answered when the moa see a kea off; lost when a kea takes the egg.
-      // (Not before the berries are out and the families have spoken: the story's order.)
-      { id: 'kea_gang', when: (x) => !!x.runner.flags.opened && sprouted(x) && K.idle(x) && (firedAgo(x, 'meet', 3) || x.runner.scopeTime() > 40 * 60) &&
+      // (Not before the families have spoken: the story's order. Kea can find the nest before
+      // the berries are out, so this does not wait for the sprouting.)
+      { id: 'kea_gang', when: (x) => !!x.runner.flags.opened && K.idle(x) && (firedAgo(x, 'meet', 3) || x.runner.scopeTime() > 40 * 60) &&
                                       eggInNest(x) && x.runner.nearCheck('kea', 'friendsHome', 170, null),
         say: [
           kea("Strongbeak", "The Pouākai attacked our mountain perch last year... We could use a clearing like yours!", { lit: ['kea'] }),   // (M1)
@@ -259,9 +261,12 @@ const JOURNEY_PATOTARA = (() => {
       // close to hatching is set down there: the story cannot go on without her.
       { id: 'koukou_owed', chapters: ['summer'], once: false, cooldown: 14,
         when: (x) => !!x.runner.flags.staged && x.runner.castEnts.koukou === undefined && (x.runner._heldFrames || 0) >= 40 * 60,
-        do: [(x) => { x.runner.lay({ species: 'upland_moa', at: 'friendsHome', incubationSec: 6 }); x.runner._log('beat', 'koukou', 'forced: an egg near hatching set down'); }] },
-      // The raid, both ways.
-      { id: 'raid_failed', on: 'nest_raid', if: { success: false },
+        do: [(x) => { x.runner.lay({ species: 'upland_moa', at: 'friendsHome', incubationSec: 6, scene: true }); x.runner._log('beat', 'koukou', 'forced: an egg near hatching set down'); }] },
+      // The raid, both ways. The scenes play only once the kea have been met (kea_gang); a raid
+      // before that, while the families are still talking, is a notice.
+      { id: 'raid_early', on: 'nest_raid', once: false, cooldown: 10, if: (x) => !x.runner.reactions.some(r => r.id === 'kea_gang' && r.fired),
+        notify: ["A kea has been at the neighbours' nest.", 'error'] },
+      { id: 'raid_failed', on: 'nest_raid', if: (x) => !!x.event && !x.event.success && x.runner.reactions.some(r => r.id === 'kea_gang' && r.fired),
         moment: { on: '$site', text: "The moa drove the kea off!" },
         say: [
           kea("Kea", "Have it your way, keep your nest... But stay away from ours when you hide from the cold in our forest!", { lit: ['kea'] }),   // (M1)
@@ -271,7 +276,7 @@ const JOURNEY_PATOTARA = (() => {
       { id: 'raid_failed_again', on: 'nest_raid',   // (the second time they are seen off, not the first)
         if: (x) => !!x.event && !x.event.success && firedAgo(x, 'raid_failed', 1),
         say: [kea("Strongbeak", "Skraw... There's too many of them... At this rate, we'll be done for in the winter! Skraak, regroup, regroup!", { lit: ['kea'] })] },   // (M1)
-      { id: 'raid_won', on: 'nest_raid', if: { success: true },
+      { id: 'raid_won', on: 'nest_raid', if: (x) => !!x.event && !!x.event.success && x.runner.reactions.some(r => r.id === 'kea_gang' && r.fired),
         say: [
           kea("Kea", "SKRAAWK! Move over, you giant wingless birds! This glade is ours now!", { lit: ['kea'] }),         // (M1)
           ['friendMama', "Our egg! ...There's still time for another this summer. Stay close to us this time, won't you?", { lit: ['nests', ...FAMILY] }]   // NEW
@@ -282,7 +287,7 @@ const JOURNEY_PATOTARA = (() => {
       // (the kea took the egg), another is laid there after a few seconds, and the log says so.
       { id: 'egg_again', chapters: ['summer', 'autumn'], once: false, cooldown: 8, for: 5,
         when: (x) => !!x.runner.flags.staged && x.runner.castEnts.koukou === undefined && !eggInNest(x),
-        do: [(x) => { x.runner.lay({ species: 'upland_moa', at: 'friendsHome' }); x.runner._log('beat', 'koukou', 'forced: another egg set down'); }] },
+        do: [(x) => { x.runner.lay({ species: 'upland_moa', at: 'friendsHome', scene: true }); x.runner._log('beat', 'koukou', 'forced: another egg set down'); }] },
       // Koukou: the neighbours' chick, a hen, adopted as she hatches. A moment later the young meet.
       { id: 'koukou_hatched', on: 'egg_hatched', if: { near: ['$egg', 'friendsHome', 60] },
         do: [{ adopt: { koukou: '$moa' } }, (x) => { const k = x.runner.castEnts.koukou; if (k && !k.isFemale) { k.isFemale = true; k.updateAge(0); } }],

@@ -484,13 +484,15 @@ if (require.main === module) {
   // Farewell Spit: the thin pale hook off the north-west tip, a pixel wide in the raster (too
   // thin to trace as a shape). Its line runs through the lightest rows of each column between
   // the tip and its end, and it is drawn as a bar of sand on its own shoal.
-  const SPIT = { x0: 84, x1: 101, y0: 13, y1: 19 };
+  const SPIT = { x0: 88, x1: 101, y0: 13, y1: 19 };
   const spitPts = [];
   for (let x = SPIT.x0; x <= SPIT.x1; x++) {
     let sy = 0, sw = 0;
     for (let y = SPIT.y0; y <= SPIT.y1; y++) { const v = Math.max(0, lum[y * w + x] - 150); sy += v * (y + 0.5); sw += v; }
     if (sw) spitPts.push([x + 0.5, sy / sw]);
   }
+  // Its root runs on a little, down into the tip of the land it grows from.
+  if (spitPts.length > 2) { const [a, b] = spitPts, dx = a[0] - b[0], dy = a[1] - b[1], L = Math.hypot(dx, dy); spitPts.unshift([a[0] + dx / L * 2, a[1] + dy / L * 2]); }
   const spitD = spitPts.length > 2 ? openPath(rdp(spitPts.map((p, i, a) => i === 0 || i === a.length - 1 ? p : [p[0], (a[i - 1][1] + 2 * p[1] + a[i + 1][1]) / 4]), 0.05)) : '';
 
   const lb = landRelief.bands, ab = alpRelief.bands;
@@ -533,6 +535,7 @@ if (require.main === module) {
     `<g clip-path="url(#alpClip)">`,
     ...alpBands.map(b => `<path d="${b.d}" fill-rule="evenodd" fill="${hex(b.colour)}"/>`),
     `</g>`,
+    `<path d="${P.alpine}" fill="none" stroke="#8fb1cc" stroke-width="0.45" stroke-linejoin="round"/>`,
     // Lakes, each in its pale ring; the rivers.
     `<path d="${P.lake}" fill-rule="evenodd" fill="${hex(C.lake)}" stroke="#f3f5e2" stroke-width="1.7" stroke-linejoin="round" paint-order="stroke"/>`,
     `<g fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="${P.river}" stroke="#d2d8f1" stroke-width="2.3"/><path d="${P.river}" stroke="${hex(C.river)}" stroke-width="1.15"/></g>`,

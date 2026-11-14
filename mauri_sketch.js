@@ -5816,8 +5816,14 @@ class Game {
 
   // A level card's body: a rounded, bevelled panel (lit top-left rim, shaded bottom-right) in
   // the menu's greens; brighter on hover, thicker-edged once completed, grey while locked.
-  _cardFrame(x, y, w, h, unlocked, hover, completed) {
-    if (!unlocked) { fill(30, 30, 35, 200); stroke(50, 50, 55); }
+  // `greenWhenDone`: a completed card is filled bright green (the journey's tiles, which show
+  // they are won that way rather than with a mark).
+  _cardFrame(x, y, w, h, unlocked, hover, completed, greenWhenDone = false) {
+    if (greenWhenDone && completed && unlocked) {
+      if (hover) { fill(74, 172, 92, 245); stroke(186, 246, 186); }
+      else { fill(58, 150, 76, 245); stroke(138, 222, 146); }
+    }
+    else if (!unlocked) { fill(30, 30, 35, 200); stroke(50, 50, 55); }
     else if (hover) { fill(40, 65, 45, 240); stroke(100, 160, 110); }
     else { fill(30, 50, 35, 240); stroke(70, 110, 80); }
     strokeWeight(completed ? 3 : 2);
@@ -6168,7 +6174,7 @@ class Game {
       const open = !!def && C.isOpen(id), done = C.isWon(id), chosen = id === sel;
       const hover = mx > p.x && mx < p.x + card && my > p.y && my < p.y + card;
       if (hover) this._journeyHover = id;
-      this._cardFrame(p.x, p.y, card, card, open, hover || chosen, done);
+      this._cardFrame(p.x, p.y, card, card, open, hover || chosen, done, true);
       if (chosen) {
         noFill(); stroke(250, 244, 222, 230); strokeWeight(2.5);
         rect(p.x - 4, p.y - 4, card + 8, card + 8, 15);
@@ -6177,8 +6183,7 @@ class Game {
       fill(open ? [226, 246, 228] : [104, 106, 112]);
       push(); textFont(FreckleFace); textSize(28); text(t.label, p.x + card / 2, p.y + 29); pop();
       smallTextSize(9);
-      if (done) { fill(120, 220, 140); text('✓ done', p.x + card / 2, p.y + 56); }
-      else if (!def) { fill(96, 98, 104); text('to come', p.x + card / 2, p.y + 56); }
+      if (!def) { fill(96, 98, 104); text('to come', p.x + card / 2, p.y + 56); }
       else if (!open) { fill(96, 98, 104); text('🔒', p.x + card / 2, p.y + 56); }
       this._journeyBtnBounds.push({ x: p.x, y: p.y, w: card, h: card, action: () => { this._journeySel = id; } });
     }
@@ -6226,8 +6231,9 @@ class Game {
       fill(done ? [120, 220, 140, 90] : [255, 255, 255, 34]);
       rect(cx, cy, cs - 3, cs - 3, 4);
     }
-    // The marker: it glides to the shown tile's place, and a ring spreads from it.
-    const want = C.place(shown), mk = this._journeyMarker || (this._journeyMarker = Object.assign({}, want));
+    // The marker: it glides to the chosen tile's place (a click moves it, not a hover), and a
+    // ring spreads from it.
+    const want = C.place(sel), mk = this._journeyMarker || (this._journeyMarker = Object.assign({}, want));
     for (const k of ['u', 'v', 's']) mk[k] += (want[k] - mk[k]) * 0.2;
     const px = x + mk.u * w, py = y + mk.v * mh, ps = mk.s * w + 4;
     const beat = (millis() % 1600) / 1600;
@@ -6237,7 +6243,7 @@ class Game {
     stroke(18, 24, 18, 230); strokeWeight(6); rect(px, py, ps, ps, 6);
     stroke(255, 246, 200); strokeWeight(3); rect(px, py, ps, ps, 6);
     // Its label, on a pill above it.
-    const tl = C.tile(shown).label;
+    const tl = C.tile(sel).label;
     noStroke(); fill(18, 26, 20, 225);
     rect(px, py - ps / 2 - 20, 40, 26, 13);
     triangle(px - 6, py - ps / 2 - 8, px + 6, py - ps / 2 - 8, px, py - ps / 2 - 1);

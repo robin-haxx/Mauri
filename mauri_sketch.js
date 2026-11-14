@@ -48,6 +48,7 @@ function _browserFontRenderPath(line, x, y, options) {
 
 let tutorialMantisSprite = null;
 let splashScreenMoa = null;
+let journeyMapImg = null;   // the upper South Island, behind the journey's tiles (level select)
 
 let plantSprites = {};
 let portraitPlantSprites = {};
@@ -178,6 +179,7 @@ function preload(){
   }
 
   splashScreenMoa = loadImage('sprites/moa_idle.png')
+  journeyMapImg = loadImage('sprites/journey_map.png');
   tutorialMantisSprite = loadImage('sprites/mantis_talk.png');
 
   loadPlaceableSprites();
@@ -5675,33 +5677,59 @@ class Game {
 
     // Each section: a stone slab (its header) standing `depth` px up off the ground at most,
     // over a recessed tray its contents slide open in.
-    const boxW = Math.min(1000, cw - 120), boxX = centerX - boxW / 2, headH = 72, gap = 18;
+    const fullW = Math.min(1000, cw - 120), headH = 72, gap = 18;
     const depth = 9, trayInset = 14;
+    // While the journey is open the boxes compact to the left and the map of the upper South
+    // Island stands beside them (journeySplit). On a canvas too narrow for that (portrait) the
+    // map goes under the journey's modules instead, inside its tray.
+    const jGap = 28, jLeftW = Math.min(660, fullW);
+    const jMapW = Math.min(640, cw - 120 - jLeftW - jGap);
+    const journeySplit = typeof CAMPAIGN !== 'undefined' && jMapW >= 440;
+    const jAnim = this._menuAnim && this._menuAnim.journey;
+    const jk = journeySplit && jAnim ? Math.max(0, Math.min(1, jAnim.open.x)) : 0;
+    const jX0 = centerX - (jLeftW + jGap + jMapW) / 2;
+    const boxW = Math.round(fullW + (jLeftW - fullW) * jk);
+    const boxX = Math.round((centerX - fullW / 2) + (jX0 - (centerX - fullW / 2)) * jk);
+    const boxMid = boxX + boxW / 2;
+    // (A slab on the move is the nearer resting slab stretched; see MenuStyle.drawSlab.)
+    const slabBake = jk > 0.98 ? jLeftW : fullW;
     const mx = mouseX / spriteSS(), my = mouseY / spriteSS();
     // The sections, from MENU_SECTIONS, each as tall as its rows of cards.
     const sections = [];
-    const cardS = 200, cardGap = 32, perRow = Math.max(1, Math.floor((boxW - 40 + cardGap) / (cardS + cardGap)));
+    const cardS = 200, cardGap = 32, perRow = Math.max(1, Math.floor((fullW - 40 + cardGap) / (cardS + cardGap)));
     this._journeyBtnBounds = [];
+    this._journeyHover = null;
     for (const sec of MENU_SECTIONS) {
-      if (sec.style === 'journey') {   // the map: its tiles come from CAMPAIGN.CELLS, not a list
-        if (typeof CAMPAIGN !== 'undefined') sections.push({ key: sec.key, label: sec.label, bodyH: 392,
-          draw: (top) => this._renderJourneyMap(centerX, top + 16, boxW - 40) });
+      if (sec.style === 'journey') {   // the sequence of tiles and their map (mauri_campaign.js)
+        if (typeof CAMPAIGN === 'undefined') continue;
+        const modW = Math.min(612, fullW - 48), modH = this._journeyModulesH();
+        if (journeySplit) {
+          sections.push({ key: sec.key, label: sec.label, bodyH: modH + 24,
+            draw: (top) => this._renderJourneyModules(boxMid - modW / 2, top + 14, modW, mx, my) });
+        } else {
+          const pw = Math.min(640, fullW - 60);
+          sections.push({ key: sec.key, label: sec.label, bodyH: modH + 24 + this._journeyPanelH(pw) + 30,
+            draw: (top) => {
+              this._renderJourneyModules(centerX - modW / 2, top + 14, modW, mx, my);
+              this._renderJourneyPanel(centerX - pw / 2, top + 14 + modH + 24, pw, 1, true, mx, my);
+            } });
+        }
         continue;
       }
       const list = bySection[sec.key];
       if (!list || !list.length) continue;
       if (sec.style === 'cards') {
         sections.push({ key: sec.key, label: sec.label, bodyH: 250,
-          draw: (top) => this._renderChallengeCards(list, centerX, top + 25, boxW - 40) });
+          draw: (top) => this._renderChallengeCards(list, centerX, top + 25, fullW - 40) });
       } else {
         const entries = this._moduleEntries(list), withSketches = sec.style === 'sketches';
         const rows = Math.ceil(entries.length / perRow), rowH = cardS + cardGap + (withSketches ? 44 : 0);
         sections.push({ key: sec.key, label: sec.label, bodyH: rows * rowH + 18,
-          draw: (top) => this._renderModuleCards(entries, centerX, top + 25, boxW - 40, withSketches) });
+          draw: (top) => this._renderModuleCards(entries, centerX, top + 25, fullW - 40, withSketches) });
       }
     }
     sections.push({ key: 'settings', label: "Settings", bodyH: 170,
-      draw: (top) => this._renderRenderSettings(centerX, top + 28, 300) });
+      draw: (top) => this._renderRenderSettings(boxMid, top + 28, 300) });
     // Per-section springs: `open` (0 shut … 1 open, with a little overshoot as the tray lands)
     // and `lift` (the slab's height off the ground: up under the pointer, flat while pressed,
     // sitting low while its section is open).
@@ -5728,14 +5756,14 @@ class Game {
       if (k > 0.01) MenuStyle.drawTray(boxX + trayInset, trayTop, boxW - trayInset * 2, trayH, 14);
 
       // The slab and its label, painted on the stone (a dark under-stroke so it sits in it).
-      const faceY = MenuStyle.drawSlab(s.key, boxX, y, boxW, headH, lift, depth);
+      const faceY = MenuStyle.drawSlab(s.key, boxX, y, boxW, headH, lift, depth, boxW === slabBake ? undefined : slabBake);
       push();
       textAlign(CENTER, CENTER);
       textFont(FreckleFace); textSize(30);
       fill(20, 26, 20, 170);
-      text(s.label, centerX + 1, faceY + headH / 2 + 2);
+      text(s.label, boxMid + 1, faceY + headH / 2 + 2);
       fill(hover || isOpen ? [250, 244, 222] : [232, 226, 204]);
-      text(s.label, centerX, faceY + headH / 2);
+      text(s.label, boxMid, faceY + headH / 2);
       // An open/closed chevron at the right, cut into the stone.
       translate(boxX + boxW - 44, faceY + headH / 2);
       rotate(Math.min(1, k) * Math.PI);
@@ -5766,74 +5794,210 @@ class Game {
       y += headH + depth + bodyH + gap;
     }
 
+    // The journey's map, in its fixed place to the right of the compacted boxes: it fades in as
+    // the journey opens, and takes clicks once it is fully there.
+    if (journeySplit && jk > 0.01) {
+      const live = jk >= 0.98;
+      const nb = this._journeyBtnBounds.length, nc = this._levelCardBounds.length;
+      this._renderJourneyPanel(jX0 + jLeftW + jGap, 190, jMapW, jk, live, mx, my);
+      if (!live) { this._journeyBtnBounds.length = nb; this._levelCardBounds.length = nc; }
+    }
+
     fill(CACHED_COLORS.menuFooter);
     smallTextSize(11);
     textAlign(CENTER, CENTER);
     text(`Version: ${CONFIG.version}`, centerX, ch - 40);
   }
 
-  // The journey's map (the menu's first section): the tiles as on the sketch, north up, with
-  // the two paths drawn between them. A cell holds a lesson, or a lesson and its free play
-  // side by side. Done tiles are ticked, open ones lit, locked ones grey. Beside the map: who
-  // is in the family as the record stands, and two small buttons (open every tile for a class
-  // or a test; start the journey again). PLACEHOLDER ART: plain cells until the tiles are drawn.
-  _renderJourneyMap(centerX, top, maxW) {
-    const C = CAMPAIGN, cw = 168, chh = 62, gap = 10, cols = 3, rows = 5;
-    const mapW = cols * cw + (cols - 1) * gap, sideW = Math.min(360, maxW - mapW - 30);
-    const x0 = centerX - (mapW + (sideW > 180 ? 30 + sideW : 0)) / 2, y0 = top;
-    const mx = mouseX, my = mouseY;   // (as the other cards read the pointer)
-    const cellAt = (col, row) => ({ x: x0 + col * (cw + gap), y: y0 + row * (chh + gap) });
-    const mid = (col, row) => { const c = cellAt(col, row); return { x: c.x + cw / 2, y: c.y + chh / 2 }; };
+  // ---- The journey on the level select ----------------------------------------------------
+  // Two parts. _renderJourneyModules: the tiles as a sequence in four groups (1 2 2f, 3 4 4f,
+  // 5 6 6f, 7 7f; CAMPAIGN.GROUPS), 2×2, with lines showing that 2f opens both 3 and 5 and
+  // that 7 needs both 4 and 6. _renderJourneyPanel: the upper South Island with a marker on
+  // the tile's place in it, and under it the tile's name, the family as the record stands,
+  // and the Start button at the bottom right. A click on a tile chooses it (the marker glides
+  // there; pointing at one previews it); Start plays the chosen tile.
+  // PLACEHOLDER ART: plain cells, and a small map graphic drawn large.
+
+  _journeyModulesH() { return 2 * 110 + 30 + 16; }
+  _journeyPanelH(w) { return Math.round(w * CAMPAIGN.MAP.h / CAMPAIGN.MAP.w) + 196; }
+
+  // The tile the panel is about: the one chosen by a click, else the journey's next tile.
+  _journeyTile() {
+    if (!this._journeySel || !CAMPAIGN.TILES[this._journeySel]) return CAMPAIGN.nextTile();
+    return this._journeySel;
+  }
+
+  _renderJourneyModules(x0, y0, w, mx, my) {
+    const C = CAMPAIGN, card = 72, pad = 10, colGap = 20, rowGap = 30, rowH = 110, labelH = 28;
+    const colW = (w - colGap) / 2, pitch = (colW - 2 * pad - card) / 2;
+    const sel = this._journeyTile();
+    const pos = {};
     push();
-    // The paths: the shared start, then west with Koukou and north with Pukepuke.
-    strokeWeight(5); noFill();
-    for (const path of C.PATHS) {
-      stroke(path.color[0], path.color[1], path.color[2], 150);
-      beginShape();
-      for (const [col, row] of path.cells) { const p = mid(col, row); vertex(p.x, p.y); }
-      endShape();
-    }
-    noStroke();
-    textAlign(CENTER, CENTER);
-    for (const cell of C.CELLS) {
-      const c = cellAt(cell.col, cell.row), n = cell.tiles.length, w = (cw - (n - 1) * 6) / n;
-      cell.tiles.forEach((tid, i) => {
-        const t = C.tile(tid), x = c.x + i * (w + 6);
-        const def = t.level ? LEVEL_REGISTRY.get(t.level) : null;
-        const open = !!def && C.isOpen(tid), done = C.isWon(tid);
-        const hover = open && mx > x && mx < x + w && my > c.y && my < c.y + chh;
-        this._cardFrame(x, c.y, w, chh, open, hover, done);
-        fill(open ? [226, 246, 228] : [96, 98, 104]);
-        push(); textFont(FreckleFace); textSize(22);
-        text(t.label + (done ? ' ✓' : ''), x + w / 2, c.y + 22); pop();
-        fill(open ? [150, 190, 160] : [80, 82, 88]);
-        smallTextSize(n > 1 ? 8 : 10);
-        text(def ? t.title : 'to come', x + w / 2, c.y + 46);
-        if (def) this._levelCardBounds.push({ x, y: c.y, w, h: chh, levelId: def.id, unlocked: open, module: true, chapters: true });
-      });
-    }
-    // Beside the map: the family, and the two buttons.
-    if (sideW > 180) {
-      const sx = x0 + mapW + 30;
-      textAlign(LEFT, TOP);
-      fill(232, 226, 204); push(); textFont(FreckleFace); textSize(20); text("The family", sx, y0); pop();
-      fill(190, 206, 190); smallTextSize(12);
-      let ty = y0 + 32;
-      for (const line of C.familyLines()) {
-        text(line, sx, ty, sideW, 80);
-        ty += 20 * Math.max(1, Math.ceil(textWidth(line) / sideW)) + 4;
+    // The groups: a tinted frame each, named at its top right.
+    C.GROUPS.forEach((g, gi) => {
+      const gx = x0 + (gi % 2) * (colW + colGap), gy = y0 + Math.floor(gi / 2) * (rowH + rowGap);
+      const col = C.pathColor(g.path);
+      fill(col[0], col[1], col[2], 16); stroke(col[0], col[1], col[2], 70); strokeWeight(1.5);
+      rect(gx, gy, colW, rowH, 10);
+      noStroke(); fill(col[0], col[1], col[2], 210);
+      textAlign(RIGHT, CENTER); smallTextSize(10);
+      text(g.title, gx + colW - 10, gy + 14);
+      g.tiles.forEach((id, i) => { if (id) pos[id] = { x: gx + pad + i * pitch, y: gy + labelH, path: g.path }; });
+    });
+    // The lines: lit where they lead to an open tile.
+    const arrow = (pts, col, lit) => {
+      const a = lit ? 235 : 80;
+      noFill(); stroke(col[0], col[1], col[2], a); strokeWeight(3); strokeJoin(ROUND);
+      beginShape(); for (const p of pts) vertex(p[0], p[1]); endShape();
+      const [ex, ey] = pts[pts.length - 1], [px, py] = pts[pts.length - 2];
+      const ang = Math.atan2(ey - py, ex - px);
+      noStroke(); fill(col[0], col[1], col[2], a);
+      push(); translate(ex, ey); rotate(ang); triangle(1, 0, -8, -5.5, -8, 5.5); pop();
+    };
+    const litTo = (id) => { const t = C.tile(id); return !!(t.level && LEVEL_REGISTRY.get(t.level)) && C.isOpen(id); };
+    for (const g of C.GROUPS) {
+      const ids = g.tiles.filter(Boolean), col = C.pathColor(g.path);
+      for (let i = 1; i < ids.length; i++) {
+        const a = pos[ids[i - 1]], b = pos[ids[i]];
+        arrow([[a.x + card + 3, a.y + card / 2], [b.x - 3, b.y + card / 2]], col, litTo(ids[i]));
       }
-      const btn = (label, by, action) => {
-        const bw = Math.min(sideW, 250), bh = 34, hover = mx > sx && mx < sx + bw && my > by && my < by + bh;
-        this._cardFrame(sx, by, bw, bh, true, hover, false);
-        fill(210, 240, 215); textAlign(CENTER, CENTER);
-        push(); textFont(FreckleFace); textSize(15); text(label, sx + bw / 2, by + bh / 2 + 1); pop();
-        this._journeyBtnBounds.push({ x: sx, y: by, w: bw, h: bh, action });
-      };
-      const by0 = y0 + rows * (chh + gap) - gap - 34 * 2 - 10;
-      btn(C.record.openAll ? "Every tile is open" : "Open every tile", by0, () => C.toggleOpenAll());
-      btn("Start the journey again", by0 + 44, () => C.reset());
     }
+    for (const l of C.LINKS) {
+      const a = pos[l.from], b = pos[l.to], col = C.pathColor(l.path);
+      if (!a || !b) continue;
+      const ax = a.x + card / 2, bx = b.x + card / 2;
+      let pts;
+      if (l.route === 'across') pts = [[a.x + card + 3, a.y + card / 2], [b.x - 3, b.y + card / 2]];
+      else if (l.route === 'down') pts = [[ax, a.y + card + 3], [bx, b.y - 3]];
+      else if (l.route === 'under') {   // out of the bottom, along the gap between the rows, in at the top
+        const ly = a.y + card + (rowH - labelH - card) + rowGap / 2;
+        pts = [[ax, a.y + card + 3], [ax, ly], [bx, ly], [bx, b.y - 3]];
+      } else {                          // 'below': under the bottom row and up into the tile
+        const ly = a.y + card + (rowH - labelH - card) + 8;
+        pts = [[ax, a.y + card + 3], [ax, ly], [bx, ly], [bx, b.y + card + 3]];
+      }
+      arrow(pts, col, litTo(l.to));
+    }
+    // The tiles.
+    textAlign(CENTER, CENTER);
+    for (const id in pos) {
+      const p = pos[id], t = C.tile(id), def = t.level ? LEVEL_REGISTRY.get(t.level) : null;
+      const open = !!def && C.isOpen(id), done = C.isWon(id), chosen = id === sel;
+      const hover = mx > p.x && mx < p.x + card && my > p.y && my < p.y + card;
+      if (hover) this._journeyHover = id;
+      this._cardFrame(p.x, p.y, card, card, open, hover || chosen, done);
+      if (chosen) {
+        noFill(); stroke(250, 244, 222, 230); strokeWeight(2.5);
+        rect(p.x - 4, p.y - 4, card + 8, card + 8, 15);
+        noStroke();
+      }
+      fill(open ? [226, 246, 228] : [104, 106, 112]);
+      push(); textFont(FreckleFace); textSize(28); text(t.label, p.x + card / 2, p.y + 29); pop();
+      smallTextSize(9);
+      if (done) { fill(120, 220, 140); text('✓ done', p.x + card / 2, p.y + 56); }
+      else if (!def) { fill(96, 98, 104); text('to come', p.x + card / 2, p.y + 56); }
+      else if (!open) { fill(96, 98, 104); text('🔒', p.x + card / 2, p.y + 56); }
+      this._journeyBtnBounds.push({ x: p.x, y: p.y, w: card, h: card, action: () => { this._journeySel = id; } });
+    }
+    pop();
+  }
+
+  _renderJourneyPanel(x, y, w, alpha, live, mx, my) {
+    const C = CAMPAIGN, M = C.MAP, mh = Math.round(w * M.h / M.w), H = this._journeyPanelH(w);
+    const ctx = drawingContext;
+    const sel = this._journeyTile(), shown = this._journeyHover || sel;
+    push();
+    ctx.save();
+    ctx.globalAlpha *= alpha;
+    MenuStyle.drawTray(x - 12, y - 12, w + 24, H + 24, 18);
+
+    // The map, with every tile's place marked faintly on it.
+    ctx.save();
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(x, y, w, mh, 10); else ctx.rect(x, y, w, mh);
+    ctx.clip();
+    if (journeyMapImg && journeyMapImg.width > 1) image(journeyMapImg, x, y, w, mh);
+    else { noStroke(); fill(40, 60, 50); rect(x, y, w, mh); }
+    const cs = M.pitch / M.w * w;
+    rectMode(CENTER);
+    for (const cell of C.CELLS) {
+      const cx = x + (M.x0 + cell.col * M.pitch) / M.w * w, cy = y + (M.y0 + cell.row * M.pitch) / M.h * mh;
+      const done = cell.tiles.some(id => C.isWon(id));
+      stroke(20, 26, 20, 150); strokeWeight(1.5);
+      fill(done ? [120, 220, 140, 90] : [255, 255, 255, 34]);
+      rect(cx, cy, cs - 3, cs - 3, 4);
+    }
+    // The marker: it glides to the shown tile's place, and a ring spreads from it.
+    const want = C.place(shown), mk = this._journeyMarker || (this._journeyMarker = Object.assign({}, want));
+    for (const k of ['u', 'v', 's']) mk[k] += (want[k] - mk[k]) * 0.2;
+    const px = x + mk.u * w, py = y + mk.v * mh, ps = mk.s * w + 4;
+    const beat = (millis() % 1600) / 1600;
+    noFill();
+    stroke(255, 246, 200, 190 * (1 - beat)); strokeWeight(3);
+    ellipse(px, py, ps * (1.3 + beat * 2.2), ps * (1.3 + beat * 2.2));
+    stroke(18, 24, 18, 230); strokeWeight(6); rect(px, py, ps, ps, 6);
+    stroke(255, 246, 200); strokeWeight(3); rect(px, py, ps, ps, 6);
+    // Its label, on a pill above it.
+    const tl = C.tile(shown).label;
+    noStroke(); fill(18, 26, 20, 225);
+    rect(px, py - ps / 2 - 20, 40, 26, 13);
+    triangle(px - 6, py - ps / 2 - 8, px + 6, py - ps / 2 - 8, px, py - ps / 2 - 1);
+    fill(255, 246, 200); textAlign(CENTER, CENTER);
+    push(); textFont(FreckleFace); textSize(17); text(tl, px, py - ps / 2 - 20); pop();
+    rectMode(CORNER);
+    ctx.restore();
+    noFill(); stroke(0, 0, 0, 150); strokeWeight(2); rect(x, y, w, mh, 10); noStroke();
+
+    // Under the map: the shown tile, and the family as the record stands.
+    const t = C.tile(shown), def = t.level ? LEVEL_REGISTRY.get(t.level) : null;
+    const open = !!def && C.isOpen(shown), done = C.isWon(shown);
+    const group = C.GROUPS.find(g => g.tiles.includes(shown));
+    const iy = y + mh + 14;
+    textAlign(LEFT, TOP);
+    fill(240, 234, 210);
+    push(); textFont(FreckleFace); textSize(25); text(`${t.label} · ${t.title}`, x + 4, iy); pop();
+    if (group) {
+      const col = C.pathColor(group.path);
+      fill(col[0], col[1], col[2], 220); textAlign(RIGHT, TOP); smallTextSize(11);
+      text(group.title, x + w - 4, iy + 8);
+      textAlign(LEFT, TOP);
+    }
+    let words = C.BLURBS[shown] || '';
+    if (!def) words += ' Still to come.';
+    else if (!open) words += ` Locked: win ${t.needs.filter(n => !C.isWon(n)).map(n => C.tile(n).label).join(' and ')} first.`;
+    else if (done) words += ' Won.';
+    fill(196, 212, 196); smallTextSize(12);
+    text(words, x + 4, iy + 36, w - 8, 40);
+    fill(140, 164, 146); smallTextSize(9);
+    text(C.familyLines().join('  '), x + 4, iy + 80, w - 8, 34);
+
+    // The bottom row: two small buttons at the left, Start at the bottom right.
+    const over = (bx, by, bw, bh) => mx > bx && mx < bx + bw && my > by && my < by + bh;
+    const small = (label, bx, bw, action) => {
+      const bh = 32, by = y + H - bh - 4, hover = live && over(bx, by, bw, bh);
+      this._cardFrame(bx, by, bw, bh, true, hover, false);
+      fill(200, 232, 206); textAlign(CENTER, CENTER);
+      push(); textFont(FreckleFace); textSize(14); text(label, bx + bw / 2, by + bh / 2 + 1); pop();
+      this._journeyBtnBounds.push({ x: bx, y: by, w: bw, h: bh, action });
+    };
+    const sw = Math.min(170, (w - 200) / 2 - 6);
+    small(C.record.openAll ? "Every tile is open" : "Open every tile", x + 4, sw, () => C.toggleOpenAll());
+    small("Start again", x + 4 + sw + 10, sw, () => { C.reset(); this._journeySel = null; });
+
+    const st = C.tile(sel), sdef = st.level ? LEVEL_REGISTRY.get(st.level) : null;
+    const sOpen = !!sdef && C.isOpen(sel);
+    const bw = 180, bh = 54, bx = x + w - bw - 4, by = y + H - bh - 4;
+    const hover = live && sOpen && over(bx, by, bw, bh);
+    stroke(sOpen ? (hover ? [220, 250, 226] : [130, 200, 146]) : [60, 62, 66]); strokeWeight(2.5);
+    fill(sOpen ? (hover ? [76, 150, 96] : [56, 122, 76]) : [38, 40, 44]);
+    rect(bx, by, bw, bh, 14);
+    stroke(255, 255, 255, sOpen ? 50 : 14); strokeWeight(2); line(bx + 14, by + 5, bx + bw - 14, by + 5);
+    noStroke(); fill(sOpen ? [250, 246, 226] : [110, 112, 118]); textAlign(CENTER, CENTER);
+    push(); textFont(FreckleFace); textSize(23);
+    text(!sdef ? "To come" : !sOpen ? `${st.label} is locked` : C.isWon(sel) ? `Replay ${st.label}` : `Start ${st.label}`, bx + bw / 2, by + bh / 2 + 1);
+    pop();
+    if (sdef) this._levelCardBounds.push({ x: bx, y: by, w: bw, h: bh, levelId: sdef.id, unlocked: sOpen, module: true, chapters: true });
+    ctx.restore();
     pop();
   }
 
@@ -6605,6 +6769,7 @@ class Game {
               mx > card.x && mx < card.x + card.w &&
               my > card.y && my < card.y + card.h) {
             this.loadLevel(card.levelId);
+            this._journeySel = null;   // (back on the menu, the journey offers its next tile)
             // A module level starts straight away (its story opens it); a card goes to the
             // level splash first.
             // (A chapters level keeps the splash in debug mode, for its benchmark buttons.)

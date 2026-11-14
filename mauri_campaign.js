@@ -7,7 +7,8 @@
 // as it starts and written by it at the win.
 //
 //   The map      TILES (a level each), CELLS (where each is drawn) and PATHS (the lines).
-//                Game._renderJourneyMap draws them as the menu's first section.
+//                GROUPS and LINKS are the menu's sequence, MAP the graphic behind the tiles.
+//                Game._renderJourneyModules and _renderJourneyPanel draw them.
 //   Reading      CAMPAIGN.begin(runner), called as a journey level starts (a level with
 //                `journey: true`): the record becomes story flags (`papa_lost`) and words
 //                (`{$elders}`) on the ChapterRunner, which the chapters engine already has.
@@ -78,6 +79,60 @@ const CAMPAIGN = {
     { name: 'west',     color: [150, 210, 170], cells: [[2, 3], [1, 3], [1, 2], [1, 1]] },   // with Koukou
     { name: 'north',    color: [170, 196, 236], cells: [[2, 3], [2, 2], [2, 1], [1, 1]] }    // with Pukepuke
   ],
+
+  // The menu's sequence (Game._renderJourneyModules): the tiles in four groups, each a lesson
+  // or two and the free play after them, laid out 2×2. `path` names the PATHS colour. A null
+  // slot is left empty (7 sits under 4, so the west path's line drops straight into it).
+  GROUPS: [
+    { title: "Together",            path: 'together', tiles: ['t1', 't2', 't2f'] },
+    { title: "West with Koukou",    path: 'west',     tiles: ['t3', 't4', 't4f'] },
+    { title: "North with Pukepuke", path: 'north',    tiles: ['t5', 't6', 't6f'] },
+    { title: "The paths meet",      path: 'together', tiles: [null, 't7', 't7f'] }
+  ],
+  // The lines between groups: 2f opens both 3 and 5; 7 needs both 4 and 6.
+  LINKS: [
+    { from: 't2f', to: 't3', path: 'west',  route: 'across' },
+    { from: 't2f', to: 't5', path: 'north', route: 'under' },
+    { from: 't4',  to: 't7', path: 'west',  route: 'down' },
+    { from: 't6',  to: 't7', path: 'north', route: 'below' }
+  ],
+  // One line per tile for the menu's panel. PLACEHOLDERS: the words are the author's.
+  BLURBS: {
+    t1:  "A storm hides a moa from the Pouākai.",
+    t2:  "Pātōtara feeds the family, and the kea come for the egg.",
+    t2f: "Five years on the same land. A baby hatches.",
+    t3:  "Koukou and the baby meet the little bush moa.",
+    t4:  "The kākāpō set a riddle about the rimu.",
+    t4f: "Eight years. Keep the forest bountiful as the cold comes down.",
+    t5:  "Pukepuke's family winters beside a flock of kākā.",
+    t6:  "An old crested moa of the high country.",
+    t6f: "Eight years. Grow the clan beside the slow-breeding giant moa.",
+    t7:  "Both families meet, and a chick hatches.",
+    t7f: "The whole land, year after year."
+  },
+  // The upper South Island graphic behind the tiles (sprites/journey_map.png, w × h px) and
+  // where the CELLS grid lies on it: (x0, y0) is the centre of cell col 0, row 0, and `pitch`
+  // the distance between cells, all in the image's pixels. A new graphic needs these re-measured.
+  MAP: { w: 205, h: 156, x0: 72.2, y0: 54.0, pitch: 9.2 },
+
+  // Where a tile lies on the map graphic: its centre (u, v: 0..1 across the image) and its
+  // side `s` as a fraction of the image's width. 7f is the whole 2×2 land north-west of 7.
+  place(id) {
+    const M = this.MAP;
+    let col = 1, row = 1, span = 1;
+    if (id === 't7f') { col = 0.5; row = 0.5; span = 2; }
+    else for (const c of this.CELLS) if (c.tiles.includes(id)) { col = c.col; row = c.row; }
+    return { u: (M.x0 + col * M.pitch) / M.w, v: (M.y0 + row * M.pitch) / M.h, s: span * M.pitch / M.w };
+  },
+
+  // The tile the menu offers first: the earliest open one not yet won (else the first).
+  nextTile() {
+    for (const g of this.GROUPS) for (const id of g.tiles) {
+      if (id && this.TILES[id].level && this.isOpen(id) && !this.isWon(id)) return id;
+    }
+    return 't1';
+  },
+  pathColor(name) { const p = this.PATHS.find(q => q.name === name); return p ? p.color : [226, 214, 170]; },
 
   // Five written records for testing tile 7 and what follows it (?record=<name>, and
   // tools/batch.js --record <name>): from the kindest journey to the hardest.

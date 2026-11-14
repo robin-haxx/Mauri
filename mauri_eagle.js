@@ -3,6 +3,8 @@
 // ============================================
 
 class HaastsEagle extends Boid {
+  static WARN_COL = [255, 190, 70];   // eagleTelegraph: the outline of a bird near its hunt
+  get outlinable() { return true; }   // (its sprite takes an outline mark: EntitySprites.mark)
   constructor(x, y, terrain, config = null, speciesData = null) {
     super(x, y, terrain);
     
@@ -152,6 +154,7 @@ class HaastsEagle extends Boid {
     if (this._hold) { this._holdFlight(dt); return; }
 
     this.hunger = Math.min(this.hunger + this.hungerRate * dt, this.maxHunger);
+    if (this._hungerRamp) this._stepHungerRamp(dt);
 
     // On an errand off the land (sendAway): nothing else it does runs until it is back.
     if (this._away) { this._awayFlight(dt); return; }
@@ -867,6 +870,25 @@ class HaastsEagle extends Boid {
     return true;
   }
 
+  // A story making it hungrier (a chapter's `eagle: { hunger }`): its hunger climbs to `h` at
+  // HUNGER_RAMP a frame, on top of its own hunger, so its bar is seen to drain (and its amber
+  // warning to come on) instead of jumping there. A hunger at or below where it is now (it has
+  // eaten) is set at once. A meal on the way ends the climb.
+  static HUNGER_RAMP = 0.12;   // hunger a frame: about 7 a second, 30 to 50 in under 3 s
+  hungerTo(h) {
+    h = Math.max(0, Math.min(this.maxHunger, h));
+    if (h <= this.hunger) { this.hunger = h; this._hungerRamp = null; return; }
+    this._hungerRamp = { to: h, last: this.hunger };
+  }
+
+  _stepHungerRamp(dt) {
+    const r = this._hungerRamp;
+    if (this.hunger < r.last - 0.5) { this._hungerRamp = null; return; }   // (it ate meanwhile)
+    this.hunger = Math.min(r.to, this.hunger + HaastsEagle.HUNGER_RAMP * dt);
+    r.last = this.hunger;
+    if (this.hunger >= r.to) this._hungerRamp = null;
+  }
+
   // A scripted errand off the land (a chapter's `eagle: { away }`; tile 1's Pouākai going to
   // scuffle with the kea for scraps, as module 0's did): it flies off over the nearest edge,
   // fading out, is gone for `sec` seconds, and flies back in to its patrol. `hungerBack`: its
@@ -876,6 +898,7 @@ class HaastsEagle extends Boid {
     const t = this.terrain, W = t.mapWidth, H = t.mapHeight, x = this.pos.x, y = this.pos.y;
     const out = [[x, -90, y], [x, H + 90, H - y], [-90, y, x], [W + 90, y, W - x]].sort((a, b) => a[2] - b[2])[0];
     this._away = { phase: 'out', to: { x: out[0], y: out[1] }, t: 0, frames: Math.max(1, sec) * 60, hungerBack, fade: 1 };
+    this._hungerRamp = null;
     this.hunting = false; this.target = null; this.aimAt = null;
     this.state = 'patrol'; this._chaseLoop = null; this._huntEventFired = false;
     this._coverFoils = 0; this.tutorialGraceTimer = 0;
@@ -925,7 +948,11 @@ class HaastsEagle extends Boid {
         if (a.hungerBack != null) this.hunger = Math.max(0, Math.min(this.maxHunger, a.hungerBack));
       }
     } else {
-      const c = this.patrolCenter, t = this.terrain, m = 30;
+      // Back in over its patrol, aimed well inside the land: it is back once it is over the
+      // land and seen in full. (Aimed at a patrol centre by the edge, it settled there short
+      // of the land's margin and hung at the edge of the screen, still "away": not hunting,
+      // and so not fled from.)
+      const t = this.terrain, m = 30, c = this._onLand(this.patrolCenter.x, this.patrolCenter.y);
       this.maxSpeed = this.baseSpeed;
       this.applyForce(this.seekPoint(c.x, c.y, 0.9, 30));
       a.fade = Math.min(1, a.fade + dt / 50);
@@ -936,14 +963,26 @@ class HaastsEagle extends Boid {
     }
   }
 
+  // (x, y) kept at least `inset` inside the land (as driftPatrolCenter keeps a patrol), or at
+  // its middle on a land too small for that.
+  _onLand(x, y, inset = 80) {
+    const W = this.terrain.mapWidth, H = this.terrain.mapHeight;
+    const ix = Math.min(inset, W / 2), iy = Math.min(inset, H / 2);
+    return { x: Math.max(ix, Math.min(W - ix, x)), y: Math.max(iy, Math.min(H - iy, y)) };
+  }
+
+  // Its territory moved over (x, y) (a story's watch, aim or hold). The patrol is kept on the
+  // land: it circles a place by the edge from a little inside it, its orbit still passing
+  // over the place, rather than circling half off the map against its own edge-avoidance.
   _relocateTerritory(x, y) {
-    this.nest.set(x, y);
-    this.patrolCenter.set(x, y);
+    const c = this._onLand(x, y);
+    this.nest.set(c.x, c.y);
+    this.patrolCenter.set(c.x, c.y);
     const mate = this.partner;
     if (mate && mate.alive) {
-      const ox = x + random(-40, 40), oy = y + random(-40, 40);
-      mate.nest.set(ox, oy);
-      mate.patrolCenter.set(ox, oy);
+      const o = this._onLand(c.x + random(-40, 40), c.y + random(-40, 40));
+      mate.nest.set(o.x, o.y);
+      mate.patrolCenter.set(o.x, o.y);
     }
   }
 
@@ -1075,12 +1114,20 @@ class HaastsEagle extends Boid {
       
       imageMode(CENTER);
       const _eW = this.wingspan * 2.8, _eH = this.wingspan * 2.1;
-      // Highlight outline: field-guide selection or the player's species toggle (ember default).
-      // Free Play flags its eagle (redWhenHunting): outlined red while it hunts.
-      const _olCol = (this.redWhenHunting && this.hunting) ? [235, 45, 35]
+      // Highlight outline, first that applies: a mark on this bird (EntitySprites.mark: the
+      // selected animal); the eagleTelegraph warning, amber and pulsing, as its hunger nears the
+      // hunt (so a player can see a hunt coming and act before it starts); Free Play's eagle
+      // (redWhenHunting), red while it hunts; the field-guide selection or the player's species
+      // toggle (ember default).
+      const _mk = EntitySprites.markOf(this);
+      const _warn = !_mk && this._telegraphing();
+      const _olCol = _mk ? _mk.col
+        : _warn ? HaastsEagle.WARN_COL
+        : (this.redWhenHunting && this.hunting) ? [235, 45, 35]
         : (typeof highlightOutlineColor !== 'undefined')
           ? highlightOutlineColor(this.speciesKey, (this.config && this.config.highlightColor) || [255, 145, 90]) : null;
-      if (_olCol) EntitySprites.drawSpriteOutline(sprite, _eW, _eH, _olCol);
+      const _olA = _mk ? _mk.alpha : _warn ? 0.55 + 0.45 * (0.5 + 0.5 * Math.sin(this.animTime * 0.15)) : null;
+      if (_olCol) EntitySprites.drawSpriteOutline(sprite, _eW, _eH, _olCol, _warn ? 7 : 6, _olA);
       image(sprite, 0, 0, _eW, _eH);
 
       pop();
@@ -1108,20 +1155,17 @@ class HaastsEagle extends Boid {
       text("→", this.pos.x, this.pos.y - this.wingspan - 2);
     }
     
-    // eagleTelegraph: as hunger nears the hunt threshold the bird gives it away (a pulsing amber
-    // ring), so a player can see a hunt coming and act before it starts.
+    // (eagleTelegraph's amber warning is the sprite's outline, drawn with it above.)
     const _T = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS) ? LEVEL_MECHANICS.eagleTelegraph : null;
-    if (_T && !this.hunting && this.state !== 'resting' && this.state !== 'distracted' &&
-        this.hunger >= (this._huntThreshEff ?? this.huntThreshold) - (_T.warnBelow ?? 10)) {
-      const pulse = 0.5 + 0.5 * Math.sin(this.animTime * 0.15);
-      noFill();
-      stroke(255, 190, 70, 120 + 100 * pulse);
-      strokeWeight(1.2);
-      ellipse(this.pos.x, this.pos.y, this.wingspan * (2.2 + 0.4 * pulse), this.wingspan * (1.4 + 0.25 * pulse));
-      noStroke();
-    }
-
     if (CONFIG.showHungerBars || _T) this.renderHungerBar();
+  }
+
+  // eagleTelegraph: whether the bird is giving away a hunt to come (its hunger near the hunt
+  // threshold, not hunting yet): its outline shows amber (render).
+  _telegraphing() {
+    const _T = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS) ? LEVEL_MECHANICS.eagleTelegraph : null;
+    return !!_T && !this._away && !this.hunting && this.state !== 'resting' && this.state !== 'distracted' &&
+      this.hunger >= (this._huntThreshEff ?? this.huntThreshold) - (_T.warnBelow ?? 10);
   }
 
   // How the bird is doing, in a few words (a chapter level's tap-to-inspect; Game._renderInspect).

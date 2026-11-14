@@ -410,7 +410,7 @@ Object.assign(CHAPTERS_KIT, {
   // told it: the Pouākai's two lines, the hunted bird's, then the instruction, with play
   // stopped. (It is said as the ladder's first rung at once, so the record does not count it
   // as answered without a hint.) Every later hunt, and every hunt in a lesson that does not
-  // teach the storm, climbs the ladder: nothing (the "!" and the amber ring are the clue), the
+  // teach the storm, climbs the ladder: nothing (the "!" and the amber outline are the clue), the
   // Pouākai's mutter, the instruction.
   huntInVoice({ species = 'upland_moa', teach = false, later = [4, 7], chapters = null } = {}) {
     const K = CHAPTERS_KIT, P = K.pouakai;

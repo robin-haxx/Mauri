@@ -37,7 +37,7 @@
 // How it teaches. By clue first, as the Clues setting, with the hints in voice:
 //   - The first hunt is told outright (the story's own scene, then "Move the STORM to cover
 //     MAMA MOA"), with play stopped. So is each new control: calling a storm, tapping a plant.
-//   - After that a problem is met with nothing at first (the Pouākai's "!" and its amber ring
+//   - After that a problem is met with nothing at first (the Pouākai's "!" and its amber outline
 //     are the clue), then the Pouākai's own mutter, then the instruction.
 //   - The record (ChapterRunner.caseLog) keeps the rung at which the player acted.
 //
@@ -48,7 +48,7 @@
 //   gave_up        the Pouākai turning to the herd, once it is back from the kea (the first time
 //                  it is seen off it goes to "scuffle with the Kea", module 0's line and scene)
 //   eagle_fed      Papa, once the Pouākai has eaten
-//   amber          Te Whē on the amber ring and the "!" (what the two signs mean)
+//   amber          Te Whē on the amber outline and the "!" (what the two signs mean)
 //   eagle_back     the Pouākai's first line in autumn when it did eat in summer
 //   winter         Pukepuke and Mama on winter storms
 //   on_the_way     Mama, if spring runs out before the family is home
@@ -116,15 +116,16 @@ const JOURNEY_STORM = (() => {
         beats: [
           // The first hunt, once the opening has been said, as module 0's: the Pouākai, held on
           // its way over, is let go, made hungry and brought over the berries, where Mama is
-          // (the invitation). It always goes for the family first: if it has not locked onto one
-          // of them within 3 seconds it is sent after Mama (or Papa), and the log says forced.
+          // (the invitation): its hunger climbs to 50 over about three seconds, its bar seen to
+          // drain. It always goes for the family first: if it has not locked onto one of them
+          // within 6 seconds it is sent after Mama (or Papa), and the log says forced.
           // Until it has gone for one of them it passes over the herd (30 s at most): a family
           // already under the storms is circled and waited for, as module 0's eagle searched.
           { id: 'first_hunt', when: { flag: 'opened' },
             invite: [{ eagle: { which: 'nearest', near: 'grove', release: true, watch: 'grove', hunger: 50,
                                 shun: { species: 'stout_legged_moa', sec: 30 } } }],
             until: { seen: ['eagle_hunting', { species: 'upland_moa' }] },
-            once: true, by: 3, force: [{ aim: { at: ['mama', 'papa'], sec: 60 } }] }
+            once: true, by: 6, force: [{ aim: { at: ['mama', 'papa'], sec: 60 } }] }
         ],
         goals: [
           { id: 'seen_off', name: "Hide the family from the Pouākai",
@@ -340,7 +341,7 @@ const JOURNEY_STORM = (() => {
         notify: ["The Pouākai took one of the upland moa.", 'error'] },
       // The two signs to read, said once the first hunt is over and it grows hungry again.
       { id: 'amber', when: { all: [{ beat: 'first_hunt' }, { eagleHunger: ['>=', 38] }, { not: { hunting: true } }] },
-        say: [['guide', "See the amber ring around the Pouākai? It is getting hungry. A \"!\" over it means it has chosen someone.", { lit: ['haasts_eagle'] }]] },   // NEW
+        say: [['guide', "See the amber outline around the Pouākai? It is getting hungry. A \"!\" over it means it has chosen someone.", { lit: ['haasts_eagle'] }]] },   // NEW
 
       // ---- Summer: home with the berries, and the hatch ---------------------------------------------
       { id: 'food_home', when: { all: [{ beat: 'first_hunt' }, { near: ['mama', 'home', 46] }, { not: { hunting: true } }, { not: { goal: 'hatched' } }] },

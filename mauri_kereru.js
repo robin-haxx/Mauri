@@ -66,6 +66,7 @@ const KERERU_SPECIES = {
 };
 
 class Kereru extends Boid {
+  get outlinable() { return true; }   // (its sprite takes an outline mark: EntitySprites.mark)
   constructor(x, y, terrain, config, speciesData) {
     super(x, y, terrain);
     this.config = config || {};
@@ -807,9 +808,10 @@ class Kereru extends Boid {
       scale(this._flip >= 0 ? 1 : -1, 1);            // art faces up-and-right; mirror for leftward
       // Highlight outline: field-guide selection or the player's species toggle.
       const _hlCfg = this.speciesData && this.speciesData.config && this.speciesData.config.highlightColor;
-      const _olCol = (typeof highlightOutlineColor !== 'undefined')
+      const _mk = EntitySprites.markOf(this);   // (a mark on this one bird: EntitySprites.mark)
+      const _olCol = _mk ? _mk.col : (typeof highlightOutlineColor !== 'undefined')
         ? highlightOutlineColor(this.speciesKey, _hlCfg) : null;
-      if (_olCol) EntitySprites.drawSpriteOutline(sprite, drawW, drawH, _olCol);
+      if (_olCol) EntitySprites.drawSpriteOutline(sprite, drawW, drawH, _olCol, 6, _mk ? _mk.alpha : null);
       image(sprite, 0, 0, drawW, drawH);
     } else {
       this._renderGlyph(s, perched);

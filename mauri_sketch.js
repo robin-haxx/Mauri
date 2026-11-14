@@ -170,15 +170,16 @@ function preload(){
     plantSprites.lancewood_mature[state.toLowerCase()] = lancewoodMature;
   }
 
-  // Portrait plant variants: 2 alternate sprites each in sprites/<Plant>/, anchored at
-  // bottom-centre and rendered by a dedicated path (see mauri_plant.js).
-  const portraitPlants = ['Rimu', 'Beech', 'Dracophyllum', 'Matagouri'];
-  for (const plant of portraitPlants) {
+  // Portrait plant variants: alternate sprites in sprites/<Plant>/<plant>1.png, 2.png, ...,
+  // anchored at bottom-centre and rendered by a dedicated path (see mauri_plant.js). Each plant
+  // lists how many it has; a plant picks one of them at random (Plant.portraitVariant).
+  const portraitPlants = { Rimu: 2, Beech: 3, Dracophyllum: 2, Matagouri: 2 };
+  for (const plant in portraitPlants) {
     const key = plant.toLowerCase();
-    portraitPlantSprites[key] = [
-      loadImage(`sprites/${plant}/${key}1.png`),
-      loadImage(`sprites/${plant}/${key}2.png`)
-    ];
+    portraitPlantSprites[key] = [];
+    for (let i = 1; i <= portraitPlants[plant]; i++) {
+      portraitPlantSprites[key].push(loadImage(`sprites/${plant}/${key}${i}.png`));
+    }
   }
 
   splashScreenMoa = loadImage('sprites/moa_idle.png')
@@ -1228,6 +1229,15 @@ function levelSection(l) {
 }
 
 class Game {
+  // Outline colours for a marked animal (EntitySprites.mark): the selected one, and the storm
+  // cover preview's (hidden; hidden while hunted; left in the open by a moved storm; hunted in
+  // the open).
+  static SELECT_OUTLINE = [255, 236, 150];
+  static COVER_OUTLINE = [235, 244, 255];
+  static COVER_HUNTED_OUTLINE = [140, 240, 160];
+  static COVER_LEAVES_OUTLINE = [255, 184, 76];
+  static OPEN_HUNTED_OUTLINE = [255, 90, 70];
+
   constructor() {
     this.state = GAME_STATE.LEVEL_SELECT;
 
@@ -2147,10 +2157,15 @@ class Game {
     const k = Math.pow(Math.max(1, this.camera ? this.camera.zoom : 1), -0.75);
     const x = e.pos.x, y = this._groundPaintY(e.pos.x, e.pos.y), sz = e.size || 12;
     push();
-    noFill();
-    stroke(255, 236, 150, 170 + 60 * Math.sin(frameCount * 0.1));
-    strokeWeight(1.5 * k);
-    ellipse(x, y + 1, sz * 1.6 + 16 * k, sz * 0.8 + 8 * k);
+    // An animal with a sprite outline is outlined (EntitySprites.mark, drawn by its own render);
+    // anything else keeps a ring round it.
+    if (e.outlinable) EntitySprites.mark(e, Game.SELECT_OUTLINE);
+    else {
+      noFill();
+      stroke(255, 236, 150, 170 + 60 * Math.sin(frameCount * 0.1));
+      strokeWeight(1.5 * k);
+      ellipse(x, y + 1, sz * 1.6 + 16 * k, sz * 0.8 + 8 * k);
+    }
     const lines = [].concat(e.describe ? e.describe(this) : []).filter(Boolean);
     if (lines.length) {
       textAlign(CENTER, BOTTOM);
@@ -7045,9 +7060,9 @@ class Game {
   // A storm in hand (to call, or being moved), where it would be set down at (tx, ty) with
   // radius R: what it will do there. Only where the Storm is cover (blocksEagleVision). Where it
   // can't be set down (ok false) it says only that.
-  //   - The moa it would hide: a cloud-white ring (pulsing green for one the Pouākai is after).
-  //     A moa the moved storm hides now and would leave in the open: an amber dashed ring. A
-  //     hunted moa still in the open: a red ring.
+  //   - The moa it would hide: its sprite outlined cloud-white (pulsing green for one the Pouākai
+  //     is after). A moa the moved storm hides now and would leave in the open: outlined amber.
+  //     A hunted moa still in the open: outlined red. (EntitySprites.mark.)
   //   - The walk of each bird on its way somewhere (a story's walk, a seasonal migration): dots
   //     to where it is going, bright where the storm would cover them, pale under other cover,
   //     amber in the open.
@@ -7081,30 +7096,24 @@ class Game {
     const hides = [], leaves = [];
     let hidesHunted = false, extraHidden = 0;
     const pulse = 0.5 + 0.5 * Math.sin(frameCount * 0.15);
+    // Each bird is marked by its sprite's outline (EntitySprites.mark, drawn by Moa.render and,
+    // under a storm's clouds, Moa.renderOverStorm).
     push();
     noFill();
     for (const m of watch) {
-      const x = m.pos.x, y = gy(m.pos.x, m.pos.y), r = (m.size || 12) + 10;
       const under = inNew(m.pos.x, m.pos.y), sheltered = inOther(m.pos.x, m.pos.y);
       const nowHeld = held && held.isInRange(m.pos);
       const isHunted = hunted.has(m);
       if (under) {
         if (title(m)) hides.push(title(m)); else extraHidden++;
         if (isHunted) hidesHunted = true;
-        stroke(isHunted ? color(140, 240, 160, 170 + 85 * pulse) : color(235, 244, 255, 225));
-        strokeWeight((isHunted ? 3 : 2.2) * u);
-        ellipse(x, y, r * 2 + (isHunted ? 6 * pulse * u : 0), r * 1.3 + (isHunted ? 4 * pulse * u : 0));
+        if (isHunted) EntitySprites.mark(m, Game.COVER_HUNTED_OUTLINE, 0.65 + 0.35 * pulse);
+        else EntitySprites.mark(m, Game.COVER_OUTLINE, 0.95);
       } else if (nowHeld && !sheltered) {
         if (title(m)) leaves.push(title(m));
-        stroke(255, 184, 76, 230);
-        strokeWeight(2.2 * u);
-        drawingContext.setLineDash([5 * u, 4 * u]);
-        ellipse(x, y, r * 2, r * 1.3);
-        drawingContext.setLineDash([]);
+        EntitySprites.mark(m, Game.COVER_LEAVES_OUTLINE, 0.95);
       } else if (isHunted && !sheltered) {
-        stroke(255, 90, 70, 150 + 100 * pulse);
-        strokeWeight(2.4 * u);
-        ellipse(x, y, r * 2, r * 1.3);
+        EntitySprites.mark(m, Game.OPEN_HUNTED_OUTLINE, 0.6 + 0.4 * pulse);
       }
     }
 

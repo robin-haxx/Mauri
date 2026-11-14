@@ -55,6 +55,7 @@ const _moaSafetyBarCol = [150, 210, 250]; // scratch: a module family moa's safe
 
 class Moa extends Boid {
   static STORM_OUTLINE = [236, 240, 248];   // a plain (unhighlighted) bird's outline under a storm
+  get outlinable() { return true; }   // (its sprite takes an outline mark: EntitySprites.mark)
 
   static DEFAULTS = {
     size: { min: 8, max: 11 },
@@ -948,14 +949,37 @@ class Moa extends Boid {
   // MOVEMENT
   // ============================================
 
+  // Run from (tx, ty). By the edge of the land, running straight away would pin the bird
+  // against the edge with the eagle closing: the part of its run that goes into the edge is
+  // turned along it, the way that is still away from the eagle (toward the land's middle when
+  // the eagle is square on, or when that way is a corner), so it slides out along the edge.
   fleeFrom(tx, ty) {
     const f = this._returnForce;
-    const dx = this.pos.x - tx, dy = this.pos.y - ty;
+    let dx = this.pos.x - tx, dy = this.pos.y - ty;
     const dSq = dx * dx + dy * dy;
-    
+
     if (dSq < this.fleeRadiusSq && dSq > 0.0001) {
-      const urgency = 1 - Math.sqrt(dSq) / this.fleeRadius;
-      f.set(dx, dy);
+      const d = Math.sqrt(dSq), urgency = 1 - d / this.fleeRadius;
+      dx /= d; dy /= d;
+      const px = this.pos.x, py = this.pos.y, W = this.terrain.mapWidth, H = this.terrain.mapHeight;
+      // How hard each edge blocks the run, only if the run goes into it: 0 from 60 out, 1 by 25
+      // (where Boid.edges pushes it back in hard, and a run still into the edge stalls).
+      const block = (gap) => Math.max(0, Math.min(1, (60 - gap) / 35));
+      const bx = (dx < 0) ? block(px) : (dx > 0) ? block(W - px) : 0;
+      const by = (dy < 0) ? block(py) : (dy > 0) ? block(H - py) : 0;
+      // Which way along an edge (+ or -): away from the eagle; with the eagle square on, the way
+      // it is already going (so it doesn't dither), else toward the middle; and out of a corner,
+      // toward the middle.
+      const along = (v, p, size, blocked, moving) => {
+        if (blocked) return p < size / 2 ? 1 : -1;
+        if (Math.abs(v) > 0.2) return Math.sign(v);
+        if (Math.abs(moving) > 0.02) return Math.sign(moving);
+        return p < size / 2 ? 1 : -1;
+      };
+      const ox = dx * (1 - bx) + (by > 0 ? along(dx, px, W, bx > 0, this.vel.x) * Math.abs(dy) * by : 0);
+      const oy = dy * (1 - by) + (bx > 0 ? along(dy, py, H, by > 0, this.vel.y) * Math.abs(dx) * bx : 0);
+      f.set(ox, oy);
+      if (f.magSq() < 1e-6) f.set(px < W / 2 ? 1 : -1, py < H / 2 ? 1 : -1);
       f.setMag(this.maxSpeed * (1 + urgency));
       f.sub(this.vel);
       f.limit(this.maxForce * 2);
@@ -1595,9 +1619,12 @@ class Moa extends Boid {
     const _drawSize = this.size * 2.5 * (this.speciesConfig.spriteScale || 1);
     // Highlight outline (field-guide selection or the player's species toggle), drawn in
     // this rotated/mirrored frame so it lines up.
-    const _olCol = (typeof highlightOutlineColor !== 'undefined')
+    // A mark on this one bird (EntitySprites.mark: the storm's cover preview, the selected
+    // animal) outlines it in its own colour, over any species highlight.
+    const _mk = EntitySprites.markOf(this);
+    const _olCol = _mk ? _mk.col : (typeof highlightOutlineColor !== 'undefined')
       ? highlightOutlineColor(this.speciesKey, this.speciesConfig.highlightColor) : null;
-    if (_olCol) EntitySprites.drawSpriteOutline(sprite, _drawSize, _drawSize, _olCol, this.speciesConfig.outlineThickness || 6);
+    if (_olCol) EntitySprites.drawSpriteOutline(sprite, _drawSize, _drawSize, _olCol, this.speciesConfig.outlineThickness || 6, _mk ? _mk.alpha : null);
     // On the GL layer a live tint() is free (the batch multiplies the per-quad colour), so
     // use it; on 2D fall back to the cached pre-tinted frame.
     if (_tint && typeof GLBatch !== 'undefined' && GLBatch.enabled && GLBatch._open) {
@@ -1618,7 +1645,8 @@ class Moa extends Boid {
   // other gets a thinner, steady pale line.
   renderOverStorm(storm) {
     if (!this.alive) return;
-    const hl = (typeof highlightOutlineColor !== 'undefined')
+    const mk = EntitySprites.markOf(this);
+    const hl = mk ? mk.col : (typeof highlightOutlineColor !== 'undefined')
       ? highlightOutlineColor(this.speciesKey, this.speciesConfig.highlightColor) : null;
     const variant = this.speciesConfig.spriteSet;
     const sprite = EntitySprites.getMoaSprite(this.animTime, this.vel.magSq() > 0.01, this.isJuvenile(), variant,
@@ -1640,7 +1668,7 @@ class Moa extends Boid {
     scale(flip * EntitySprites.getMoaFaceSign(variant), 1 + (1 - Math.abs(flip)) * 0.18);
     imageMode(CENTER);
     const size = this.size * 2.5 * (this.speciesConfig.spriteScale || 1);
-    if (hl) EntitySprites.drawSpriteOutlineOnly(sprite, size, size, hl, this.speciesConfig.outlineThickness || 6);
+    if (hl) EntitySprites.drawSpriteOutlineOnly(sprite, size, size, hl, this.speciesConfig.outlineThickness || 6, mk ? mk.alpha : null);
     else EntitySprites.drawSpriteOutlineOnly(sprite, size, size, Moa.STORM_OUTLINE, 4, 0.75);
     if (clip) dc.restore();
     pop();

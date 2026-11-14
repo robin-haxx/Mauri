@@ -268,7 +268,7 @@ An action is an object with **one** verb, or a function `(x) => {}`. Actions go 
 
 | Verb | Value |
 |---|---|
-| `eagle` | `{ which = 'all', near, hunger, watch, grace }`. `which`: `'all'`, `'nearest'` (to `near` or `watch`), or a ref. `hunger`: 0–100 (they hunt above about 45). `watch`: move their patrol over a place. `grace`: seconds the eagle chases but can't strike (a "last chance"). `away`: seconds it flies off over the nearest edge on an errand (tile 1: scuffling with the kea), out of sight and out of the hunt, then back to its patrol (over `watch`, if given); `hunger` is then its hunger on its return (`HaastsEagle.sendAway`). |
+| `eagle` | `{ which = 'all', near, hunger, watch, grace }`. `which`: `'all'`, `'nearest'` (to `near` or `watch`), or a ref. `hunger`: 0–100 (they hunt above about 45); a higher hunger than now is climbed to over a few seconds, about 7 a second, so the bar is seen to drain (`HaastsEagle.hungerTo`); a lower one is set at once. `watch`: move their patrol over a place (kept 80 px inside the land, so a place by the edge is circled from a little inside it). `grace`: seconds the eagle chases but can't strike (a "last chance"). `away`: seconds it flies off over the nearest edge on an errand (tile 1: scuffling with the kea), out of sight and out of the hunt, then back to its patrol (over `watch`, if given); `hunger` is then its hunger on its return (`HaastsEagle.sendAway`). |
 
 ---
 

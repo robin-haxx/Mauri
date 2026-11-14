@@ -578,9 +578,76 @@ class Kea extends Kereru {
     else this.applyForce(this.wander(dt));
   }
 
+  update(dt = 1) {
+    super.update(dt);
+    this._stepWings(dt);
+  }
+
+  // The kea's wings: which sprite it shows in the air. Perched, its perched pose. Leaving a
+  // perch, the two takeoff frames, then a few flaps; once it is up at its cruising height it
+  // SOARS, holding the wings-out frame for a few seconds, with a short burst of flaps between
+  // soars. Still climbing, or flying from a storm or a moa, it flaps without a break. Landing,
+  // the takeoff plays backward. It runs on its own clock (not animTime), so a soar can hold
+  // its frame for as long as it lasts. Visual only: Math.random, so the sim's random() is not
+  // disturbed.
+  static WINGS = {
+    takeoffSpeed: 0.055,      // takeoff frames a tick: ~18 ticks (0.3 s) each
+    flapSpeed:    0.07,       // flap frames a tick: ~14 ticks each, a wingbeat in about a second
+                              // (as slow as the upland moa's walk, 0.06; the eagle's flap is 0.15)
+    soarFrame:    2,          // keaAnim.fly[2], wings out level: held while soaring
+    soarSec:      [1.5, 4],   // how long a soar lasts
+    beats:        [1, 3],     // wingbeats between soars
+    climbBy:      4,          // further than this below its cruising height: still climbing
+  };
+
+  _stepWings(dt) {
+    const K = Kea.WINGS, perched = this._isPerched();
+    let w = this._wings;
+    if (!w) {   // (a kea spawned in the air starts somewhere in a flap, so a flock isn't in step)
+      w = this._wings = { mode: perched ? 'perch' : 'flap', t: 0, phase: Math.random() * 4, beats: 1, hold: 0 };
+    }
+    const rnd = (r) => r[0] + Math.random() * (r[1] - r[0]);
+
+    if (perched) {
+      // (Landing partway through a takeoff runs it back from where it got to.)
+      if (w.mode !== 'perch' && w.mode !== 'land') { w.t = w.mode === 'takeoff' ? Math.min(1.999, w.t) : 1.999; w.mode = 'land'; }
+      if (w.mode === 'land') {
+        w.t -= dt * K.takeoffSpeed;
+        if (w.t <= 0) w.mode = 'perch';
+      }
+      return;
+    }
+
+    if (w.mode === 'perch' || w.mode === 'land') { w.t = w.mode === 'land' ? Math.max(0, w.t) : 0; w.mode = 'takeoff'; }
+    if (w.mode === 'takeoff') {
+      w.t += dt * K.takeoffSpeed;
+      if (w.t < 2) return;
+      w.mode = 'flap'; w.phase = 0; w.beats = 2;
+    }
+
+    const busy = this._altitude < this._cruiseAlt - K.climbBy || this._fleeingStorm || !!this._shoo;
+    if (w.mode === 'soar') {
+      w.hold -= dt;
+      if (w.hold > 0 && !busy) return;
+      w.mode = 'flap'; w.phase = K.soarFrame + 1; w.beats = Math.round(rnd(K.beats));
+    }
+
+    // Flapping: a beat ends each time the cycle wraps. With its beats done and nothing to hurry
+    // it, it holds the wings-out frame the next time the cycle comes round to it, and soars.
+    w.phase += dt * K.flapSpeed;
+    if (w.phase >= 4) { w.phase -= 4; w.beats--; }
+    if (w.beats <= 0 && !busy && Math.floor(w.phase) === K.soarFrame) {
+      w.mode = 'soar'; w.hold = rnd(K.soarSec) * 60;
+    }
+  }
+
   _getSprite(perched) {
-    return (typeof EntitySprites !== 'undefined' && EntitySprites.getKeaSprite)
-      ? EntitySprites.getKeaSprite(perched) : null;
+    const E = (typeof EntitySprites !== 'undefined') ? EntitySprites : null;
+    if (!E || !E.getKeaSprite) return null;
+    const w = this._wings;
+    if (!w || w.mode === 'perch') return E.getKeaSprite();
+    if (w.mode === 'takeoff' || w.mode === 'land') return E.getKeaFlightSprite('takeoff', Math.max(0, Math.min(1, Math.floor(w.t))));
+    return E.getKeaFlightSprite('fly', w.mode === 'soar' ? Kea.WINGS.soarFrame : Math.floor(w.phase) % 4);
   }
 
   // Status bars above each kea: a HUNGER bar (green when fed → red as it starves) and, when the

@@ -1311,8 +1311,10 @@ class ChapterRunner {
     return e && e.alive ? [e] : [];
   }
 
-  // { which, hunger, watch, grace }: set their hunger (0 to 100; they hunt past about 45), move
-  // their patrol over a place (they fly there and circle it), or give a "last chance" of `grace`
+  // { which, hunger, watch, grace }: set their hunger (0 to 100; they hunt past about 45: a
+  // higher one is climbed to over a few seconds, HaastsEagle.hungerTo), move their patrol over a
+  // place (they fly there and circle it, from a little inside the land when it is by the edge),
+  // or give a "last chance" of `grace`
   // seconds (it chases but can't strike: HaastsEagle.tutorialGraceTimer). With `away` (seconds)
   // it flies off the land on an errand and comes back to its patrol (HaastsEagle.sendAway);
   // `hunger` is then its hunger as it comes back.
@@ -1346,7 +1348,8 @@ class ChapterRunner {
         this._log('eagle_away', `${spec.away}`);
         continue;
       }
-      if (spec.hunger != null) e.hunger = Math.max(0, Math.min(e.maxHunger, spec.hunger));
+      // (Made hungrier, its hunger climbs there and its bar is seen to drain: HaastsEagle.hungerTo.)
+      if (spec.hunger != null) { if (e.hungerTo) e.hungerTo(spec.hunger); else e.hunger = Math.max(0, Math.min(e.maxHunger, spec.hunger)); }
       if (p) e._relocateTerritory(p.x, p.y);
       if (spec.grace) e.tutorialGraceTimer = spec.grace * CHAPTER_FPS;
     }

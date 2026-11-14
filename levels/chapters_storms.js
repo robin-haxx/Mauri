@@ -8,7 +8,7 @@
 // calls new storms when the old ones blow out.
 //
 // What the player sees. Summer: the pair at the nest, the egg, a patch of pātōtara berries in
-// the open below, and the eagle circling. The eagle grows hungry (it shows it: an amber ring,
+// the open below, and the eagle circling. The eagle grows hungry (it shows it: an amber outline,
 // then a "!" when it has picked a moa and begins its slow approach), and goes for whoever is
 // out in the open. Cover that moa and the eagle turns to the herd of stout-legged moa on the
 // low ground, which has numbers to spare. The egg hatches: Pukepuke. Autumn: the family drifts

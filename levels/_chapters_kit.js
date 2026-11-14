@@ -354,3 +354,146 @@ Object.assign(CHAPTERS_KIT, {
     };
   }
 });
+
+// ============================================================================
+// THE FIRST TILES, TOLD IN THE ANIMALS' OWN VOICES (levels/journey_01_storm.js and on)
+// ============================================================================
+// Tiles 1, 2 and 2f follow the narrative sequence of the first modules (Āwhā, Pātōtara and
+// their free play), whose stories were told as dialogue between the family, the kea and the
+// Pouākai. These pieces say the hint ladders the same way. The ladder is unchanged: nothing,
+// then a question, then the instruction. What changes is who asks. The question rung is the
+// Pouākai's own mutter ("I spy with my little eye..."), which says who is in the open without
+// saying what to do about it. Nothing above this line is changed by them.
+// ============================================================================
+Object.assign(CHAPTERS_KIT, {
+  // Whether every line said so far has been read (no panel showing or waiting). A reaction that
+  // must follow a scene waits on this, since a scene stops play while it is read.
+  idle(x) {
+    const t = x.game.tutorial;
+    return !t || !t.enabled || (!t.active && !t.pendingTips.length && !t.eventQueue.length);
+  },
+
+  // A line by the Pouākai, titled as the first modules titled it.
+  pouakai(text, extra) { return ['haasts_eagle', text, Object.assign({ title: "Pouākai" }, extra || {})]; },
+
+  // ---- Te Whē's prologue on black, then the fade in -------------------------------------------
+  // Reactions, in the order they run. The level starts black; Te Whē says `lines` (once a
+  // session: a restart only fades in); when they have been read the screen fades in; a moment
+  // later the flag `opened` is set and `opening` (the story's first scene) is said. The level's
+  // stage must be set by an earlier reaction, or by the chapter's own start.
+  //   chapter   the chapter it opens (the level's first)
+  //   seenKey   the Game field that remembers the prologue was read this session
+  prologue({ chapter = 'summer', lines = [], opening = [], seenKey = '_journeyPrologueSeen', fadeFrames = 90 } = {}) {
+    const K = CHAPTERS_KIT, first = K.opens(chapter, 'prologued');
+    return [
+      { id: 'black', on: 'chapter_start', if: first, do: [(x) => x.game.fadeScreen(1, 0)] },
+      ...(lines.length ? [{ id: 'prologue', on: 'chapter_start', if: (x) => first(x) && !x.game[seenKey],
+        say: lines.map(l => (typeof l === 'string' ? ['guide', l] : ['guide', l[0], l[1]])),
+        do: [(x) => { x.game[seenKey] = true; }] }] : []),
+      { id: 'prologued', on: 'chapter_start', if: first, do: [{ flag: 'prologued' }] },
+      { id: 'fade_in', when: (x) => !!x.runner.flags.prologued && K.idle(x),
+        do: [(x) => { x.game.fadeScreen(0, fadeFrames); x.runner.vars._fadeAt = x.game.playTime; }, { flag: 'fading' }] },
+      Object.assign({ id: 'opening', when: (x) => !!x.runner.flags.fading && x.game.playTime - x.runner.vars._fadeAt >= fadeFrames + 20,
+        do: [{ flag: 'opened' }] }, opening.length ? { say: opening } : {})
+    ];
+  },
+
+  // ---- The Pouākai's hunts, in its own voice ---------------------------------------------------
+  // teach: the lesson that teaches the storm. Its first hunt is told outright, as module 0
+  // told it: the Pouākai's two lines, the hunted bird's, then the instruction, with play
+  // stopped. (It is said as the ladder's first rung at once, so the record does not count it
+  // as answered without a hint.) Every later hunt, and every hunt in a lesson that does not
+  // teach the storm, climbs the ladder: nothing (the "!" and the amber ring are the clue), the
+  // Pouākai's mutter, the instruction.
+  huntInVoice({ species = 'upland_moa', teach = false, later = [4, 7], chapters = null } = {}) {
+    const K = CHAPTERS_KIT, P = K.pouakai;
+    const name = (x) => { const w = K.who(x.runner, x.event && x.event.target); x.runner.vars.who = w; x.runner.vars.WHO = w.toUpperCase(); };
+    const isHunt = (x) => !!(x.event && x.event.target && x.event.target.speciesKey === species);
+    const again = {
+      id: 'hunt_again', on: 'eagle_hunting', once: false,
+      if: teach ? ((x) => isHunt(x) && !!x.runner.vars._firstHunt && x.runner.vars._firstHunt !== x.event) : isHunt,
+      until: K.coverUntil, solved: K.coverSolved, lost: K.coverLost,
+      hints: [
+        { after: later[0], do: [name, { notify: ['Pouākai: "I spy with my little eye... {$who}, out in the open!"', 'error'] }] },
+        { after: later[1], do: [name], banner: { words: ["The Pouākai has seen {$who}! Cover them with a STORM", "Set the STORM down over {$who}"],
+                                                 lit: ['$target', '$eagle', 'Storm'], pause: false, maxSec: 20 } }
+      ]
+    };
+    const out = [];
+    if (teach) out.push({
+      id: 'hunt', on: 'eagle_hunting', if: isHunt,
+      do: [(x) => { x.runner.vars._firstHunt = x.event; }, name],
+      until: K.coverUntil, solved: K.coverSolved, lost: K.coverLost,
+      hints: [{ after: 0,
+        say: [P("I spy with my little eye, something beginning with M....", { lit: ['$eagle'] }),
+              P("Mmm, mmm... MOA! Tasty Moa in these Mmm.. M... Mountains!", { lit: ['$eagle', '$target'] }),
+              ['$target', "Eeek!"]],
+        banner: { words: ["Tap and hold a STORM to move it", "Move the STORM to cover {$WHO}"],
+                  lit: ['Storm', '$target', '$eagle'], pause: true, maxSec: 40 } }]
+    });
+    out.push(again);
+    // Hidden before anything was said: the Pouākai says so (the rule, in the hunter's words).
+    out.push({ id: 'foiled_unaided', on: 'case_closed', once: false, cooldown: 20, chapters,
+      if: (x) => x.event && /^hunt/.test(x.event.case || '') && x.event.outcome === 'solved' && x.event.rung === 0,
+      notify: ['Pouākai: "Blast these clouds! I never even got a good look!"', 'success'] });
+    return out;
+  },
+
+  // ---- A storm has blown out, in the family's voice ----------------------------------------------
+  // teach: the first one to blow out unlocks the Storm tool and is told outright (a new control),
+  // with Te Whē's one line on what calling a storm costs. Later ones climb the ladder: nothing
+  // (the storm thinning is the clue), a word from `voice`, the instruction.
+  stormInVoice({ teach = false, voice = "Pukepuke", lit = [], notice = 6, tell = 14, chapters = null } = {}) {
+    const until = { any: [{ placed: 'Storm' }, { after: 45 }] }, solved = { placed: 'Storm' };
+    const out = [];
+    if (teach) out.push({
+      id: 'storm_gone', on: 'placeable_expired', if: { type: 'Storm' }, unlock: 'Storm',
+      do: [(x) => { x.runner.vars._firstGone = x.event; x.runner.vars._firstGoneAt = x.game.playTime; }],
+      until, solved,
+      hints: [{ after: 0,
+        say: [['guide', "Calling a new STORM takes MAURI, the life force of this land. The number at the top of the screen is how much you hold, and the family earns more as its goals are met.",
+               { highlight: { type: 'element', target: 'mauriDisplay' }, guidePosition: 'topLeft' }]],
+        banner: { words: ["Their STORM is breaking up! Tap the STORM button", "Now tap beside the family to call the STORM"],
+                  tool: 'Storm', lit, pause: true, maxSec: 40 } }]
+    });
+    out.push({
+      id: 'storm_gone_again', on: 'placeable_expired', once: false, cooldown: 25, chapters,
+      // (Not the one that was told outright, nor the others that blew out in the same breath.)
+      if: (x) => !!x.event && x.event.type === 'Storm' && (!teach || (!!x.runner.vars._firstGone && x.runner.vars._firstGone !== x.event &&
+                 x.game.playTime - x.runner.vars._firstGoneAt > 20 * 60)),
+      until, solved,
+      hints: [
+        { after: notice, notify: `${voice}: "Mama, our storm is blowing away!"` },
+        { after: tell, banner: { words: ["A STORM has blown out! Tap the STORM button to call a new one", "Tap beside the family to call the STORM"],
+                                 tool: 'Storm', lit, pause: false, maxSec: 20 } }
+      ]
+    });
+    return out;
+  },
+
+  // ---- The family sets off for a place (the force of a guaranteed walk) ---------------------------
+  // The story's walks (down to the wharariki in autumn, home in spring) are the simulation's
+  // own: upland moa drift down with the cold and up with the thaw, and the player leads them.
+  // A lesson invites the walk with its stage and its words, and only if the family has not
+  // A lesson whose story has the family walk somewhere uses this: the named birds take the
+  // place as their home and set off for it by their own migration walk (Moa._keepWalking),
+  // feeding when hungry, bolting from the Pouākai and hiding on the way as they would. It is
+  // a script tool: it decides where the birds are going, and is logged as such.
+  headFor(names, place) {
+    return (x) => {
+      const r = x.runner, p = r.point(place);
+      if (!p) { r._log('issue', 'head_for', `no place "${place}"`); return; }
+      for (const n of names) {
+        const e = r.castEnts[n];
+        if (!e || !e.alive || !e.homeRange) continue;
+        e.homeRange.set(p.x, p.y);
+        e._boundFor = { x: p.x + random(-12, 12), y: p.y + random(-12, 12), r: 60 };   // (Moa._keepWalking)
+      }
+      r._log('head_for', names.join(','), typeof place === 'string' ? place : '');
+    };
+  },
+
+  // A scene's last line said, play resumes, and then this holds: for a chapter that ends (or
+  // a level that is won) once its closing words have been read.
+  saidAndRead(flag) { return (x) => !!x.runner.flags[flag] && CHAPTERS_KIT.idle(x); }
+});

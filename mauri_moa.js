@@ -450,6 +450,7 @@ class Moa extends Boid {
     this._breedDensityFactor = this._computeBreedDensityFactor(simulation);
 
     // Determine and execute state
+    if (this._boundFor) this._keepWalking();
     this.currentState = this.determineState(placeables, sc, moas);
     this.executeState(simulation, mauri, sc, moas, placeables, dt);
 
@@ -1022,6 +1023,11 @@ class Moa extends Boid {
         const fed = p.feedMoa(this, dt);
         if (fed > 0) {          // a species-exclusive feeder returns 0 to the wrong moa
           feedTotal += fed;
+          // A moa bound for a place (_boundFor: a story's walk, see _keepWalking) that is not
+          // hungry takes a mouthful in passing but does not stop. Otherwise a moa standing in a
+          // feeder's reach counts as feeding whatever its hunger, so a family at a waterhole
+          // never leaves it (which held the journey's first family at the tarn all spring).
+          if (this._boundFor && this.hunger < this.hungerThreshold - 10) continue;
           this.isFeeding = true;
           this.feedingAt = p;
         }
@@ -1360,6 +1366,26 @@ class Moa extends Boid {
 
   resistEagleAttack() {
     return this.eagleResistance > 0 && random() < this.eagleResistance;
+  }
+
+  // A story's walk (CHAPTERS_KIT.headFor sets _boundFor = { x, y, r }): the moa is on its way
+  // to a place, by its own migration walk. A fright drops a migration (see FLEEING), so while
+  // it is bound for the place the walk is taken up again; within `r` of it the moa has arrived
+  // and is its own bird once more. Nothing else sets _boundFor, so no other level is touched.
+  _keepWalking() {
+    const b = this._boundFor, dx = b.x - this.pos.x, dy = b.y - this.pos.y, dSq = dx * dx + dy * dy;
+    if (dSq < b.r * b.r) { this._boundFor = null; return; }
+    // (Anything a bird walks at is checked for progress, and dropped when there is none: twelve
+    // seconds of walking and no nearer, and it gives the walk up. Time spent feeding or hiding
+    // on the way is not counted. The place is still its home, and draws it.)
+    if (b.best == null || dSq < b.best - 400) { b.best = dSq; b.stuck = 0; }
+    else if (this.currentState === MOA_STATE.MIGRATING && ++b.stuck > 720) { this._boundFor = null; this.isMigrating = false; this.migrationTarget = null; return; }
+    if (!this.isMigrating || !this.migrationTarget) {
+      if (!this._boundVec) this._boundVec = createVector(b.x, b.y); else this._boundVec.set(b.x, b.y);
+      this.migrationTarget = this._boundVec;
+      this.isMigrating = true;
+      this.migrationCooldown = 0;
+    }
   }
 
   // Dispersal (mechanics.dispersal; Game._seasonalArrivals picks the bird): a grown young bird

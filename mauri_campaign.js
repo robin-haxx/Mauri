@@ -50,7 +50,7 @@ const CAMPAIGN = {
 
   // The tiles. `needs`: the tiles that must be won first. A tile with no level is still to come.
   TILES: {
-    t1:  { label: '1',  title: "The Storm",        level: 'chapters_storms_clues',    needs: [] },
+    t1:  { label: '1',  title: "The Storm",        level: 'journey_storm',            needs: [] },
     t2:  { label: '2',  title: "Pātōtara",         level: 'chapters_patotara_clues',  needs: ['t1'] },
     t2f: { label: '2f', title: "Five years",       level: 'chapters_freeplay_journey', needs: ['t2'] },
     t3:  { label: '3',  title: "Into the bush",    level: 'journey_bush',             needs: ['t2f'] },

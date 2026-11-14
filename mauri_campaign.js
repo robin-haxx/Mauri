@@ -110,7 +110,8 @@ const CAMPAIGN = {
     t7:  "Both families meet, and a chick hatches.",
     t7f: "The whole land, year after year."
   },
-  // The upper South Island graphic behind the tiles (sprites/journey_map.png, w × h px) and
+  // The upper South Island graphic behind the tiles (sprites/journey_map.svg, traced from
+  // sprites/journey_map.png by tools/trace_map.js; its viewBox is the raster's w × h px) and
   // where the CELLS grid lies on it: (x0, y0) is the centre of cell col 0, row 0, and `pitch`
   // the distance between cells, all in the image's pixels. A new graphic needs these re-measured.
   MAP: { w: 205, h: 156, x0: 72.2, y0: 54.0, pitch: 9.2 },

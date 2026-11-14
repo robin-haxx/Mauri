@@ -33,7 +33,7 @@ const SAFE  = process.argv.includes('--safe');
 const MINIFY_LIBS = { 'p5.js': 'p5.min.js' };
 
 const ASSET_DIRS = ['sprites', 'audio', 'typefaces'];
-const ASSET_EXTS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif',
+const ASSET_EXTS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif', '.svg',
                             '.mp3', '.ogg', '.wav', '.m4a',
                             '.ttf', '.otf', '.woff', '.woff2']);
 const ASSET_SKIP = /\(Copy \d+\)/;   // editor duplicates, e.g. "moa_walk_4 (Copy 1).png"

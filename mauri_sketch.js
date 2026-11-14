@@ -48,7 +48,10 @@ function _browserFontRenderPath(line, x, y, options) {
 
 let tutorialMantisSprite = null;
 let splashScreenMoa = null;
-let journeyMapImg = null;   // the upper South Island, behind the journey's tiles (level select)
+// The upper South Island, behind the journey's tiles (level select). A vector traced from
+// sprites/journey_map.png by tools/trace_map.js; Game._journeyMapRaster draws it at the size
+// it is shown at, so it stays crisp at any screen size.
+let journeyMapSvg = null;
 
 let plantSprites = {};
 let portraitPlantSprites = {};
@@ -179,7 +182,8 @@ function preload(){
   }
 
   splashScreenMoa = loadImage('sprites/moa_idle.png')
-  journeyMapImg = loadImage('sprites/journey_map.png');
+  journeyMapSvg = new Image();   // (not loadImage: that would fix it at the SVG's own pixel size)
+  journeyMapSvg.src = 'sprites/journey_map.svg';
   tutorialMantisSprite = loadImage('sprites/mantis_talk.png');
 
   loadPlaceableSprites();
@@ -6181,6 +6185,21 @@ class Game {
     pop();
   }
 
+  // The journey's map, rasterised once at the size it is drawn on the screen (its layout size
+  // times the canvas's scale), and again only when that size changes. Null until it loads.
+  _journeyMapRaster(w, h) {
+    const svg = journeyMapSvg;
+    if (!svg || !svg.complete || !svg.naturalWidth) return null;
+    const s = Math.abs(drawingContext.getTransform().a) || 1;
+    const pw = Math.max(1, Math.round(w * s)), ph = Math.max(1, Math.round(h * s));
+    const c = this._journeyMapCanvas;
+    if (c && c.width === pw && c.height === ph) return c;
+    const out = c || (this._journeyMapCanvas = document.createElement('canvas'));
+    out.width = pw; out.height = ph;
+    out.getContext('2d').drawImage(svg, 0, 0, pw, ph);
+    return out;
+  }
+
   _renderJourneyPanel(x, y, w, alpha, live, mx, my) {
     const C = CAMPAIGN, M = C.MAP, mh = Math.round(w * M.h / M.w), H = this._journeyPanelH(w);
     const ctx = drawingContext;
@@ -6195,7 +6214,8 @@ class Game {
     ctx.beginPath();
     if (ctx.roundRect) ctx.roundRect(x, y, w, mh, 10); else ctx.rect(x, y, w, mh);
     ctx.clip();
-    if (journeyMapImg && journeyMapImg.width > 1) image(journeyMapImg, x, y, w, mh);
+    const mapRaster = this._journeyMapRaster(w, mh);
+    if (mapRaster) ctx.drawImage(mapRaster, x, y, w, mh);
     else { noStroke(); fill(40, 60, 50); rect(x, y, w, mh); }
     const cs = M.pitch / M.w * w;
     rectMode(CENTER);

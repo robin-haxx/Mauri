@@ -12,9 +12,9 @@
 //   summer     Papa at the nest with the egg, Mama out at the pātōtara in the open. The Pouākai
 //              sees her ("I spy with my little eye..."). Move a storm over her. It gives up and
 //              goes for the herd on the flats. She comes home with the berries; the egg hatches.
-//   autumn     The berries are gone. The family goes down to the wharariki by the tarn, with a
+//   autumn     The berries are gone. The family goes down to the wharariki by the lake, with a
 //              storm standing part-way down. The Pouākai comes back. Storms begin to blow out.
-//   winter     By the tarn. Storms do not last, and the Pouākai is hungrier.
+//   winter     By the lake. Storms do not last, and the Pouākai is hungrier.
 //   spring     Wharariki flowers, and the way home. NOTHING IS PROMPTED in spring: it is the
 //              season that tests the year. Home at the nest, the family's last words, and north.
 //
@@ -114,14 +114,17 @@ const JOURNEY_STORM = (() => {
         locked: ['Storm'],            // the standing storms are moved; calling one comes when one blows out
         focus: ['upland_moa'],
         beats: [
-          // The first hunt, once the opening has been said. The Pouākai has been circling over
-          // the berries, where Mama is; now it is made hungry (the invitation). If it has not
-          // gone for one of the family within 16 seconds it is sent after Mama, and the log
-          // says forced.
+          // The first hunt, once the opening has been said, as module 0's: the Pouākai, held on
+          // its way over, is let go, made hungry and brought over the berries, where Mama is
+          // (the invitation). It always goes for the family first: if it has not locked onto one
+          // of them within 3 seconds it is sent after Mama (or Papa), and the log says forced.
+          // Until it has gone for one of them it passes over the herd (30 s at most): a family
+          // already under the storms is circled and waited for, as module 0's eagle searched.
           { id: 'first_hunt', when: { flag: 'opened' },
-            invite: [{ eagle: { which: 'nearest', near: 'grove', watch: 'grove', hunger: 44 } }],
+            invite: [{ eagle: { which: 'nearest', near: 'grove', release: true, watch: 'grove', hunger: 50,
+                                shun: { species: 'stout_legged_moa', sec: 30 } } }],
             until: { seen: ['eagle_hunting', { species: 'upland_moa' }] },
-            once: true, by: 16, force: [{ aim: { at: ['mama', 'papa'], sec: 60 } }] }
+            once: true, by: 3, force: [{ aim: { at: ['mama', 'papa'], sec: 60 } }] }
         ],
         goals: [
           { id: 'seen_off', name: "Hide the family from the Pouākai",
@@ -162,7 +165,7 @@ const JOURNEY_STORM = (() => {
         holdSeason: { until: { goal: 'down' }, at: 0.9, maxSec: 45 }
       },
 
-      { id: 'winter', title: "Winter: by the tarn",
+      { id: 'winter', title: "Winter: by the lake",
         tools: ['Storm'],
         start: [
           { fade: { type: 'Storm', sec: 25, refreshOnMove: true } },
@@ -269,7 +272,10 @@ const JOURNEY_STORM = (() => {
           K.hensHaveLaid(['mama']),
           { sow: { plant: 'patotara', at: 'grove', count: 5, radius: 26, sprouted: true } },
           ...['tops', 'lookout', 'tops2', 'lookout2'].map(at => ({ place: { type: 'Storm', at, standing: true } })),
-          { eagle: { which: 'nearest', near: 'grove', watch: 'grove', hunger: 30 } }
+          // The Pouākai's entrance, as module 0's: set down on its way over from the high ground
+          // (away from the flats and the herd), circling there out of the hunt through the
+          // opening, until the first hunt sends it for the family.
+          { eagle: { which: 'nearest', near: 'grove', hold: { at: 'grove', awayFrom: 'tarn', dist: 160 }, hunger: 30 } }
         ] },
 
       // ---- Te Whē on black, the fade in, and the family's first words -----------------------------
@@ -292,6 +298,10 @@ const JOURNEY_STORM = (() => {
           ['mama', "And just look at that storm gathering. I'm sure Tāwhirimātea is on our side.", { lit: ['Storm'] }]       // (M0)
         ]
       }),
+
+      // (Its first go at the family: the herd is fair game again.)
+      { id: 'herd_open', on: 'eagle_hunting', if: { species: 'upland_moa' },
+        do: [{ eagle: { which: 'all', shun: { species: 'stout_legged_moa', sec: 0 } } }] },
 
       // ---- The Pouākai's hunts: the first told outright, the rest by clue first --------------------
       ...K.huntInVoice({ species: 'upland_moa', teach: true, chapters: TAUGHT }),
@@ -355,7 +365,7 @@ const JOURNEY_STORM = (() => {
           P("Aha! I spy something more kai-shaped moving, under that cloud... That's moa like it!", { lit: [...FAMILY, 'Storm'] })   // (M0)
         ] },
       { id: 'down', on: 'goal_met', if: (x) => x.event && x.event.goal === 'down',
-        moment: { on: 'mama', text: "The wharariki, by the tarn" } },
+        moment: { on: 'mama', text: "The wharariki, by the lake" } },
       { id: 'hungry', when: (x) => hungryOnes(x).length > 0, chapters: ['autumn', 'winter'],
         banner: { words: ["Moa need to eat PLANTS to sustain Mauri (life force).", "Tap a PLANT near a hungry moa to call it over"],   // (M0), and how
                   // (Gone once a plant has been tapped: the moa still has to walk to it and eat.)

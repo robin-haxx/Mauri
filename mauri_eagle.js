@@ -146,6 +146,11 @@ class HaastsEagle extends Boid {
     // (How long it has been without a target: a lock after a real gap is a new attempt, with
     // its wind-up; one that flickers off and on within half a second is not. eagleTelegraph.)
     this._noTargetFrames = this.target ? 0 : (this._noTargetFrames || 0) + dt;
+
+    // Held over a place by a story (holdOver): it circles there, not hunting and not getting
+    // hungrier, until the story releases it (as module 0's eagle waits through the opening).
+    if (this._hold) { this._holdFlight(dt); return; }
+
     this.hunger = Math.min(this.hunger + this.hungerRate * dt, this.maxHunger);
 
     // On an errand off the land (sendAway): nothing else it does runs until it is back.
@@ -874,6 +879,30 @@ class HaastsEagle extends Boid {
     this.hunting = false; this.target = null; this.aimAt = null;
     this.state = 'patrol'; this._chaseLoop = null; this._huntEventFired = false;
     this._coverFoils = 0; this.tutorialGraceTimer = 0;
+  }
+
+  // A story's entrance (a chapter's `eagle: { hold }`; tile 1, as module 0): it circles a
+  // point, out of the hunt, until release(). Its patrol is moved there too.
+  holdOver(x, y, r = 22) {
+    this._hold = { x, y, r, a: random(TWO_PI) };
+    this.hunting = false; this.target = null; this.aimAt = null;
+    this.state = 'patrol'; this._chaseLoop = null; this._huntEventFired = false; this.restTimer = 0;
+    this._relocateTerritory(x, y);
+  }
+
+  release() {
+    if (!this._hold) return;
+    this._hold = null;
+    this._noTargetFrames = 30;   // (its first hunt is a fresh one, with its wind-up)
+  }
+
+  _holdFlight(dt) {
+    const h = this._hold;
+    this.hunting = false; this.target = null; this.state = 'patrol';
+    this.maxSpeed = this.baseSpeed * 0.6;
+    h.a += 0.02 * dt * (this.personality ? this.personality.turniness || 1 : 1);
+    this.applyForce(this.seekPoint(h.x + Math.cos(h.a) * h.r, h.y + Math.sin(h.a) * h.r, 0.7));
+    this.edges();
   }
 
   // Whether it is off on an errand (sendAway) and not back over the land yet.

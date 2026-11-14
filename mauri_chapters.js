@@ -1316,6 +1316,27 @@ class ChapterRunner {
   eaglePressure(spec, ev) {
     const p = spec.watch ? this.point(spec.watch, ev) : null;
     for (const e of this._eagles(spec, ev)) {
+      // hold { at, from | awayFrom, dist = 200, r = 22, place = true }: the story's entrance, as
+      // module 0's. It is set down `dist` from `at` toward `from` (its lookout), or away from
+      // `awayFrom` (the low ground), and circles there, out of the
+      // hunt and no hungrier, until a `release`. Then `hunger` and `watch` apply as usual.
+      if (spec.hold && e.holdOver) {
+        const q = this._holdPoint(spec.hold, ev);
+        if (!q) { this._log('issue', 'eagle', `no place "${spec.hold.at}"`); continue; }
+        if (spec.hold.place !== false) { e.pos.set(q.x, q.y); e.vel.mult(0); }
+        e.holdOver(q.x, q.y, spec.hold.r || 22);
+        if (spec.hunger != null) e.hunger = Math.max(0, Math.min(e.maxHunger, spec.hunger));
+        this._log('eagle_hold', typeof spec.hold.at === 'string' ? spec.hold.at : '');
+        continue;
+      }
+      if (spec.release && e.release) e.release();
+      // shun { species, sec }: it passes over that kind for `sec` seconds (0: no longer), as an
+      // eagle that has given them up does (HaastsEagle._shunSpecies). Tile 1 keeps the herd off
+      // its first hunt, so the family is the one it tries for.
+      if (spec.shun) {
+        e._shunSpecies = spec.shun.sec ? spec.shun.species : null;
+        e._shunUntil = (e._clock || 0) + (spec.shun.sec || 0) * CHAPTER_FPS;
+      }
       if (spec.away && e.sendAway) {
         if (p) e._relocateTerritory(p.x, p.y);
         e.sendAway(spec.away, { hungerBack: spec.hunger });
@@ -1328,6 +1349,22 @@ class ChapterRunner {
     }
   }
 
+  // Where an eagle is held (eaglePressure's hold): `dist` from `at` toward `from`, or straight
+  // away from `awayFrom`, kept on the land. With neither, over `at` itself.
+  _holdPoint(h, ev) {
+    const a = this.point(h.at, ev);
+    if (!a) return null;
+    const t = this.game.terrain, m = 24;
+    const f = h.from ? this.point(h.from, ev) : null, o = !f && h.awayFrom ? this.point(h.awayFrom, ev) : null;
+    let dx, dy;
+    if (f) { dx = f.x - a.x; dy = f.y - a.y; }
+    else if (o) { dx = a.x - o.x; dy = a.y - o.y; }
+    else return { x: a.x, y: a.y };
+    const d = Math.hypot(dx, dy) || 1, want = h.dist ?? 200;
+    return { x: Math.max(m, Math.min(t.mapWidth - m, a.x + dx * want / d)),
+             y: Math.max(m, Math.min(t.mapHeight - m, a.y + dy * want / d)) };
+  }
+
   // { at, which, sec }: an eagle (the nearest, unless `which` says) goes for a named bird for
   // `sec` (20) seconds, whatever its hunger. It still can't see one under cover
   // (HaastsEagle.aimAt). `at` can list fallbacks: ['matriarch', 'upland_moa'] (the first alive).
@@ -1337,6 +1374,7 @@ class ChapterRunner {
     if (!target) { this._log('issue', 'aim', 'nothing to aim at'); return; }
     const [e] = this._eagles(Object.assign({ which: 'nearest' }, spec, { near: target }), ev);
     if (!e) return;
+    if (e.release) e.release();   // (a held eagle is let go to make its run)
     e.aimAt = target;
     e.aimTimer = (spec.sec || 20) * CHAPTER_FPS;
     e._relocateTerritory(target.pos.x, target.pos.y);

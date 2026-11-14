@@ -466,7 +466,7 @@ Nothing old changed: the five years (Clues) and the first Endless level were ste
 
 | Level | Careful player | Player who only covers | Player who does nothing |
 |---|---|---|---|
-| 2f with the baby | Won. On seed 1 Pukepuke, Koukou and the baby were all forced (the stand-in does not guard nests, and the kea took the first eggs) | not run | not run |
+| 2f with the baby | Superseded: see "Tiles 1, 2 and 2f in the first modules' voices" below | | |
 | Tile 3 | Won on seeds 1 and 2. Crowding answered with no hint | Won on seed 3, with the lesson's goals unmet and every crowding problem recorded as lost | Lost on seed 1: the Pouākai took the baby |
 | Tile 5 | Won. Grove planted ahead, with no hint | Won, with the grove recorded as lost | not run |
 | Tile 4 | Won. Riddle answered at once; 5 kākāpō chicks in the mast | Won. Riddle unanswered; **also 5 chicks** | not run |
@@ -510,4 +510,83 @@ reads as itself, and the kākāpō's portrait when it speaks.
 Section 10's defaults were used throughout. Two more were made while building: every tile is
 locked until the one before it is won, with an "Open every tile" button on the map for a class
 or a test; and in the journey's five years a chick owed to the story is set down in year two if
-the kea took the first egg, logged as forced.
+the kea took the first egg, logged as forced. (That second one no longer applies: the five years
+now open with Pukepuke and Koukou already hatched. See below.)
+
+## 13. Tiles 1, 2 and 2f in the first modules' voices, 15 November 2026
+
+Tiles 1, 2 and 2f now follow the narrative sequence of the original modules and their free
+play, so they can stand in for them. They keep the clue-first teaching.
+
+### What changed
+
+| Tile | File | As the original | What is new |
+|---|---|---|---|
+| 1, The Storm | `levels/journey_01_storm.js` | Module 0's story in order: Te Whē's prologue on black, Mama at the berries and Papa at the nest, the Pouākai's "I spy...", the hatch, the walk down to the wharariki, winter, spring, home, "let's head north" | You have since added the Pouākai's entrance, its scuffle with the kea, weather, the hatch scene and the walk north |
+| 2, Pātōtara | `levels/journey_02_patotara.js` | Module 1's story in order: "Are we there yet?", the meeting, sprouting, Strongbeak, Skraak and Huft-Tuft, the raid, Koukou's hatching, the families parting, flax in winter, flowers in spring | A line from Te Whē on black ("A year has passed...") |
+| 2f, The five years | `levels/chapters_freeplay.js`, setting `journey` | The free play's opening (five winters, then mauri, goals and the season ring, the toolbox), Te Whē on the Pouākai's place, the closing words | Pukepuke and Koukou arrive half-grown, as tiles 1 and 2 left them, instead of hatching again. In year five a nest of their own stands between their parents' nests, and the baby is Koukou's first chick from it |
+
+Every line marked `(M0)` or `(M1)` in the files is yours, word for word. Each file's header
+lists the few lines written new for moments the originals did not have; they are yours to
+replace. The Guided, Open and Clues settings are unchanged.
+
+**How the teaching sits inside the story.** A new control is told outright the first time,
+in the story's own scene: the first hunt on tile 1, calling a storm, sprouting. After that a
+problem is met with nothing at first, then a character's line that points at it without
+saying what to do (the Pouākai's mutter; Skraak counting the moa at the nest; Pukepuke asking
+where the flax is), then the instruction. The last season of tiles 1 and 2 says nothing.
+
+**The walks are scripted.** In the originals the family walks down in autumn and home in
+spring, and the player's work is to keep storms over them. Left to the open simulation, the
+family reached the wharariki in time on 2 seeds of 5 and the nest on none. Now the family sets
+off when its words are said (`CHAPTERS_KIT.headFor`) and walks there by its own movement,
+feeding, bolting and hiding on the way. This is the one place these tiles decide where an
+animal goes. It does not pass your same-rule test, and it is marked in the files.
+
+**Guarantees, each logged as forced when used.** The first hunt on tile 1 (sent after a parent
+if the Pouākai has not gone for one within 3 seconds). Koukou's hatching on tile 2 (another egg
+if the kea take hers, and one near hatching if summer has waited 40 seconds). The baby on 2f
+(an egg by Koukou if none of hers is alive by the fifth spring).
+
+### Engine changes, each behind a level switch
+
+- `noKinPairing`, on for every journey level: a moa does not court its parent, chick or a
+  sibling by the same hen. This fixes Koukou breeding with the baby on tile 4.
+- `Moa._keepWalking`, used only by `headFor`: a walk survives a fright, a full moa passes a
+  feeder instead of stopping, and twelve seconds of walking with no progress ends it.
+- A hunted cast bird speaks under its own name ("Mama Moa: Eeek!").
+- The first scene after a prologue waits for the fade to finish.
+- **A crash fixed in the weather** (`ChapterRunner._updateWeather`). It read the storm's size
+  from the toolbar, and the closing chapters of tiles 1 and 2 empty the toolbar. Any storm due
+  to gather during the walk north stopped the game with an error. It now reads the size from
+  the level.
+
+Nothing older changed: nine existing levels, two seeds each, replay identically to commit
+`bead61b`.
+
+### How the three tiles fare with stand-ins
+
+Six seeds each (four for 2f).
+
+| Tile | Careful player | Covers only | Does nothing |
+|---|---|---|---|
+| 1 | Won 6 of 6. First hunt came by itself on 3, forced on 2 | Same as careful (tile 1 has no food tools) | Lost 5 of 6, to the Pouākai |
+| 2 | Won 6 of 6. Koukou hatched by herself on 5 of 6 | Won 6 of 6 | Lost 4 of 6 |
+| 2f | Won 5 of 5. The baby came by herself on 3 of 5, never forced | not run | **Won 3 of 4**, ending with about 700 mauri unspent |
+
+### What needs your judgement
+
+1. **The five years are too easy for a player who does nothing.** With the two young arriving
+   half-grown instead of as chicks, the Pouākai mostly takes the six giant moa on the flats,
+   and the elders, not the young. The levers are the eagle's appetite, the size of the giant
+   moa herd, and whether losing an elder should cost more than a line.
+2. **The scripted walks** (above). The alternative is the originals' trail of storms with the
+   family led along it, which needs the family to follow storms. Your new `stormAttract` rule
+   may make that possible.
+3. **The new lines.** Each file's header lists them: Te Whē's line on tile 2's black screen,
+   Skraak counting the moa, the neighbours' line when the kea take their egg, Pukepuke asking
+   where the flax is, Mama's line if spring runs out before the family is home.
+4. **Names.** Koukou's parents are still "Friendly Moa" and "Friendly Papa" on tile 2, and
+   "Koukou's mother" and "Koukou's father" from 2f on.
+5. **Not played by hand.** The scenes were played in a browser with each panel advanced and a
+   picture taken. Nobody has played the three tiles through.

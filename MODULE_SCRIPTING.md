@@ -691,6 +691,29 @@ LEVEL_REGISTRY.registerFamily('chapters_storms', { label: "Storms", defaultSketc
   is built from it: the Guided sketch's stage and guarantees, with every instruction swapped
   for a ladder, no floors, the family on the calendar, and one more season at the end in which
   nothing is said. A new lesson should start from the kit, not from a copy of an old sketch.
+- **Lessons told in the animals' voices.** The journey's first tiles (`levels/journey_01_storm.js`,
+  `journey_02_patotara.js`, and the `journey` setting of `chapters_freeplay.js`) put the first
+  modules' stories back, in the family's, the kea's and the Pouākai's own lines. The kit's
+  pieces for that:
+  - `prologue({ chapter, lines, opening, seenKey })`: the level opens on black, Te Whē says
+    `lines` (once a session), the screen fades in, and `opening` is said. Sets the flag
+    `opened`, which a first beat can wait on.
+  - `huntInVoice({ species, teach, later })`: the eagle's hunts. With `teach`, the first is
+    told outright as module 0's scene (the Pouākai's two lines, the hunted bird's "Eeek!", then
+    the instruction). Every other hunt climbs the ladder: nothing, the Pouākai's own mutter,
+    the instruction.
+  - `stormInVoice({ teach, voice, lit })`: a storm blown out. With `teach`, the first unlocks
+    the Storm and is told outright, with one line on mauri. Later ones: nothing, a word from
+    `voice`, the instruction.
+  - `headFor(names, place)`: the named birds take the place as home and walk there by their
+    own migration (`Moa._keepWalking`). A fright does not end the walk; twelve seconds of
+    walking with no progress does. Used for a story's walks (down in autumn, home in spring),
+    which the open simulation did not make in time.
+  - `idle(x)`: every line said so far has been read. `saidAndRead(flag)`: the flag is set and
+    every line read (for a chapter that ends on its closing words). `pouakai(text)`: a line
+    titled "Pouākai".
+  A role that turns out to be a cast bird speaks under the cast name: `['$target', "Eeek!"]`
+  is titled "Mama Moa" when the eagle is after Mama.
 - `levels/_template_chapters.js` is a copyable module with a claim, a guide list, two sketches,
   one beat and a few reactions, with comments written for a first-time author. Copy it, rename
   the family and the ids, add a `<script>` tag for it in `index.html` after the template's,
@@ -728,6 +751,7 @@ per-level override of a placeable. The ones added for the modules, and the file 
 | `rescueImmigration: { species: { below, count, afterSeasons } }` | In place of floors: a species that has lived here and stood below `below` for `afterSeasons` season turns is joined by `count` from over the pass. Fires `species_arrived`. | `mauri_sketch.js` (`Game._seasonalArrivals`) |
 | `eagleReturns: { afterSeasons }` | With no eagle left, a new one takes the territory after that many turns, and losing the last one is not a loss. Fires `species_arrived`. | `mauri_sketch.js` |
 | `dispersal: { species: { above, maxPerYear, season } }` | While a moa species stands above `above` at the turn into `season`, its oldest grown young (hatched here, not named by the level) walk to the edge of the land and are gone. Fires `species_left`. | `mauri_sketch.js` (`Game._seasonalDepartures`), `mauri_moa.js` |
+| `noKinPairing: true` (with `familyLinks`) | A moa does not court its mother, father, chick, or a sibling by the same hen. On for every journey level (`CHAPTERS_KIT.journeyMechanics`). | `mauri_moa.js` |
 | `birdMaxPopulation: { kea: 6, ... }` | A cap per bird species for a level of small flocks; eggs in the nest count toward it. | `mauri_kereru.js` |
 | `ecosystemIncome: { base, perFocusAnimal, perAnimal }` | Mauri a second on a level of small herds: `base` while any focus animal lives, then so much for each focus animal and for every other moa and bird. Shown on the mauri dial. `noPopulationMilestones: true` switches off the older lump sums. | `mauri_sketch.js` (`Game.ecosystemIncomePerSec`) |
 | `huntCamera: { focusOnly }` (with the level key `userCamera`) | When the player is zoomed in and an eagle starts on an animal off screen (a focus animal, with `focusOnly`), the view eases to frame hunter and hunted, and back when it is over. Not while the player is dragging or holding an item. | `mauri_sketch.js` (`Game._onHuntStart`) |

@@ -1538,7 +1538,11 @@ class ChapterRunner {
     const storms = this.sim.placeables.filter(p => p.alive && p.type === 'Storm');
     if (storms.length >= W.max) return;   // (it tries again next poll: a gap opens when one blows out)
     this._weatherT = 0;
-    const t = this.game.terrain, R = (this.game.activePlaceables.Storm.radius) || 64;
+    // (The storm's size from the toolbar, else from the level: a chapter with an empty toolbar,
+    // such as a walk off the land at the end, must not stop the weather with an error.)
+    const def = (this.game.activePlaceables && this.game.activePlaceables.Storm) ||
+                (this.level.availablePlaceables && this.level.availablePlaceables.Storm) || {};
+    const t = this.game.terrain, R = def.radius || 64;
     const away = Object.values(this.castEnts).filter(e => e && e.alive).map(e => e.pos);
     const clear = (q) => storms.every(p => Math.hypot(p.pos.x - q.x, p.pos.y - q.y) > R * 1.6) &&
                          away.every(c => Math.hypot(c.x - q.x, c.y - q.y) > R * 1.5);

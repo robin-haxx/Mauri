@@ -74,6 +74,7 @@ const Lens = {
     for (const r of this._rows) {
       if (mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h) {
         this.toggle(r.id);
+        touchSound('tick');
         return true;
       }
     }

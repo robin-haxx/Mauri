@@ -213,7 +213,13 @@ picking up future tasks. The other docs:
   `TUTORIAL_TIPS`: a trigger-driven tip system (event / immediate / time / condition),
   UI highlighting, pause-on-tip, and **per-level tip sets** (`setLevelTips`).
 - **`mauri_audio.js`**; `audioManager`: ambience and one-shot SFX (feeding, mating,
-  eagle catch, season change, milestones, tutorial, win/loss, character calls).
+  eagle catch, season change, milestones, tutorial, win/loss, character calls), and the
+  **touch sounds**: every press, pick-up and set-down answers with a short sound of wood,
+  stone, soil, leaf, twig, feather or water (`TOUCH_CUES`; `touchSound(name)` from any
+  handler). They are kept under the soundscape: quiet, never more than four at once, a
+  repeat dropped, trimmed further while a bird or a story line is sounding, and silent for
+  anything continuous (wheel zoom, panning, scrolling). `tools/make_touch_sounds.js` cuts
+  the files; `CREDITS.md` says where every sound came from.
   `mauri_audio_context.js` pins the audio context's sample rate and latency (loads before
   p5.sound).
 - **`mauri_encyclopedia.js`**; the gamewide Field Guide (**E**).

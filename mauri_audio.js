@@ -57,6 +57,81 @@ const VOICE_FADE_OUT_SEC = 1.3;   // fade-out at a snippet's end or when un-high
 const VOICE_VOLUME       = 0.6;   // voice level, relative to the SFX volume
 const KAKAPO_TERRITORIAL_MIN = 2; // this many males actively contesting → territorial track
 
+// ============================================
+// TOUCH SOUNDS: what the player's own hands do
+// ============================================
+// Every press, pick-up and set-down answers with a short sound of the land's own materials
+// (a fingertip on wood, pebbles, soil patted down, leaves, twigs, feathers, a drop of water),
+// so the game feels handled rather than clicked. The recordings are cut by
+// tools/make_touch_sounds.js; where each came from is in CREDITS.md.
+//
+// TOUCH_SAMPLES: the recordings, by material; a cue draws one at random. All optional: a
+// missing file is dropped, and a cue with nothing loaded is silent.
+const TOUCH_SAMPLES = {
+  wood:    ['touch_wood_1.wav', 'touch_wood_2.wav', 'touch_wood_3.wav'],
+  knock:   ['touch_knock_1.wav', 'touch_knock_2.wav'],
+  thud:    ['touch_thud_1.wav', 'touch_thud_2.wav'],
+  stone:   ['touch_stone_1.wav', 'touch_stone_2.wav'],
+  soil:    ['touch_soil_1.wav', 'touch_soil_2.wav', 'touch_soil_3.wav'],
+  leaf:    ['touch_leaf_1.wav', 'touch_leaf_2.wav', 'touch_leaf_3.wav'],
+  twig:    ['touch_twig_1.wav', 'touch_twig_2.wav'],
+  feather: ['touch_feather_1.wav', 'touch_feather_2.wav', 'touch_feather_3.wav'],
+  seeds:   ['touch_seeds_1.wav', 'touch_seeds_2.wav'],
+  water:   ['touch_water_1.wav', 'touch_water_2.wav'],
+  page:    ['touch_page_1.wav', 'touch_page_2.wav'],
+  creak:   ['touch_creak_1.wav'],
+  guideOpen:  ['touch_guide_open.wav'],
+  guideClose: ['touch_guide_close.wav']
+};
+
+// TOUCH_CUES: one per kind of interaction (AudioManager.playTouch(name), or touchSound(name)).
+//   s    the material (a TOUCH_SAMPLES key)
+//   v    its level within the family (the family's own level is TOUCH_LEVEL)
+//   r    [low, high] playback speed, drawn afresh each time so a repeat never sounds stamped
+//   gap  ms before the same cue may sound again (default TOUCH_GAP_MS)
+//   plus a second, later layer: { s, v, r, delay (s) }
+const TOUCH_CUES = {
+  // ---- buttons and switches ----
+  press:      { s: 'wood',    v: 0.50, r: [0.97, 1.06] },            // any plain button
+  confirm:    { s: 'knock',   v: 0.55, r: [0.97, 1.03] },            // a button that begins something
+  back:       { s: 'wood',    v: 0.42, r: [0.74, 0.80] },            // back, close, cancel, put away
+  tick:       { s: 'stone',   v: 0.34, r: [0.96, 1.08] },            // a small switch, a step
+  refuse:     { s: 'thud',    v: 0.50, r: [0.90, 0.98], gap: 250 },  // "that can't be done"
+  pause:      { s: 'knock',   v: 0.50, r: [0.72, 0.76] },            // the world held still
+  resume:     { s: 'knock',   v: 0.45, r: [1.00, 1.05] },
+  faster:     { s: 'feather', v: 0.40, r: [1.45, 1.55] },            // time let run
+  slower:     { s: 'feather', v: 0.34, r: [0.84, 0.90] },
+  view:       { s: 'creak',   v: 0.40, r: [0.95, 1.05], gap: 200 },  // fullscreen, the 3D view
+  // ---- the field guide ----
+  guideOpen:  { s: 'guideOpen',  v: 0.55, r: [0.96, 1.04] },
+  guideClose: { s: 'guideClose', v: 0.45, r: [0.96, 1.04] },
+  page:       { s: 'page',    v: 0.50, r: [0.95, 1.08] },
+  // ---- taking a tool in hand ----
+  pickLeaf:   { s: 'leaf',    v: 0.50, r: [1.05, 1.20] },            // a plant
+  pickTwig:   { s: 'twig',    v: 0.42, r: [1.10, 1.22] },            // the nest
+  pickWater:  { s: 'water',   v: 0.36, r: [1.15, 1.28] },            // the waterhole
+  pickSeeds:  { s: 'seeds',   v: 0.40, r: [1.05, 1.15] },            // seed, berries, a mast
+  pickStorm:  { s: 'feather', v: 0.50, r: [0.55, 0.62] },            // the storm: a low breath of air
+  pickFeather:{ s: 'feather', v: 0.42, r: [1.10, 1.20] },            // the kea's raid
+  // ---- putting it on the land ----
+  setPlant:   { s: 'soil',    v: 0.60, r: [0.95, 1.06] },            // (the planting's own rustle follows)
+  setNest:    { s: 'twig',    v: 0.55, r: [0.84, 0.94], plus: { s: 'soil', v: 0.30, r: [1.05, 1.15], delay: 0.05 } },
+  setWater:   { s: 'water',   v: 0.55, r: [0.84, 0.94] },
+  setSeeds:   { s: 'seeds',   v: 0.50, r: [0.90, 1.00], plus: { s: 'soil', v: 0.28, r: [1.10, 1.20], delay: 0.04 } },
+  sprout:     { s: 'seeds',   v: 0.30, r: [1.30, 1.42], plus: { s: 'leaf', v: 0.24, r: [1.15, 1.30], delay: 0.06 } },
+  // ---- the animals ----
+  animal:     { s: 'feather', v: 0.42, r: [1.00, 1.12] },            // one chosen, or sent on its way
+  release:    { s: 'feather', v: 0.28, r: [0.78, 0.84] }             // let go again
+};
+
+// Keeping the touch sounds under the land's own soundscape, not on top of it:
+const TOUCH_LEVEL       = 0.8;    // the whole family, against the other effects (turn this to taste)
+const TOUCH_MAX_VOICES  = 4;      // sounding at once; one more quietly takes the oldest's place
+const TOUCH_GAP_MS      = 70;     // the same cue asked for again sooner than this is dropped
+const TOUCH_UNDER_VOICE = 0.65;   // trimmed while a bird's recording or a story line is sounding
+const TOUCH_SHELF_HZ    = 5000;   // above this the family is turned down (TOUCH_SHELF_DB), leaving
+const TOUCH_SHELF_DB    = -6;     // the birdsong's band clear and the hits soft rather than clicky
+
 // A thin p5.SoundFile-compatible wrapper around a streaming <audio> element, used ONLY
 // for the long background-music track. p5.loadSound() fully decodes a file to PCM in RAM;
 // for the ~4½-minute background loop that's ~90 MB of resident audio that never gets
@@ -109,7 +184,8 @@ class StreamingSound {
 // over a shared volume. Nodes are disconnected when the sound ends so they can be collected.
 class BufferPlayback {
   // sf: a loaded p5.SoundFile. opts: { loop, offset (s), fadeIn (s), duration (s), fadeOut (s),
-  // rate (playback speed and pitch, 1 = as recorded) }.
+  // rate (playback speed and pitch, 1 = as recorded), delay (s before it starts; plain
+  // one-shots only), out (the node to play into, in place of p5's master input) }.
   // duration makes it a timed one-shot: it fades out over its last fadeOut seconds and stops,
   // scheduled on the audio clock so it ends on time even while the game is paused.
   constructor(sf, volume, opts = {}) {
@@ -124,7 +200,7 @@ class BufferPlayback {
     this.src.loop = !!opts.loop;   // whole-buffer loop (p5 looped only from the cue to the end)
     if (opts.rate > 0) this.src.playbackRate.value = opts.rate;
     this.src.connect(this.gain);
-    const out = (typeof p5 !== 'undefined' && p5.soundOut && p5.soundOut.input) || ctx.destination;
+    const out = opts.out || (typeof p5 !== 'undefined' && p5.soundOut && p5.soundOut.input) || ctx.destination;
     this.gain.connect(out);
 
     const now = ctx.currentTime;
@@ -140,7 +216,7 @@ class BufferPlayback {
     BufferPlayback.live++;
     this.src.onended = () => this._release();
     const offset = Math.max(0, Math.min(opts.offset || 0, Math.max(0, buf.duration - 0.01)));
-    this.src.start(now, offset);
+    this.src.start(now + (opts.delay > 0 ? opts.delay : 0), offset);
     if (opts.duration > 0) {
       const fade = opts.fadeOut || 0;
       this.gain.gain.setValueAtTime(target, now + opts.duration - fade);
@@ -361,8 +437,14 @@ class AudioManager {
       loss: null,
       speciesCalls: {},     // key -> dedicated call sample (see SPECIES_CALL_FILES)
       eagleHuntCries: [],   // extra hunt-cry variants, pooled with eagleHunt (EAGLE_HUNT_CRY_FILES)
-      speciesVoices: {}     // voiceKey -> { stateName -> SoundFile|null } (SPECIES_VOICE_TRACKS)
+      speciesVoices: {},    // voiceKey -> { stateName -> SoundFile|null } (SPECIES_VOICE_TRACKS)
+      touch: {}             // material -> [SoundFile] (TOUCH_SAMPLES)
     };
+
+    // Touch-sound runtime (see playTouch).
+    this._touchLive = [];     // playbacks still sounding, oldest first
+    this._touchLast = {};     // cue name -> performance.now() it last sounded
+    this._touchBus = null;    // the family's shared output (a high shelf into p5's master)
 
     // Extended-voice runtime (driven each frame by update()).
     //   _voices: voiceKey -> { active, sustain, current(stateName), sound, snippetTimer, _vol }
@@ -528,6 +610,24 @@ class AudioManager {
         } catch (e) {
           bank[stateName] = null;
         }
+      }
+    }
+
+    // The touch sounds; all optional, and constructed directly like the other optional files.
+    for (const [material, files] of Object.entries(TOUCH_SAMPLES)) {
+      const bank = this.sounds.touch[material] = [];
+      for (const file of files) {
+        try {
+          const sf = new p5.SoundFile(audioPath + file,
+            () => {},
+            () => {
+              const i = bank.indexOf(sf);
+              if (i >= 0) bank.splice(i, 1);
+              console.info(`No touch sound ${file}; ${material} cues go without it`);
+            }
+          );
+          bank.push(sf);
+        } catch (e) { /* the bank stays as-is */ }
       }
     }
 
@@ -863,6 +963,104 @@ class AudioManager {
   }
 
   // ============================================
+  // TOUCH SOUNDS (the player's own interactions)
+  // ============================================
+
+  // The family's shared output: a gentle high shelf, then p5's master (and its limiter).
+  _touchOut() {
+    if (this._touchBus) return this._touchBus;
+    const ctx = getAudioContext();
+    const shelf = ctx.createBiquadFilter();
+    shelf.type = 'highshelf';
+    shelf.frequency.value = TOUCH_SHELF_HZ;
+    shelf.gain.value = TOUCH_SHELF_DB;
+    shelf.connect((typeof p5 !== 'undefined' && p5.soundOut && p5.soundOut.input) || ctx.destination);
+    return (this._touchBus = shelf);
+  }
+
+  // A bird's recording, a story line's sound or the guide's chime is in the air: the touch
+  // sounds sit further back while it is.
+  _voiceSounding() {
+    for (const k in this._voices) if (this._voices[k] && this._voices[k].active) return true;
+    return !!((this._speaker && this._speaker.isPlaying()) ||
+              (this._tipPlayback && this._tipPlayback.isPlaying()));
+  }
+
+  // Sound a touch cue (TOUCH_CUES). Quiet by design, and kept from piling up: a cue repeated
+  // within its gap is dropped, and only TOUCH_MAX_VOICES sound at once (the oldest fades out
+  // for a newcomer). Works in the menus and while paused (it keeps no game-frame clock).
+  // Returns true if it sounded.
+  playTouch(name) {
+    const cue = TOUCH_CUES[name];
+    if (!cue || !this.enabled || this._muted) return false;
+    const base = this._getVolume() * TOUCH_LEVEL * (this._voiceSounding() ? TOUCH_UNDER_VOICE : 1);
+    if (base <= 0) return false;
+    const now = performance.now();
+    if (now - (this._touchLast[name] || -1e9) < (cue.gap || TOUCH_GAP_MS)) return false;
+    // While the browser still holds the audio context (before the first gesture has been
+    // counted, or an interruption on a tablet), sounds queue up and would all land at once
+    // when it wakes: let one through and drop the rest.
+    try {
+      if (getAudioContext().state !== 'running') {
+        if (now - (this._touchHeldAt || -1e9) < 600) return false;
+        this._touchHeldAt = now;
+      }
+    } catch (e) {}
+    let sounded = false;
+    try {
+      sounded = this._touchLayer(cue, base);
+      if (sounded && cue.plus) this._touchLayer(cue.plus, base);
+    } catch (e) {
+      console.warn('Error playing touch sound:', e);
+    }
+    if (sounded) this._touchLast[name] = now;
+    return sounded;
+  }
+
+  _touchLayer(layer, base) {
+    const bank = (this.sounds.touch[layer.s] || []).filter(sf => sf && sf.isLoaded() && sf.buffer);
+    if (!bank.length) return false;
+    const live = this._touchLive;
+    for (let i = live.length - 1; i >= 0; i--) if (!live[i].isPlaying()) live.splice(i, 1);
+    while (live.length >= TOUCH_MAX_VOICES) {
+      const old = live.shift();
+      old.setVolume(0, 0.03);
+      setTimeout(() => old.stop(), 60);
+    }
+    const r = layer.r || [1, 1];
+    live.push(new BufferPlayback(bank[Math.floor(Math.random() * bank.length)], base * layer.v, {
+      rate: r[0] + Math.random() * (r[1] - r[0]),
+      delay: layer.delay || 0,
+      out: this._touchOut()
+    }));
+    return true;
+  }
+
+  // A tool taken in hand (the toolbar, or its number key): the sound of what it is made of.
+  playPickUp(def) {
+    const e = def && def.effect;
+    if (e === 'Storm') return this.playTouch('pickStorm');
+    if (e === 'water') return this.playTouch('pickWater');
+    if (e === 'nesting') return this.playTouch('pickTwig');
+    if (e === 'nestRaid') return this.playTouch('pickFeather');
+    if ((def && def.global) || e === 'keaLure' || e === 'forestBoost') return this.playTouch('pickSeeds');
+    return this.playTouch('pickLeaf');
+  }
+
+  // Something set on the land (placed new, or put down after a move). A storm breaks with its
+  // own thunder; a planting is patted into the soil and its leaves rustle; a nest is twigs,
+  // a waterhole a drop of water, a cache of seed or berries spills.
+  playSetDown(def) {
+    const e = def && def.effect;
+    if (e === 'Storm') return this.playBoltStrike();
+    if (e === 'water') return this.playTouch('setWater');
+    if (e === 'nesting') return this.playTouch('setNest');
+    if (e === 'keaLure' || e === 'forestBoost') return this.playTouch('setSeeds');
+    this.playTouch('setPlant');
+    this.playPlantRustle();
+  }
+
+  // ============================================
   // EXTENDED SPECIES VOICES (highlight tracks)
   // ============================================
   // Driven by update() each frame while playing. A highlighted species with a voice track
@@ -1195,6 +1393,7 @@ class AudioManager {
     Object.values(s.seasonChange).forEach(push);
     Object.values(s.speciesCalls).forEach(push);
     s.eagleHuntCries.forEach(push);
+    Object.values(s.touch).forEach(bank => bank.forEach(push));
     for (const bank of Object.values(s.speciesVoices)) Object.values(bank).forEach(push);
     return out;
   }
@@ -1222,6 +1421,11 @@ class AudioManager {
 
 // Global audio manager instance
 let audioManager = null;
+
+// Sound a touch cue (TOUCH_CUES) if there is audio to sound it with.
+function touchSound(name) {
+  return !!(audioManager && audioManager.playTouch && audioManager.playTouch(name));
+}
 
 // Initialize audio manager (call in setup()).
 function initAudioManager() {

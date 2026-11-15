@@ -459,7 +459,7 @@ Object.assign(CHAPTERS_KIT, {
       do: [(x) => { x.runner.vars._firstGone = x.event; x.runner.vars._firstGoneAt = x.game.playTime; }],
       until, solved,
       hints: [{ after: 0,
-        say: [['guide', "Calling a new STORM takes MAURI, the life force of this land. The number at the top of the screen is how much you hold, and the family earns more as its goals are met.",
+        say: [['guide', "Calling a new STORM takes MAURI, the life force of this land. Use it well, and complete goals for Pukepuke's family, and keep the forest's populations in balance, to increase it.",
                { highlight: { type: 'element', target: 'mauriDisplay' }, guidePosition: 'topLeft' }]],
         banner: { words: ["Their STORM is breaking up! Tap the STORM button", "Now tap beside the family to call the STORM"],
                   tool: 'Storm', lit, pause: true, maxSec: 40 } }]

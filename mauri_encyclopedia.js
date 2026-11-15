@@ -296,7 +296,12 @@ class Encyclopedia {
     this._panelRect = null;  // last docked box (wheel hit-testing)
   }
 
-  toggle(game) { this.open ? this.close(game) : this.openGuide(game); }
+  // (The player's own doing, by the Guide button or E: it sounds. close() on its own is also
+  // the game putting the guide away, which stays silent.)
+  toggle(game) {
+    touchSound(this.open ? 'guideClose' : 'guideOpen');
+    this.open ? this.close(game) : this.openGuide(game);
+  }
   openGuide() { this.open = true; }   // docked; sim keeps running
   close() { this.open = false; }
 
@@ -316,13 +321,14 @@ class Encyclopedia {
     if (key === 'e') { this.toggle(game); return true; }
     if (!this.open) return false;
     if (key === 'escape') {
-      if (this.viewMode === 'detail') this.viewMode = 'list';   // step back to the list first
-      else this.close();
+      if (this.viewMode === 'detail') { touchSound('page'); this.viewMode = 'list'; }   // step back to the list first
+      else { touchSound('guideClose'); this.close(); }
       return true;
     }
     if (this.viewMode === 'list') {
-      if (keyCode === UP_ARROW) { this.index = Math.max(0, this.index - 1); this._ensureVisible(); return true; }
-      if (keyCode === DOWN_ARROW) { this.index = Math.min(ENCYCLOPEDIA.length - 1, this.index + 1); this._ensureVisible(); return true; }
+      const was = this.index;
+      if (keyCode === UP_ARROW) { this.index = Math.max(0, this.index - 1); this._ensureVisible(); if (this.index !== was) touchSound('tick'); return true; }
+      if (keyCode === DOWN_ARROW) { this.index = Math.min(ENCYCLOPEDIA.length - 1, this.index + 1); this._ensureVisible(); if (this.index !== was) touchSound('tick'); return true; }
     }
     return false;
   }
@@ -337,13 +343,13 @@ class Encyclopedia {
   // Called by GameUI only when the click lands inside the docked panel.
   handleDockedClick(mx, my) {
     if (!this.open) return false;
-    if (this._closeRect && this._hit(this._closeRect, mx, my)) { this.close(); return true; }
+    if (this._closeRect && this._hit(this._closeRect, mx, my)) { touchSound('guideClose'); this.close(); return true; }
     if (this.viewMode === 'detail') {
-      if (this._backRect && this._hit(this._backRect, mx, my)) { this.viewMode = 'list'; return true; }
-      for (const r of this._seeAlsoRects) if (this._hit(r, mx, my)) { this.select(r.id); return true; }
+      if (this._backRect && this._hit(this._backRect, mx, my)) { touchSound('page'); this.viewMode = 'list'; return true; }
+      for (const r of this._seeAlsoRects) if (this._hit(r, mx, my)) { touchSound('page'); this.select(r.id); return true; }
       return true;   // swallow clicks inside the panel body
     }
-    for (const r of this._rowRects) if (this._hit(r, mx, my)) { this.select(r.index); return true; }
+    for (const r of this._rowRects) if (this._hit(r, mx, my)) { touchSound('page'); this.select(r.index); return true; }
     return true;     // swallow clicks inside the list background
   }
 

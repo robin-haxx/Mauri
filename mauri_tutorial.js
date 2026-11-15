@@ -659,11 +659,13 @@ class TutorialManager {
     if (!this.active) return false;
     
     if (this._hitTest(this.nextButtonBounds, mx, my)) {
+      touchSound('tick');   // (the next tip, if one follows, opens on its own sound)
       this.dismissCurrentTip();
       return true;
     }
     
     if (this._hitTest(this.skipButtonBounds, mx, my)) {
+      touchSound('back');
       this.skipTutorial();
       return true;
     }

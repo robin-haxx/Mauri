@@ -261,6 +261,7 @@ function dirBytes(dir) {
   writePage(page, tags, chunks, libOut);
   copyLinked(page);
   const assets = copyAssets();
+  if (fs.existsSync(path.join(ROOT, 'CREDITS.md'))) copy('CREDITS.md');   // where the sounds came from ships with the game
 
   console.log(`\ndist/ built in ${((Date.now() - t0) / 1000).toFixed(1)}s ` +
               `(${SAFE ? 'safe: top-level names kept' : 'scope-wrapped: top-level names renamed'})\n`);

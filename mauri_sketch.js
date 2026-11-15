@@ -1690,6 +1690,7 @@ class Game {
   }
 
   toggleFullscreen() {
+    touchSound('view');
     CONFIG.fullscreen = !CONFIG.fullscreen;
     this._updateViewTransform();
   }
@@ -1703,9 +1704,10 @@ class Game {
     // The 3D view is GL-only (the CPU relief path is broken); in Classic 2D there is nothing
     // to toggle to, so keep top-down and point the player at the graphics setting instead.
     if (!CONFIG.useGL) {
-      this.addNotification("3D view needs Enhanced graphics", 'info');
+      this._refuse("3D view needs Enhanced graphics", 'info');
       return;
     }
+    touchSound('view');
     CONFIG.view3D = !CONFIG.view3D;
     this._configureProjection();
     this.addNotification(CONFIG.view3D ? "3D view" : "Top-down view", 'info');
@@ -1977,6 +1979,7 @@ class Game {
     if (dir < 0 && USER_ZOOMS[i] < cur - 0.01) i++;
     const z = USER_ZOOMS[Math.max(0, Math.min(USER_ZOOMS.length - 1, i + dir))];
     if (Math.abs(z - cur) < 0.01) return;
+    touchSound('tick');     // (a step; the wheel, which glides, stays silent)
     this._huntCam = null;   // the player has the camera
     const f = (this._follow && this._selected && this._selected.alive) ? this._selected : null;
     if (z <= 1.0001) this.cameraTo({ zoom: 1 }, 30);
@@ -2029,6 +2032,7 @@ class Game {
     this._selected = e;
     this._follow = true;
     this._huntCam = null;
+    touchSound('animal');
     if (this.tutorial) this.tutorial.fireEvent(TUTORIAL_EVENTS.ANIMAL_SELECTED, { animal: e, speciesKey: e.speciesKey || (e.hunting !== undefined ? 'haasts_eagle' : '') });
     const cur = this._zoomGoal();
     const z = cur <= 1.05 ? USER_ZOOMS[2] : cur;
@@ -2041,7 +2045,7 @@ class Game {
   // let it go if it was the one selected); else on a plant, rustle it as a tap always has.
   _tapAt(pc) {
     const e = this._animalAt(pc.tx, pc.ty);
-    if (e) { if (this._selected === e) this.clearSelection(); else this.selectAnimal(e); return; }
+    if (e) { if (this._selected === e) { touchSound('release'); this.clearSelection(); } else this.selectAnimal(e); return; }
     if (pc.plantTap) this._tapPlant(pc.tx, pc.ty);
   }
 
@@ -3158,7 +3162,7 @@ class Game {
   exportFreeplayStats() {
     if (!(this.currentLevel && this.currentLevel.endless) || !this._runStats ||
         !this.simulation || !this.mauri) {
-      this.addNotification('Stats export is only available during a Free Play run.', 'error');
+      this._refuse('Stats export is only available during a Free Play run.');
       return;
     }
     const data = this._buildFreeplayStatsData();
@@ -3895,13 +3899,13 @@ class Game {
     const cfg = this._keaRaidCfg();
     if (!cfg || !site || !site.alive) return;
     if ((site.eggCount || 0) <= 0) {   // nothing to raid; an empty site can't be claimed
-      this.addNotification(`No clutch to raid here; the kea need a nest with eggs. Draw the moa onto a site, then thin them.`, 'error');
+      this._refuse(`No clutch to raid here; the kea need a nest with eggs. Draw the moa onto a site, then thin them.`);
       return;
     }
     if (this.keaStationedCount(site) < (cfg.stationCount ?? 3)) return;   // not enough kea
     const cost = cfg.cost ?? 60;
     if (this.mauri.mauri < cost) {
-      this.addNotification(`Not enough mauri to loose the kea (need ${cost}).`, 'error');
+      this._refuse(`Not enough mauri to loose the kea (need ${cost}).`);
       return;
     }
     this.mauri.spend(cost);
@@ -3913,6 +3917,7 @@ class Game {
       if (audioManager && audioManager.playEagleCatch) audioManager.playEagleCatch();
     } else {
       this.addNotification(`The moa drove the kea off; the raid failed. Thin their numbers here first.`, 'error');
+      if (audioManager && audioManager.playMoaCall) audioManager.playMoaCall();   // the moa that saw them off
     }
     if (this.tutorial) this.tutorial.fireEvent(TUTORIAL_EVENTS.NEST_RAID, { site, success });
   }
@@ -4065,11 +4070,12 @@ class Game {
     const d = this._raidPanelRows;
     if (!d) return false;
     const c = d.close;
-    if (c && mx >= c.x && mx <= c.x + c.w && my >= c.y && my <= c.y + c.h) { this._closeRaidPanel(); return true; }
+    if (c && mx >= c.x && mx <= c.x + c.w && my >= c.y && my <= c.y + c.h) { touchSound('back'); this._closeRaidPanel(); return true; }
     for (let i = 0; i < d.rows.length; i++) {
       const r = d.rows[i];
       if (mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h) {
-        if (r.clickable) this.attemptRaid(r.site);
+        if (r.clickable) { touchSound('animal'); this.attemptRaid(r.site); }   // the kea loosed
+        else touchSound('refuse');
         return true;   // consume clicks on any row (the panel is non-modal only OUTSIDE it)
       }
     }
@@ -4104,11 +4110,20 @@ class Game {
       const dx = k.pos.x - egg.pos.x, dy = k.pos.y - egg.pos.y, d2 = dx * dx + dy * dy;
       if (d2 <= eatRSq && d2 < bSq) { bSq = d2; best = k; }
     }
-    if (!best) { this.addNotification('No hungry kea close enough to take that egg.', 'info'); return true; }
+    if (!best) { this._refuse('No hungry kea close enough to take that egg.', 'info'); return true; }
     best._directedEgg = egg;
     if (typeof KERERU_STATE !== 'undefined') best.state = KERERU_STATE.FLYING;
     this.addNotification('A kea darts in to take the egg.', 'info');
+    // Its wings, and its own voice answering (a short snippet of the kea recording).
+    touchSound('animal');
+    if (audioManager && audioManager.playVoiceCue) audioManager.playVoiceCue('kea', 1.6);
     return true;
+  }
+
+  // The player asked for something that can't be done: say why, over a dull knock.
+  _refuse(text, type = 'error') {
+    this.addNotification(text, type);
+    touchSound('refuse');
   }
 
   addNotification(text, type = 'info') {
@@ -4215,10 +4230,12 @@ class Game {
   // tutorial tip has the game paused, it opens (and closes) the pause card over the tip
   // instead (_pauseMenu), leaving the game paused for the tip.
   togglePause() {
+    if (this.state !== GAME_STATE.PAUSED && this.state !== GAME_STATE.PLAYING) return;
     const tipPaused = this.state === GAME_STATE.PAUSED && this.tutorial && this.tutorial._pausedByTutorial;
     if (tipPaused) this._pauseMenu = !this._pauseMenu;
     else if (this.state === GAME_STATE.PAUSED) this.state = GAME_STATE.PLAYING;
     else if (this.state === GAME_STATE.PLAYING) this.state = GAME_STATE.PAUSED;
+    touchSound(this._pauseCardUp() ? 'pause' : 'resume');
   }
 
   // Whether the PAUSED card shows: a pause the player asked for (a tip's own pause shows just
@@ -4332,7 +4349,7 @@ class Game {
     if (this.module && this.module.inputLocked()) return;   // a module's outro is hands-off
     if (this.chapters && this.chapters.moment) return;      // (a chapter's moment, too)
     if (this.isToolLocked(type)) {
-      this.addNotification("That isn't ready yet.", 'info');
+      this._refuse("That isn't ready yet.", 'info');
       return;
     }
     if (this.movingPlaceable) this.cancelMove();   // one mode at a time
@@ -4340,13 +4357,20 @@ class Game {
     const def = this.activePlaceables[type];
     // Dialog interactions (Nest Raid) open a chooser instead of entering placement
     // mode; the mauri cost is charged per raid inside the dialog, not on selection.
-    if (def && def.opensDialog) { this.selectedPlaceable = null; this._openRaidPanel(); return; }
+    if (def && def.opensDialog) {
+      this.selectedPlaceable = null;
+      this._openRaidPanel();
+      if (!this._raidPanelOpen) touchSound('back');
+      else if (audioManager && audioManager.playPickUp) audioManager.playPickUp(def);
+      return;
+    }
     if (def && this.mauri.canAfford(def.cost)) {
       this.selectedPlaceable = type;
+      if (audioManager && audioManager.playPickUp) audioManager.playPickUp(def);
     } else if (!def) {
-      this.addNotification("Not available in this area!", 'error');
+      this._refuse("Not available in this area!");
     } else {
-      this.addNotification("Not enough mauri!", 'error');
+      this._refuse("Not enough mauri!");
     }
   }
   
@@ -4409,15 +4433,17 @@ class Game {
   // A press and hold on an unsprouted pātōtara (a patch, or a wild plant; the modules'
   // mechanics.sproutPatotara) brings out its berries. Not in winter: pātōtara fruits in the
   // warm months. A module hears of both (onSprouted, onSproutRefused). It comes into leaf first
-  // and into fruit a moment later (Plant.sprout's `staged`), quietly: no rustle.
+  // and into fruit a moment later (Plant.sprout's `staged`), quietly: no rustle, only the
+  // small patter of the berries coming out (the 'sprout' touch cue).
   _sprout(t) {
     if (!t || !t.alive || !t.unsprouted) return;
     if (this.seasonManager && this.seasonManager.currentKey === 'winter') {
-      this.addNotification("Pātōtara has no berries to sprout in winter.", 'info');
+      this._refuse("Pātōtara has no berries to sprout in winter.", 'info');
       if (this.module && this.module.onSproutRefused) this.module.onSproutRefused(t);
       return;
     }
     t.sprout(true);
+    touchSound('sprout');
     if (this.module && this.module.onSprouted) this.module.onSprouted(t);
     if (this.tutorial) this.tutorial.fireEvent(TUTORIAL_EVENTS.PLANT_SPROUTED, { sprouted: t, type: t.type || 'patotara' });
   }
@@ -4426,7 +4452,7 @@ class Game {
     const def = this._moveDef(p);
     const cost = this._moveCost(p);
     if (!this.mauri.canAfford(cost)) {
-      this.addNotification(`Need ${cost} mauri to move ${def.name}`, 'error');
+      this._refuse(`Need ${cost} mauri to move ${def.name}`);
       return;
     }
     this.cancelPlacement();
@@ -4489,6 +4515,7 @@ class Game {
     if (this.movingPlaceable) {
       this.movingPlaceable = null;
       this.addNotification("Move cancelled", 'info');
+      touchSound('back');
     }
   }
 
@@ -4498,30 +4525,30 @@ class Game {
     const def = this._moveDef(p);
 
     if (!this.terrain.canPlace(x, y)) {
-      this.addNotification("Cannot place here!", 'error');
+      this._refuse("Cannot place here!");
       return false;
     }
     if (def.allowedBiomes) {
       const biome = this.terrain.getBiomeAt(x, y);
       if (!def.allowedBiomes.includes(biome.key)) {
-        this.addNotification(`${def.name} can't take root in ${biome.name}`, 'error');
+        this._refuse(`${def.name} can't take root in ${biome.name}`);
         return false;
       }
     }
     if (def.requiresNearForest && !this._nearForestOk(def, x, y)) {
-      this.addNotification(`${def.name} must be planted near existing podocarp forest`, 'error');
+      this._refuse(`${def.name} must be planted near existing podocarp forest`);
       return false;
     }
     // Spacing must ignore the item being moved, or it blocks itself
     const spacingCheck = this.canPlaceWithSpacing(x, y, p.type, p);
     if (!spacingCheck.allowed) {
-      this.addNotification(spacingCheck.reason, 'error');
+      this._refuse(spacingCheck.reason);
       return false;
     }
 
     const cost = this._moveCost(p);
     if (!this.mauri.spend(cost)) {
-      this.addNotification("Not enough mauri!", 'error');
+      this._refuse("Not enough mauri!");
       return false;
     }
 
@@ -4542,7 +4569,7 @@ class Game {
     this.movingPlaceable = null;
     this.addNotification(extended ? `Moved ${def.name} (-${cost} mauri, +50% time left)`
                                   : `Moved ${def.name} (-${cost} mauri)`, 'info');
-    if (audioManager) p.type === 'Storm' ? audioManager.playBoltStrike() : audioManager.playPlantRustle();
+    if (audioManager) audioManager.playSetDown(def);
     if (this.tutorial) this.tutorial.fireEvent(TUTORIAL_EVENTS.PLACEABLE_MOVED, { type: p.type });
     return true;
   }
@@ -4598,35 +4625,35 @@ class Game {
     const _stormFree = !!(this.module && this.module.stormCooldownFree());   // module spring: no recharge
     if (this.selectedPlaceable === 'Storm' && !_stormFree && this.playTime < this._stormCooldownUntil) {
       const secs = Math.ceil((this._stormCooldownUntil - this.playTime) / 60);
-      this.addNotification(`Storm is recharging (${secs}s)`, 'error');
+      this._refuse(`Storm is recharging (${secs}s)`);
       return false;
     }
     
     if (!this.terrain.canPlace(x, y)) {
-      this.addNotification("Cannot place here!", 'error');
+      this._refuse("Cannot place here!");
       return false;
     }
 
     if (def.allowedBiomes) {
       const biome = this.terrain.getBiomeAt(x, y);
       if (!def.allowedBiomes.includes(biome.key)) {
-        this.addNotification(`${def.name} can't take root in ${biome.name}`, 'error');
+        this._refuse(`${def.name} can't take root in ${biome.name}`);
         return false;
       }
     }
     if (def.requiresNearForest && !this._nearForestOk(def, x, y)) {
-      this.addNotification(`${def.name} must be planted near existing podocarp forest`, 'error');
+      this._refuse(`${def.name} must be planted near existing podocarp forest`);
       return false;
     }
 
     const spacingCheck = this.canPlaceWithSpacing(x, y, this.selectedPlaceable);
     if (!spacingCheck.allowed) {
-      this.addNotification(spacingCheck.reason, 'error');
+      this._refuse(spacingCheck.reason);
       return false;
     }
     
     if (!this.mauri.spend(def.cost)) {
-      this.addNotification("Not enough mauri!", 'error');
+      this._refuse("Not enough mauri!");
       return false;
     }
     
@@ -4655,9 +4682,7 @@ class Game {
       this.tutorial.fireEvent(TUTORIAL_EVENTS.PLACEMENT, { type: this.selectedPlaceable });
     }
     
-    if (audioManager) {
-      this.selectedPlaceable === 'Storm' ? audioManager.playBoltStrike() : audioManager.playPlantRustle();
-    }
+    if (audioManager) audioManager.playSetDown(def);
 
     if (!keyIsDown(SHIFT)) this.selectedPlaceable = null;
     this._lastPlacedMs = millis();   // (a quick second tap isn't a plant tap; see handleClick)
@@ -4670,22 +4695,22 @@ class Game {
     const until = this._globalCooldownUntil[type] || 0;
     if (this.playTime < until) {
       const secs = Math.ceil((until - this.playTime) / 60);
-      this.addNotification(`${def.name} is recharging (${secs}s)`, 'error');
+      this._refuse(`${def.name} is recharging (${secs}s)`);
       return false;
     }
     // Feature precondition: a mast is already booked for next year.
     if (type === 'mastYear' && this._mastYearTargetCycle > this.cycle) {
-      this.addNotification('A mast year is already on the way.', 'error');
+      this._refuse('A mast year is already on the way.');
       return false;
     }
     // Feature precondition: the Rimu Berry Scramble needs mature rimu to shake.
     if (type === 'rimuScramble' &&
         !this.simulation.plants.some(p => p.alive && p.type === 'rimu' && p.growth >= 0.4)) {
-      this.addNotification('No mature rimu to shake for berries.', 'error');
+      this._refuse('No mature rimu to shake for berries.');
       return false;
     }
     if (!this.mauri.spend(def.cost)) {
-      this.addNotification('Not enough mauri!', 'error');
+      this._refuse('Not enough mauri!');
       return false;
     }
 
@@ -4695,7 +4720,7 @@ class Game {
     this._globalCooldownUntil[type] = this.playTime + (def.cooldown || 3600);
     if (typeof BENCHMARK !== 'undefined') BENCHMARK.recordPlacement(type);
     this._recordPlaceableUse(type);   // stats export tally
-    if (audioManager) audioManager.playPlantRustle();
+    touchSound('setSeeds');           // seed cast wide (the rimu's own rustle is the scramble's)
     if (!keyIsDown(SHIFT)) this.selectedPlaceable = null;
     return true;
   }
@@ -4708,7 +4733,7 @@ class Game {
     const sim = this.simulation;
     const rimus = [];
     for (const p of sim.plants) if (p.alive && p.type === 'rimu' && p.growth >= 0.4) rimus.push(p);
-    if (!rimus.length) { this.addNotification('No mature rimu to shake for berries.', 'error'); return false; }
+    if (!rimus.length) { this._refuse('No mature rimu to shake for berries.'); return false; }
 
     // Pick 20% of the rimu (shuffle the front of the list, take that many).
     const count = Math.max(1, Math.round(rimus.length * 0.2));
@@ -5694,7 +5719,7 @@ class Game {
         fill(210, 240, 220);
         textSize(18);
         text(btn.label, centerX, by + bh / 2);
-        rects.push({ x: bx, y: cy + by, w: bw, h: bh, action: btn.action });
+        rects.push({ x: bx, y: cy + by, w: bw, h: bh, action: btn.action, label: btn.label });
         by += bh + gap;
       }
       this._overlayBtns = rects;
@@ -7230,6 +7255,7 @@ class Game {
     const pt = this._perfToggleBounds;
     if (pt && mx > pt.x && mx < pt.x + pt.w && my > pt.y && my < pt.y + pt.h) {
       setPerfMode(!CONFIG.perfMode, true);
+      touchSound('tick');
       return true;
     }
     if (this._detailSliderBounds) {
@@ -7237,6 +7263,7 @@ class Game {
       if (mx > s.x && mx < s.x + s.w && my > s.y && my < s.y + s.h) {
         // The press takes hold of the handle; it follows the pointer until let go.
         this._detailSliderDrag = true;
+        touchSound('tick');
         return true;
       }
     }
@@ -7252,6 +7279,15 @@ class Game {
     const idx = Math.max(0, Math.min(TERRAIN_DETAIL_OPTIONS.length - 1, Math.round(t)));
     CONFIG.pixelScale = TERRAIN_DETAIL_OPTIONS[idx].pixelScale;
     CONFIG.terrainDetail = TERRAIN_DETAIL_OPTIONS[idx].detail;
+    touchSound('tick');   // the handle settling into its stop
+  }
+
+  // An overlay card's button (pause, win, loss): leaving is a step back, an export a plain
+  // press, anything else begins something. (Resume sounds as the pause lifting: togglePause.)
+  _overlayBtnSound(btn) {
+    const label = btn.label || '';
+    if (/resume/i.test(label)) return;
+    touchSound(/menu|end run/i.test(label) ? 'back' : /export/i.test(label) ? 'press' : 'confirm');
   }
 
   handleClick(mx, my) {
@@ -7262,9 +7298,12 @@ class Game {
       if (cc && mx > cc.x && mx < cc.x + cc.w && (my < cc.y || my > cc.y + cc.h)) return;
       if (this._levelCardBounds) {
         for (const card of this._levelCardBounds) {
+          const onCard = mx > card.x && mx < card.x + card.w && my > card.y && my < card.y + card.h;
+          if (onCard && !card.unlocked) { touchSound('refuse'); return; }   // a locked level: a dull knock
           if (card.unlocked &&
               mx > card.x && mx < card.x + card.w &&
               my > card.y && my < card.y + card.h) {
+            touchSound('confirm');
             this.loadLevel(card.levelId);
             this._journeySel = null;   // (back on the menu, the journey offers its next tile)
             // A module level starts straight away (its story opens it); a card goes to the
@@ -7278,11 +7317,12 @@ class Game {
       }
       if (this._handleRenderSettingsClick(mx, my)) return;
       for (const b of (this._journeyBtnBounds || [])) {
-        if (mx > b.x && mx < b.x + b.w && my > b.y && my < b.y + b.h) { b.action(); return; }
+        if (mx > b.x && mx < b.x + b.w && my > b.y && my < b.y + b.h) { touchSound('press'); b.action(); return; }
       }
       // A box's header opens it (closing the one that was open), or closes it if it's open.
       for (const h of (this._menuHeaderBounds || [])) {
         if (mx > h.x && mx < h.x + h.w && my > h.y && my < h.y + h.h) {
+          touchSound(this._menuOpen === h.key ? 'back' : 'press');
           this._menuOpen = this._menuOpen === h.key ? null : h.key;
           return;
         }
@@ -7297,6 +7337,7 @@ class Game {
         if (mx > btn.x && mx < btn.x + btn.w &&
             my > btn.y && my < btn.y + btn.h) {
           BENCHMARK.arm();
+          touchSound('confirm');
           this._startLoading();  // Start playing with the benchmark recording
           return;
         }
@@ -7306,6 +7347,7 @@ class Game {
         if (mx > btn.x && mx < btn.x + btn.w &&
             my > btn.y && my < btn.y + btn.h) {
           BENCHMARK.armBatch(5);   // five unattended runs, one CSV each
+          touchSound('confirm');
           this._startLoading();
           return;
         }
@@ -7314,6 +7356,7 @@ class Game {
         const btn = this._menuBtnBounds;
         if (mx > btn.x && mx < btn.x + btn.w &&
             my > btn.y && my < btn.y + btn.h) {
+          touchSound('confirm');
           this._startLoading();  // Start playing
           return;
         }
@@ -7322,6 +7365,7 @@ class Game {
         const btn = this._backBtnBounds;
         if (mx > btn.x && mx < btn.x + btn.w &&
             my > btn.y && my < btn.y + btn.h) {
+          touchSound('back');
           this.state = GAME_STATE.LEVEL_SELECT;
           return;
         }
@@ -7333,6 +7377,7 @@ class Game {
     if (this._overlayBtns) {
       for (const btn of this._overlayBtns) {
         if (mx > btn.x && mx < btn.x + btn.w && my > btn.y && my < btn.y + btn.h) {
+          this._overlayBtnSound(btn);
           btn.action();
           return;
         }
@@ -7395,7 +7440,7 @@ class Game {
       // a hunt is coming. (On a userCamera level the tap selects it instead, with the same words.)
       if (!pc && typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.eagleTelegraph && sim && sim.eagleGrid) {
         const e = sim.eagleGrid.getClosest(tx, ty, 26, (b) => b.alive);
-        if (e) { this._inspect = { e, until: millis() + 3500 }; return; }
+        if (e) { this._inspect = { e, until: millis() + 3500 }; touchSound('animal'); return; }
       }
 
       // Nothing selected: pressing near a placed item's center arms a touch-and-hold;
@@ -7483,7 +7528,7 @@ class Game {
     if (this.userCameraOn()) {
       if (key === '+' || key === '=') { this.zoomStep(1); return; }
       if (key === '-' || key === '_') { this.zoomStep(-1); return; }
-      if (key === '0') { this._huntCam = null; this.cameraTo({ zoom: 1 }, 30); return; }
+      if (key === '0') { if (this._zoomGoal() > 1.01) touchSound('tick'); this._huntCam = null; this.cameraTo({ zoom: 1 }, 30); return; }
     }
 
     // The pause card is up: Esc / Space / P / Enter close it (back to play, or to the tip that
@@ -7505,14 +7550,17 @@ class Game {
     const tut = this.tutorial;
     if ((key === ' ' || key === 'Enter') && tut && tut.active && tut.currentTip &&
         !tut.currentTip.banner) {
+      touchSound('tick');
       tut.dismissCurrentTip();
       return;
     }
 
       if (key === 'r' || key === 'R') {
       if (this.state === GAME_STATE.WON || this.state === GAME_STATE.LOST) {
+        touchSound('back');
         this._returnToMenuFromEnd();
       } else {
+        if (this.currentLevel) touchSound('confirm');
         this._restartLevel();
       }
       return;
@@ -7529,6 +7577,7 @@ class Game {
     // Free Play: export this run's season-by-season stats (.txt + .json). Works during
     // play, while paused, and on the game-over screen.
     if ((key === 'x' || key === 'X') && this.currentLevel && this.currentLevel.endless) {
+      touchSound('press');
       this.exportFreeplayStats();
       return;
     }
@@ -7537,6 +7586,7 @@ class Game {
     if (key === 'l' || key === 'L') {
       if (typeof Lens !== 'undefined') {
         const on = Lens.toggleMaster();
+        touchSound('tick');
         this.addNotification(on ? 'Lens overlay ON (click the legend to pick lenses)' : 'Lens overlay OFF', 'info');
       }
       return;
@@ -7568,6 +7618,7 @@ class Game {
           // Esc clears an in-progress move/placement if there is one; otherwise it
           // pauses (or unpauses) the game.
           if (this.movingPlaceable || this.selectedPlaceable) {
+            if (this.selectedPlaceable) touchSound('back');   // the tool put away
             this.cancelMove();
             this.cancelPlacement();
           } else {
@@ -7575,19 +7626,19 @@ class Game {
           }
           break;
         case 'h': case 'H':
-          CONFIG.showHungerBars = !CONFIG.showHungerBars; break;
+          CONFIG.showHungerBars = !CONFIG.showHungerBars; touchSound('tick'); break;
       }
     }
     
     if ((key === 't' || key === 'T') && this.state === GAME_STATE.PLAYING) {
-      if (this.tutorial && !this.tutorial.active) this.tutorial.toggle();
+      if (this.tutorial && !this.tutorial.active) { touchSound('tick'); this.tutorial.toggle(); }
     }
 
     if (key === 'm' || key === 'M') {
-      if (audioManager) this.addNotification(audioManager.toggleMusic() ? 'Music enabled' : 'Music disabled', 'info');
+      if (audioManager) { this.addNotification(audioManager.toggleMusic() ? 'Music enabled' : 'Music disabled', 'info'); touchSound('tick'); }
     }
     if (key === 'n' || key === 'N') {
-      if (audioManager) this.addNotification(audioManager.toggleAudio() ? 'Audio enabled' : 'Audio muted', 'info');
+      if (audioManager) { this.addNotification(audioManager.toggleAudio() ? 'Audio enabled' : 'Audio muted', 'info'); touchSound('tick'); }
     }
   }
 

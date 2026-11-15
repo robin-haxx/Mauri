@@ -338,10 +338,8 @@ const JOURNEY_STORM = (() => {
         notify: "The Pouākai has fed on the herd." },
       { id: 'family_taken', on: 'moa_killed', if: { species: 'upland_moa' }, once: false,
         notify: ["The Pouākai took one of the upland moa.", 'error'] },
-      // The two signs to read, said once the first hunt is over and it grows hungry again.
-      { id: 'amber', when: { all: [{ beat: 'first_hunt' }, { eagleHunger: ['>=', 38] }, { not: { hunting: true } }] },
-        say: [['guide', "See the amber ring around the Pouākai? It is getting hungry. A \"!\" over it means it has chosen someone.", { lit: ['haasts_eagle'] }]] },   // NEW
-
+      
+      
       // ---- Summer: home with the berries, and the hatch ---------------------------------------------
       { id: 'food_home', when: { all: [{ beat: 'first_hunt' }, { near: ['mama', 'home', 46] }, { not: { hunting: true } }, { not: { goal: 'hatched' } }] },
         chapters: ['summer'],

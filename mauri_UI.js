@@ -541,6 +541,7 @@ class GameUI {
     }
     if (this._inRect(mx, my, fs.ffBtnX, fs.ffBtnY, bs, bs)) {
       this.game.fastForward = !this.game.fastForward;
+      touchSound(this.game.fastForward ? 'faster' : 'slower');
       return true;
     }
 
@@ -677,6 +678,7 @@ class GameUI {
 
     if (mx > x && mx < x + size && my > y && my < y + size) {
       this.game.fastForward = !this.game.fastForward;
+      touchSound(this.game.fastForward ? 'faster' : 'slower');
       return true;
     }
     return false;
@@ -819,7 +821,7 @@ class GameUI {
     if (this._inRect(mx, my, this.layout.zoomOutX, y, size, size)) { g.zoomStep(-1); return true; }
     if (this._inRect(mx, my, this.layout.zoomInX, y, size, size)) { g.zoomStep(1); return true; }
     const b = this._followChipBounds;
-    if (b && this._inRect(mx, my, b.x, b.y, b.w, b.h)) { g.clearSelection(); return true; }
+    if (b && this._inRect(mx, my, b.x, b.y, b.w, b.h)) { touchSound('release'); g.clearSelection(); return true; }
     return false;
   }
 
@@ -2802,6 +2804,7 @@ class GameUI {
     if (typeof SPECIES_HIGHLIGHT === 'undefined') return;
     if (SPECIES_HIGHLIGHT.has(key)) SPECIES_HIGHLIGHT.delete(key);
     else SPECIES_HIGHLIGHT.add(key);
+    touchSound('tick');   // the press itself (a voice track takes a moment to fade in)
     // The species answers when named; its own call on every toggle
     // (dedicated recording if present, else moa/eagle generic).
     if (audioManager) audioManager.playSpeciesCall(key);
@@ -2818,6 +2821,7 @@ class GameUI {
       if (anyActive) SPECIES_HIGHLIGHT.delete(k);
       else SPECIES_HIGHLIGHT.add(k);
     }
+    touchSound('tick');
     if (audioManager) audioManager.playSpeciesCall(keys[0]);
   }
 

@@ -74,7 +74,8 @@ Every source file, what it holds, and the chapter that explains it. Files load i
 | File | Holds | Chapter |
 |---|---|---|
 | `mauri_level_format.js` | `LEVEL_REGISTRY`, `LEVEL_DEFAULTS`, `resolveLevelDef`, scoring | 12 |
-| `mauri_progress.js` | `PROGRESS`: saved completion and scores | 12 |
+| `mauri_progress.js` | `PROGRESS`: saved completion, scores, per-level stats and high scores | 12 |
+| `mauri_save.js` | `SAVEGAME`: run seeds, recording attempts, the save exported/imported as one file | 12 |
 | `levels/level_*.js` | Classic levels and Free Play | 12 |
 | `levels/module_*.js` | Story levels run by a director | 14 |
 | `levels/chapters_*.js`, `levels/_template_chapters.js` | Chapters levels and the template | 14 |

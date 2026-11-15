@@ -270,6 +270,8 @@ Notice `speedMod`: a starving moa moves at 60% speed, even when fleeing. Hunger 
 
 The flee case loops over the eagles it's afraid of and applies a flee force from each. If two eagles close from different sides, the forces add, and the moa runs along the line between them. Addition of forces from Chapter 2 does the work; nobody wrote a rule about two eagles.
 
+There is one rule, though, for the edge of the land. A moa running straight away from an eagle that comes at it from the middle of the map runs straight into the edge, and there `Boid.edges` shoves it back in, hard. The two forces cancel, and the bird stands pinned while the eagle closes. So `fleeFrom` looks at each edge the run is heading into. From 60 units out to 25 units out it turns more and more of the into-the-edge part of the run *along* the edge instead, the way that still leads away from the eagle. The bird slides out along the edge the way a cornered animal does. It's the same vector, broken into two components (Chapter 2) and with one of them rotated.
+
 `_threateningEagles` was filled in during sensing. An eagle counts as a threat only if it's actively hunting and inside the flee radius. A resting eagle perched nearby doesn't scare anyone. This list is computed once and used by both `determineState` and `executeState`, so the two stages can't disagree about what's frightening.
 
 ## Choosing What to Eat

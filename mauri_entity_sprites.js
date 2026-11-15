@@ -71,12 +71,20 @@ const EntitySprites = {
     glide: null,
     hunt: null    // wings up, beak open: the portrait for "stop the Pouākai" prompts (not drawn in the world)
   },
-  // Flighted-bird art: one static sprite each (perched vs flying not distinguished).
+  // Flighted-bird art: one static sprite each (perched vs flying not distinguished), except
+  // the kea, whose static sprite is its perched pose and which flies with keaAnim below.
   flyers: {
     kea: null,
     kaka: null,
     kakapo: null,
     kokako: null
+  },
+  // The kea in the air: a 2-frame takeoff (played forward leaving a perch, backward landing)
+  // and a 4-frame flap (wings up, mid, out level, mid; frame 2 is also its soaring pose).
+  // Which frame shows is the kea's own (Kea._stepWings), not an animTime index.
+  keaAnim: {
+    takeoff: [],
+    fly: []
   },
   loaded: false,
   loadAttempted: false,
@@ -179,6 +187,14 @@ const EntitySprites = {
         () => console.warn(`Could not load ${file}`)
       );
     }
+    for (let i = 0; i < 2; i++) {
+      this.keaAnim.takeoff.push(loadImage(`${spritePath}kea_takeoff${i}.png`, () => {},
+        () => console.warn(`Could not load kea_takeoff${i}.png`)));
+    }
+    for (let i = 0; i < 4; i++) {
+      this.keaAnim.fly.push(loadImage(`${spritePath}kea_fly${i}.png`, () => {},
+        () => console.warn(`Could not load kea_fly${i}.png`)));
+    }
 
     this.loaded = true;
   },
@@ -236,6 +252,12 @@ const EntitySprites = {
 
   // Flighted-bird sprite getters; null while still loading (draw falls back to the glyph).
   getKeaSprite()    { return this.isValid(this.flyers.kea)    ? this.flyers.kea    : null; },
+  // A kea's frame in the air: keaAnim[pose][i] ('takeoff' or 'fly'); its perched sprite while
+  // that frame is still loading or missing.
+  getKeaFlightSprite(pose, i) {
+    const set = this.keaAnim[pose], s = set && set[i];
+    return this.isValid(s) ? s : this.getKeaSprite();
+  },
   getKakaSprite()   { return this.isValid(this.flyers.kaka)   ? this.flyers.kaka   : null; },
   getKakapoSprite() { return this.isValid(this.flyers.kakapo) ? this.flyers.kakapo : null; },
   getKokakoSprite() { return this.isValid(this.flyers.kokako) ? this.flyers.kokako : null; },
@@ -306,6 +328,20 @@ const EntitySprites = {
       perSprite.set(key, baked);
     }
     return baked;
+  },
+
+  // A mark on one animal: its sprite outlined in `col` instead of a ring drawn round it (the
+  // storm's cover preview, the selected animal). Made each frame by whoever wants it, and read
+  // by the animal's own render on the next (a mark lasts one frame after it was last made, so
+  // a pass drawn after the animals still shows). alpha 0..1, or null to pulse.
+  mark(e, col, alpha = null) {
+    if (!e) return;
+    const m = e._outlineMark || (e._outlineMark = { col: null, alpha: null, frame: -9 });
+    m.col = col; m.alpha = alpha; m.frame = frameCount;
+  },
+  markOf(e) {
+    const m = e && e._outlineMark;
+    return (m && m.frame >= frameCount - 1) ? m : null;
   },
 
   // Draw a sprite-shaped outline under a sprite, in the current transform. Call with

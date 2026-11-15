@@ -239,9 +239,11 @@ class Plant {
     this.spriteKey = type;   // PLANT_SPRITES key; a matured plant switches to '<type>_mature'
     this.matured = false;    // grown out of a moa's reach (see mature)
 
-    // Portrait-sprite plants pick one of 2 variants at random (fixed for life).
+    // Portrait-sprite plants pick one of their variants at random (fixed for life): as many as
+    // the plant has art for (beech 3, the rest 2; see preload).
     this.usesPortraitSprite = PORTRAIT_PLANTS.has(type);
-    this.portraitVariant = this.usesPortraitSprite ? floor(random(2)) : 0;
+    const _nVariants = (PORTRAIT_PLANT_SPRITES && PORTRAIT_PLANT_SPRITES[type] && PORTRAIT_PLANT_SPRITES[type].length) || 2;
+    this.portraitVariant = this.usesPortraitSprite ? floor(random(_nVariants)) : 0;
     
     const plantDef = PLANT_TYPES[type];
     this.baseNutrition = plantDef.nutrition;

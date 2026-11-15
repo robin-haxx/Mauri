@@ -215,6 +215,7 @@ const SpriteAtlas = {
       if (E.moaVariants) for (const key in E.moaVariants) eachIn(E.moaVariants[key]);
       eachIn(E.eagle);
       eachIn(E.flyers);
+      eachIn(E.keaAnim);
     }
 
     // Flora; PLANT_SPRITES[type] = { state:img } and PORTRAIT_PLANT_SPRITES[type] = [img, img].

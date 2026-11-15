@@ -334,6 +334,10 @@ Object.assign(CHAPTERS_KIT, {
       coverSendsEagleAway: { after: 2, sec: 45 },
       eagleReturns: { afterSeasons: 2 },
       nestingSites: { forestCount: 0, openCount: 0, radius: 40, laySnapRadius: 150, drawRadius: 260, layBoost: 0.5, eggSpeedBonus: 1.5 },
+      // The lancewood grove: a stand planted in the forest brings up a few ferns round it, and
+      // two stands close together found a bush moa nest while bush moa live on the land
+      // (Simulation.seedGroveUnderstorey, _nestWatches).
+      lancewoodGrove: { ferns: 5, fernGrowth: 0.25, species: 'little_bush_moa' },
       habitatStress: true, habitatStressMargin: 0.08, habitatStressPenalty: 0.4, winterStressMult: 1.4,
       hungerRateMult: 0.6, juvenileHungerMult: 1.0
     }, extra);
@@ -410,7 +414,7 @@ Object.assign(CHAPTERS_KIT, {
   // told it: the Pouākai's two lines, the hunted bird's, then the instruction, with play
   // stopped. (It is said as the ladder's first rung at once, so the record does not count it
   // as answered without a hint.) Every later hunt, and every hunt in a lesson that does not
-  // teach the storm, climbs the ladder: nothing (the "!" and the amber ring are the clue), the
+  // teach the storm, climbs the ladder: nothing (the "!" and the amber outline are the clue), the
   // Pouākai's mutter, the instruction.
   huntInVoice({ species = 'upland_moa', teach = false, later = [4, 7], chapters = null } = {}) {
     const K = CHAPTERS_KIT, P = K.pouakai;

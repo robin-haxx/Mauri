@@ -331,3 +331,23 @@ fixed; **[process]** a testing trap, not a bug; **[rule]** a design guardrail, b
   numbers counts the eggs already in the nest (`Kereru._tryReproduce`, where the level sets
   `birdMaxPopulation`). The first of these also tightens the five-year lesson's giant moa, which
   could be courted out of turn the same way.
+
+## [fixed] Kea hovered at a storm's edge, or short of a tree, until they starved
+
+- **What happened.** In journey mode a kea that met a storm sometimes stayed flying in one
+  place until it starved. Under the old code, in a seeded test a kea was flushed off a storm
+  over 300 times a minute, and one in the land's corner never landed at all.
+- **Root cause.** Three unreachable goals. (1) The base flush (`Kereru._fleeStorm`) carries a
+  bird just clear of the cloud, but the kea's own choices (its food search, home perch tree,
+  berry lure and elevation drift, all overrides in `mauri_kea.js`) never asked about storms,
+  so they pulled it straight back under to be flushed again. (2) In a corner the flush aimed
+  at a point inside the 25-unit band where `Boid.edges` pushes birds back in, and the bird
+  balanced there "fleeing" forever. (3) Apart from storms, the kea's food search had no edge
+  check (the base one does), so it could pick a plant 5 units from the map's edge and hover
+  against the edge force.
+- **Rule.** An override of a target-choosing method inherits none of the base's filters: copy
+  them (storm, edge) or call through. A flyer's fly-to point is kept `Kereru.REACH_EDGE` (30)
+  from the edge, beyond `Boid.edges`. A flushed kea now picks a refuge outside the storm and
+  lands there (`Kea._findStormRefuge`), a flush that makes no progress for 0.75 s escapes to a
+  refuge instead, and a kea that gets no closer to its food plant for 3 s gives it up for 10 s
+  (`Kea._watchTarget`): the progress watchdog from "the unreachable goal".

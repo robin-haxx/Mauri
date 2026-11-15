@@ -249,6 +249,22 @@ Each moa's `animTime` starts at a random value, so a herd doesn't march in step.
 
 Notice the chain of fallbacks. No mating pose? Use the walk. No walk frames? Use the idle image. This variant's art missing? Use the generic moa's. Still nothing? Return `null`, and the caller draws nothing. A game in development always has art that isn't finished. Code that degrades gracefully at each step means missing art is a visual gap, not a crash.
 
+### When an index isn't enough: the kea's wings
+
+An index from `animTime` can only loop. A kea in flight does more than loop: it takes off (two frames, once), flaps a few beats, then *soars*, holding its wings-out frame for a few seconds before the next burst of flaps. And when it lands, the takeoff plays backward. "Hold this frame for three seconds" can't be written as `animTime * speed % 4`.
+
+So the kea keeps its own small state machine, `_stepWings` in `mauri_kea.js`, with a mode (`perch`, `takeoff`, `flap`, `soar`, `land`) and its own clock for each:
+
+```javascript
+w.phase += dt * K.flapSpeed;
+if (w.phase >= 4) { w.phase -= 4; w.beats--; }
+if (w.beats <= 0 && !busy && Math.floor(w.phase) === K.soarFrame) {
+  w.mode = 'soar'; w.hold = rnd(K.soarSec) * 60;
+}
+```
+
+The flap is still the same idea (a number that climbs, floored to a frame), but the bird only stops to soar when the cycle comes round to the wings-out frame, so it never jumps from wings-up straight to wings-out. While it is still climbing, or fleeing, it is `busy` and flaps without a break. `_getSprite` then just reads the mode and returns the matching frame. All the timings are in one table, `Kea.WINGS`, so they can be tuned without touching the logic.
+
 ### Facing
 
 A moa's sprite is drawn in side view. Chapter 2 covered the logic of which way it faces. Here's the drawing:

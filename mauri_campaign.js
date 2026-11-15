@@ -188,13 +188,20 @@ const CAMPAIGN = {
   _load() {
     try {
       const raw = (typeof localStorage !== 'undefined') ? localStorage.getItem(this._key) : null;
-      const rec = raw ? JSON.parse(raw) : null;
-      if (!rec || rec.v !== this.VERSION) return null;   // an older shape: start again
-      const d = this.defaultRecord();
-      for (const k in d) if (rec[k] === undefined) rec[k] = d[k];
-      for (const name in d.birds) if (!rec.birds[name]) rec.birds[name] = d.birds[name];
-      return rec;
+      return raw ? this._normalize(JSON.parse(raw)) : null;
     } catch (e) { return null; }
+  },
+
+  // A record read from storage or a save file (SAVEGAME.apply), with anything it lacks filled
+  // from the default. null for an older shape (start again).
+  _normalize(rec) {
+    if (!rec || typeof rec !== 'object' || rec.v !== this.VERSION) return null;
+    rec = JSON.parse(JSON.stringify(rec));
+    const d = this.defaultRecord();
+    for (const k in d) if (rec[k] === undefined) rec[k] = d[k];
+    if (!rec.birds || typeof rec.birds !== 'object') rec.birds = d.birds;
+    for (const name in d.birds) if (!rec.birds[name]) rec.birds[name] = d.birds[name];
+    return rec;
   },
 
   save() {

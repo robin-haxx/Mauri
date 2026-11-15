@@ -1705,6 +1705,63 @@ class Simulation {
     this._updateMoaNestingFormation(dt);   // grow player nesting sites (moa focus year)
   }
 
+  // ---- The lancewood grove (mechanics.lancewoodGrove: the journey) -----------------------
+  // A lancewood stand planted in the forest (a forest biome, or beside forest trees) brings
+  // up a few ferns round it: young, growing in where the stand shades the floor. Called for a
+  // stand the player plants (Game.tryPlace), not for one replanted on a return to an area.
+  seedGroveUnderstorey(stand) {
+    const G = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.lancewoodGrove) || null;
+    if (!G || !stand || !stand.def || stand.def.plantType !== 'lancewood' || typeof Plant === 'undefined') return 0;
+    const t = this.terrain, x0 = stand.pos.x, y0 = stand.pos.y;
+    if (!this._inForest(x0, y0)) return 0;
+    const count = G.ferns ?? 5, [rIn, rOut] = G.fernRing || [16, (stand.radius || 40) + 14];
+    let n = 0;
+    const turn = random(TWO_PI);
+    for (let tries = 0; tries < count * 8 && n < count; tries++) {
+      // Spread round the stand: each fern its own slice of the circle, jittered.
+      const a = (n + random(0.15, 0.85)) / count * TWO_PI + turn;
+      const d = random(rIn, rOut);
+      const x = x0 + Math.cos(a) * d, y = y0 + Math.sin(a) * d;
+      if (!t.isWalkable(x, y)) continue;
+      const p = new Plant(x, y, 'fern', t, t.getBiomeAt(x, y).key);
+      if (p.unsprouted) p.sprout();
+      p.growth = G.fernGrowth ?? 0.25;   // young: seen to grow in
+      p.isSpawned = true;
+      p.groveOf = stand;
+      this.addPlant(p);
+      n++;
+    }
+    return n;
+  }
+
+  // Whether (x, y) is forest: a forest biome (mechanics.forestBiomes, else the podocarp and
+  // montane belts and the glacial forest refuge), or a living forest tree within 45.
+  _inForest(x, y) {
+    const M = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS) || {};
+    const biomes = M.forestBiomes || ['forestRefuge', 'podocarp', 'montane'];
+    if (biomes.includes(this.terrain.getBiomeAt(x, y).key)) return true;
+    const tp = this.treePlants || [];
+    for (let i = 0; i < tp.length; i++) {
+      const p = tp[i];
+      if (p.alive && p.type !== 'fern' && (p.pos.x - x) ** 2 + (p.pos.y - y) ** 2 < 45 * 45) return true;
+    }
+    return false;
+  }
+
+  // The nest-founding rules in force: the year's or chapter's (moaNestingWatch), and the
+  // journey's standing lancewood grove (mechanics.lancewoodGrove: two stands found a bush moa
+  // nest wherever bush moa live on the land). The grove's nests are its own: they are not the
+  // year's or chapter's nests (stats.nestingSitesMade).
+  _nestWatches() {
+    const out = [];
+    if (this.moaNestingWatch) out.push(this.moaNestingWatch);
+    const G = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.lancewoodGrove) || null;
+    if (G && G.nest !== false && !out.some(w => w.plantType === 'lancewood')) {
+      out.push({ speciesKey: G.species || 'little_bush_moa', plantType: 'lancewood', drawRadius: Infinity, grove: true });
+    }
+    return out;
+  }
+
   // The live, unspent placed patches of the watched moa's favoured plant (each with at least
   // one of its plants still standing). A patch that has founded a nest is spent (_nestFounded).
   _focusPlantPatches(watch = this.moaNestingWatch) {
@@ -1729,13 +1786,22 @@ class Simulation {
   // focus moa's favoured plant close together (centres within foundRadius) and that moa has
   // been drawn in. The nest sits between the patches, and each patch founds at most one nest.
   // One site per tick, each counting toward the nesting goal. Inert when moaNestingWatch is null.
+  //
+  // Each rule in force (_nestWatches) is tried in turn. The journey's lancewood grove founds
+  // with bush moa anywhere on the land (they come to a stand on their own), and its nest is
+  // kept for them (reservedFor) and counted apart (stats.groveNestsMade), so a chapter's
+  // count of the nests its own rule founds is not swollen by the grove's.
   _updateMoaNestingFormation(dt) {
-    const watch = this.moaNestingWatch;
-    if (!watch || typeof NestingSite === 'undefined') return;
+    if (typeof NestingSite === 'undefined') return;
+    const watches = this._nestWatches();
+    if (!watches.length) return;
     this._moaNestTimer -= dt;
     if (this._moaNestTimer > 0) return;
     this._moaNestTimer = 90;   // ~1.5s between attempts
+    for (const w of watches) if (this._tryFoundNest(w)) return;   // one new site per tick
+  }
 
+  _tryFoundNest(watch) {
     const M = (typeof LEVEL_MECHANICS !== 'undefined') ? LEVEL_MECHANICS : {};
     const nc = M.nestingSites || {};
     const radius = nc.radius ?? 46;
@@ -1746,7 +1812,7 @@ class Simulation {
     const forestBand = nc.forestBand || { min: 0.36, max: 0.48 };
 
     const patches = this._focusPlantPatches(watch);
-    if (patches.length < need) return;
+    if (patches.length < need) return false;
     const d2 = (a, b) => (a.pos.x - b.pos.x) ** 2 + (a.pos.y - b.pos.y) ** 2;
 
     for (let i = 0; i < patches.length; i++) {
@@ -1761,9 +1827,9 @@ class Simulation {
       // Don't crowd an existing site.
       if (this.getNearestNestingSite(cx, cy, minGap)) continue;
 
-      // The focus moa must actually be drawn to the patches.
+      // The focus moa must actually be drawn to the patches (the grove's: living on the land).
       let moaNear = false;
-      const moas = this.getNearbyMoas(cx, cy, drawRadius);
+      const moas = drawRadius === Infinity ? this.moas : this.getNearbyMoas(cx, cy, drawRadius);
       for (let j = 0; j < moas.length; j++) {
         if (moas[j].alive && moas[j].speciesKey === watch.speciesKey) { moaNear = true; break; }
       }
@@ -1772,18 +1838,25 @@ class Simulation {
       for (const g of group) g._nestFounded = true;
       const e = this.terrain.getElevationAt(cx, cy);
       const habitat = (e >= forestBand.min && e < forestBand.max) ? 'forest' : 'open';
-      const site = new NestingSite(cx, cy, { radius, habitat });
+      const site = new NestingSite(cx, cy, { radius, habitat, reservedFor: watch.grove ? watch.speciesKey : null });
       site.playerMade = true;
       site.forSpecies = watch.speciesKey;
       site.createdCycle = this.game ? this.game.cycle : 0;
       this.nestingSites.push(site);
-      this.stats.nestingSitesMade = (this.stats.nestingSitesMade || 0) + 1;
+      this._invalidateCache();
+      if (watch.grove) {
+        site.grove = true;
+        this.stats.groveNestsMade = (this.stats.groveNestsMade || 0) + 1;
+      } else {
+        this.stats.nestingSitesMade = (this.stats.nestingSitesMade || 0) + 1;
+      }
       if (this.game && this.game.addNotification) {
         const name = this.game._freeplaySpeciesName ? this.game._freeplaySpeciesName(watch.speciesKey) : 'moa';
         this.game.addNotification(`The ${name} settle a new nesting site in the grove.`, 'success');
       }
-      return;   // one new site per tick
+      return true;
     }
+    return false;
   }
 
   _updateOtherEntities(mauri, dt) {

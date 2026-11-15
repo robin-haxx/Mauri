@@ -45,7 +45,7 @@ const JOURNEY_NORTH = (() => {
   const FOCUS = 'upland_moa';
   const clan = (x) => x.runner.sim.getSpeciesCount(FOCUS);
   const giants = (x) => x.runner.sim.getSpeciesCount('south_island_giant_moa');
-  const nests = (x) => (x.runner.sim.nestingSites || []).filter(s => s.alive !== false && s.playerMade).length;
+  const nests = (x) => (x.runner.sim.nestingSites || []).filter(s => s.alive !== false && s.playerMade && !s.grove).length;
   const lonePatch = (x) => { const p = x.runner.sim._focusPlantPatches(); return p.length === 1; };
   const groveNear = (x) => x.runner.sim.placeables.some(p => p.alive && p.type === 'harakeke' &&
     FAMILY.some(n => { const e = x.runner.castEnts[n]; return e && e.alive && Math.hypot(e.pos.x - p.pos.x, e.pos.y - p.pos.y) < 150; }));

@@ -228,7 +228,10 @@ picking up future tasks. The other docs:
   `LEVEL_DEFAULTS`, `resolveLevelDef()` (merge defaults + resolve the level's placeable
   overrides onto the base `PLACEABLES`), and a `validate()` sanity-checker.
 - **`mauri_progress.js`**; `PROGRESS`: localStorage persistence of unlocked/completed
-  levels and best scores.
+  levels, best scores, per-level stats, high scores (with seeds) and an attempt log.
+- **`mauri_save.js`**; `SAVEGAME`: every attempt runs on a seed (fresh, replayed, or
+  `?seed=`); `record()` logs each attempt's result; Export/Import save (Settings) writes
+  PROGRESS + the journey record + display prefs as one JSON file, with Undo import.
 - **`levels/level_01_kahurangi.js`** and **`levels/level_02_glacial_kahurangi.js`**; the
   original prototypes. Level 1 is the single-species intro with classic static goals;
   Level 2 is the glacial-maximum level (multi-species balance, a **4-phase** structure,

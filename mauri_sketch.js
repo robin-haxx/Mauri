@@ -1341,6 +1341,8 @@ class Game {
 
     const levelDef = resolveLevelDef(rawDef);
     this.currentLevel = levelDef;
+    // A seed to replay is chosen for one level, after loading it (see _initTerrainAndSeason).
+    this._replaySeed = null;
     // A module hand-off only carries into the level it leads to (see startModuleHandoff).
     if (this._moduleHandoff && this._moduleHandoff.levelId !== levelId) this._moduleHandoff = null;
 
@@ -1465,11 +1467,19 @@ class Game {
     // A level load / restart replaces the terrain: free the old one's canvases first, or each
     // load leaks its season buffers (see TerrainGenerator.dispose).
     if (this.terrain && this.terrain.dispose) this.terrain.dispose();
-    // A seeded run (?seed=, or a research batch's seed for this run): the land, and with every
-    // roll on p5's generator, the play, come back the same. Nothing is seeded otherwise.
-    const seed = (typeof BENCHMARK !== 'undefined' && BENCHMARK.nextSeed) ? BENCHMARK.nextSeed() : null;
-    this.runSeed = seed != null ? seed : (this._urlSeed != null ? this._urlSeed : null);
-    if (this.runSeed != null) { randomSeed(this.runSeed); noiseSeed(this.runSeed); }
+    // Every attempt is seeded: the land, and with every roll on p5's generator, the play, come
+    // back the same from the same seed. A research batch's seed first, then one being replayed
+    // (_replaySeed: an end card's "Replay seed", a high score's play button), then ?seed=, else
+    // a fresh one. The seed is logged with the attempt's result (mauri_save.js).
+    const benchSeed = (typeof BENCHMARK !== 'undefined' && BENCHMARK.nextSeed) ? BENCHMARK.nextSeed() : null;
+    let seedFrom = 'bench', seed = benchSeed;
+    if (seed == null && this._replaySeed != null) { seed = this._replaySeed; seedFrom = 'replay'; }
+    if (seed == null && this._urlSeed != null) { seed = this._urlSeed; seedFrom = 'url'; }
+    if (seed == null) { seed = SAVEGAME.newSeed(); seedFrom = 'new'; }
+    this._replaySeed = null;
+    this.runSeed = seed;
+    randomSeed(this.runSeed); noiseSeed(this.runSeed);
+    this._beginAttempt(seedFrom);
     this.terrain = new TerrainGenerator(CONFIG, this.activeBiomes);
     this.seasonManager = new SeasonManager(CONFIG);
     this.terrain.setSeasonManager(this.seasonManager);
@@ -2331,6 +2341,7 @@ class Game {
   }
   
   update(dt = 1) {
+    this._watchAttempt();   // a win or loss this frame goes into the save with its seed
     if (this.state !== GAME_STATE.PLAYING && this.state !== GAME_STATE.PAUSED) return;
     // A module's "moment" (Free Play: a hatching, a catch) holds the whole world still while it
     // plays: no sim, no clock, no tips; only the moment's own timeline runs.
@@ -2527,9 +2538,70 @@ class Game {
       goalsCompleted: this._goalsCompleted || 0,
       // Free Play's scoreFormula rewards years survived; without this it always read
       // undefined and the score collapsed to moaCount×5.
-      cyclesSurvived: this._yearsSurvived || 0,
+      cyclesSurvived: this._yearsKept(),
       level: this.currentLevel
     };
+  }
+
+  // Whole years this run has lived through: Free Play's own count, else (a chapters level, such
+  // as the Endless one) the seasons turned.
+  _yearsKept() {
+    if (this._yearsSurvived) return this._yearsSurvived;
+    if (this.chapters && this.simulation) return Math.floor((this.simulation.seasonTurns || 0) / 4);
+    return 0;
+  }
+
+  // ---- Attempts: each run's seed and result, into the save (mauri_save.js) -----------------
+  // Begun as the level's land is seeded; closed by _watchAttempt at a win or loss, or by
+  // _closeAttempt('quit') when the player leaves (Restart, Exit to Menu, Replay seed). A
+  // research run is not recorded.
+  _beginAttempt(seedFrom) {
+    const L = this.currentLevel;
+    this._attempt = (!L || SAVEGAME.research()) ? null
+      : { level: L, seed: this.runSeed, from: seedFrom, recorded: false, rank: 0, best: false };
+  }
+
+  _watchAttempt() {
+    const a = this._attempt;
+    if (!a || a.recorded) return;
+    if (this.state === GAME_STATE.WON) this._closeAttempt('won');
+    else if (this.state === GAME_STATE.LOST) this._closeAttempt(this._runEndedByChoice ? 'ended' : 'lost');
+  }
+
+  _closeAttempt(outcome) {
+    const a = this._attempt;
+    if (!a || a.recorded || !this.simulation || a.level !== this.currentLevel) return;
+    if (outcome === 'quit' && this.state !== GAME_STATE.PLAYING && this.state !== GAME_STATE.PAUSED) return;
+    a.recorded = true;
+    const endless = SAVEGAME.isEndless(a.level);
+    // Leaving an endless run part-way is where that run ended.
+    if (outcome === 'quit' && endless) outcome = 'ended';
+    const ctx = this._scoreContext();
+    const r = SAVEGAME.record({
+      level: a.level.id, seed: a.seed, source: a.from, outcome, endless,
+      score: computeLevelScore(a.level, ctx), years: ctx.cyclesSurvived,
+      moa: ctx.moaCount || 0, mauri: ctx.totalEarned || 0, seconds: (ctx.playTime || 0) / 60,
+      goals: ctx.goalsCompleted || 0
+    });
+    a.rank = r.rank; a.best = r.best;
+  }
+
+  // The end card's line about the run's seed and where it placed.
+  _attemptLine() {
+    const a = this._attempt;
+    if (!a || this.runSeed == null) return null;
+    const place = !a.recorded ? '' : a.best ? ' · New best score!' : a.rank ? ` · #${a.rank} on this level's high scores` : '';
+    return `Seed ${this.runSeed}${place}`;
+  }
+
+  // Play the current level again on this run's seed.
+  _replayThisSeed() {
+    if (this.runSeed == null || !this.currentLevel) return;
+    const seed = this.runSeed;
+    this._closeAttempt('quit');
+    this.loadLevel(this.currentLevel.id);
+    this._replaySeed = seed;
+    this._startLoading();
   }
 
   checkGoals() {
@@ -4217,6 +4289,7 @@ class Game {
   // Leave the current level and return to the habitat-select menu (from the pause
   // screen's "Exit to Menu" button). Mirrors the WON/LOST "return to menu" path.
   _exitToMenu() {
+    this._closeAttempt('quit');
     if (this.encyclopedia) this.encyclopedia.close();
     this.selectedPlaceable = null;
     this.movingPlaceable = null;
@@ -4260,6 +4333,7 @@ class Game {
   // Restart the current level from the top (pause screen's "Restart" button, and the R key).
   _restartLevel() {
     if (!this.currentLevel) return;
+    this._closeAttempt('quit');
     this.loadLevel(this.currentLevel.id);
     this._startLoading();
   }
@@ -4653,10 +4727,14 @@ class Game {
       this._stormCooldownUntil = this.playTime + this._stormCooldownDuration;
     }
     if (this.module) this.module.onPlaced(placed);   // a module's storms join its weather
-    // A lone patch of the focus moa's plant can't found a nest yet: say it needs a partner.
+    // A lancewood stand in the forest brings up ferns round it (the journey's grove:
+    // Simulation.seedGroveUnderstorey).
+    if (placed) this.simulation.seedGroveUnderstorey(placed);
+    // A lone patch of the focus moa's plant (or the journey's lancewood) can't found a nest
+    // yet: say it needs a partner.
     let placedMsg = `Placed ${def.name}`;
-    const watch = this.simulation.moaNestingWatch;
-    if (placed && watch && def.plantType === watch.plantType) {
+    const watch = placed && this.simulation._nestWatches().find(w => w.plantType === def.plantType);
+    if (placed && watch) {
       const r2 = this.simulation._nestFoundRadius() ** 2;
       const paired = this.simulation._focusPlantPatches(watch)
         .some(p => p !== placed && (p.pos.x - x) ** 2 + (p.pos.y - y) ** 2 <= r2);
@@ -5282,7 +5360,9 @@ class Game {
       // years, the free play after a lesson, the next tile.
       const _journey = (typeof CAMPAIGN !== 'undefined' && L.journey) ? CAMPAIGN : null;
       if (_journey) for (const w of _journey.waysOn(L)) buttons.push({ label: w.label, action: () => this._startLevel(w.id) });
+      if (this.runSeed != null && buttons.length < 3) buttons.push({ label: "Replay seed", action: () => this._replayThisSeed() });
       buttons.push({ label: "Back to Menu", action: () => this._returnToMenuFromEnd() });
+      const _seedLine = this._attemptLine();
       this._renderOverlay(...CONFIG.col_UI.slice(0,3), 150, {
         title: L.winTitle || (allGoalsMet ? "ECOSYSTEM THRIVING!" : "ECOSYSTEM BALANCED"),
         titleColor: [180, 255, 180],
@@ -5295,7 +5375,8 @@ class Game {
           { text: `Final population: ${this._cachedMoaCount} moa`, color: [120, 180, 120], size: 14 },
           { text: `Total mauri earned: ${this.mauri.totalEarned | 0}`, color: [120, 180, 120], size: 14 },
           { text: `Time elapsed: ${(this.playTime / 60) | 0} seconds`, color: [120, 180, 120], size: 14 },
-          { text: `Final Score: ${computeLevelScore(this.currentLevel, this._scoreContext())} points`, color: [200, 240, 200], size: 16 }
+          { text: `Final Score: ${computeLevelScore(this.currentLevel, this._scoreContext())} points`, color: [200, 240, 200], size: 16 },
+          ...(_seedLine ? [{ text: _seedLine, color: [255, 240, 170], size: 14 }] : [])
         ],
         art: nextItem ? { h: 190, draw: (cx, top) => this._renderNextUp(nextItem, cx, top) } : null,
         boxColor: [30, 60, 40, 250],
@@ -5307,22 +5388,28 @@ class Game {
       // A run ended from the pause menu isn't an extinction: show a neutral "RUN ENDED"
       // final-stats card instead of the red loss screen.
       const _byChoice = !!this._runEndedByChoice;
+      const _seedLine = this._attemptLine();
+      const _scoreLine = SAVEGAME.isEndless(this.currentLevel)
+        ? [{ text: `Score: ${computeLevelScore(this.currentLevel, this._scoreContext())} points`, color: [220, 220, 190], size: 15 }] : [];
       this._renderOverlay(...(_byChoice ? [30, 45, 35] : [80, 30, 30]), 150, {
         title: _byChoice ? "RUN ENDED" : "EXTINCTION",
         titleColor: _byChoice ? [200, 230, 200] : [255, 180, 180],
         lines: [
           { text: this.gameOverReason, color: _byChoice ? [180, 210, 180] : [220, 150, 150], size: 16 },
           { text: this._goalsTally(), color: [200, 180, 140], size: 14 },
-          { text: `Years survived: ${(this._yearsSurvived || 0)}`, color: [180, 190, 170], size: 14 },
+          { text: `Years survived: ${this._yearsKept()}`, color: [180, 190, 170], size: 14 },
           { text: `Time survived: ${(this.playTime / 60) | 0} seconds`, color: [180, 190, 170], size: 14 },
           { text: `Moa hatched: ${this.simulation.stats.births}`, color: [180, 190, 170], size: 14 },
-          { text: `Total mauri earned: ${this.mauri.totalEarned | 0}`, color: [180, 190, 170], size: 14 }
+          { text: `Total mauri earned: ${this.mauri.totalEarned | 0}`, color: [180, 190, 170], size: 14 },
+          ..._scoreLine,
+          ...(_seedLine ? [{ text: _seedLine, color: [255, 240, 170], size: 14 }] : [])
         ],
         boxColor: _byChoice ? [30, 50, 38, 250] : [60, 35, 35, 250],
         strokeColor: _byChoice ? [100, 160, 120] : [150, 100, 100],
         // Free Play also gets a one-click export of the whole run's season-by-season stats.
         buttons: [
           ...(_endless ? [{ label: "Export run stats", action: () => this.exportFreeplayStats() }] : []),
+          ...(this.runSeed != null ? [{ label: "Replay seed", action: () => this._replayThisSeed() }] : []),
           { label: "Back to Menu", action: () => this._returnToMenuFromEnd() }
         ]
       });
@@ -5718,6 +5805,87 @@ class Game {
     pop();
   }
 
+  // The level splash's high-score table: the best runs with their seeds, each with a button that
+  // plays its seed again, the level's tally, and "Play a seed…" for a seed from somewhere else
+  // (a friend's save, a bug report). The panel's right edge is at `right`. Sets _splashScoreBtns.
+  _renderSplashScores(right, top) {
+    const L = this.currentLevel;
+    this._splashScoreBtns = [];
+    if (!L) return;
+    const list = SAVEGAME.scores(L.id).slice(0, 5), st = PROGRESS.stats[L.id];
+    const endless = SAVEGAME.isEndless(L);
+    const w = 360, rowH = 26, x = right - w;
+    const h = 40 + Math.max(1, list.length) * rowH + 22 + 44;
+    const over = (bx, by, bw, bh) => mouseX > bx && mouseX < bx + bw && mouseY > by && mouseY < by + bh;
+    push();
+    noStroke();
+    fill(14, 22, 18, 170);
+    rect(x, top, w, h, 12);
+    textAlign(LEFT, CENTER);
+    fill(CACHED_COLORS.menuSubtitle);
+    smallTextSize(12);
+    text(endless ? "HIGH SCORES (every run)" : "HIGH SCORES (wins)", x + 14, top + 18);
+    let y = top + 40;
+    if (!list.length) {
+      fill(CACHED_COLORS.menuText); smallTextSize(11);
+      text("None yet. Every run's seed is kept with its score.", x + 14, y + rowH / 2);
+      y += rowH;
+    }
+    list.forEach((e, i) => {
+      const cy = y + rowH / 2;
+      fill(i === 0 ? [255, 236, 160] : [200, 220, 205]);
+      smallTextSize(12);
+      text(`${i + 1}.`, x + 14, cy);
+      text(`${e.score} pts${endless ? ` · ${e.years || 0} yr` : ''}`, x + 40, cy);
+      fill(150, 175, 158); smallTextSize(11);
+      text(`seed ${e.seed}`, x + 170, cy);
+      // ▶: play this seed again.
+      const bw = 52, bh = 20, bx = x + w - bw - 12, by = cy - bh / 2, hv = over(bx, by, bw, bh);
+      fill(hv ? [76, 150, 96] : [44, 84, 58]); rect(bx, by, bw, bh, 10);
+      fill(235, 245, 238); textAlign(CENTER, CENTER); smallTextSize(10);
+      text("REPLAY", bx + bw / 2, cy);
+      textAlign(LEFT, CENTER);
+      this._splashScoreBtns.push({ x: bx, y: by, w: bw, h: bh, action: () => { this._replaySeed = e.seed; this._startLoading(); } });
+      y += rowH;
+    });
+    // The level's tally.
+    fill(140, 164, 146); smallTextSize(10);
+    const mins = Math.round(((st && st.seconds) || 0) / 60);
+    text(st ? `${st.attempts} attempt${st.attempts === 1 ? '' : 's'} · ${st.won || 0} won · ${st.lost || 0} lost${st.ended ? ` · ${st.ended} ended` : ''} · ${mins} min played`
+            : "Not played yet.", x + 14, y + 10);
+    y += 22;
+    // Play a seed…, and the seed the next run will use when one is chosen.
+    const pw = 130, ph = 30, px = x + 14, py = y + 4, phv = over(px, py, pw, ph);
+    fill(phv ? [46, 80, 58] : [30, 44, 36]); stroke(phv ? [200, 240, 210] : CACHED_COLORS.btnStroke); strokeWeight(1.5);
+    rect(px, py, pw, ph, ph / 2); noStroke();
+    fill(phv ? [200, 240, 210] : CACHED_COLORS.menuText); textAlign(CENTER, CENTER); smallTextSize(11);
+    text("PLAY A SEED…", px + pw / 2, py + ph / 2);
+    this._splashScoreBtns.push({ x: px, y: py, w: pw, h: ph, action: () => this._askForSeed() });
+    textAlign(LEFT, CENTER); smallTextSize(11);
+    if (this._replaySeed != null) {
+      fill(255, 236, 160);
+      text(`Start plays seed ${this._replaySeed}`, px + pw + 12, py + ph / 2);
+      const cxw = 22, cxx = x + w - cxw - 12, cxy = py + (ph - cxw) / 2, chv = over(cxx, cxy, cxw, cxw);
+      fill(chv ? [120, 70, 60] : [70, 50, 46]); rect(cxx, cxy, cxw, cxw, 6);
+      fill(240, 220, 210); textAlign(CENTER, CENTER); text("✕", cxx + cxw / 2, cxy + cxw / 2);
+      this._splashScoreBtns.push({ x: cxx, y: cxy, w: cxw, h: cxw, action: () => { this._replaySeed = null; } });
+    } else {
+      fill(140, 164, 146);
+      text("Start uses a new seed", px + pw + 12, py + ph / 2);
+    }
+    pop();
+  }
+
+  // "Play a seed…": the browser's prompt for a whole number, kept for the next Start.
+  _askForSeed() {
+    let ans = null;
+    try { ans = window.prompt("Play which seed? (a whole number)", this._replaySeed != null ? String(this._replaySeed) : ''); }
+    catch (e) { ans = null; }
+    if (ans == null) return;
+    const n = Number(String(ans).trim());
+    if (String(ans).trim() !== '' && Number.isFinite(n)) this._replaySeed = Math.floor(Math.abs(n));
+  }
+
   // Render settings on the gamemode-select screen: the terrain-resolution slider. Sets
   // _detailSliderBounds (handled in handleClick's LEVEL_SELECT branch). Returns bottom Y.
   _renderRenderSettings(cx, topY, w) {
@@ -5782,8 +5950,60 @@ class Game {
     ellipse(on ? swX + swW - swH / 2 : swX + swH / 2, swY + swH / 2, swH - 6, swH - 6);
     fill(CACHED_COLORS.menuHint);
     this._perfToggleBounds = { x: tgX, y: tgY, w: tgW, h: tgH };
+
+    // The save as one file (mauri_save.js): Export, Import, and Undo import once an import has
+    // replaced a save. A line under them says what happened. Sets _saveBtnBounds.
+    const sbY = tgY + tgH + 16, sbH = 38, sbGap = 10;
+    const saveBtns = [
+      { label: "EXPORT SAVE", act: 'export' },
+      { label: "IMPORT SAVE", act: 'import' },
+      ...(this._saveUndoable ? [{ label: "UNDO IMPORT", act: 'undo' }] : [])
+    ];
+    const sbW = (tgW - sbGap * (saveBtns.length - 1)) / saveBtns.length;
+    this._saveBtnBounds = [];
+    textAlign(CENTER, CENTER);
+    saveBtns.forEach((b, i) => {
+      const bx = tgX + i * (sbW + sbGap);
+      const sbHover = mouseX > bx && mouseX < bx + sbW && mouseY > sbY && mouseY < sbY + sbH;
+      fill(sbHover ? [46, 80, 58] : [30, 44, 36]);
+      stroke(sbHover ? [200, 240, 210] : CACHED_COLORS.btnStroke);
+      strokeWeight(sbHover ? 2 : 1.5);
+      rect(bx, sbY, sbW, sbH, sbH / 2);
+      noStroke();
+      fill(sbHover ? [200, 240, 210] : CACHED_COLORS.menuText);
+      smallTextSize(saveBtns.length > 2 ? 10 : 12);
+      text(b.label, bx + sbW / 2, sbY + sbH / 2);
+      this._saveBtnBounds.push({ x: bx, y: sbY, w: sbW, h: sbH, act: b.act });
+    });
+    const msg = this._saveMsg;
+    fill(msg && msg.error ? [240, 170, 150] : CACHED_COLORS.menuHint);
+    smallTextSize(11);
+    textAlign(CENTER, TOP);
+    text(msg ? msg.text : "Your progress, the journey's record, and every high score with its seed, in one file.",
+         cx - 240, sbY + sbH + 8, 480, 40);
     pop();
-    return tgY + tgH + 30;
+    return sbY + sbH + 48;
+  }
+
+  // Settings' save buttons (mauri_save.js). An import opens the browser's file picker, so this
+  // runs inside the click.
+  _saveAction(act) {
+    const say = (text, error) => { this._saveMsg = { text, error: !!error }; };
+    try {
+      if (act === 'export') say(`Saved to your downloads: ${SAVEGAME.exportToFile()}.`);
+      else if (act === 'undo') {
+        say(`Put your earlier save back: ${SAVEGAME.undo()}.`);
+        this._saveUndoable = false;
+        this._journeySel = null;
+      } else if (act === 'import') {
+        SAVEGAME.pickAndImport((err, line) => {
+          if (err) { say(err.message || String(err), true); return; }
+          say(`Imported: ${line}. Undo import puts your earlier save back.`);
+          this._saveUndoable = true;
+          this._journeySel = null;
+        });
+      }
+    } catch (e) { say(e.message || String(e), true); }
   }
 
   // A module's card on the level select: a square, in the challenge cards' style, with its
@@ -5882,7 +6102,7 @@ class Game {
     this._levelCardBounds = [];
     this._menuHeaderBounds = [];
     // (Settings' controls only take clicks while showing; see _renderRenderSettings.)
-    this._detailSliderBounds = this._perfToggleBounds = null;
+    this._detailSliderBounds = this._perfToggleBounds = this._saveBtnBounds = null;
 
     // Each section: a stone slab (its header) standing `depth` px up off the ground at most,
     // over a recessed tray its contents slide open in.
@@ -5950,7 +6170,7 @@ class Game {
           draw: (top) => this._renderModuleCards(entries, boxMid, top + 25, innerW, withSketches) });
       }
     }
-    sections.push({ key: 'settings', label: "Settings", bodyH: 170,
+    sections.push({ key: 'settings', label: "Settings", bodyH: 250,
       draw: (top) => this._renderRenderSettings(boxMid, top + 28, 300) });
     // Per-section springs: `open` (0 shut … 1 open, with a little overshoot as the tray lands)
     // and `lift` (the slab's height off the ground: up under the pointer, flat while pressed,
@@ -6015,7 +6235,7 @@ class Game {
         if (k < 0.98) {   // still sliding: nothing in it takes a click yet
           this._levelCardBounds.length = cards;
           if (s.key === 'journey') this._journeyBtnBounds = [];
-          if (s.key === 'settings') this._detailSliderBounds = this._perfToggleBounds = null;
+          if (s.key === 'settings') this._detailSliderBounds = this._perfToggleBounds = this._saveBtnBounds = null;
         }
       }
       y += headH + depth + bodyH + gap;
@@ -6286,6 +6506,8 @@ class Game {
     if (!def) words += ' Still to come.';
     else if (!open) words += ` Locked: win ${t.needs.filter(n => !C.isWon(n)).map(n => C.tile(n).label).join(' and ')} first.`;
     else if (done) words += ' Won.';
+    const tBest = def ? SAVEGAME.best(def.id) : null;
+    if (tBest) words += ` Best ${tBest.score} pts, seed ${tBest.seed}.`;
     fill(196, 212, 196); smallTextSize(12);
     text(words, x + 4, iy + 36, w - 8, 40);
     fill(140, 164, 146); smallTextSize(9);
@@ -6300,12 +6522,20 @@ class Game {
       push(); textFont(FreckleFace); textSize(14); text(label, bx + bw / 2, by + bh / 2 + 1); pop();
       this._journeyBtnBounds.push({ x: bx, y: by, w: bw, h: bh, action });
     };
-    const sw = Math.min(170, (w - 200) / 2 - 6);
-    small(C.record.openAll ? "Every tile is open" : "Open every tile", x + 4, sw, () => C.toggleOpenAll());
-    small("Start again", x + 4 + sw + 10, sw, () => { C.reset(); this._journeySel = null; });
-
     const st = C.tile(sel), sdef = st.level ? LEVEL_REGISTRY.get(st.level) : null;
     const sOpen = !!sdef && C.isOpen(sel);
+    // The chosen tile's best run, to play again on its seed (mauri_save.js).
+    const sBest = sOpen ? SAVEGAME.best(sdef.id) : null;
+    const nSmall = sBest ? 3 : 2;
+    const sw = Math.min(170, (w - 200) / nSmall - 6 - (nSmall - 2) * 4);
+    small(C.record.openAll ? "Every tile is open" : "Open every tile", x + 4, sw, () => C.toggleOpenAll());
+    small("Start again", x + 4 + sw + 10, sw, () => { C.reset(); this._journeySel = null; });
+    if (sBest) small("Best seed", x + 4 + (sw + 10) * 2, sw, () => {
+      this.loadLevel(sdef.id);
+      this._journeySel = null;
+      this._replaySeed = sBest.seed;
+      this._startLoading();
+    });
     const bw = 180, bh = 54, bx = x + w - bw - 4, by = y + H - bh - 4;
     const hover = live && sOpen && over(bx, by, bw, bh);
     stroke(sOpen ? (hover ? [220, 250, 226] : [130, 200, 146]) : [60, 62, 66]); strokeWeight(2.5);
@@ -6443,12 +6673,18 @@ class Game {
         text("🔒", x + cardW / 2, cardY + 160);
       }
 
-      // Best score
-      if (PROGRESS.bestScores[level.id]) {
+      // Best score, and the seed it was played on (mauri_save.js)
+      const best = SAVEGAME.best(level.id);
+      if (best || PROGRESS.bestScores[level.id]) {
         fill(180, 200, 180);
         smallTextSize(12);
-        text(`Best: ${PROGRESS.bestScores[level.id]} pts`,
-             x + cardW / 2, cardY + cardH - 20);
+        text(`Best: ${best ? best.score : PROGRESS.bestScores[level.id]} pts${best && best.years ? ` · ${best.years} yr` : ''}`,
+             x + cardW / 2, cardY + cardH - (best ? 36 : 20));
+        if (best) {
+          fill(150, 170, 150);
+          smallTextSize(10);
+          text(`seed ${best.seed}`, x + cardW / 2, cardY + cardH - 18);
+        }
       }
 
       this._levelCardBounds.push({
@@ -6669,6 +6905,9 @@ class Game {
     noStroke();
     textSize(14);
     text("← Back", centerX, backY + backH * 0.5);
+
+    // This level's high scores and their seeds, left of the Start button (mauri_save.js).
+    this._renderSplashScores(centerX - btnW / 2 - 30, btnY - 20);
 
     // Debug-only: benchmark run (starts the level tutorial-free and logs
     // populations + placements to a CSV every 10s and on win/loss)
@@ -7236,6 +7475,9 @@ class Game {
   // performance mode). The graphics-mode toggle was removed; GL is the sole path (see
   // _renderRenderSettings).
   _handleRenderSettingsClick(mx, my) {
+    for (const b of (this._saveBtnBounds || [])) {
+      if (mx > b.x && mx < b.x + b.w && my > b.y && my < b.y + b.h) { this._saveAction(b.act); return true; }
+    }
     const pt = this._perfToggleBounds;
     if (pt && mx > pt.x && mx < pt.x + pt.w && my > pt.y && my < pt.y + pt.h) {
       setPerfMode(!CONFIG.perfMode, true);
@@ -7319,6 +7561,9 @@ class Game {
           return;
         }
       }
+      for (const b of (this._splashScoreBtns || [])) {
+        if (mx > b.x && mx < b.x + b.w && my > b.y && my < b.y + b.h) { b.action(); return; }
+      }
       if (this._menuBtnBounds) {
         const btn = this._menuBtnBounds;
         if (mx > btn.x && mx < btn.x + btn.w &&
@@ -7331,6 +7576,7 @@ class Game {
         const btn = this._backBtnBounds;
         if (mx > btn.x && mx < btn.x + btn.w &&
             my > btn.y && my < btn.y + btn.h) {
+          this._replaySeed = null;
           this.state = GAME_STATE.LEVEL_SELECT;
           return;
         }

@@ -596,16 +596,32 @@ Some level files go further and are **factories**: a function that takes a few s
 
 ## Saving Progress
 
-One last small system: remembering between sessions which levels the player has finished. It's `PROGRESS` in `mauri_progress.js`, and it's the entire persistence layer of the game.
+One last small system: remembering between sessions which levels the player has finished. It's `PROGRESS` in `mauri_progress.js`, and with the journey's record (`CAMPAIGN`, chapter 14) it's the persistence layer of the game.
 
 ```javascript
+toJSON() {
+  return {
+    levelsCompleted: this.levelsCompleted,
+    levelsUnlocked: this.levelsUnlocked,
+    bestScores: this.bestScores,
+    stats: this.stats,
+    highScores: this.highScores,
+    attempts: this.attempts
+  };
+},
+
+fromJSON(p) {
+  p = p || {};
+  const arr = (v) => Array.isArray(v) ? v.slice() : [];
+  const obj = (v) => (v && typeof v === 'object' && !Array.isArray(v)) ? Object.assign({}, v) : {};
+  this.levelsCompleted = arr(p.levelsCompleted).filter(id => typeof id === 'string');
+  this.bestScores = obj(p.bestScores);
+  // ... and the same for the other fields
+},
+
 save() {
   try {
-    localStorage.setItem(this._storageKey, JSON.stringify({
-      levelsCompleted: this.levelsCompleted,
-      levelsUnlocked: this.levelsUnlocked,
-      bestScores: this.bestScores
-    }));
+    localStorage.setItem(this._storageKey, JSON.stringify(this.toJSON()));
   } catch (e) {
     console.warn('Could not save progress:', e);
   }
@@ -614,25 +630,32 @@ save() {
 load() {
   try {
     const data = localStorage.getItem(this._storageKey);
-    if (data) {
-      const parsed = JSON.parse(data);
-      this.levelsCompleted = parsed.levelsCompleted || [];
-      this.levelsUnlocked = parsed.levelsUnlocked || [];
-      this.bestScores = parsed.bestScores || {};
-    }
+    if (data) this.fromJSON(JSON.parse(data));
   } catch (e) {
     console.warn('Could not load progress:', e);
   }
 },
 ```
 
+The shape of the save lives in one pair of functions, `toJSON` and `fromJSON`, so the browser's storage and a save *file* (below) read and write exactly the same thing.
+
 `localStorage` is a small key-value store the browser provides to each website. It survives closing the tab. It only holds strings, so the data is converted with `JSON.stringify` on the way in and `JSON.parse` on the way out. JSON is a text format for plain data: objects, arrays, numbers, strings, booleans. It can't hold functions or class instances, which is why only simple lists and a score table are saved.
 
 Three defensive habits here are worth copying:
 
 - **`try` / `catch` around both.** Storage can be full, disabled, or blocked in a private window. A game that crashes because it couldn't save is worse than one that quietly doesn't.
-- **`|| []` on every field.** Saved data may be from an older version of the game that didn't have that field. Never assume a loaded value is present.
+- **A type check on every field** (`arr(...)`, `obj(...)`). Saved data may be from an older version of the game that didn't have that field, or from a file someone edited by hand. Never assume a loaded value is present, or is what it should be.
 - **A key with the game's name in it** (`'avianage_progress'`), since every page on the same site shares the store.
+
+### Seeds and high scores
+
+Every attempt at a level runs on a **seed**, a whole number handed to p5's `randomSeed()` and `noiseSeed()` as the level's land is made (`Game._initTerrainAndSeason`). p5's `random()` and `noise()` are then *pseudo*-random: the same seed gives the same sequence of numbers, so the same land, and as far as the simulation's rolls stay on p5's generator, much the same play. A fresh seed comes from `SAVEGAME.newSeed()` in `mauri_save.js`; a replayed one (an end card's "Replay seed", a high score's REPLAY button, "Play a seed…" on a level's splash) is put in `game._replaySeed` and used instead.
+
+When the attempt ends, won, lost, or left, `Game._closeAttempt` hands `SAVEGAME.record()` the tally, and it lands in three places in `PROGRESS`: `stats` (attempts, wins, time played per level), `highScores` (each level's best ten, *with their seeds*), and `attempts` (a log of the last two hundred). A high score you can't reproduce is just a number; one with its seed is a land anyone can play again.
+
+### The save as a file
+
+Settings on the level select has **Export save** and **Import save**. `SAVEGAME.snapshot()` gathers `PROGRESS.toJSON()`, the journey's record and two display preferences into one object with a `format` tag and a `version`, and `exportToFile()` hands it to the browser as a download (a `Blob` and an `<a download>` link). Importing reads the file with a `FileReader`, checks the tag (`SAVEGAME.parse`), keeps the save it's about to replace under its own key, and only then writes the new one, so **Undo import** can put the old one back. That order, *check, back up, then overwrite*, is the habit to copy whenever a player's file replaces a player's data.
 
 The game saves only progress, not a level in mid-play. Saving a running simulation would mean turning every moa, plant and timer into plain data and back again. It's possible, and it's a real project. If you want to attempt it, the data-driven structure helps: a moa is mostly a species key plus a dozen numbers.
 

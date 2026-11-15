@@ -33,7 +33,7 @@ const JOURNEY_MEETING = (() => {
   const FOCUS = 'upland_moa';
   const WEST = ['koukou', 'baby'], NORTH = ['pukepuke', 'mama', 'papa'], ALL = [...WEST, ...NORTH, 'chick'];
   const TAUGHT = ['summer', 'autumn', 'winter'];
-  const nests = (x) => (x.runner.sim.nestingSites || []).filter(s => s.alive !== false && s.playerMade).length;
+  const nests = (x) => (x.runner.sim.nestingSites || []).filter(s => s.alive !== false && s.playerMade && !s.grove).length;
   const want = (x) => x.runner.vars.wantNests || 1;
   const clan = (x) => x.runner.sim.getSpeciesCount(FOCUS);
   const chick = (x) => { const c = x.runner.castEnts.chick; return !!(c && c.alive); };

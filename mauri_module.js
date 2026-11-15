@@ -31,7 +31,7 @@
 //           the trail. The eagle attacks twice; the second time, the storm over the family
 //           breaks up and the Storm tool unlocks so the player can call a new one. Birds
 //           caught in the open run, and their safety bar drains.
-//   winter  The family stays by the tarn. Storms fade away, so the player calls new ones
+//   winter  The family stays by the lake. Storms fade away, so the player calls new ones
 //           from the toolbar, while the eagle keeps coming back.
 //   spring  The family walks back up to the nest; the Storm tool has no recharge, so the
 //           player can call a path of storms. Once they reach it, have their last words

@@ -1881,7 +1881,7 @@ class ChapterRunner {
   _watchNests() {
     const n = this._counter('nests');
     if (n <= this._nests) return;
-    const sites = (this.sim.nestingSites || []).filter(s => s.playerMade);
+    const sites = (this.sim.nestingSites || []).filter(s => s.playerMade && !s.grove);
     for (let i = this._nests; i < n; i++) this._emit('nest_founded', { site: sites[sites.length - (n - i)] || null });
     this._nests = n;
   }

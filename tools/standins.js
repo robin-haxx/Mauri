@@ -68,7 +68,7 @@ window.STANDINS = {
       if (K.cover && game.mauri.mauri < cost(type) + 50) return false;
       if (!pay(type, cost(type))) return false;
       const sel = game.selectedPlaceable; game.selectedPlaceable = null;
-      sim.addPlaceable(q.x, q.y, type); did('PLACEMENT', type);
+      const placed = sim.addPlaceable(q.x, q.y, type); if (placed && sim.seedGroveUnderstorey) sim.seedGroveUnderstorey(placed); did('PLACEMENT', type);   // (as Game.tryPlace)
       game.selectedPlaceable = sel;
       acted[key] = now + every * 60 * (K.lag || 1);
       return true;

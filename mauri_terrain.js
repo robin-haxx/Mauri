@@ -156,6 +156,12 @@ class TerrainGenerator {
     this.features = [];
     this.featurePlanner = null;
 
+    // A land made in the Engine editor: a level's terrain.engineLand ({ map, params, seed }).
+    // The heights then come from the editor's own generator (mauri_engine_land.js) in place of
+    // the noise below, so the land in play is the land the editor drew. Built in _genHeightMap;
+    // null on every other level, which this then leaves untouched.
+    this._engineLand = null;
+
     this._initBiomeIndex();
     this._colorCache = new Map();
     this._snowColorsRGB = null;
@@ -445,6 +451,8 @@ class TerrainGenerator {
   }
   
   getElevation(x, y) {
+    // A level made in the Engine editor brings its own land (see _engineElevation).
+    if (this._engineLand) return this._engineElevation(x, y);
     // (x, y) are full-world coordinates. The whole land is one continuous noise field, so
     // neighbouring areas flow into each other.
     const base = this.fractalNoise(x, y);
@@ -463,6 +471,22 @@ class TerrainGenerator {
     // Gentle alps + broad forest at the opening; glacial habitats spread over the years.
     elevation = this._applyGridProfile(elevation);
     // Per-level window fit (see _fitElevationWindow); null on most levels.
+    if (this._elevFit) elevation = this._elevFit.a * elevation + this._elevFit.b;
+    if (this.features.length) elevation = this._applyFeatureHeights(x, y, elevation);
+    return Math.max(0, Math.min(1, elevation));
+  }
+
+  // The height at world point (x, y) of a land made in the Engine editor. The editor's map is
+  // laid over the play window, centred and keeping its proportions, at the size that just
+  // covers it: on a screen wider or taller than the map, the map's middle is what shows. The
+  // 3D over-scan above and below the window reads the spare rows the land was built with.
+  // A level's window fit and its tarns apply as on any land.
+  _engineElevation(x, y) {
+    const land = this._engineLand;
+    const s = Math.max(this.worldW / land.width, this.worldH / land.height);
+    const u = 0.5 + (x - this.worldW / 2) / (land.width * s);
+    const v = 0.5 + (y - this.worldH / 2) / (land.height * s);
+    let elevation = EngineLand.at(land, u, v);
     if (this._elevFit) elevation = this._elevFit.a * elevation + this._elevFit.b;
     if (this.features.length) elevation = this._applyFeatureHeights(x, y, elevation);
     return Math.max(0, Math.min(1, elevation));
@@ -793,6 +817,11 @@ class TerrainGenerator {
   // Allocate + fill the coarse gameplay height map. Split out of generate() so the
   // stepped loader (generateSteps) can run it as its own frame.
   _genHeightMap() {
+    // A level made in the Engine editor: build its land first, since everything below reads
+    // heights. (this.seed is this attempt's own, so a level with no fixed seed of its own
+    // gets a new land each attempt and the same land on a replay.)
+    this._engineLand = (this.config.engineLand && typeof EngineLand !== 'undefined')
+      ? EngineLand.build(this.config.engineLand, this.seed) : null;
     // getElevation reads this.features, so clear them while the window fit and the level's
     // planner look at the bare land. Then let the level choose its features.
     this.features = [];

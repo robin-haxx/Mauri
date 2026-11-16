@@ -459,6 +459,8 @@ function applyLevelToConfig(levelDef) {
   CONFIG.plantDensity = t.plantDensity;
   // Optional per-level elevation fit of the play window (TerrainGenerator._fitElevationWindow).
   CONFIG.elevationWindow = t.elevationWindow || null;
+  // A land made in the Engine editor (levels/editor/*.js); null on every other level.
+  CONFIG.engineLand = t.engineLand || null;
 
   // Endless "years" world grid (a 2×2 grid of terrain areas the world scrolls
   // through, one per year). Null on classic levels → the terrain behaves exactly
@@ -1220,7 +1222,8 @@ const MENU_SECTIONS = [
   { key: 'stories',  label: "Stories",  style: 'modules' },
   { key: 'chapters', label: "Chapters", style: 'sketches' },
   { key: 'endless',  label: "Endless",  style: 'cards' },
-  { key: 'classic',  label: "Classic",  style: 'cards' }
+  { key: 'classic',  label: "Classic",  style: 'cards' },
+  { key: 'workshop', label: "Workshop", style: 'cards' }   // levels sent from the Engine editor (levels/editor/)
 ];
 
 // Which section a level belongs in: its own `section`, else by what it is.

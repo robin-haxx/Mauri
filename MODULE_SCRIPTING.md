@@ -757,3 +757,41 @@ per-level override of a placeable. The ones added for the modules, and the file 
 | `ecosystemIncome: { base, perFocusAnimal, perAnimal }` | Mauri a second on a level of small herds: `base` while any focus animal lives, then so much for each focus animal and for every other moa and bird. Shown on the mauri dial. `noPopulationMilestones: true` switches off the older lump sums. | `mauri_sketch.js` (`Game.ecosystemIncomePerSec`) |
 | `huntCamera: { focusOnly }` (with the level key `userCamera`) | When the player is zoomed in and an eagle starts on an animal off screen (a focus animal, with `focusOnly`), the view eases to frame hunter and hunted, and back when it is over. Not while the player is dragging or holding an item. | `mauri_sketch.js` (`Game._onHuntStart`) |
 
+
+---
+
+## 20. Levels from the Engine editor
+
+A level can also be made in the Engine's editor (`D:\ac.coding\Engine`) and sent here. It arrives
+as an ordinary chapters level: a file in `levels/editor/`, registered like any other, listed in
+the menu's **Workshop** section, and played by this simulation with these sprites and sounds.
+
+- **Sending.** In the editor's Export panel, "Send levels to Mauri"; or, from the Engine folder,
+  `node tools/to-mauri.js <project>` (`--check` to look first, `--list`, `--remove <id>`).
+  Sending again writes the same file again.
+- **What is written here**, and nothing else: `levels/editor/<id>.js` (one per level),
+  `levels/editor/manifest.json` (which levels are there and where they came from),
+  `mauri_engine_land.js`, and the `<script>` lines between the two `editor-levels` markers in
+  `index.html`. All of it is generated: change a level in the editor, not here. To keep a
+  hand-edited copy, save it under another file name and id outside `levels/editor/` and give it
+  its own `<script>` tag.
+- **The land.** An editor level carries `terrain.engineLand: { map, params, seed }`. For such a
+  level `TerrainGenerator` builds its heights with the editor's own generator
+  (`mauri_engine_land.js`, a copy of the Engine's `runtime/core/land.js`) in place of the noise
+  in `mauri_terrain.js`, so the land in play is the land the editor drew: its shape (island,
+  coast, valley, divide, scattered islands, inland), sea level, terraces, lakes, rivers and
+  hand-placed landforms. The editor's map is laid over the play window, centred and keeping
+  its proportions. `seed: null` gives a new land each attempt (from the attempt's own seed);
+  a number gives the same land every time. Every other level is untouched: with no
+  `terrain.engineLand` none of this runs.
+- **What crosses.** The land, the biome bands, which animals and how many, which tools and
+  their costs, the season length and starting season, starting mauri, the population cap, and
+  the whole story: goals, chapters, reactions, beats, places and characters.
+- **What does not.** How an animal behaves: an upland moa here is this game's upland moa,
+  whatever mind and numbers the editor gave its own. The editor's rules are matched to the
+  switches of §19 where one exists (`habitatStress`, `coverBreaksLock`, `populationFloors`)
+  and reported where not. Each level file lists, in its header, what was left out or changed.
+- **The hooks in this code** are four small additions: `mauri_engine_land.js` and the
+  `editor-levels` block in `index.html`; `CONFIG.engineLand` in `applyLevelToConfig` and the
+  `workshop` entry of `MENU_SECTIONS` (`mauri_sketch.js`); and `_engineLand` /
+  `_engineElevation` in `mauri_terrain.js`.

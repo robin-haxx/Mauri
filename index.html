@@ -30,6 +30,7 @@
 
     <!-- Terrain and seasons -->
     <script src="mauri_projection.js"></script>  <!-- plan-oblique 3D projection (before terrain: the relief bake reads it) -->
+    <script src="mauri_engine_land.js"></script>  <!-- the Engine editor's land generator (generated; before terrain, which reads it for editor levels) -->
     <script src="mauri_terrain.js"></script>
     <script src="mauri_climate_drift.js"></script>  <!-- Free Play deepening-glacial curve (pure; before seasons/sketch read it) -->
     <script src="mauri_seasons.js"></script>
@@ -88,6 +89,11 @@
     <script src="levels/journey_06_crested.js"></script>  <!-- tile 6, the crested one; and 6f, the giant moa -->
     <script src="levels/journey_07_meeting.js"></script>  <!-- tile 7, where the paths meet -->
     <script src="levels/_template_chapters.js"></script>  <!-- a copyable module template (debug mode only) -->
+    <!-- Levels sent from the Engine editor (levels/editor/). The lines between the two markers
+         below are written by the editor (Engine/tools/to-mauri.js): don't edit them by hand. -->
+    <!-- editor-levels:start -->
+    <script src="levels/editor/ed_kahurangi.js"></script>  <!-- Kahurangi (kahurangi/kahurangi) -->
+    <!-- editor-levels:end -->
     <script src="mauri_encyclopedia.js"></script>
 
     <!-- Per-level tutorial scripts (register with TUTORIAL_REGISTRY) -->

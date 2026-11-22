@@ -1220,11 +1220,12 @@ const USER_ZOOMS = [1, 1.5, 2.25, 3.2];
 const MENU_SECTIONS = [
   { key: 'journey',  label: "The journey", style: 'journey' },   // the map of tiles (mauri_campaign.js)
   { key: 'stories',  label: "Stories",  style: 'modules' },
-  { key: 'chapters', label: "Chapters", style: 'sketches' },
-  { key: 'endless',  label: "Endless",  style: 'cards' },
+  { key: 'chapters', label: "Chapters", style: 'sketches', hidden: true },
+  { key: 'endless',  label: "Endless",  style: 'cards', hidden: true },
   { key: 'classic',  label: "Classic",  style: 'cards' },
-  { key: 'workshop', label: "Workshop", style: 'cards' }   // levels sent from the Engine editor (levels/editor/)
+  { key: 'workshop', label: "Workshop", style: 'cards', hidden: true }   // levels sent from the Engine editor (levels/editor/)
 ];
+// (`hidden: true` keeps a section, and its levels, off the level select; delete the flag to show it again.)
 
 // Which section a level belongs in: its own `section`, else by what it is.
 function levelSection(l) {
@@ -6169,6 +6170,7 @@ class Game {
     this._journeyBtnBounds = [];
     this._journeyHover = null;
     for (const sec of MENU_SECTIONS) {
+      if (sec.hidden) continue;
       if (sec.style === 'journey') {   // the sequence of tiles and their map (mauri_campaign.js)
         if (typeof CAMPAIGN === 'undefined') continue;
         const modW = Math.min(612, boxW - 48), modH = this._journeyModulesH();

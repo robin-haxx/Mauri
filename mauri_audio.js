@@ -867,7 +867,7 @@ class AudioManager {
 
   // A line of story dialogue opens on its speaker's own sound: 'moa' (the moa call; `rate`
   // pitches it, e.g. lower for the bigger mother), 'chick' (a cheep), 'eagle' (a hunt cry) or
-  // 'kea' (a snippet of kea song) or 'gust' (the winter wind). Each new line cuts the last line's sound short, so clicking
+  // 'kea' (a snippet of kea song) or 'gust' (the winter wind), or 'boom' (a kākāpō booming far off). Each new line cuts the last line's sound short, so clicking
   // through a scene never piles calls up. Returns false for a speaker with no sound of its own
   // (the tip then plays its usual chime).
   playSpeaker(kind, rate = 1) {
@@ -890,6 +890,13 @@ class AudioManager {
         if (sf && sf.isLoaded() && sf.buffer) {
           const len = sf.buffer.duration || 0;
           pb = shot(sf, vol * 0.6, { offset: Math.random() * Math.max(0, len - 4.2), duration: 4, fadeIn: 0.4, fadeOut: 1.2 });
+        }
+      } else if (kind === 'boom') {
+        // A kākāpō's boom, heard from far off (the journey's voice from the west: 2f and tile 3).
+        const bank = this.sounds.speciesVoices.kakapo, sf = bank && bank.boom;
+        if (this._voiceReady(sf)) {
+          pb = this._voicePlayback(sf, vol * VOICE_VOLUME,
+            { offset: this._randomCue(sf, 3.5), fadeIn: 0.4, duration: 3.5, fadeOut: 1.2 });
         }
       } else if (kind === 'kea') {
         const bank = this.sounds.speciesVoices.kea;

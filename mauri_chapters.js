@@ -48,6 +48,7 @@ const CHAPTER_EVENTS = {
   goal_failed:     {},
   nest_founded:    { subject: 'site' },
   cast_lost:       { subject: 'entity' },
+  cast_taken:      { subject: 'entity' },                  // a named bird carried off alive (CHAPTERS_KIT.carryOff): `cast`
   beat:            {},
   placeable_expired: { count: 'expired' },          // a placed item wore out: `type` (expired:Storm)
   plant_sprouted:  { count: 'sprouted' },           // a pātōtara sprouted by hand: `sprouted`, `type`
@@ -1869,6 +1870,14 @@ class ChapterRunner {
       // A named bird that walked off the land (the journey's travel: CHAPTERS_KIT.walkOff) is
       // not lost: it is on its way to the next tile.
       if (e.causeOfDeath === 'dispersed') { (this.walked || (this.walked = {}))[name] = true; this._log('cast_left', name); continue; }
+      // Nor is one the Pouākai carried off alive (a story's CHAPTERS_KIT.carryOff): it is taken,
+      // and the record keeps it so (CAMPAIGN.finish).
+      if (e.causeOfDeath === 'carried') {
+        (this.taken || (this.taken = {}))[name] = true;
+        this._log('cast_taken', name);
+        this._emit('cast_taken', { cast: name, entity: e });
+        continue;
+      }
       // How it died, when the simulation says (Moa.causeOfDeath: 'eagle' or 'starved'), so a
       // lesson can answer each differently (the `cause` filter).
       const cause = e.causeOfDeath || (e.hunger >= (e.maxHunger || 100) ? 'starved' : 'unknown');

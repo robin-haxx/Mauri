@@ -194,7 +194,8 @@ Object.assign(CHAPTERS_KIT, {
       if (!c) { r._log('issue', 'party', `no place "${at}"`); return; }
       const turns = sim.seasonTurns || 0;
       for (const s of list) {
-        if (r.level.journey && typeof CAMPAIGN !== 'undefined' && !CAMPAIGN.alive(s.name)) { r._log('party', s.name, 'not with them'); continue; }
+        // (The record says who is still walking; a bird born on this tile, `newborn`, is not in it yet.)
+        if (!s.newborn && r.level.journey && typeof CAMPAIGN !== 'undefined' && !CAMPAIGN.alive(s.name)) { r._log('party', s.name, 'not with them'); continue; }
         const p = r._walkableNear({ x: c.x + random(-radius, radius), y: c.y + random(-radius, radius) }, 120, c) || c;
         const e = sim._createFromRegistry('moa', s.species || species, p.x, p.y, Moa);
         if (!e) continue;
@@ -233,6 +234,70 @@ Object.assign(CHAPTERS_KIT, {
       }
       r._log('walk_off', names.join(','), side);
     };
+  },
+
+  // ---- Taken by the Pouākai (a story moment, outside play) ---------------------------------------
+  // A start action: the Pouākai nearest the named bird stoops on it and carries it off over the
+  // nearest of `sides` (HaastsEagle.carryOff). The bird leaves the land alive; the runner notes
+  // it as taken, not lost, and the record keeps it so (CAMPAIGN.finish). Never a hunt: no cover
+  // stops it, so it belongs only where play has stopped (the end of 2f). With no eagle on the
+  // land the bird is simply gone, logged.
+  carryOff(name, { sides = ['north', 'west'], sec = 30 } = {}) {
+    return (x) => {
+      const r = x.runner, e = r.castEnts[name];
+      if (!e || !e.alive) { r._log('issue', 'carry_off', `${name} is not on the land`); return; }
+      const d = (b) => Math.hypot(b.pos.x - e.pos.x, b.pos.y - e.pos.y);
+      const eagle = (r.sim.eagles || []).filter(b => b.alive && b.carryOff).sort((a, b) => d(a) - d(b))[0];
+      if (eagle && eagle.carryOff(e, { sides, sec })) { r._log('carry_off', name, 'the Pouākai stoops'); return; }
+      e.alive = false; e.causeOfDeath = 'carried';
+      r._log('carry_off', name, 'no eagle: gone');
+    };
+  },
+
+  // A check (an `until`): the named bird has been carried off.
+  isTaken(name) { return (x) => !!(x.runner.taken && x.runner.taken[name]); },
+
+  // A start action, the fallback after carryOff: if the bird is somehow still here, it is gone
+  // now, carried (logged as forced).
+  makeTaken(name) {
+    return (x) => {
+      const r = x.runner, e = r.castEnts[name];
+      if ((r.taken && r.taken[name]) || !e || !e.alive) return;
+      e._carriedBy = null; e.alive = false; e.causeOfDeath = 'carried';
+      r._log('beat', 'carry_off', 'forced');
+    };
+  },
+
+  // ---- The west path's party (FULLGAMESCRIPT: Koukou's tribe) -------------------------------------
+  // Who walks west with Koukou after 2f: her own family. Add 'mama' and 'papa' here to send
+  // Pukepuke's elders west too (CAMPAIGN_PLAN.md section 14, decision 18). Upland moa that arrive
+  // on a tile join the tribe as the simulation brings them; they are not named here.
+  WEST: ['koukou', 'friendMama', 'friendPapa'],
+  _WEST_BIRDS: {
+    koukou:     { title: "Koukou",          female: true,  pitch: 0.9 },
+    friendMama: { title: "Koukou's mother", female: true,  pitch: 0.95 },
+    friendPapa: { title: "Koukou's father", female: false, pitch: 1.1 },
+    mama:       { title: "Mama",            female: true,  pitch: 0.85 },
+    papa:       { title: "Papa",            female: false }
+  },
+  // The cast entries for the west party, to spread into a level's `cast`.
+  westCast() {
+    const out = {};
+    for (const n of this.WEST) {
+      const b = this._WEST_BIRDS[n];
+      out[n] = Object.assign({ title: b.title, species: 'upland_moa', manual: true }, b.pitch ? { pitch: b.pitch } : {});
+    }
+    return out;
+  },
+  // A start action: the west party set down at `at` (CAMPAIGN.alive decides who is still walking).
+  westParty(at, opts = {}) {
+    return this.party(this.WEST.map(n => ({ name: n, female: this._WEST_BIRDS[n].female })), at, opts);
+  },
+  // The party's elders, as elderLost wants them: { castName: "Title" }.
+  westElders() {
+    const out = {};
+    for (const n of this.WEST) if (n !== 'koukou') out[n] = this._WEST_BIRDS[n].title;
+    return out;
   },
 
   // ---- A riddle, as a hint ladder ----------------------------------------------------------------

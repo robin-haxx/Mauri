@@ -17,17 +17,22 @@
 //   Carrying     CAMPAIGN.alive(name) says whether a named bird can be set down on this
 //                tile (CHAPTERS_KIT.party does the setting down).
 //
-// What can vary and what cannot. A lesson can only be won with its leads alive, so Koukou,
-// the baby and Pukepuke always reach tile 7. Everything else is remembered as it happened:
-// the elders, Pukepuke's younger siblings, each herd's numbers, the forest's bounty, and how
-// often the player acted with no hint.
+// What can vary and what cannot. A lesson can only be won with its leads alive, so Koukou
+// and Pukepuke always reach tile 7. Everything else is remembered as it happened: the elders,
+// Pukepuke's younger siblings, each herd's numbers, the forest's bounty, and how often the
+// player acted with no hint.
 //
-// Every level also starts from the DEFAULT record (everyone alive, middling herds), so any
-// tile can be opened alone for a test or a class. A research run (?bench=) or a run started
-// with ?record=<preset or base64 JSON> never touches the saved record.
+// TAKEN, not lost. A named bird can be carried off alive (the Pouākai takes Pipi at the end of
+// 2f: FULLGAMESCRIPT, CAMPAIGN_PLAN.md section 14). The record keeps it as alive but `taken`,
+// with the tile it was taken on: it walks with nobody (CAMPAIGN.alive is false) until a level
+// sets it down again and it lives to that level's win, which clears `taken`.
 //
-// NAMES ARE PLACEHOLDERS. Koukou's parents, the baby and the new chick have working titles
-// here; naming them in te reo is the author's to do (one place: BIRDS below).
+// Every level also starts from the DEFAULT record (everyone alive, Pipi taken, middling herds),
+// so any tile can be opened alone for a test or a class. A research run (?bench=) or a run
+// started with ?record=<preset or base64 JSON> never touches the saved record.
+//
+// NAMES ARE PLACEHOLDERS. Koukou's parents and the new chick have working titles here; naming
+// them in te reo is the author's to do (one place: BIRDS below).
 // ============================================================================
 
 const CAMPAIGN = {
@@ -44,7 +49,7 @@ const CAMPAIGN = {
     friendPapa: { title: "Koukou's father",   neighbour: true },
     pukepuke:   { title: "Pukepuke",          lead: true },
     koukou:     { title: "Koukou",            lead: true },
-    baby:       { title: "the baby",          lead: true },
+    baby:       { title: "Pipi",              lead: true, takenAt: 't2f' },   // carried off at the end of 2f
     chick:      { title: "the new chick",     unborn: true }   // hatched on tile 7
   },
 
@@ -100,8 +105,8 @@ const CAMPAIGN = {
   BLURBS: {
     t1:  "A storm hides a moa from the Pouākai.",
     t2:  "Pātōtara feeds the family, and the kea come for the egg.",
-    t2f: "Five years on the same land. A baby hatches.",
-    t3:  "Koukou and the baby meet the little bush moa.",
+    t2f: "Five years on the same land. Pipi hatches.",
+    t3:  "Koukou and her family meet the little bush moa.",
     t4:  "The kākāpō set a riddle about the rimu.",
     t4f: "Eight years. Keep the forest bountiful as the cold comes down.",
     t5:  "Pukepuke's family winters beside a flock of kākā.",
@@ -148,10 +153,14 @@ const CAMPAIGN = {
   // ---- The record ---------------------------------------------------------------------------
   defaultRecord() {
     const birds = {};
-    for (const name in this.BIRDS) birds[name] = { alive: !this.BIRDS[name].unborn, born: !this.BIRDS[name].unborn };
+    for (const name in this.BIRDS) {
+      const B = this.BIRDS[name];
+      birds[name] = { alive: !B.unborn, born: !B.unborn };
+      if (B.takenAt) Object.assign(birds[name], { taken: true, at: B.takenAt });   // (Pipi: the story always takes her)
+    }
     return {
       v: this.VERSION, openAll: false,
-      birds,                      // name -> { alive, born, cause?, at? (the tile it was lost on) }
+      birds,                      // name -> { alive, born, taken?, cause?, at? (the tile it was lost or taken on) }
       siblings: 0,                // Pukepuke's younger siblings raised on the north path
       // Middling numbers stand in for a free play that was not played (decision 5).
       herds: { bush_moa: 6, kakapo: 5, giant: 3, kaka: 5, clan: 5 },
@@ -201,6 +210,12 @@ const CAMPAIGN = {
     for (const k in d) if (rec[k] === undefined) rec[k] = d[k];
     if (!rec.birds || typeof rec.birds !== 'object') rec.birds = d.birds;
     for (const name in d.birds) if (!rec.birds[name]) rec.birds[name] = d.birds[name];
+    // (A record written before birds could be taken: a bird the story now takes, still marked
+    // as walking, is taken. Once found again its `taken` is false, not missing, so this leaves it.)
+    for (const name in this.BIRDS) {
+      const B = this.BIRDS[name], b = rec.birds[name];
+      if (B.takenAt && b && b.born && b.alive && b.taken === undefined) Object.assign(b, { taken: true, at: B.takenAt });
+    }
     return rec;
   },
 
@@ -253,7 +268,10 @@ const CAMPAIGN = {
 
   // ---- Who is who ----------------------------------------------------------------------------
   bird(name) { return (this.record && this.record.birds[name]) || { alive: false, born: false }; },
-  alive(name) { const b = this.bird(name); return !!(b.born && b.alive); },
+  // (Alive and with the family: a bird carried off is alive, but walks with nobody.)
+  alive(name) { const b = this.bird(name); return !!(b.born && b.alive && !b.taken); },
+  taken(name) { const b = this.bird(name); return !!(b.born && b.alive && b.taken); },
+  _cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); },
   title(name) { return (this.BIRDS[name] || {}).title || name; },
   _list(names) {
     const t = names.map(n => this.title(n));
@@ -264,8 +282,12 @@ const CAMPAIGN = {
   // The family as the record stands, for the map's side panel.
   familyLines() {
     const rec = this.record, born = Object.keys(this.BIRDS).filter(n => rec.birds[n].born);
-    const here = born.filter(n => rec.birds[n].alive), lost = born.filter(n => !rec.birds[n].alive);
+    const here = born.filter(n => this.alive(n)), lost = born.filter(n => !rec.birds[n].alive);
     const lines = [`Walking: ${this._list(here) || 'nobody yet'}.`];
+    for (const n of born.filter(m => this.taken(m))) {
+      const t = rec.birds[n].at && this.TILES[rec.birds[n].at];
+      lines.push(`${this._cap(this.title(n))}: carried off by the Pouākai${t ? ` on tile ${t.label}` : ''}.`);
+    }
     for (const n of lost) {
       const b = rec.birds[n], t = b.at && this.TILES[b.at];
       lines.push(`${this.title(n).charAt(0).toUpperCase() + this.title(n).slice(1)}: ${this._causeWords(b.cause)}${t ? ` on tile ${t.label}` : ''}.`);
@@ -292,7 +314,8 @@ const CAMPAIGN = {
     for (const name in rec.birds) {
       const b = rec.birds[name];
       if (b.born && !b.alive) f[name + '_lost'] = true;
-      if (b.born && b.alive) f[name + '_here'] = true;
+      else if (b.born && b.taken) f[name + '_taken'] = true;
+      else if (b.born) f[name + '_here'] = true;
     }
     const group = (key, names) => {
       const here = names.filter(n => this.alive(n));
@@ -319,11 +342,15 @@ const CAMPAIGN = {
     for (const name of (O.birds || [])) {
       if (!(name in runner.castEnts) && !(runner.walked && runner.walked[name])) continue;   // (never on this stage)
       const e = runner.castEnts[name];
-      const alive = !!(e && e.alive) || !!(runner.walked && runner.walked[name]);
+      const walked = !!(runner.walked && runner.walked[name]), taken = !!(runner.taken && runner.taken[name]);
+      const alive = !!(e && e.alive) || walked;
       const b = rec.birds[name] || (rec.birds[name] = {});
       b.born = true;
-      if (alive) { b.alive = true; delete b.cause; delete b.at; }
-      else if (b.alive !== false || !b.at) { b.alive = false; b.cause = lostHow[name] || 'unknown'; b.at = tile; }
+      // Carried off on this tile: alive, and away (ChapterRunner._watchCast, CHAPTERS_KIT.carryOff).
+      if (taken) { b.alive = true; b.taken = true; b.at = tile; delete b.cause; }
+      // (Here at the win: with the family, and found again if it had been taken.)
+      else if (alive) { b.alive = true; if (b.taken) b.taken = false; delete b.cause; delete b.at; }
+      else if (b.alive !== false || !b.at) { b.alive = false; b.cause = lostHow[name] || 'unknown'; b.at = tile; delete b.taken; }
     }
     const sim = runner.sim;
     for (const key in (O.herds || {})) { rec.herds[key] = sim.getSpeciesCount(O.herds[key]); rec.played[key] = true; }
@@ -347,6 +374,8 @@ const CAMPAIGN = {
     if (on.length) out.push(`Walking on: ${this._list(on)}.`);
     const lostHere = Object.keys(rec.birds).filter(n => rec.birds[n].born && !rec.birds[n].alive && rec.birds[n].at === tile);
     for (const n of lostHere) out.push(`${this.title(n).charAt(0).toUpperCase() + this.title(n).slice(1)} was ${this._causeWords(rec.birds[n].cause)} here.`);
+    const takenHere = Object.keys(rec.birds).filter(n => this.taken(n) && rec.birds[n].at === tile);
+    for (const n of takenHere) out.push(`${this._cap(this.title(n))} was carried off by the Pouākai here.`);
     if (level.closingLines) { try { out.push(...[].concat(level.closingLines(rec, runner) || [])); } catch (e) { /* a level's own words */ } }
     return out;
   }

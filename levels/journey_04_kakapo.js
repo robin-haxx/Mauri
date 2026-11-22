@@ -1,7 +1,7 @@
 // ============================================================================
 // THE JOURNEY, TILE 4: THE NIGHT PARROTS, and 4f: THE MAST YEARS (the west path)
 // ============================================================================
-// TILE 4, the lesson. Koukou and the baby follow the booming north and meet the kākāpō. An
+// TILE 4, the lesson. Koukou and her family follow the booming north and meet the kākāpō. An
 // old bird sets a riddle. Its answer: the rimu will fruit heavily next summer, and a flock
 // that is ready will breed. The one rule: kākāpō breed only in a mast year, and the mast can
 // be seen coming a year ahead. The lever is the Forest Seed: a grove sown by the flock this
@@ -21,8 +21,10 @@
 // cold deepening and the forest band shrinking from the top. Won at the end of year 8 if the
 // forest is more bountiful than at the start and the kākāpō are still there. Forest bounty
 // (the fruiting trees on the land) is shown all game as a goal line with its starting value.
-// Koukou and the baby cannot breed here: there are no other upland moa. That is the story's
-// reason to go north again.
+// Koukou walks with her tribe (CHAPTERS_KIT.WEST: her mother and father). Her parents are a
+// pair and may breed here, so the tribe can grow; Koukou cannot pair with her father
+// (noKinPairing). FULLGAMESCRIPT makes 4f Koukou leading that tribe: stage I in
+// CAMPAIGN_PLAN.md section 14.
 //
 // Known, inferred, imagined: kākāpō breeding in rimu mast years is known in living birds;
 // that the crop can be seen a year ahead is likely (rimu fruit ripen slowly) and its timing
@@ -42,7 +44,8 @@ const JOURNEY_KAKAPO_DIAL = {
 
 const JOURNEY_WEST = (() => {
   const K = CHAPTERS_KIT, D = JOURNEY_KAKAPO_DIAL;
-  const LEADS = ['koukou', 'baby'];
+  const LEADS = ['koukou'];
+  const FAMILY = K.WEST;   // Koukou and her tribe (her mother and father)
   const kakapo = (x) => x.runner.sim.getSpeciesCount('kakapo');
   const bounty = (x) => x.runner.sim.forestBounty();
   const seeds = (x) => x.runner.sim.placeables.filter(p => p.alive && p.type === 'forestBoost');
@@ -58,10 +61,7 @@ const JOURNEY_WEST = (() => {
     }),
     biomes: LEVEL_FREEPLAY_KAHURANGI.biomes,
     startingSpecies: 'upland_moa',
-    cast: {
-      koukou: { title: "Koukou",   species: 'upland_moa', manual: true, pitch: 0.9 },
-      baby:   { title: "the baby", species: 'upland_moa', manual: true, scale: 0.8 }
-    },
+    cast: K.westCast(),
     sites: {
       top:    { find: 'high', near: { fx: 0.5, fy: 0.5 }, within: 200 },
       camp:   { find: 'biome', biome: 'forestRefuge', near: 'top' },
@@ -78,12 +78,13 @@ const JOURNEY_WEST = (() => {
   const common = (taught) => [
     ...K.coverLadder({ species: 'upland_moa', first: [4, 7], later: [4, 7], pauseFirst: false }),
     ...K.praise({ chapters: taught }),
-    ...K.stormLadder({ lit: LEADS, unlock: false, chapters: taught }),
+    ...K.stormLadder({ lit: FAMILY, unlock: false, chapters: taught }),
     ...K.gaveUp(),
     ...K.arrivals(),
     { id: 'chick', on: 'bird_hatched', if: { species: 'kakapo' }, moment: { on: '$bird', text: "A kākāpō chick" } },
     { id: 'chick_again', on: 'bird_hatched', if: { species: 'kakapo' }, once: false, cooldown: 15, notify: ["A kākāpō chick has hatched.", 'success'] },
-    ...K.leadLost({ koukou: "Koukou", baby: "the baby" })
+    ...K.leadLost({ koukou: "Koukou" }),
+    ...K.elderLost(K.westElders())
   ];
 
   // ==========================================================================================
@@ -97,7 +98,7 @@ const JOURNEY_WEST = (() => {
     teaches: ['mast_year', 'mast_ahead', 'forest_tools'],
     guide: ['kakapo', 'rimu', 'beech_refuge'],
     waysOn: [{ label: "Stay for the mast years", tile: 't4f' }],
-    outcome: { birds: LEADS, herds: { kakapo: 'kakapo' },
+    outcome: { birds: FAMILY, herds: { kakapo: 'kakapo' },
                also: (rec, r) => { const c = r.caseLog.find(k => k.id === 'riddle'); rec.riddleRung = c ? (c.outcome === 'solved' ? c.rung : 'unanswered') : null; } },
 
     species: { moa: ['upland_moa', 'little_bush_moa'], eagle: ['haasts_eagle'], other: ['kakapo'] },
@@ -123,7 +124,7 @@ const JOURNEY_WEST = (() => {
         goals: [{ id: 'sown', name: "Year {year}: be ready for what is coming", done: sownByFlock, reward: 20, stretch: true }] },
       { id: 'autumn', title: "Autumn", tools: ['forestBoost', 'Storm'],
         start: [{ fade: { type: 'Storm', sec: 60, refreshOnMove: true } }, K.eagleComes('koukou', 40)],
-        goals: [{ id: 'autumn_safe', name: "Year {year}: Koukou and the baby through the autumn", survive: true, reward: 10 }] },
+        goals: [{ id: 'autumn_safe', name: "Year {year}: Koukou's family through the autumn", survive: true, reward: 10 }] },
       { id: 'winter', title: "Winter", tools: ['forestBoost', 'Storm'],
         start: [(x) => { x.runner.vars.flockStart = kakapo(x); }],
         goals: [{ id: 'flock_through', name: "Year {year}: the flock through the winter", keep: (x) => kakapo(x) >= (x.runner.vars.flockStart || 0), reward: 20 }],
@@ -147,10 +148,10 @@ const JOURNEY_WEST = (() => {
       { id: 'stage', on: 'chapter_start', if: K.opens('summer', 'staged'),
         do: [
           { flag: 'staged' },
-          K.party([{ name: 'koukou', female: true }, { name: 'baby', years: 2, mother: 'koukou' }], 'camp', { hunger: 30 }),
+          K.westParty('camp', { hunger: 30 }),
           { place: { type: 'Storm', at: 'stormSpot', standing: true } },
           { eagle: { hunger: 5 } },
-          { say: [['guide', "Koukou and the baby have followed the booming north. The birds that make it walk the forest floor at night: kākāpō.", { lit: [...LEADS, 'kakapo'] }]] }
+          { say: [['guide', "Koukou and her family have followed the booming north. The birds that make it walk the forest floor at night: kākāpō.", { lit: [...FAMILY, 'kakapo'] }]] }
         ] },
       // The riddle: a hint ladder a year long. (PLACEHOLDER WORDS: the riddle is the author's.)
       ...K.riddleLadder({
@@ -171,9 +172,9 @@ const JOURNEY_WEST = (() => {
     ], ['gave_up', 'gave_up_again', 'arrived', 'chick'], TAUGHT),
 
     winTitle: "THE MAST",
-    winText: "Koukou and the baby have seen the night parrots through a mast year.",
+    winText: "Koukou and her family have seen the night parrots through a mast year.",
     menu: K.journeyMenu("The night parrots", "The journey: tile 4",
-      ["Koukou and the baby among the kākāpō.", "", "They breed only in a mast year.", "The mast can be seen coming a year ahead."],
+      ["Koukou and her family among the kākāpō.", "", "They breed only in a mast year.", "The mast can be seen coming a year ahead."],
       ['rimu', 'beech', 'fern'])
   });
 
@@ -198,7 +199,7 @@ const JOURNEY_WEST = (() => {
     teaches: ['forest_bounty', 'climate'],
     guide: ['kakapo', 'rimu', 'little_bush_moa', 'glacial_cycles'],
     waysOn: [],
-    outcome: { birds: LEADS, herds: { kakapo: 'kakapo', bush_moa: 'little_bush_moa' },
+    outcome: { birds: FAMILY, herds: { kakapo: 'kakapo', bush_moa: 'little_bush_moa' },
                also: (rec, r) => { rec.bounty = { start: r.vars.bountyStart || 0, end: r.sim.forestBounty() }; } },
 
     species: { moa: ['upland_moa', 'little_bush_moa'], eagle: ['haasts_eagle'], other: ['kakapo'] },
@@ -241,9 +242,15 @@ const JOURNEY_WEST = (() => {
         ok: (x) => kakapo(x) > 0 && bounty(x) > (x.runner.vars.bountyStart || 0),
         reason: (x) => kakapo(x) > 0 ? "Eight years on, the forest bears less than when Koukou came. A bountiful forest is what the kākāpō live on."
                                      : "The kākāpō are gone from this forest.",
-        words: ["Eight years. The forest bears more than when Koukou and the baby came, and the kākāpō are still booming in it.",
-                "But there are no other upland moa here. The baby is grown, and it is time to go north again."],
-        lit: LEADS, before: [K.walkOff(LEADS, 'north')]
+        // (FULLGAMESCRIPT 4f: the great screech, and a kākāpō sends Koukou to the final test.)
+        lit: LEADS, before: [
+          { say: [
+            ['guide', "Eight years. The forest bears more than when Koukou's family came, and the kākāpō are still booming in it.", { lit: FAMILY }],
+            ['guide', "Then, from the north, a great screech.", { lit: ['koukou'] }],
+            ['kakapo', "Koukou. Your time has come. Go and face the final test, for your tribe's future.", { lit: ['kakapo', 'koukou'] }],
+            ['guide', "Afraid, Koukou heads north, toward the sound, and her family with her.", { lit: FAMILY }]
+          ] },
+          K.walkOff(FAMILY, 'north')]
       })
     ],
 
@@ -251,13 +258,14 @@ const JOURNEY_WEST = (() => {
       { id: 'stage', on: 'chapter_start', if: K.opens('summer', 'staged'),
         do: [
           { flag: 'staged' },
-          K.party([{ name: 'koukou', female: true }, { name: 'baby', years: 3, mother: 'koukou' }], 'camp', { hunger: 30 }),
+          K.westParty('camp', { hunger: 30 }),
           { place: { type: 'Storm', at: 'stormSpot', standing: true } },
           { eagle: { hunger: 5 } },
           (x) => { x.runner.vars.bountyStart = bounty(x); bountyLine(x); },
           { say: [
             ['guide', "Eight years in the kākāpō's forest. The rimu will mast in years four and eight. The cold deepens, and the forest shrinks from the top.", { lit: ['kakapo'] }],
-            ['guide', "Keep the forest bountiful: leave it with more fruiting trees than it has now, and the kākāpō still in it. Lancewood, the Forest Seed and the storm are what you have.", { lit: [...LEADS] }]
+            ['guide', "As the ice comes down, the bush moa and the kākāpō are packed into less forest every year. Koukou must learn to live beside them.", { lit: ['little_bush_moa', 'kakapo', 'koukou'] }],   // (FULLGAMESCRIPT 4f)
+            ['guide', "Keep the forest bountiful: leave it with more fruiting trees than it has now, and the kākāpō still in it. Lancewood, the Forest Seed and the storm are what you have.", { lit: FAMILY }]
           ] }
         ] },
       { id: 'best', on: 'goal_met', if: (x) => x.event && /^bounty_/.test(x.event.goal || ''), once: false, do: [(x) => { x.runner.vars.bountyBest = bounty(x); }] },
@@ -275,10 +283,9 @@ const JOURNEY_WEST = (() => {
     winTitle: "A BOUNTIFUL FOREST",
     winText: "Eight years, two masts, and the forest bears more than it did.",
     menu: K.journeyMenu("The mast years", "The journey: 4f, eight years",
-      ["Koukou and the baby, eight years among the kākāpō.", "", "Keep the forest bountiful as the cold comes down.", "A mast in years four and eight."],
+      ["Koukou and her family, eight years among the kākāpō.", "", "Keep the forest bountiful as the cold comes down.", "A mast in years four and eight."],
       ['rimu', 'beech', 'fern', 'lancewood'])
   });
-  freeplay.cast = Object.assign({}, freeplay.cast, { baby: { title: "the baby", species: 'upland_moa', manual: true } });
 
   return { lesson, freeplay };
 })();

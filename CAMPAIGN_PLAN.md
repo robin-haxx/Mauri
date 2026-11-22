@@ -590,3 +590,234 @@ Six seeds each (four for 2f).
    "Koukou's mother" and "Koukou's father" from 2f on.
 5. **Not played by hand.** The scenes were played in a browser with each panel advanced and a
    picture taken. Nobody has played the three tiles through.
+
+## 14. The full script, 22 November 2026: what changes
+
+*Read from `FULLGAMESCRIPT.odt` against sections 2 to 13. Nothing in 14.3 to 14.6 is built.
+14.7 lists the words that were changed in the level files.*
+
+### 14.1 What is different, in short
+
+The script keeps the map, the two paths and the meeting. Five things change underneath them.
+
+1. **Pipi is taken at the end of 2f, not in 7f.** The baby now has a name, Pipi. The Pouākai
+   carries her off as she hatches. Koukou walks west alone, Pukepuke goes north to get her back,
+   and she is found on tile 7, about four years old. Tile 7's new chick is no longer needed.
+2. **The kea become the north path's allies.** Tile 5 is now about the kea and the high forest.
+   The kākā stay allies on tiles 5 and 6, but they are doing fine: their goals are to grow a
+   flock that is already flush, and they are the species a Pouākai hunt can be turned onto. On
+   tile 6 a kākā gives the advice, in place of the crested moa. The rule that kea harry a
+   Pouākai moves from 7f to 6f, and on tile 7 the kea raid the Pouākai's nest.
+3. **Tile 4's mast is earned, not foretold.** Koukou fills the mauri pool to 100 and that brings
+   the mast. This is the Endless level's mast goal, which is already built. The riddle and the
+   Forest Seed sown a year ahead are no longer the lesson.
+4. **The free plays may be shorter.** 4f and 6f last the same time as each other: four years
+   or eight, not decided yet.
+5. **7f builds on the Endless level's year loop**, as section 5 always meant, reusing it rather
+   than reinventing it. What is new is the start on tile 7's quarter and Pukepuke and Koukou's
+   nest kept in that home quarter.
+6. **The two paths are not alike.** Koukou walks west with a tribe: her own family (her mother
+   and father), perhaps Pukepuke's elders too, and any upland moa that turn up. Pukepuke goes
+   north as the lone upland moa.
+
+### 14.2 Tile by tile
+
+"Kind" says how much the tile has to change: **words** only, the **level** file, or the
+**engine** (a new rule or feature).
+
+| Tile | Old plan, as built | New script | Kind |
+|---|---|---|---|
+| 2f | Five years. In year five Pukepuke and Koukou make a nest and the baby hatches. Both ways on are offered | The same, then Pipi is named and the Pouākai carries her off. Pukepuke swears to get her back and make the uplands safe. Koukou, distraught, hears a booming voice from the west | Engine: the taking. Words |
+| 3 | Koukou and the baby. Crowding. Lancewood draws the bush moa off their fern | Koukou alone. A kākāpō speaks to her. In dense forest the bush moa come first. Lancewood is placed to found **bush moa nests** away from the upland moa's food and glades. Koukou makes a nest that will support her tribe | Level rework. Engine: two kinds of nest in one level |
+| 4 | Riddle. Forest Seed sown ahead. Mast fixed in year 2 | The kākāpō: prove your nest adds mauri to the forest, more than enough to keep the Pouākai off, and we'll help make a safe place for upland moa. Mauri pool to 100 brings a bountiful mast | Level rework. Engine: a chapter goal that sets the mast |
+| 4f | Eight years, masts in years 4 and 8, forest bounty. Koukou and the baby cannot breed | Koukou leads the tribe and teaches it to live beside bush moa and kākāpō as the ice packs them into less forest. One more mast cycle. Then a great screech, and a kākāpō sends her to the final test | Level: shorter, and a tribe to lead. Words done |
+| 5 | Pukepuke and both sets of parents. The kākā flock strips the floor. Harakeke grown ahead. Speargrass moved | Pukepuke, alone, grows the montane forest outward as the tree line falls back. The kea are fighting for scraps. Make them a new feeding ground and they'll come to your aid. The kākā are flush, and a hunt can be turned onto them | Level rework: Pukepuke alone, the kea's need, a forest-growing lever |
+| 6 | The crested moa. Speargrass founds a nest. A grove grown ahead | A kākā advises a safe nest made with speargrass. Now the family can live beside the giant moa | Level: a kākā for the crested moa, giant moa brought in from 6f |
+| 6f | Eight years beside the giant moa. A clan target | Kea and kākā confront each other. The kākā: the moa will help make a feeding ground if the kea help find Pipi. The kea: prove it. Grow the forest four years. Kea can chase off an eagle's hunt and lose some cocks doing it. Then they screech and lead the charge west | Level rework. Engine: kea chase off a hunt |
+| 7 | The meeting. Nests. A new chick hatches, to be taken in 7f | The raid. Pukepuke meets Koukou. They watch the kea drive the Pouākai from its nest. At Strongbeak's summons they go uphill for summer and find Pipi hiding nearby: dropped by the eagle, she has fended for herself. A nest. Pipi leads the walk downhill. More forest life, colder winters. Koukou hints there is much to tell | Level rework. Engine: the roost, the raid, Pipi in hiding |
+| 7f | Four story years (the chick taken, the roost, the mast, the kōkako), then endless | The tour runs anticlockwise from tile 7's quarter. Year one there: the kea hassle the moa, the player directs which, and pātōtara lets the kea intercept eagles. Pukepuke and Koukou stay on their nest here while the scattered upland moa live in the other three quarters. Then as in Free Play: north to the kākā, west to the kākāpō, south to the South Island kōkako if the mast goal was met, else other moa | Mostly the Endless level's loop. Engine: home quarter, tour start |
+
+### 14.3 What is already built and carries over
+
+- **The five years (2f)** stand almost whole. The nest in year five and the chick's beat are
+  already there. Only the taking is missing.
+- **The mast goal.** The Endless level's kākā year asks for an amount of mauri gained in the
+  year (`mastGoal` in `levels/level_freeplay_kahurangi.js`, counted in `Game`). Reaching it
+  brings the mast early and opens the kōkako year. That is tile 4's "mauri pool to 100" and
+  7f's branch to the kōkako.
+- **The tour order.** The Endless level's default tour is already anticlockwise (north-east,
+  north-west, south-west, south-east: `_defaultQuadOrder` in `mauri_terrain.js`). 7f only has to
+  start one step later, on the south-east, which `worldGrid.order` can set.
+- **Directing the kea.** The Berry Cache (`keaLure`) stations kea by a chosen nest and grows
+  forest around itself. "KEA: Nest Raid" chooses a nest for them to raid. Together they are 7f's
+  "direct which moa the kea hassle". The Berry Cache also suits tile 5, where the lever is a new
+  feeding ground for the kea.
+- **A Pouākai sent off the land.** `HaastsEagle.sendAway` is how tile 1's eagle leaves to
+  scuffle with the kea. It is the base for kea chasing off a hunt, and for the raid on tile 7.
+- **Bush moa nests from lancewood.** The nest-founding rule takes any moa and plant (a chapter's
+  `nesting: { species, plant }`). Only one pairing can be watched at a time, so a level that wants
+  upland and bush moa nests together (tile 3, 7f) needs one watch per kind.
+- **The tree line falling back.** 4f's `forestContraction` and `forestBand` already shrink the
+  forest from the top as the cold deepens. Tile 5 can reuse it.
+- **Leading a walk.** `CHAPTERS_KIT.headFor` (the scripted walks of tiles 1 and 2) can have Pipi
+  lead the walk downhill on tile 7, and the family go uphill at Strongbeak's summons.
+- **Sounds.** `audio/kakapo_male_boom.mp3` exists and can sit under the booming voice in 2f
+  and 3.
+
+### 14.4 What has to be built
+
+New rules go behind a level switch, as before, and every existing level's replay is compared at
+each stage.
+
+| Feature | For | In the code today | To build |
+|---|---|---|---|
+| The taking of Pipi | 2f | Nothing | A story moment after the win's last line, outside play: the Pouākai swoops and carries Pipi off. Art: the eagle carrying a chick |
+| A bird away but alive | 2f to 7 | The record knows alive or lost | A third state, `taken`, so the map and cards say "carried off" and tile 7 can set Pipi down. (Section 7.4 had this for 7f. It is now needed four tiles earlier) |
+| Pipi off the west path | 3, 4, 4f | Pipi walks with Koukou as a lead | Take her out of the parties, goals and hints. Koukou is the only lead |
+| Two kinds of nest at once | 3, 7f | One nest watch per level | A watch per moa kind |
+| A nest away from the glades | 3 | Nothing | A goal check: a bush moa nest this far from the upland moa's food |
+| Mast set by a chapter goal | 4 | `mastYears` fixed by the lesson. The mast goal lives only in the Endless code | A chapter action that makes next year a mast, called when the mauri goal is met |
+| A tribe that follows Koukou | 4f | Upland moa can arrive over the pass | Upland moa that keep near Koukou and go where she goes |
+| Kea fighting for scraps | 5 | Hungry kea. The scuffle on tile 1 is scripted | A sign the player can see: kea squabbling at thin food |
+| A feeding ground for the kea | 5, 6f | The Berry Cache grows forest and draws kea | A measure: kea fed at ground the player grew. It is the goal of both levels |
+| Kea chase off a hunt | 6f, 7, 7f | `sendAway` (scripted only) | The rule: a kea flock near a hunting Pouākai can break the hunt. Its odds rise with the flock's size and how well fed it is. The eagle leaves, and may take a kea. An event, and a mob the player can see |
+| The kākā speaks | 6, 6f | Kākā live in the game, with no portrait or voice | A portrait and a call for speech panels |
+| The roost and the raid | 7 | Each eagle has a patrol centre | A roost site, the kea mob flying in, the eagle driven off the land |
+| Pipi in hiding | 7 | The `near` condition | Pipi set down in cover, found when the family comes near. Art: an older Pipi |
+| 7f's start and home quarter | 7f | Each quarter is repopulated when the view arrives | Start on the south-east. Keep the family's nest and birds in their quarter while the view is away |
+| Upland moa in every quarter | 7f | One focus moa per zone (upland east, bush moa west) | Upland moa in all four quarters. Bush moa only in the west |
+| Pātōtara draws kea to intercept | 7f | The Berry Cache grows pātōtara on the tops | The chase-off rule, switched on for 7f |
+| "Other moa" when the mast is missed | 7f | The missed branch is a late, cold kākāpō year | New branch contents |
+
+What no longer needs building: the riddle ladder's words, the crested moa's sprite (if the kākā
+replaces it), tile 7's guaranteed new chick, and 7f's "roost year" with the chick found.
+
+### 14.5 A build order
+
+| Stage | You can play at the end | Size |
+|---|---|---|
+| H | 2f with Pipi taken. The record's `taken`. Pipi out of tiles 3, 4 and 4f | Medium |
+| I | Tile 3 reworked (bush moa nests). Tile 4 reworked (the mast from mauri). 4f shortened, with a tribe | Large |
+| J | Tile 5 reworked (kea and the feeding ground). Tile 6 with the kākā. 6f with the chase-off rule | Large |
+| K | Tile 7: the raid, Strongbeak's summons, Pipi found | Medium |
+| L | 7f on the Endless loop: start, home quarter, upland moa everywhere | Large |
+
+Stage J's chase-off rule is the riskiest piece. It is new, it changes who the eagle eats, and
+7f leans on it too. It is worth building and testing first, on 6f alone.
+
+### 14.6 Decisions that are yours
+
+| # | Decision | Default | Why it matters |
+|---|---|---|---|
+| 15 | How Pipi is taken | A story moment after 2f's last line, outside play. The player cannot prevent it | The same reason as decision 2: if it happens in play, the storm rule visibly fails |
+| 16 | Pipi's sex | A hen ("she"). She has to hatch female in 2f | Today the chick's sex is left to chance |
+| 17 | Pipi's age on tile 7 | The words give no number | With 4f and 6f at four years she is about six or seven by the tiles' years; at eight, about ten. Not four either way |
+| 18 | Whether Mama and Papa go west too | **Open.** Built for now with Koukou's parents only; one list in the kit (`CHAPTERS_KIT.WEST`) adds them | Settled by you: Koukou's tribe is her family, perhaps Pukepuke's elders, and any upland moa that turn up. Pukepuke goes north alone |
+| 19 | Koukou's tribe | **Settled by you** (see 18) | |
+| 20 | The riddle | Dropped. The green fruit stays as a clue | The mauri goal replaces it |
+| 21 | Tile 4's "mauri pool to 100" | Mauri gained this year, as the Endless mast goal counts it. Spending doesn't undo it | Mauri is also what tools cost. A balance that must reach 100 would punish planting |
+| 22 | The crested moa | Dropped from tile 6. The kākā speaks | Saves a sprite. The crested moa is a known bird of that country, so it could stay in the background |
+| 23 | The kea's leader | Strongbeak, on tiles 5, 6f, 7 and 7f | He calls the summons on tile 7, and on tile 2 he said the Pouākai attacked their mountain perch |
+| 24 | The kākā year's quarter in 7f | **Settled by you:** north-east, on the uplands, as long as the land generator makes suitable forest there | To build: enough forest in the upland quarters, and a Forest Seed that may be sown there |
+| 25 | "Other moa" in 7f | A moa focus year (stout-legged or heavy-footed moa) in the south-west | The Endless level does something else there today |
+
+The script settles decisions 1 (Pipi is Pukepuke and Koukou's) and 6 (6f is four years).
+Decisions 2 and 3 are replaced by 15, and decision 11 by 25.
+
+**New claims for the evidence table (section 6), to check:** the Pouākai grew large hunting
+the giant moa (inferred, and widely written); the tree line sat lower in glacial times (known);
+in closed forest the little bush moa came first (inferred); bush moa learned to eat lancewood
+while it is young (imagined, the debated defence idea again); kea mob or chase a Pouākai
+(imagined); a carried chick dropped alive and surviving alone (imagined); a Pouākai nest that
+can be found (imagined, no nest is known).
+
+### 14.7 Words changed in the level files (this session)
+
+Only lines whose moment already exists in the levels as built. A line that needs a level to
+work differently (Pipi gone from the west path, kea on tile 5, a kākā on tile 6, the raid) is
+in the drafts below and not in the files. Every level still validates clean.
+
+| File | Change |
+|---|---|
+| all journey files, `mauri_campaign.js` | "the baby" is **Pipi** in every title, goal, hint and line. The menu blurb for 2f says Pipi hatches |
+| `levels/chapters_freeplay.js` (2f) | "They name her Pipi." A last line: the booming from the west, heard by Koukou |
+| `levels/journey_03_bush.js` | Spring: the kākāpō speaks from the dark ("A voice in the dark", so tile 4 keeps its reveal): colder winters, creatures older than the Pouākai, why the bush moa eat young lancewood |
+| `levels/journey_04_kakapo.js` (4f) | Opening: the ice packing bush moa and kākāpō into less forest. Ending: the great screech, and a kākāpō sends Koukou to the final test for her tribe |
+| `levels/journey_06_crested.js` | The lore placeholders now say what the script's kākā says (speargrass makes a safe nest; room beside the giant moa). The speaker is still the crested moa. 6f's ending: the kea screech and lead the charge west |
+| `levels/journey_07_meeting.js` | Koukou: how long she waited, making the deep forest bountiful. Pukepuke: the feeding grounds he helped grow for the kea. The finale: Koukou, "There is so much I have to tell you." |
+
+Pukepuke's "the kea won't be a bother any more" is left out of tile 7 for now: the kea there
+still raid the eggs.
+
+**Drafts waiting for a build.** All of these are placeholders for you to rewrite.
+
+- **2f, the taking.** Now in the file (stage H, 14.8), still drafts for you to rewrite.
+- **Tile 3 opening.** Now in the file with her family: "Koukou has come down into forest she
+  does not know, with her mother and father."
+- **Tile 4 (stage I).** Kākāpō: "Prove that your nest adds mauri to this forest. Not just
+  enough to keep the Pouākai off. More. Then we will help make a safe place for your kind."
+  When the goal is met: "The mauri of the forest is full. Next summer the rimu will mast."
+- **4f opening (stage I).** "Upland moa have followed Koukou into the forest. She leads them now."
+- **Tile 5 (stage J).** Te Whē: "Up here the tree line is falling back, and every bird is
+  trying to spread the forest out again." Strongbeak: "Scraps! That's all that's left up here."
+  Te Whē: "Help them make a new feeding ground, and the kea may come to your aid."
+- **Tile 6 (stage J).** The two lore lines above, spoken by the kākā.
+- **6f opening (stage J).** Kākā: "Kea! These moa can help you grow a new feeding ground, if
+  you help them find their chick." Strongbeak: "Prove it." When the kea first chase off a hunt:
+  "The kea have driven the Pouākai off its hunt!"
+- **Tile 7 (stage K).** Pukepuke: "The kea won't be a bother any more." Strongbeak: "Up the
+  hill, all of you! Summer's waiting!" Te Whē: "Something moves in the scrub..." and "Pipi.
+  The Pouākai dropped her, and she has fended for herself all this time." In autumn: "Pipi
+  leads the way downhill. There is more life in the forest every year, and the winters are
+  colder."
+
+### 14.8 Stage H, built 22 November 2026
+
+Nothing is committed. Every chapters level validates clean.
+
+**The taking (2f).** The five years now end in three short chapters (`levels/chapters_freeplay.js`,
+journey setting only). `finale` says the closing lines and ends on "Then a shadow falls across
+the nest." `taken` empties the toolbar, and the Pouākai stoops on Pipi, lifts her and flies off
+the nearer of the north and west edges, fading out with her (`HaastsEagle.carryOff`, started by
+`CHAPTERS_KIT.carryOff`). `vow` has Koukou's cry, Pukepuke's vow, and Te Whē's line about the
+booming voice, which opens on the kākāpō's recorded boom (a new speaker sound, `'boom'`, in
+`AudioManager.playSpeaker`). Then the win. Run by hand in the app's browser: the stoop takes
+about two seconds and the flight off the land about nine, and the scene reached the win with
+the record written.
+
+- Pipi is always a hen (set as she is adopted, or as she is set down if Koukou had no chick).
+- The carry is never a hunt. No cover stops it, no hunt event fires, and no cast-lost rule
+  sees it. That is why it only comes after the five years are won.
+- The chick is drawn over the eagle, trailing toward its tail. Seen from above, a chick under
+  its body was hidden completely.
+- If no eagle is on the land, Pipi is simply gone. If the eagle has not left with her after 25
+  seconds, she is taken anyway. Both are logged.
+
+**The record (`mauri_campaign.js`).** A bird can now be `taken`: alive, but walking with nobody
+(`CAMPAIGN.alive` is false, `CAMPAIGN.taken` true, a `<name>_taken` flag for levels). The
+default record has Pipi taken on 2f, so any later tile opened alone starts without her. A record
+saved before this change is mended as it loads. The map's family panel and the win card say
+"Pipi: carried off by the Pouākai on tile 2f." A level that sets her down and wins with her
+alive marks her found (stage K). The runner notes a carried bird as taken, not lost
+(`ChapterRunner._watchCast`, a `cast_taken` event).
+
+**The west path (tiles 3, 4 and 4f).** Pipi is gone from them. Koukou walks with her tribe,
+one list in the kit (`CHAPTERS_KIT.WEST`: Koukou and her mother and father; add `'mama'`,
+`'papa'` to send Pukepuke's elders too). Koukou is the only lead. Her parents are elders: losing
+one is a line and a record entry, not a loss. Goals, hints and lines that named Pipi now name
+the family. In 4f her parents are a pair and can breed, so the tribe can grow.
+
+**To keep the two paths apart:** Koukou's parents are off tile 5 (they went west). Mama and Papa
+stay with Pukepuke until stage J makes him the lone moa. Tile 7 no longer sets Pipi down, and
+its opening says "Koukou has walked up from the south." Finding Pipi there is stage K.
+
+**Nothing older changed.** Twelve levels run with seed 1 for up to 90 seconds on the committed
+code and on this build gave identical fingerprints at every 15-second mark: tile 1, tile 2, the
+first two modules (Storms and the modules' free play), the Clues storm lesson, the five years
+(Clues, Guided and Journey), the chapters Endless level, the first Endless level, tile 6 and 6f.
+Tiles 3, 4, 4f, 5 and 7 were changed on purpose. Each was started and run 40 seconds with no
+error, and the right birds were set down.
+
+**Not done.** Nobody has played the scene with their own eyes at full speed. The carried chick
+uses the adult moa picture, because the juvenile one (`sprites/moa_juvenile.png`) is missing.
+The lines are drafts.

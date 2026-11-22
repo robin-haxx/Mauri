@@ -158,6 +158,8 @@ class HaastsEagle extends Boid {
 
     // On an errand off the land (sendAway): nothing else it does runs until it is back.
     if (this._away) { this._awayFlight(dt); return; }
+    // Carrying a bird off for a story (carryOff): the same, until the bird is gone with it.
+    if (this._carry) { this._carryFlight(dt); return; }
 
     // A chapter level's `aim` (mauri_chapters.js): for a while this bird hunts a named moa
     // first, whatever its hunger, cutting short a rest. It's still blind to it under cover
@@ -904,6 +906,58 @@ class HaastsEagle extends Boid {
     this._coverFoils = 0; this.tutorialGraceTimer = 0;
   }
 
+  // A story moment, outside play (CHAPTERS_KIT.carryOff; the end of the journey's five years,
+  // when the Pouākai takes Pipi): it stoops on `prey` and lifts it, whatever covers it, then
+  // flies off over the nearest of `sides` with the bird hanging beneath it, fading out as
+  // sendAway does. At the edge the bird leaves the land alive (causeOfDeath 'carried': the
+  // chapters runner records it as taken, not lost), and the eagle is away for `sec` seconds
+  // before it flies back in fed. Nothing that happens in play changes: this is never a hunt.
+  carryOff(prey, { sides = ['north', 'south', 'west', 'east'], sec = 30 } = {}) {
+    if (!prey || !prey.alive) return false;
+    const t = this.terrain, W = t.mapWidth, H = t.mapHeight, x = prey.pos.x, y = prey.pos.y;
+    const edge = { north: [x, -90, y], south: [x, H + 90, H - y], west: [-90, y, x], east: [W + 90, y, W - x] };
+    const out = sides.map(s => edge[s]).filter(Boolean).sort((a, b) => a[2] - b[2])[0] || edge.north;
+    this._hold = null; this._away = null; this._hungerRamp = null;
+    this._carry = { phase: 'stoop', prey, to: { x: out[0], y: out[1] }, t: 0, sec, fade: 1, held: false };
+    this.hunting = false; this.target = null; this.aimAt = null;
+    this.state = 'patrol'; this._chaseLoop = null; this._huntEventFired = false;
+    return true;
+  }
+
+  get isCarrying() { return !!this._carry; }
+
+  _carryFlight(dt) {
+    const c = this._carry, p = c.prey;
+    this.hunting = false; this.target = null; this.state = 'patrol';
+    c.t += dt;
+    if (c.phase === 'stoop') {
+      if (!p || !p.alive) { this._carry = null; return; }   // (nothing left to take)
+      // (A fast, straight stoop: a few seconds at most, since the player can only watch.)
+      this.maxSpeed = this.baseSpeed * 2.4;
+      this.applyForce(this.seekPoint(p.pos.x, p.pos.y, 1.6));
+      // (Six seconds of chasing a bolting chick is long enough: it has it.)
+      if (Math.hypot(this.pos.x - p.pos.x, this.pos.y - p.pos.y) < 12 || c.t > 6 * 60) {
+        c.phase = 'lift'; c.held = true; c.t = 0;
+        p._carriedBy = this;
+        p.vel.mult(0);
+        if (typeof audioManager !== 'undefined' && audioManager && audioManager.playEagleCatch) audioManager.playEagleCatch();
+      }
+    } else {
+      this.maxSpeed = this.baseSpeed * 1.1;
+      this.applyForce(this.seekPoint(c.to.x, c.to.y, 1));
+      if (p) p.pos.set(this.pos.x, this.pos.y + 5);
+      const d = Math.hypot(this.pos.x - c.to.x, this.pos.y - c.to.y);
+      c.fade = Math.min(c.fade, Math.max(0, Math.min(1, (d - 20) / 140)));
+      if (d < 20) {
+        if (p && p.alive) { p.alive = false; p.causeOfDeath = 'carried'; }
+        if (p) p._carriedBy = null;
+        // Off the land with it, and away a while before flying back in, fed.
+        this._carry = null;
+        this._away = { phase: 'gone', to: c.to, t: 0, frames: Math.max(1, c.sec) * 60, hungerBack: 0, fade: 0 };
+      }
+    }
+  }
+
   // A story's entrance (a chapter's `eagle: { hold }`; tile 1, as module 0): it circles a
   // point, out of the hunt, until release(). Its patrol is moved there too.
   holdOver(x, y, r = 22) {
@@ -1087,9 +1141,9 @@ class HaastsEagle extends Boid {
     // A module's scripted eagle fades out as it flies off the map and is unseen while it's
     // away (EagleLife.fade).
     const fade = (this.lifeScript && this.lifeScript.fade != null) ? this.lifeScript.fade
-               : this._away ? this._away.fade : 1;
+               : this._away ? this._away.fade : this._carry ? this._carry.fade : 1;
     if (fade <= 0) return;
-    const isActiveHunt = this.hunting && this.target !== null;
+    const isActiveHunt = (this.hunting && this.target !== null) || (!!this._carry && this._carry.phase === 'stoop');
     const spriteState = isActiveHunt ? 'hunting' : (this.state === 'resting' ? 'resting' : 'flying');
     const sprite = EntitySprites.getEagleSprite(this.animTime, spriteState);
 
@@ -1132,7 +1186,22 @@ class HaastsEagle extends Boid {
 
       pop();
     }
-    if (this._away) return;   // (on its errand: no rings or bars over a bird half gone)
+    // The bird it carries off, fading with it (Moa.render draws it only from here). Drawn over
+    // the eagle, trailing toward its tail, so the player can see what it has taken: seen from
+    // above, a chick truly under its body would be hidden. (Placed by the eagle, not where the
+    // bird was last kept: the land holds a moa inside its edge, and the eagle flies on past it.)
+    const held = this._carry && this._carry.held ? this._carry.prey : null;
+    if (held && held.alive) {
+      const v = this.vel, m = Math.hypot(v.x, v.y) || 1, back = this.wingspan * 0.4;
+      push();
+      if (fade < 1) drawingContext.globalAlpha *= fade;   // restored by pop()
+      translate(this.pos.x - (v.x / m) * back - held.pos.x, this.pos.y - (v.y / m) * back - held.pos.y);
+      held._drawCarried = true;
+      held.render();
+      held._drawCarried = false;
+      pop();
+    }
+    if (this._away || this._carry) return;   // (on its errand: no rings or bars over a bird half gone)
 
     if (this.state === 'distracted') {
       fill(255, 200, 100);
@@ -1164,7 +1233,7 @@ class HaastsEagle extends Boid {
   // threshold, not hunting yet): its outline shows amber (render).
   _telegraphing() {
     const _T = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS) ? LEVEL_MECHANICS.eagleTelegraph : null;
-    return !!_T && !this._away && !this.hunting && this.state !== 'resting' && this.state !== 'distracted' &&
+    return !!_T && !this._away && !this._carry && !this.hunting && this.state !== 'resting' && this.state !== 'distracted' &&
       this.hunger >= (this._huntThreshEff ?? this.huntThreshold) - (_T.warnBelow ?? 10);
   }
 

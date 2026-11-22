@@ -171,7 +171,8 @@ const JOURNEY_NORTH = (() => {
           { eagle: { which: 'nearest', near: 'camp', watch: 'stormSpot', hunger: 20 } },
           { say: [
             ['guide', "Higher still. Pukepuke, Mama and Papa have no nest in this country.", { lit: FAMILY }],
-            ['crested', "[PLACEHOLDER LORE] I have watched many of your kind settle here. They settle where the speargrass grows thick.", { lit: ['crested'] }]
+            // (FULLGAMESCRIPT 6 gives this advice to a kākā, not a crested moa: CAMPAIGN_PLAN.md §14.)
+            ['crested', "[PLACEHOLDER LORE] Your kind nest safely where the speargrass grows thick. Nothing comes through those spines in a hurry.", { lit: ['crested'] }]
           ] }
         ] },
       // ---- The lone patch: a hint ladder. The ring round it is the clue. -------------------------
@@ -188,7 +189,7 @@ const JOURNEY_NORTH = (() => {
       // ---- The lore, each line released by what the player did (PLACEHOLDER WORDS) -------------------
       { id: 'lore_nest', on: 'nest_founded',
         moment: { on: '$site', text: "A nest in the high country" },
-        say: [['crested', "[PLACEHOLDER LORE] So. A nest. On the flats below walk moa twice my height, who lay one egg in three summers. Be careful what you crowd.", { lit: ['crested'] }]] },
+        say: [['crested', "[PLACEHOLDER LORE] A safe nest, up among the spines. Now you need not crowd the giant moa on the flats below. There is room for both of you.", { lit: ['crested'] }]] },
       { id: 'lore_hatch', on: 'egg_hatched', if: { species: FOCUS },
         moment: { on: '$moa', text: "A chick for Mama" },
         say: [['crested', "[PLACEHOLDER LORE] A chick. The Pouākai roosts north and west of here. It forgets nothing it has seen.", { lit: ['crested', '$moa'] }]] },
@@ -269,7 +270,8 @@ const JOURNEY_NORTH = (() => {
         reason: (x) => giants(x) < (x.runner.vars.giantStart || 0)
           ? "Eight years on there are fewer giant moa than when the family came. A bird that lays one egg in three years cannot make up what it loses."
           : `Eight years on the clan is ${clan(x)}, short of ${D.fClan}.`,
-        words: ["Eight years. The clan has grown, and the giant moa still walk the flats.", "The family turns west, toward the place where two valleys meet."],
+        words: ["Eight years. The clan has grown, and the giant moa still walk the flats.",
+                "Then the kea rise, screeching, and lead the charge west, toward the Pouākai's nest. The family follows."],   // (FULLGAMESCRIPT 6f)
         lit: FAMILY, before: [K.walkOff(FAMILY, 'west')]
       })
     ],

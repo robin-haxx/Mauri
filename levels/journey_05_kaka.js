@@ -2,7 +2,9 @@
 // THE JOURNEY, TILE 5: THE CROWDED FOREST (the north path's first lesson)
 // ============================================================================
 // What this lesson is. After the five years, Pukepuke goes north into higher country with
-// his parents and Koukou's parents. In winter the cold drives upland moa down to the forest
+// his parents (Koukou's parents went west with her: CHAPTERS_KIT.WEST). FULLGAMESCRIPT makes
+// Pukepuke the lone upland moa of this path, and this lesson the kea's: stage J in
+// CAMPAIGN_PLAN.md section 14. In winter the cold drives upland moa down to the forest
 // edge, and a large flock of kākā has fed there all autumn. The one rule: the forest is
 // shared, so winter food has to be grown a season ahead, at the place the family will
 // winter. The lever is a grove of harakeke, planted in autumn so it is grown by winter.
@@ -12,8 +14,7 @@
 // harakeke tool, and a grove that goes in as shoots and takes most of a season to grow.
 // Winter: the family comes down. A moa that feeds under the flock gets a short meal and
 // carries a mark; a grown grove feeds it well; a grove planted late is still shoots. Spring
-// is the season in which nothing is said. Then Koukou's parents turn south for home and
-// Pukepuke, Mama and Papa go on north.
+// is the season in which nothing is said. Then Pukepuke, Mama and Papa go on north.
 //
 // What the simulation does on its own. The family's drift down with the cold, the flock's
 // choice of grove, every meal and every hunt. Two rules are new and are switched on here:
@@ -45,8 +46,8 @@ const JOURNEY_KAKA_DIAL = {
 const JOURNEY_KAKA = (() => {
   const K = CHAPTERS_KIT, D = JOURNEY_KAKA_DIAL;
   const TAUGHT = ['summer', 'autumn', 'winter'];
-  const FAMILY = ['pukepuke', 'mama', 'papa', 'friendMama', 'friendPapa'];
-  const ELDERS = { mama: "Mama", papa: "Papa", friendMama: "Koukou's mother", friendPapa: "Koukou's father" };
+  const FAMILY = ['pukepuke', 'mama', 'papa'];
+  const ELDERS = { mama: "Mama", papa: "Papa" };
 
   const family = (x) => FAMILY.map(n => x.runner.castEnts[n]).filter(e => e && e.alive);
   const groves = (x) => { const w = x.runner.sites.winterGround; return x.runner.sim.placeables.filter(p => p.alive && p.type === 'harakeke' && Math.hypot(p.pos.x - w.x, p.pos.y - w.y) <= D.groveReach); };
@@ -109,9 +110,7 @@ const JOURNEY_KAKA = (() => {
     cast: {
       pukepuke:   { title: "Pukepuke",        species: 'upland_moa', manual: true },
       mama:       { title: "Mama",            species: 'upland_moa', manual: true, pitch: 0.85 },
-      papa:       { title: "Papa",            species: 'upland_moa', manual: true },
-      friendMama: { title: "Koukou's mother", species: 'upland_moa', manual: true, pitch: 0.9 },
-      friendPapa: { title: "Koukou's father", species: 'upland_moa', manual: true }
+      papa:       { title: "Papa",            species: 'upland_moa', manual: true }
     },
 
     sites: {
@@ -175,9 +174,8 @@ const JOURNEY_KAKA = (() => {
       { id: 'onward', title: "North again",
         tools: [],
         start: [
-          { say: [['guide', "Here the families part. Koukou's parents turn south, for their own nest on the old tops. Pukepuke goes on north.", { lit: FAMILY }]] },
-          K.walkOff(['friendMama', 'friendPapa'], 'south'),
-          K.walkOff(['pukepuke', 'mama', 'papa'], 'north')
+          { say: [['guide', "Pukepuke, Mama and Papa go on north.", { lit: FAMILY }]] },
+          K.walkOff(FAMILY, 'north')
         ],
         until: { after: 5 },
         next: 'win'
@@ -189,8 +187,7 @@ const JOURNEY_KAKA = (() => {
       { id: 'stage', on: 'chapter_start', if: K.opens('summer', 'staged'),
         do: [
           { flag: 'staged' },
-          K.party([{ name: 'pukepuke', female: false }, { name: 'mama', female: true }, { name: 'papa', female: false },
-                   { name: 'friendMama', female: true }, { name: 'friendPapa', female: false }], 'tops', { radius: 22 }),
+          K.party([{ name: 'pukepuke', female: false }, { name: 'mama', female: true }, { name: 'papa', female: false }], 'tops', { radius: 22 }),
           // A fruiting grove at the forest edge: what brings the flock there, by the kākā's own rule.
           { place: { type: 'forestBoost', at: 'winterGround', standing: true } },
           // Speargrass on the tops: the family's favoured plant. A standing patch can be moved.
@@ -199,7 +196,7 @@ const JOURNEY_KAKA = (() => {
           { place: { type: 'Storm', at: 'stormSpot', standing: true } },
           { eagle: { which: 'nearest', near: 'tops', watch: 'stormSpot', hunger: 30 } },
           { say: [
-            ['guide', "Pukepuke has come north into higher country, with his parents and Koukou's.", { lit: FAMILY }],
+            ['guide', "Pukepuke has come north into higher country, with Mama and Papa.", { lit: FAMILY }],
             ['guide', "In the forest below, a flock of kākā is feeding. The forest is shared: under a flock, a moa finds less.", { lit: ['kaka'] }],
             ['guide', "A small mark over a moa means its meal was cut short. And the Pouākai hunts here too.", { lit: ['haasts_eagle'] }]
           ] }
@@ -255,7 +252,7 @@ const JOURNEY_KAKA = (() => {
     scoreFormula: (ctx) => Math.round(ctx.moaCount * 30 + ctx.totalEarned * 0.2 + (ctx.goalsCompleted || 0) * 40),
 
     menu: K.journeyMenu("The crowded forest", "The journey: tile 5",
-      ["Pukepuke and both sets of parents, in higher country.", "", "The forest is shared.", "Winter food has to be grown a season ahead."],
+      ["Pukepuke, Mama and Papa, in higher country.", "", "The forest is shared.", "Winter food has to be grown a season ahead."],
       ['tussock', 'beech', 'rimu', 'flax']),
 
     tutorial: { guideSprite: 'mantis_talk', tips: null }

@@ -2116,7 +2116,7 @@ class Simulation {
       eagle.update(dt);
       // A module's eagle can fly off the map and back (EagleLife.offMap).
       // (Or a chapter's eagle on an errand off the land: HaastsEagle.sendAway.)
-      if (!(eagle.lifeScript && eagle.lifeScript.offMap) && !eagle._away) this.constrainToBounds(eagle.pos);
+      if (!(eagle.lifeScript && eagle.lifeScript.offMap) && !eagle._away && !eagle._carry) this.constrainToBounds(eagle.pos);
     }
   }
   

@@ -94,7 +94,7 @@ const JOURNEY_MEETING = (() => {
 
     cast: {
       koukou:   { title: "Koukou",   species: FOCUS, manual: true, pitch: 0.9 },
-      baby:     { title: "the baby", species: FOCUS, manual: true },
+      baby:     { title: "Pipi", species: FOCUS, manual: true },
       pukepuke: { title: "Pukepuke", species: FOCUS, manual: true },
       mama:     { title: "Mama",     species: FOCUS, manual: true, pitch: 0.85 },
       papa:     { title: "Papa",     species: FOCUS, manual: true },
@@ -148,7 +148,8 @@ const JOURNEY_MEETING = (() => {
       { id: 'finale', title: "A year where the paths met", tools: [],
         start: [
           { moment: { on: 'chick', text: "One family again", sec: 3 } },
-          { say: [['guide', "A year where the two paths met. {$meetWords}", { lit: ALL }]] }
+          { say: [['guide', "A year where the two paths met. {$meetWords}", { lit: ALL }],
+                  ['koukou', "There is so much I have to tell you.", { lit: ['koukou', 'pukepuke'] }]] }   // (FULLGAMESCRIPT 7)
         ],
         until: { after: 4 }, next: 'win' }
     ],
@@ -158,7 +159,9 @@ const JOURNEY_MEETING = (() => {
         do: [
           { flag: 'staged' },
           { spawn: { type: 'little_bush_moa', at: 'meet', count: D.herd, radius: 40, sexes: 'pair', hunger: 34 } },
-          K.party([{ name: 'koukou', female: true }, { name: 'baby' }], ['southEdge', 'meet'], { walkTo: 'meet' }),
+          // (Pipi was carried off at the end of 2f and is not with Koukou: finding her here is stage K,
+          // CAMPAIGN_PLAN.md section 14. Koukou's parents joining her here is stage K too.)
+          K.party([{ name: 'koukou', female: true }], ['southEdge', 'meet'], { walkTo: 'meet' }),
           K.party([{ name: 'pukepuke', female: false }, { name: 'mama', female: true }, { name: 'papa', female: false }], ['eastEdge', 'meet'], { walkTo: 'meet' }),
           // Pukepuke's younger siblings, as the record has them.
           (x) => { const n = (x.runner.record && x.runner.record.siblings) || 0;
@@ -177,7 +180,11 @@ const JOURNEY_MEETING = (() => {
               : (f.elders_one ? `One nest stands here, and ${v.elders} winters beside it.` : "One nest stands here. The young have made it on their own.");
           },
           { say: [
-            ['guide', "Koukou and her grown chick have walked up from the south. Pukepuke has come in from the east. {$eldersWords}", { lit: ALL }],
+            ['guide', "Koukou has walked up from the south. Pukepuke has come in from the east. {$eldersWords}", { lit: ALL }],
+            // (FULLGAMESCRIPT 7. Pukepuke's "the kea won't be a bother any more" waits until the kea stop
+            // raiding here: on this tile as built they still come for the eggs. CAMPAIGN_PLAN.md §14.)
+            ['koukou', "I waited so long, making the deep forest bountiful, so upland moa could live there.", { lit: ['koukou'] }],
+            ['pukepuke', "And I helped grow new feeding grounds for the kea, up in the high forest.", { lit: ['pukepuke'] }],
             ['guide', "Bush moa feed on this ground, kea are watching, and the Pouākai is never far. You know what each of them wants.", { lit: ['little_bush_moa', 'kea', 'haasts_eagle'] }]
           ] }
         ] },
@@ -201,7 +208,7 @@ const JOURNEY_MEETING = (() => {
       ...K.arrivals(),
       { id: 'raid_failed', on: 'nest_raid', if: { success: false }, once: false, cooldown: 20, notify: "The moa drove a kea off a nest." },
       { id: 'raid_won', on: 'nest_raid', if: { success: true }, once: false, cooldown: 15, notify: ["A kea took an egg.", 'error'] },
-      ...K.leadLost({ koukou: "Koukou", baby: "the baby", pukepuke: "Pukepuke", chick: "the new chick" }),
+      ...K.leadLost({ koukou: "Koukou", baby: "Pipi", pukepuke: "Pukepuke", chick: "the new chick" }),
       ...K.elderLost({ mama: "Mama", papa: "Papa" })
     ], ['gave_up', 'gave_up_again', 'arrived', 'raid_failed', 'raid_won'], TAUGHT),
 

@@ -1,19 +1,22 @@
 // ============================================================================
 // THE JOURNEY, TILE 3: INTO THE BUSH (the west path's first lesson)
 // ============================================================================
-// What this lesson is. After the five years, Koukou and her chick walk west and down into
-// forest they do not know. A herd of little bush moa feeds on the same fern, and the chick
-// goes short beside them. The one rule: moa crowded on the same forest food each get less,
-// and each kind's own plant draws it away. The lever is lancewood (horoeka), which only the
-// bush moa favour: a stand planted away from the chick draws the herd off its fern.
+// What this lesson is. After the five years, with Pipi carried off, Koukou and her family
+// (CHAPTERS_KIT.WEST: her mother and father) walk west and down into forest they do not know.
+// A herd of little bush moa feeds on the same fern, and the family goes short beside them. The
+// one rule: moa crowded on the same forest food each get less, and each kind's own plant draws
+// it away. The lever is lancewood (horoeka), which only the bush moa favour: a stand planted
+// away from the family draws the herd off its fern.
+// (FULLGAMESCRIPT changes this lesson: lancewood founds bush moa nests away from the upland
+// moa's food. That rework is stage I in CAMPAIGN_PLAN.md section 14; this file is stage H's.)
 //
-// What the player sees. Summer: the two upland moa feeding among the bush moa, and a small
+// What the player sees. Summer: the upland moa feeding among the bush moa, and a small
 // mark over any moa whose meal was cut short by the crowd. A few wild lancewood stand nearby
 // and the bush moa can be seen choosing them: that is the clue. Autumn: the Pouākai comes,
 // and a storm still hides a moa, as tile 1 taught. Winter: more bush moa come down into the
 // refuge and the crowding is at its worst, so one stand is not enough. Spring: a booming in
-// the night from the north. Nothing is said in spring: it is the season that tests the year.
-// Then Koukou and the chick walk off the north edge.
+// the night from the north, and a voice in the dark (the kākāpō, unseen). Nothing more is said
+// in spring: it is the season that tests the year. Then the family walks off the north edge.
 //
 // What the simulation does on its own. Everything the animals do. The crowding rule is the
 // open simulation's (mechanics.forestCompetition, in the first Endless level since it was
@@ -33,7 +36,7 @@
 // bush moa in closed forest, known; different moa on different plants, known from dung;
 // bush moa as the ones that ate young lancewood, IMAGINED (the spiky young form as a defence
 // against moa is a debated idea).
-// PLACEHOLDERS: the level's title, every line, and the baby's name.
+// PLACEHOLDERS: the level's title and every line.
 // ============================================================================
 
 const JOURNEY_BUSH_DIAL = {
@@ -41,20 +44,21 @@ const JOURNEY_BUSH_DIAL = {
   forestDensity: 0.003,   // how thickly the wild forest is planted (the first Endless level: 0.004)
   gully: { ferns: 16, radius: 42 },   // the fern gully at the camp: the rich patch both kinds come to
   winterArrivals: 4,       // ...and those that come down into the refuge in winter
-  hunger: 1.0, chickHunger: 1.4,   // how fast a moa gets hungry here, and the baby faster (the other lessons: 0.6 and 1.0)
+  hunger: 1.0, chickHunger: 1.4,   // how fast a moa gets hungry here, and a chick faster (the other lessons: 0.6 and 1.0)
   crowd: { radius: 60, tolerance: 1, penalty: 0.25, winterMult: 1.7 },   // more than one other moa within 50 cuts a meal
   crowdQuestion: 6, crowdTell: 16,     // the first crowded meal's ladder, in seconds
   laterQuestion: 14, laterTell: 28,    // ...and later ones
-  calmSec: 12              // a goal: this long with no crowded meal for Koukou or the baby
+  calmSec: 12              // a goal: this long with no crowded meal for anyone in the family
 };
 
 const JOURNEY_BUSH = (() => {
   const K = CHAPTERS_KIT, D = JOURNEY_BUSH_DIAL;
   const TAUGHT = ['summer', 'autumn', 'winter'];
-  const LEADS = ['koukou', 'baby'];
+  const LEADS = ['koukou'];
+  const FAMILY = K.WEST;   // Koukou and her tribe (her mother and father)
 
-  // The last second at which Koukou or the baby had a crowded meal (set by a reaction).
-  const noteCrowd = (x) => { x.runner.vars._crowdAt = x.game.playTime; };
+  // The last second at which one of the family had a crowded meal (set by a reaction).
+  const noteCrowd = (x) => { x.runner.vars._crowdAt = x.game.playTime; x.runner.vars.crowdWho = K.who(x.runner, x.event && x.event.moa); };
   const calmFor = (sec) => (x) => {
     const r = x.runner, since = r.vars._crowdAt != null ? r.vars._crowdAt : r.scopeCh.t0;
     return x.game.playTime - Math.max(since, r.scopeCh.t0) >= sec * 60;
@@ -80,13 +84,13 @@ const JOURNEY_BUSH = (() => {
     guide: ['little_bush_moa', 'upland_moa', 'favoured_plants', 'coexistence', 'beech_refuge'],
     unlockCondition: null,
     waysOn: [{ label: "North, to the booming", tile: 't4' }],
-    outcome: { birds: LEADS, herds: { bush_moa: 'little_bush_moa' } },
+    outcome: { birds: FAMILY, herds: { bush_moa: 'little_bush_moa' } },
 
     zoom: 2.0,
     startSeason: 'summer',
     // The first Endless level's country, fitted low: flats, shrubland and a wide forest that is
     // the highest ground there is. Upland moa keep to the highest band a land has, so here the
-    // forest is where Koukou and the baby must feed: the land sets the meeting, not the script.
+    // forest is where Koukou's family must feed: the land sets the meeting, not the script.
     terrain: Object.assign({}, LEVEL_FREEPLAY_KAHURANGI.terrain, {
       // (A thin forest: the fern gully the stage sows at the camp is the rich food on it, so
       // both kinds of moa come to the same patch for the same reason.)
@@ -122,10 +126,7 @@ const JOURNEY_BUSH = (() => {
       rescueImmigration: { little_bush_moa: { below: 3, count: 3, afterSeasons: 1 } }
     }),
 
-    cast: {
-      koukou: { title: "Koukou",   species: 'upland_moa', manual: true, pitch: 0.9 },
-      baby:   { title: "the baby", species: 'upland_moa', manual: true, scale: 0.6 }
-    },
+    cast: K.westCast(),
 
     sites: {
       // The high forest near the middle: the ground an upland moa would choose on this land,
@@ -141,9 +142,9 @@ const JOURNEY_BUSH = (() => {
         tools: ['lancewood'],
         focus: ['upland_moa'],
         goals: [
-          { id: 'uncrowded', name: "Half the bush moa drawn off to their own plant, and the baby's meals uncrowded",
+          { id: 'uncrowded', name: "Half the bush moa drawn off to their own plant, and the family's meals uncrowded",
             done: { all: [drawnOff, calmFor(D.calmSec)] }, reward: 20 },
-          { id: 'summer_fed', name: "The baby fed through the summer", survive: true, reward: 10 }
+          { id: 'summer_fed', name: "Koukou's family fed through the summer", survive: true, reward: 10 }
         ],
         holdSeason: { until: { goal: 'uncrowded' }, at: 0.9, maxSec: 30 }
       },
@@ -157,7 +158,7 @@ const JOURNEY_BUSH = (() => {
           K.eagleComes('koukou')
         ],
         goals: [
-          { id: 'autumn_safe', name: "Koukou and the baby through the autumn", survive: true, reward: 15 }
+          { id: 'autumn_safe', name: "Koukou's family through the autumn", survive: true, reward: 15 }
         ]
       },
 
@@ -169,7 +170,7 @@ const JOURNEY_BUSH = (() => {
           { say: [['guide', "Winter. More bush moa have come down into the refuge, and everyone is feeding in the same small forest.", { lit: ['little_bush_moa'] }]] }
         ],
         goals: [
-          { id: 'winter_uncrowded', name: "Half the winter herd drawn off, and the baby's meals uncrowded",
+          { id: 'winter_uncrowded', name: "Half the winter herd drawn off, and the family's meals uncrowded",
             done: { all: [drawnOff, calmFor(D.calmSec)] }, reward: 25 },
           { id: 'winter_through', name: "Through the winter", survive: true, reward: 15 }
         ]
@@ -179,7 +180,12 @@ const JOURNEY_BUSH = (() => {
       { id: 'spring', title: "Spring: a booming in the night", transfer: true,
         tools: ['lancewood', 'Storm'],
         start: [
-          { say: [['guide', "Spring. At night, from the north, a deep booming comes through the trees. Koukou keeps turning toward it."],
+          // (FULLGAMESCRIPT 3: the kākāpō speaks to Koukou. Unseen here, so tile 4 keeps its reveal;
+          // the voice is Te Whē's panel with its own title. Words drafted from the script.)
+          { say: [['guide', "Spring. At night, from the north, a deep booming comes through the trees. Then a voice, out of the dark.", { lit: ['koukou'], speaker: 'boom' }],
+                  ['guide', "Upland moa. Get ready. The winters will be colder than these.", { title: "A voice in the dark" }],
+                  ['guide', "Many creatures deep in this forest have been here a long time. Longer than the Pouākai.", { title: "A voice in the dark" }],
+                  ['guide', "The Pouākai grew great with the giant moa. So the bush moa learned to eat the lancewood while it is small.", { title: "A voice in the dark", lit: ['little_bush_moa'] }],
                   ['guide', "One more season in this forest. This time nobody will tell you what to do."]] },
           K.eagleComes('koukou', 42)
         ],
@@ -195,8 +201,8 @@ const JOURNEY_BUSH = (() => {
       { id: 'onward', title: "North, toward the booming",
         tools: [],
         start: [
-          { say: [['guide', "Koukou and the baby set off north, toward the sound.", { lit: LEADS }]] },
-          K.walkOff(LEADS, 'north')
+          { say: [['guide', "Koukou and her family set off north, toward the sound.", { lit: FAMILY }]] },
+          K.walkOff(FAMILY, 'north')
         ],
         until: { after: 5 },
         next: 'win'
@@ -210,67 +216,68 @@ const JOURNEY_BUSH = (() => {
           { flag: 'staged' },
           { sow: { plant: 'fern', at: 'camp', count: D.gully.ferns, radius: D.gully.radius } },
           { spawn: { type: 'little_bush_moa', at: 'camp', count: D.herd, radius: 34, sexes: 'pair', hunger: 34 } },
-          K.party([{ name: 'koukou', female: true }, { name: 'baby', years: 1, mother: 'koukou' }], 'camp', { hunger: 38 }),
+          K.westParty('camp', { hunger: 38 }),
           // A few wild lancewood, away from the fern: the bush moa's own plant, and the clue.
           { sow: { plant: 'lancewood', at: 'wild', count: 4, radius: 26 } },
           (x) => { for (const p of x.runner.sim.plants) if (p.type === 'lancewood') p.favouredSpecies = 'little_bush_moa'; },
           { eagle: { hunger: 4 } },
           { say: [
-            ['guide', "Koukou and her chick have come down into forest they do not know. Little bush moa feed here, on the same fern.", { lit: [...LEADS, 'little_bush_moa'] }],
-            ['guide', "Watch the baby feed. A small mark over a moa means its meal was cut short: too many beaks on one patch.", { lit: ['baby'] }],
+            ['guide', "Koukou has come down into forest she does not know, with her mother and father. Little bush moa feed here, on the same fern.", { lit: [...FAMILY, 'little_bush_moa'] }],
+            ['guide', "Watch the family feed. A small mark over a moa means its meal was cut short: too many beaks on one patch.", { lit: FAMILY }],
             ['guide', "Look at what the bush moa choose when they have a choice.", { lit: ['little_bush_moa'] }]
           ] }
         ] },
 
       // ---- The crowded meal: a hint ladder (nothing, a question, the instruction) --------------
-      { id: 'crowd_note', on: 'moa_crowded', if: { cast: LEADS }, once: false, do: [noteCrowd] },
-      { id: 'crowd', on: 'moa_crowded', if: { cast: LEADS },
+      { id: 'crowd_note', on: 'moa_crowded', if: { cast: FAMILY }, once: false, do: [noteCrowd] },
+      { id: 'crowd', on: 'moa_crowded', if: { cast: FAMILY },
         until: crowdUntil, solved: { placed: 'lancewood' }, lost: crowdLost,
         hints: [
-          { after: D.crowdQuestion, notify: ["The baby's meal was cut short. Too many moa on one patch of fern. What would the bush moa sooner eat?", 'error'] },
-          { after: D.crowdTell, banner: { words: ["Plant a LANCEWOOD STAND away from the baby", "The bush moa will go to their own plant"],
-                                          tool: 'lancewood', lit: ['baby', 'little_bush_moa'], pause: true, maxSec: 30 } }
+          { after: D.crowdQuestion, notify: ["{$crowdWho}'s meal was cut short. Too many moa on one patch of fern. What would the bush moa sooner eat?", 'error'] },
+          { after: D.crowdTell, banner: { words: ["Plant a LANCEWOOD STAND away from the family", "The bush moa will go to their own plant"],
+                                          tool: 'lancewood', lit: [...FAMILY, 'little_bush_moa'], pause: true, maxSec: 30 } }
         ] },
       { id: 'crowd_again', on: 'moa_crowded', once: false, cooldown: 35,
-        if: (x) => !!x.event && LEADS.some(n => x.runner.castEnts[n] === x.event.moa) && x.runner.reactions.some(r => r.id === 'crowd' && r.fired) &&
+        if: (x) => !!x.event && FAMILY.some(n => x.runner.castEnts[n] === x.event.moa) && x.runner.reactions.some(r => r.id === 'crowd' && r.fired) &&
                    x.game.playTime - x.runner.reactions.find(r => r.id === 'crowd').lastAt > 50 * 60,
         until: crowdUntil, solved: { placed: 'lancewood' }, lost: crowdLost,
         hints: [
-          { after: D.laterQuestion, notify: ["The baby is being crowded off its food again.", 'error'] },
-          { after: D.laterTell, banner: { words: ["Another LANCEWOOD STAND would draw the bush moa off", "Plant it away from the baby"],
-                                           tool: 'lancewood', lit: ['baby'], pause: false, maxSec: 20 } }
+          { after: D.laterQuestion, notify: ["The family is being crowded off its food again.", 'error'] },
+          { after: D.laterTell, banner: { words: ["Another LANCEWOOD STAND would draw the bush moa off", "Plant it away from the family"],
+                                           tool: 'lancewood', lit: FAMILY, pause: false, maxSec: 20 } }
         ] },
       { id: 'saw_crowd', on: 'case_closed', once: false, cooldown: 20,
         if: (x) => x.event && /^crowd/.test(x.event.case || '') && x.event.outcome === 'solved' && x.event.rung === 0,
         notify: ["Planted with no hint. Each kind of moa has its own plant, and it draws them away.", 'success'] },
       // The lesson's other half, said once the player has acted: why it worked.
       { id: 'drawn_off', when: (x) => stands(x).some(p => x.runner.allOf('little_bush_moa').filter(m => Math.hypot(m.pos.x - p.pos.x, m.pos.y - p.pos.y) < 70).length >= 2),
-        say: [['guide', "The bush moa have gone to the lancewood. It is their plant: Koukou and the baby get almost nothing from it, and leave it alone.", { lit: ['little_bush_moa', 'lancewood'] }]] },
+        say: [['guide', "The bush moa have gone to the lancewood. It is their plant: Koukou's family get almost nothing from it, and leave it alone.", { lit: ['little_bush_moa', 'lancewood'] }]] },
 
       // ---- The Pouākai and the storm, as tile 1 taught (the kit's ladders) -----------------------
       ...K.coverLadder({ species: 'upland_moa', first: [4, 7], later: [4, 7], pauseFirst: false }),
       ...K.praise({ chapters: TAUGHT }),
-      ...K.stormLadder({ lit: LEADS, unlock: false, chapters: ['autumn', 'winter'] }),
+      ...K.stormLadder({ lit: FAMILY, unlock: false, chapters: ['autumn', 'winter'] }),
       ...K.gaveUp(),
       ...K.arrivals(),
       { id: 'herd_taken', on: 'moa_killed', if: { species: 'little_bush_moa' }, once: false, cooldown: 30,
         notify: "The Pouākai took a bush moa. It has to eat too." },
 
       // ---- The leads: either lost ends the lesson -------------------------------------------------
-      ...K.leadLost({ koukou: "Koukou", baby: "the baby" },
-        { starved: "A crowded patch feeds nobody well: draw the bush moa off with lancewood, or tap plants near the family." })
+      ...K.leadLost({ koukou: "Koukou" },
+        { starved: "A crowded patch feeds nobody well: draw the bush moa off with lancewood, or tap plants near the family." }),
+      ...K.elderLost(K.westElders())
     ], ['gave_up', 'gave_up_again', 'arrived', 'herd_taken', 'drawn_off'], TAUGHT),
 
     lose: [],   // (the leads' loss is the only way to lose: see leadLost)
 
     winTitle: "NORTH",
-    winText: "Koukou and the baby are through their first year in the bush.",
+    winText: "Koukou and her family are through their first year in the bush.",
 
     goals: [],
     scoreFormula: (ctx) => Math.round(ctx.moaCount * 30 + ctx.totalEarned * 0.2 + (ctx.goalsCompleted || 0) * 40),
 
     menu: K.journeyMenu("Into the bush", "The journey: tile 3",
-      ["Koukou and her chick, in forest they do not know.", "", "Two kinds of moa on one food both go short.", "Each kind's own plant draws it away."],
+      ["Koukou and her family, in forest they do not know.", "", "Two kinds of moa on one food both go short.", "Each kind's own plant draws it away."],
       ['fern', 'beech', 'lancewood', 'rimu']),
 
     tutorial: { guideSprite: 'mantis_talk', tips: null }

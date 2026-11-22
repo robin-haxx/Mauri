@@ -368,6 +368,13 @@ class Moa extends Boid {
     // is attached it does everything, and none of the behaviour below runs.
     if (this.lifeScript) { this.lifeScript.behave(simulation, mauri, seasonManager, dt); return; }
     this._sim = simulation;   // (for the calendar's year and season; see _calendar)
+    // Carried off by a Pouākai for a story (HaastsEagle.carryOff): it does nothing, and is
+    // kept at the eagle's talons until the eagle takes it off the land.
+    if (this._carriedBy) {
+      this.vel.mult(0);
+      this.pos.set(this._carriedBy.pos.x, this._carriedBy.pos.y + 5);
+      return;
+    }
     if (this._leaving) { this._leaveStep(dt); return; }   // (dispersal: on its way off the land)
 
     this.updateAge(dt);
@@ -1585,6 +1592,7 @@ class Moa extends Boid {
 
   render() {
     if (!this.alive) return;
+    if (this._carriedBy && !this._drawCarried) return;   // (a carried bird is drawn by its eagle)
 
     const variant = this.speciesConfig.spriteSet;
     const isMating = this.currentState === MOA_STATE.MATING;
@@ -1679,6 +1687,7 @@ class Moa extends Boid {
   renderLowPopRing() {}
 
   renderIndicators() {
+    if (this._carriedBy) return;
     const px = this.pos.x, py = this.pos.y, s = this.size;
     const yOff = -s * 0.8 - 4;
 

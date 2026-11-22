@@ -52,8 +52,12 @@ const FREEPLAY_SKETCHES = {
   //   - Mauri comes in from every bird on the land (mechanics.ecosystemIncome), as Te Whē says.
   //   - No moa courts its own parent, chick or sibling (mechanics.noKinPairing).
   //   - In the fifth year a nest of their own stands between the two families' nests, and
-  //     Koukou's first clutch is due (her calendar is set so): the chick is "the baby". If no
-  //     chick of hers is alive by the fifth spring an egg is set beside her (logged as forced).
+  //     Koukou's first clutch is due (her calendar is set so): the chick is Pipi (cast name
+  //     `baby`). If no chick of hers is alive by the fifth spring an egg is set beside her
+  //     (logged as forced).
+  //   - After the closing words, outside play, the Pouākai carries Pipi off (FULLGAMESCRIPT;
+  //     CHAPTERS_KIT.carryOff). Pukepuke swears to get her back; Koukou hears a booming voice
+  //     from the west. The record keeps Pipi as taken, not lost.
   //   - The win writes the campaign record and offers the two ways on.
   journey: { label: 'Journey', graceSec: 8, floors: 0, eagleBreeding: false, pause: true, eagleHungerRate: 0.012, clues: true, journey: true }
 };
@@ -95,7 +99,7 @@ function makeChaptersFreeplay(sketchKey) {
   const journeyParts = !D.journey ? {} : {
     section: 'journey', journey: true, sketch: undefined,
     name: "Pukepuke & Koukou: the five years",
-    winText: "Pukepuke and Koukou are grown, and Koukou has a chick. Two ways lead on from here.",
+    winText: "Pukepuke and Koukou are grown, and the Pouākai has carried their chick Pipi away. Two ways lead on from here.",
     cast: {
       mama:       { title: "Mama Moa",        species: 'upland_moa', manual: true, pitch: 0.85 },
       papa:       { title: "Papa Moa",        species: 'upland_moa', manual: true },
@@ -103,7 +107,7 @@ function makeChaptersFreeplay(sketchKey) {
       friendPapa: { title: "Koukou's father", species: 'upland_moa', manual: true, pitch: 1.1 },
       pukepuke:   { title: "Pukepuke",        species: 'upland_moa', manual: true },
       koukou:     { title: "Koukou",          species: 'upland_moa', manual: true },
-      baby:       { title: "the baby",        species: 'upland_moa', manual: true, scale: 0.6 }
+      baby:       { title: "Pipi",        species: 'upland_moa', manual: true, scale: 0.6 }
     },
     waysOn: [{ label: "West with Koukou", tile: 't3' }, { label: "North with Pukepuke", tile: 't5' }],
     sites: {
@@ -212,7 +216,7 @@ function makeChaptersFreeplay(sketchKey) {
       friendPapa: { title: "The neighbour", species: 'upland_moa', manual: true },
       pukepuke:   { title: "Pukepuke",   species: 'upland_moa', manual: true, scale: 0.6 },
       koukou:     { title: "Koukou",     species: 'upland_moa', manual: true, scale: 0.6 },
-      ...(D.journey ? { baby: { title: "the baby", species: 'upland_moa', manual: true, scale: 0.6 } } : {})
+      ...(D.journey ? { baby: { title: "Pipi", species: 'upland_moa', manual: true, scale: 0.6 } } : {})
     },
 
     sites: {
@@ -280,27 +284,51 @@ function makeChaptersFreeplay(sketchKey) {
         next: [[{ year: ['>=', FREEPLAY_YEARS + 1] }, 'finale'], [true, 'summer']]
       },
       { id: 'finale', title: "Five years on",
+        ...(D.journey ? { tools: [] } : {}),
         start: [
-          // Journey: Koukou's youngest living chick is the baby (set down beside her if the
-          // egg did not make it: the story needs the baby, and the log says how it came).
+          // Journey: Koukou's youngest living chick is Pipi (set down beside her if the egg did
+          // not make it: the story needs Pipi, and the log says how she came). Pipi is a hen.
           ...(D.journey ? [(x) => {
             const r = x.runner, c = koukousChick(x);
-            if (c) { r.castEnts.baby = c; c.castName = 'baby'; r._log('cast', 'baby', 'adopted'); }
-            else if (r.castEnts.koukou) { CHAPTERS_KIT.party([{ name: 'baby', years: 0.1, mother: 'koukou' }], 'koukou')(x); r._log('beat', 'baby', 'set down at the finale'); }
+            if (c) { r.castEnts.baby = c; c.castName = 'baby'; c.isFemale = true; r._log('cast', 'baby', 'adopted'); }
+            else if (r.castEnts.koukou) { CHAPTERS_KIT.party([{ name: 'baby', years: 0.1, mother: 'koukou', female: true, newborn: true }], 'koukou')(x); r._log('beat', 'baby', 'set down at the finale'); }
           }] : []),
           { moment: { on: 'pukepuke', text: "Grown up", sec: 3 } },
           ...(D.journey ? [{ say: [
             ['guide', "Five years have passed on the tops."],
             ['guide', "Pukepuke and Koukou are grown, and they've made a nest of their own.", { lit: ['pukepuke', 'koukou', 'nests'] }],
-            ['guide', "And Koukou has a chick of her own.", { lit: ['baby', 'koukou'] }],                    // (new: the journey's baby)
-            ['guide', "As long as there are kaitiaki to watch over them, the upland moa will go on in Kahurangi."]
+            ['guide', "And now they have a chick of their own. They name her Pipi.", { lit: ['baby', 'koukou'] }],   // (new: the journey's baby, named in FULLGAMESCRIPT)
+            ['guide', "As long as there are kaitiaki to watch over them, the upland moa will go on in Kahurangi."],
+            ['guide', "Then a shadow falls across the nest.", { lit: ['baby', 'haasts_eagle'] }]   // (new, draft: FULLGAMESCRIPT 2f)
           ] }] : [{ say: [['guide', "Five years have passed on the tops. Pukepuke and Koukou are grown.", { lit: ['pukepuke', 'koukou'] }],
-                  ['guide', "As long as there are kaitiaki to watch over them, the upland moa will go on in Kahurangi."]] }]),
-          { win: true }
+                  ['guide', "As long as there are kaitiaki to watch over them, the upland moa will go on in Kahurangi."]] },
+                  { win: true }])
         ],
-        until: { after: 8 },
-        next: 'win'
-      }
+        until: { after: D.journey ? 1.5 : 8 },
+        next: D.journey ? 'taken' : 'win'
+      },
+      // Journey (FULLGAMESCRIPT 2f): the Pouākai carries Pipi off, outside play. Nothing the
+      // player does can stop it (CHAPTERS_KIT.carryOff), so it comes only after the five years
+      // are won; the toolbar is empty. Pipi leaves the land alive and the record keeps her as
+      // taken (CAMPAIGN.finish): she is found again on tile 7.
+      ...(D.journey ? [
+        { id: 'taken', title: "The Pouākai", tools: [],
+          start: [CHAPTERS_KIT.carryOff('baby', { sides: ['north', 'west'] })],
+          until: { any: [CHAPTERS_KIT.isTaken('baby'), { after: 25 }] },
+          next: 'vow' },
+        { id: 'vow', title: "Carried off", tools: [],
+          start: [
+            CHAPTERS_KIT.makeTaken('baby'),   // (only if the eagle somehow never left with her: logged as forced)
+            // (new, drafts: FULLGAMESCRIPT 2f, for the author to rewrite)
+            { say: [
+              ['koukou', "Pipi! PIPI!", { lit: ['koukou'] }],
+              ['pukepuke', "I'll get her back. And I'll find a way to make the uplands safe.", { lit: ['pukepuke'] }],
+              ['guide', "Koukou cannot be comforted. Then, from far to the west, a deep, booming voice.", { lit: ['koukou'], speaker: 'boom' }]
+            ] }
+          ],
+          until: { after: 3 },
+          next: 'win' }
+      ] : [])
     ],
 
     reactions: (D.clues ? ((list) => freeplayCluesReactions(list, D)) : (list) => list)([

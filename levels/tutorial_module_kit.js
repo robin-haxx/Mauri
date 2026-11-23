@@ -278,11 +278,11 @@ const MODULE_TIP_KIT = (function () {
       }, lit, Object.assign({ needs: 'move' }, extra));
   }
 
-  // ---- Pātōtara: it comes up bare, and a press and hold on it sprouts its berries ----------
+  // ---- Pātōtara: it comes up bare, and three quick taps on it sprout its berries ------------
   // (Game._sprout, Plant.sproutsByHand.) The pātōtara the player grew that's still bare.
   const unsproutedFood = (game) => game.module && game.module.placedFood
     ? game.module.placedFood.filter(p => p.alive && p.unsprouted) : [];
-  const SPROUT_WORDS = "Tap and hold the PĀTŌTARA to sprout its berries";
+  const SPROUT_WORDS = "Tap the PĀTŌTARA three times to sprout its berries";
 
   // A banner that goes once target(game, data) (a pātōtara patch or plant) is sprouted.
   function sproutBanner(id, trigger, target, lit, extra = {}) {

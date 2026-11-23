@@ -125,7 +125,7 @@ const MODULE_STORMS = {
     // The tussock and dracophyllum stay standing through winter (no dormant die-back), so the
     // land doesn't change under the story.
     evergreenPlants: ['tussock', 'dracophyllum'],
-    // Pātōtara on the land stands bare until the player sprouts it (press and hold on it); the
+    // Pātōtara on the land stands bare until the player sprouts it (three quick taps on it); the
     // patches the story plants come up in fruit. (Plant.sproutsByHand, Game._sprout)
     sproutPatotara: true
   },

@@ -11,7 +11,7 @@
 //               of storms, to the waterhole. Winter by the water (storms fade, the pātōtara
 //               stands bare, wharariki keeps). Spring: back up the trail to their nests.
 //   food        wild tussock is poor fare up here (biteValue). Hungry families walk to the
-//               pātōtara (once sprouted: a press and hold, as in the modules) and wharariki the
+//               pātōtara (once sprouted: three quick taps, as in the modules) and wharariki the
 //               player grows near their home. A pair well fed for a while and left in peace
 //               lays one egg at its nest in summer, once its last chick is a couple of years old.
 //   the eagle   one Pouākai that hunts when it's hungry and takes whatever it can see. A moa

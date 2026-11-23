@@ -47,6 +47,22 @@ const PLANT_SHAKE_FRAMES = 30;                 // how long a tapped plant shakes
 const PLANT_FRUIT_DELAY = 45;
 const PLANT_FRUIT_JITTER = 15;
 
+// Plants the player brings into fruit or flower by hand (three quick taps on it; Game's
+// _sproutTap), where the level's mechanics name them. Until then a plant is `unsprouted`.
+//   flag     the mechanics switch that makes this type start unsprouted
+//   seasons  when it can be brought on (else the third tap is refused with `refuse`)
+//   leaf     the share of its food it gives without fruit or flower: 0 for pātōtara (a bare
+//            bush, nothing on it), half for wharariki (its leaves feed all year)
+//   bloom    seasons it shows its flowers once sprouted (null: every season). Out of them a
+//            sprouted plant is back in leaf only, and feeds at `leaf`: wharariki flowers in
+//            spring and summer, so it is a hardy winter food but a reduced one.
+const HAND_SPROUT = {
+  patotara:  { flag: 'sproutPatotara',  seasons: ['spring', 'summer', 'autumn'], leaf: 0, bloom: null,
+               refuse: "Pātōtara has no berries to sprout in winter." },
+  wharariki: { flag: 'sproutWharariki', seasons: ['spring', 'summer'], leaf: 0.5, bloom: ['spring', 'summer'],
+               refuse: "Wharariki flowers in spring and summer." }
+};
+
 // Sprite reference - initialized from mauri_sketch.js
 let PLANT_SPRITES = null;
 
@@ -278,8 +294,9 @@ class Plant {
                         LEVEL_MECHANICS.evergreenPlants.includes(type));
     // A level with mechanics.sproutPatotara (the modules): pātōtara starts unsprouted (its
     // dormant look, no berries, nothing for a bird to eat) until the player sprouts it, by
-    // pressing and holding on it (Game._sprout). Sprouted, it looks thriving in summer and mature
-    // in spring and autumn (see _getSpriteState).
+    // tapping it three times (Game._sproutTap). Sprouted, it looks thriving in summer and mature
+    // in spring and autumn (see _getSpriteState). With mechanics.sproutWharariki, wharariki
+    // starts in leaf only (food at HAND_SPROUT's `leaf` share) until it is brought into flower.
     this.unsprouted = Plant.sproutsByHand(type);
     this.sprouted = false;
     this._seasonKey = null;
@@ -292,14 +309,42 @@ class Plant {
     this._lastSpriteState = 'mature';
   }
   
-  // Whether this level's `type` plants start unsprouted (see the constructor).
+  // Whether this level's `type` plants start unsprouted (see the constructor and HAND_SPROUT).
   static sproutsByHand(type) {
-    return type === 'patotara' && typeof LEVEL_MECHANICS !== 'undefined' && !!LEVEL_MECHANICS.sproutPatotara;
+    const h = HAND_SPROUT[type];
+    return !!h && typeof LEVEL_MECHANICS !== 'undefined' && !!LEVEL_MECHANICS[h.flag];
   }
 
-  // Bring out its berries (a press and hold on it; see Game._sprout). `staged` (the player's
-  // sprouting) shows it in leaf for a moment before the fruit (PLANT_FRUIT_DELAY); timed on
-  // the render clock, so it plays while a prompt has the game paused too.
+  // Whether `type` can be brought into fruit or flower in season `key` (HAND_SPROUT.seasons).
+  static canSproutIn(type, key) {
+    const h = HAND_SPROUT[type];
+    return !h || h.seasons.includes(key);
+  }
+
+  // The share of its food a `type` plant gives in leaf, before (or out of) fruit and flower.
+  static leafShare(type) {
+    const h = HAND_SPROUT[type];
+    return h ? h.leaf : 0;
+  }
+
+  // The share of its food a plant (or patch) of `type` gives now: 1 in fruit or flower, its
+  // `leaf` share while unsprouted or out of its flowering seasons. Only where the level hands the
+  // type to the player to sprout; elsewhere always 1.
+  static bloomShare(type, unsprouted, seasonKey) {
+    const h = HAND_SPROUT[type];
+    if (!h || !Plant.sproutsByHand(type)) return 1;
+    if (unsprouted) return h.leaf;
+    return (!h.bloom || h.bloom.includes(seasonKey)) ? 1 : h.leaf;
+  }
+
+  // Nothing on it to eat: an unsprouted plant with no leaf food (a bare pātōtara bush).
+  isBare() {
+    return this.unsprouted && !Plant.leafShare(this.type);
+  }
+
+  // Bring out its berries or flowers (three taps on it; see Game._sproutTap). `staged` (the
+  // player's sprouting) shows it in leaf for a moment first (PLANT_FRUIT_DELAY); timed on the
+  // render clock, so it plays while a prompt has the game paused too.
   sprout(staged = false) {
     this.unsprouted = false;
     this.sprouted = true;
@@ -309,7 +354,7 @@ class Plant {
 
   // Whether there's anything on it for a browser to eat now (what a tap's lure needs).
   hasFood() {
-    return this.alive && !this.dormant && !this.unsprouted && !this.matured && !this.winterInedible && this.growth >= 0.3;
+    return this.alive && !this.dormant && !this.isBare() && !this.matured && !this.winterInedible && this.growth >= 0.3;
   }
 
   // A tap on it (Game._tapPlant): a quick side-to-side shake on top of the sway. It runs on
@@ -336,7 +381,8 @@ class Plant {
       // all (pātōtara, rimu: winterEdibility 0) bears nothing through the winter.
       if (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.placedPlantsSeasonal) {
         this.seasonalModifier = Math.max(0.35, seasonManager.getPlantModifier(this.biomeKey) * 1.2);
-        this.plantTypeModifier = seasonManager.getPlantTypeModifier(this.type);
+        this.plantTypeModifier = seasonManager.getPlantTypeModifier(this.type) *
+          Plant.bloomShare(this.type, this.unsprouted, this._seasonKey);
         this.handleGrowth();
         const def = PLANT_TYPES[this.type];
         const w = seasonManager.getWinterness ? seasonManager.getWinterness() : 0;
@@ -368,8 +414,10 @@ class Plant {
       this.seasonalModifier = newModifier;
     }
     
-    // Get plant-type specific modifier (for patotara berries, etc.)
-    this.plantTypeModifier = seasonManager.getPlantTypeModifier(this.type);
+    // Get plant-type specific modifier (for patotara berries, etc.), and a flowering plant's
+    // share in leaf (wharariki out of flower: HAND_SPROUT).
+    this.plantTypeModifier = seasonManager.getPlantTypeModifier(this.type) *
+      Plant.bloomShare(this.type, this.unsprouted, this._seasonKey);
     
     this.checkDormancy(seasonManager);
 
@@ -488,7 +536,7 @@ class Plant {
   }
 
   consume() {
-    if (this.dormant || this.unsprouted) return 0;
+    if (this.dormant || this.isBare()) return 0;
     
     const nutritionGained = this.nutrition;
     this.alive = false;
@@ -512,13 +560,17 @@ class Plant {
       return 'dormant';
     }
     // Pātōtara waiting to be sprouted shows bare; sprouted, it's in fruit in summer (thriving)
-    // and in leaf in spring and autumn (mature). See sprout().
+    // and in leaf in spring and autumn (mature). See sprout(). Wharariki (HAND_SPROUT.bloom)
+    // shows leaves alone (its 'dormant' art) until it is brought into flower, and again out of
+    // its flowering seasons.
     if (this.unsprouted) return 'dormant';
     if (this.sprouted) {
+      const h = HAND_SPROUT[this.type], blooms = !!(h && h.bloom && Plant.sproutsByHand(this.type));
       if (this._fruitAt != null) {
-        if (frameCount < this._fruitAt) return 'mature';   // just sprouted: in leaf first
+        if (frameCount < this._fruitAt) return blooms ? 'dormant' : 'mature';   // just sprouted: in leaf first
         this._fruitAt = null;
       }
+      if (blooms && !h.bloom.includes(this._seasonKey)) return 'dormant';
       return this._seasonKey === 'summer' ? 'thriving' : 'mature';
     }
     // Free Play: winter-inedible plants stand frosted/wilted (present, not gone).
@@ -546,9 +598,11 @@ class Plant {
     
     const px = this.pos.x;
     const py = this.pos.y;
-    // (An unsprouted pātōtara draws as dormant does, but nearly full size and with no frost.)
-    const dormant = this.dormant || this.unsprouted;
-    const dormantMult = this.dormant ? 0.5 : (this.unsprouted ? 0.9 : 1);
+    // (An unsprouted pātōtara draws as dormant does, but nearly full size and with no frost.
+    // Wharariki in leaf, waiting to flower, is a living plant and draws as one.)
+    const bare = this.isBare();
+    const dormant = this.dormant || bare;
+    const dormantMult = this.dormant ? 0.5 : (bare ? 0.9 : 1);
     const displaySize = this.size * this.growth * dormantMult;
     
     if (displaySize < 2) return;

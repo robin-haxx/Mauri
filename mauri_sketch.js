@@ -465,7 +465,11 @@ function applyLevelToConfig(levelDef) {
   // Endless "years" world grid (a 2×2 grid of terrain areas the world scrolls
   // through, one per year). Null on classic levels → the terrain behaves exactly
   // as a single window. See TerrainGenerator + Game._scrollWorldGrid.
-  CONFIG.worldGrid = levelDef.worldGrid || null;
+  // A journey tile is an area of the journey's one land: its grid is the few areas of that land
+  // it and its ways on need (CAMPAIGN.worldGridFor), so the next tile's ground is already there
+  // to pan to (Game._journeyOnward).
+  CONFIG.worldGrid = levelDef.worldGrid ||
+    ((levelDef.journey && typeof CAMPAIGN !== 'undefined') ? CAMPAIGN.worldGridFor(levelDef) : null);
 
   const e = levelDef.economy;
   CONFIG.startingMauri = e.startingMauri;
@@ -556,6 +560,18 @@ const GAME_STATE = {
 // How far (canvas px) a press must travel before letting go counts as a drag-and-drop rather
 // than a click (Game.handleRelease). A finger's wobble on a tap stays under it.
 const DRAG_SLOP_PX = 12;
+
+// Sprouting by hand (Game._sproutTap): SPROUT_TAPS quick taps on an unsprouted pātōtara or
+// wharariki, each a press shorter than SPROUT_TAP_MAX_MS, the next within SPROUT_TAP_GAP_MS of
+// the last. A press held on a patch is still a move (updateHoldToMove), so a patch can be both
+// sprouted and moved.
+const SPROUT_TAPS = 3;
+const SPROUT_TAP_GAP_MS = 650;
+const SPROUT_TAP_MAX_MS = 450;
+
+// How long a catch's words stay over the play area on a level whose camera goes to hunts
+// (Game._onEagleCatch).
+const CATCH_CAPTION_MS = 2800;
 
 // Terrain resolution options for the splash-screen slider (left to right).
 // Low resolutions coarsen the terrain cells (pixelScale) rather than
@@ -1271,6 +1287,10 @@ class Game {
     // to set it down elsewhere for half its mauri price.
     this._holdCandidate = null;   // { p, heldFrames, startMX, startMY }
     this.movingPlaceable = null;
+    // Sprouting by hand: the press that may be a sprouting tap (_sproutPress: { p, mx, my, t,
+    // tx, ty }), and the taps counted so far on one plant (_sproutTaps: { p, n, last }).
+    this._sproutPress = null;
+    this._sproutTaps = null;
 
     // Drag to place (see handleRelease): the press that may become a drag onto the map, from
     // a toolbar button (_toolDrag: { type, x0, y0 }) or from a just-lifted item still held
@@ -1312,6 +1332,7 @@ class Game {
     this._handoffPending = null;
     this._handoffShot = null;
     this._handoffFade = null;
+    this._journeyPan = null;      // a journey tile's way on, panning to the next tile (_journeyOnward)
     this._kawakawaBanned = false; // set at the first winter (endless): kawakawa unplantable for good
     // Mast Year interactable (see triggerMastYear): the cycle a bought mast lands on
     // (-1 = none). Global one-shot cooldowns live here, keyed by placeable type.
@@ -1337,6 +1358,7 @@ class Game {
   }
 
   loadLevel(levelId) {
+    if (typeof RAIDS !== 'undefined') RAIDS.reset();   // (no raid carries into another level)
     const rawDef = LEVEL_REGISTRY.get(levelId);
     if (!rawDef) {
       console.error(`Level not found: ${levelId}`);
@@ -1347,6 +1369,7 @@ class Game {
     this.currentLevel = levelDef;
     // A seed to replay is chosen for one level, after loading it (see _initTerrainAndSeason).
     this._replaySeed = null;
+    this._journeyPan = null;
     // A module hand-off only carries into the level it leads to (see startModuleHandoff).
     if (this._moduleHandoff && this._moduleHandoff.levelId !== levelId) this._moduleHandoff = null;
 
@@ -1482,7 +1505,13 @@ class Game {
     if (seed == null) { seed = SAVEGAME.newSeed(); seedFrom = 'new'; }
     this._replaySeed = null;
     this.runSeed = seed;
-    randomSeed(this.runSeed); noiseSeed(this.runSeed);
+    // The land's noise comes from the run seed, except on a level carried on from another (a
+    // module's "Continue", a journey tile's way on): it keeps that level's, or the shared
+    // ground would come out different. (landNoise goes into the next hand-off.)
+    const _hand = (this._moduleHandoff && this.currentLevel && this._moduleHandoff.levelId === this.currentLevel.id)
+      ? this._moduleHandoff : null;
+    this.landNoise = (_hand && _hand.noise != null) ? _hand.noise : this.runSeed;
+    randomSeed(this.runSeed); noiseSeed(this.landNoise);
     this._beginAttempt(seedFrom);
     this.terrain = new TerrainGenerator(CONFIG, this.activeBiomes);
     this.seasonManager = new SeasonManager(CONFIG);
@@ -1503,7 +1532,48 @@ class Game {
     if (h) {
       if (h.seed != null) this.terrain.seed = h.seed;
       if (h.elevFit) this.terrain.fixedElevFit = h.elevFit;
+    } else if (_hand && _hand.journey && _hand.seed != null) {
+      // A journey tile carried on from the tile before: the same land. (Each tile fits the
+      // heights of its own area to its own lesson, so no height fit is carried.)
+      this.terrain.seed = _hand.seed;
     }
+  }
+
+  // A journey tile's way on (its win card): the tile it leads to, on the same land. The party
+  // has already walked off (each tile's ending does that). If the next tile's area is another
+  // one of this land, the land is cleared and the view pans across to it (_updateJourneyPan),
+  // and the next tile loads there behind a still of the last frame (startModuleHandoff); if it
+  // is this same area (a lesson's free play), it loads straight away. A level not on this
+  // land (no world grid, or the next tile's area outside it) just starts, as before.
+  _journeyOnward(levelId) {
+    const t = this.terrain, wg = CONFIG.worldGrid, C = (typeof CAMPAIGN !== 'undefined') ? CAMPAIGN : null;
+    const cell = C && C.landCell(C.tileOf(levelId));
+    const col = (cell && wg && wg.land) ? cell[0] - wg.land.col : -1;
+    const row = (cell && wg && wg.land) ? cell[1] - wg.land.row : -1;
+    if (!t || !t.hasWorldGrid || col < 0 || row < 0 || col >= t.worldGridCols || row >= t.worldGridRows) {
+      this._startLevel(levelId);
+      return;
+    }
+    const hand = { levelId, journey: true, seed: t.seed, noise: this.landNoise,
+                   from: C.tileOf(this.currentLevel && this.currentLevel.id) };
+    if (col === t.activeCol && row === t.activeRow) { this.startModuleHandoff(hand); return; }
+    if (this.tutorial) { this.tutorial.enabled = false; this.tutorial.active = false; this.tutorial.currentTip = null; }
+    this.selectedPlaceable = null;
+    this.movingPlaceable = null;
+    if (this.simulation && this.simulation.unloadAreaEntities) this.simulation.unloadAreaEntities();
+    this.cameraTo({ zoom: 1 }, 60);
+    t.panToArea(col, row);
+    this._journeyPan = { hand };
+  }
+
+  // Each frame of a journey pan (the win card is hidden meanwhile): ease the view across, then
+  // hand over to the next tile. Runs in real frames from update(), whatever the state.
+  _updateJourneyPan(dt) {
+    const jp = this._journeyPan, t = this.terrain;
+    if (t && t.isPanning()) t.updatePan(dt, 180);
+    if (t && t.isPanning()) return;
+    this._journeyPan = null;
+    this.startModuleHandoff(jp.hand);
   }
 
   // A module's "Continue" has walked the family off and panned to the next area: load the
@@ -1640,6 +1710,8 @@ class Game {
     this._toolUnlockFrame = {};
     this._holdCandidate = null;     // stale refs would point into the old simulation
     this.movingPlaceable = null;
+    this._sproutPress = null;
+    this._sproutTaps = null;
     this._toolDrag = null;
     this._moveDrag = null;
     if (typeof HudCache !== 'undefined') HudCache.clear();   // a new level builds a new HUD
@@ -1848,6 +1920,8 @@ class Game {
     this.camera = { zoom: 1, cx: 0, cy: 0, ax: 0.5, ay: 0.5, tween: null };
     this._camHist = null; this._hatchCam = null;
     this._selected = null; this._follow = false; this._huntCam = null; this._panCand = null;   // (the player's camera)
+    this._huntCamRest = 0;
+    this._catchCaption = null;
   }
 
   // Ease the camera to `target` ({ zoom, cx, cy, ax, ay }; omitted keys hold) over `frames`
@@ -1935,7 +2009,10 @@ class Game {
     if (phase === 'start') {
       if (this._hatchCam || this.state !== GAME_STATE.PLAYING) return;
       const c = this.camera, v = c ? (c.tween ? c.tween.to : c) : null;
-      this._hatchCam = { egg, back: (v && v.zoom > 1.0001) ? { zoom: v.zoom, cx: v.cx, cy: v.cy, ax: v.ax, ay: v.ay } : { zoom: 1 } };
+      // (Over a hunt's view, back to where the view was before the hunt took it.)
+      const hb = this._huntCam && this._huntCam.back;
+      this._hatchCam = { egg, back: hb ? (hb.zoom > 1.0001 ? { zoom: hb.zoom, cx: hb.cx, cy: hb.cy, ax: 0.5, ay: 0.5 } : { zoom: 1 })
+        : (v && v.zoom > 1.0001) ? { zoom: v.zoom, cx: v.cx, cy: v.cy, ax: v.ax, ay: v.ay } : { zoom: 1 } };
       this._huntCam = null;
       this._follow = false;
       this.cameraTo({ zoom: Math.max(2.8, v ? v.zoom : 1), cx: egg.pos.x, cy: this._groundPaintY(egg.pos.x, egg.pos.y),
@@ -2099,33 +2176,92 @@ class Game {
     this._normaliseCamera();
   }
 
-  // mechanics.huntCamera { focusOnly }: an eagle has started on `target`. If the player is zoomed
-  // in and the hunt is off screen, ease the view to frame hunter and hunted, remembering where
-  // the view was; _updateHuntCam eases back when the hunt is over. Not while the player's
-  // hands are busy (a drag, an item being moved or placed).
+  // mechanics.huntCamera { focusOnly, zoomIn, maxZoom }: the view goes to a hunt.
+  //   (always)   on a level with the player's camera, zoomed in elsewhere: when an eagle starts
+  //              on a bird off screen, the view eases to frame hunter and hunted
+  //   zoomIn     with the whole land in view (any level, the player's camera or not): the view
+  //              closes in on the hunt, so the player sees what the Pouākai is after. It frames
+  //              the hunted bird, and the eagle and the storm nearest the bird while they fit
+  //              (maxZoom, 2 by default, down to 1.3), and follows the hunt as it goes
+  //   focusOnly  only hunts of the focus species
+  // Where the view was is remembered; _updateHuntCam eases back when the hunt is over. Not while
+  // the player's hands are busy (a drag, an item being moved or placed), nor while something
+  // else holds the camera (a story moment, a hatching, a year's turn, a chapter outside play).
+  _huntCamCfg() {
+    return (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS && LEVEL_MECHANICS.huntCamera) || null;
+  }
+
+  // Whether the hunt view may have the camera now.
+  _huntCamFree() {
+    if (this._hatchCam) return false;
+    if (this.currentLevel && this.currentLevel.userCamera) return this.userCameraOn();
+    // (A chapter with an empty toolbar is a story beat outside play: the finale, a taking.)
+    const ch = this.chapters && this.chapters.cur;
+    if (ch && ch.def && Array.isArray(ch.def.tools) && !ch.def.tools.length) return false;
+    return !!this.currentLevel && !this.module && !(this.chapters && this.chapters.moment) &&
+      !this._yearTransition && !this._introShot &&
+      (this.state === GAME_STATE.PLAYING || this.state === GAME_STATE.PAUSED);
+  }
+
   _onHuntStart(eagle, target) {
-    const H = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS && LEVEL_MECHANICS.huntCamera) || null;
-    if (!H || !this.userCameraOn() || !eagle || !target || !target.pos) return;
-    if (this._zoomGoal() <= 1.05) return;                       // the whole land is in view already
+    const H = this._huntCamCfg();
+    if (!H || !eagle || !target || !target.pos || !this._huntCamFree()) return;
     if (H.focusOnly) {
       const focus = (this.chapters && this.chapters.focus) || this.freeplayFocus || [];
       if (!focus.includes(target.speciesKey)) return;
     }
     if (this._huntCam) { this._huntCam.eagle = eagle; this._huntCam.target = target; return; }   // the same hunt, its next bird
-    if ((this._panCand && this._panCand.active) || this.movingPlaceable || this.selectedPlaceable) return;
-    if (this._inView(target.pos, 0.12) && this._inView(eagle.pos, 0.04)) return;                 // already on screen
-    this._huntCam = { eagle, target, frames: 0, quiet: 0,
+    if ((this._panCand && this._panCand.active) || this.movingPlaceable || this._moveDrag || this._toolDrag) return;
+    const zoomIn = this._zoomGoal() <= 1.05;
+    if (zoomIn) {
+      if (!H.zoomIn) return;                                    // the whole land is in view already
+    } else {
+      if (!(this.currentLevel && this.currentLevel.userCamera)) return;   // (a script has the view close: leave it)
+      if (this.selectedPlaceable) return;
+      if (this._inView(target.pos, 0.12) && this._inView(eagle.pos, 0.04)) return;               // already on screen
+    }
+    this._huntCam = { eagle, target, frames: 0, quiet: 0, zoomIn,
                       back: Object.assign({ zoom: this._zoomGoal(), follow: this._follow }, this._viewCentre()) };
     this._follow = false;
-    this._frameHunt(this._huntCam, 45);
+    this._frameHunt(this._huntCam, zoomIn ? 70 : 45);
+  }
+
+  // The view a hunt wants: { zoom, cx, cy } (paint space).
+  _huntFraming(hc) {
+    const e = hc.eagle, t = hc.target, v = this._viewport(), b = this._baseView();
+    const pt = (p) => ({ x: p.x, y: this._groundPaintY(p.x, p.y) });
+    const fit = (pts, pad) => {
+      let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+      for (const p of pts) { x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x); y0 = Math.min(y0, p.y); y1 = Math.max(y1, p.y); }
+      return { zoom: Math.min(v.w * 0.8 / (x1 - x0 + pad), v.h * 0.8 / (y1 - y0 + pad)) / b.z,
+               cx: (x0 + x1) / 2, cy: (y0 + y1) / 2 };
+    };
+    if (!hc.zoomIn) {
+      const f = fit([pt(e.pos), pt(t.pos)], 170);
+      return { zoom: Math.max(1.15, Math.min(Math.max(1.5, hc.back.zoom), f.zoom)), cx: f.cx, cy: f.cy };
+    }
+    // Closing in from the whole land: the hunted bird, then the eagle, then the storm nearest the
+    // bird (the player's answer to the hunt), each while the view can still hold them all.
+    const H = this._huntCamCfg() || {}, hi = H.maxZoom || 2, lo = 1.3;
+    const pts = [pt(t.pos)];
+    const more = [];
+    if (e && e.alive && e.pos) more.push(pt(e.pos));
+    const sim = this.simulation;
+    let storm = null, sd = 260;
+    if (sim) for (const p of sim.placeables) {
+      if (!p.alive || p.type !== 'Storm') continue;
+      const d = Math.hypot(p.pos.x - t.pos.x, p.pos.y - t.pos.y);
+      if (d < sd) { sd = d; storm = p; }
+    }
+    if (storm) more.push(pt(storm.pos));
+    for (const p of more) if (fit([...pts, p], 150).zoom >= lo) pts.push(p);
+    const f = fit(pts, 150);
+    return { zoom: Math.max(lo, Math.min(hi, f.zoom)), cx: f.cx, cy: f.cy };
   }
 
   _frameHunt(hc, frames) {
-    const e = hc.eagle, t = hc.target, v = this._viewport(), b = this._baseView();
-    const ey = this._groundPaintY(e.pos.x, e.pos.y), ty = this._groundPaintY(t.pos.x, t.pos.y);
-    const spanW = Math.abs(e.pos.x - t.pos.x) + 170, spanH = Math.abs(ey - ty) + 170;
-    const zoom = Math.max(1.15, Math.min(Math.max(1.5, hc.back.zoom), Math.min(v.w * 0.8 / spanW, v.h * 0.8 / spanH) / b.z));
-    this.cameraTo({ zoom, cx: (e.pos.x + t.pos.x) / 2, cy: (ey + ty) / 2, ax: 0.5, ay: 0.5 }, frames);
+    const f = this._huntFraming(hc);
+    this.cameraTo({ zoom: f.zoom, cx: f.cx, cy: f.cy, ax: 0.5, ay: 0.5 }, frames);
   }
 
   _updateHuntCam(hc) {
@@ -2133,28 +2269,97 @@ class Game {
     const e = hc.eagle, live = e.alive && e.hunting;
     const t = (live && e.target && e.target.alive) ? e.target : null;
     if (t) { hc.target = t; hc.quiet = 0; } else hc.quiet++;
-    const over = !live || hc.quiet > 90 || hc.frames > 60 * 25;
-    if (over && hc.frames > 90) {
+    const over = !live || hc.quiet > 90 || hc.frames > 60 * 25 || !hc.target || !hc.target.pos;
+    // (A hunt that ends in a catch holds on it a moment, under the catch's words, before easing out.)
+    if (!over) hc.endAt = null;
+    else if (hc.endAt == null) hc.endAt = frameCount + (hc.target && !hc.target.alive ? 75 : 0);
+    if (over && hc.frames > 90 && frameCount >= hc.endAt) {
       // Back to where the view was (or to the animal it was following).
       this._huntCam = null;
+      this._huntCamRest = frameCount + 90;   // (a breath before the next hunt takes the view)
       const b = hc.back, f = (b.follow && this._selected && this._selected.alive) ? this._selected : null;
       this._follow = !!f;
-      this.cameraTo(f ? { zoom: b.zoom, cx: f.pos.x, cy: this._groundPaintY(f.pos.x, f.pos.y), ax: 0.5, ay: 0.5 }
-                      : { zoom: b.zoom, cx: b.cx, cy: b.cy, ax: 0.5, ay: 0.5 }, 60);
+      if (f) this.cameraTo({ zoom: b.zoom, cx: f.pos.x, cy: this._groundPaintY(f.pos.x, f.pos.y), ax: 0.5, ay: 0.5 }, 60);
+      else if (b.zoom <= 1.0001) this.cameraTo({ zoom: 1 }, 80);
+      else this.cameraTo({ zoom: b.zoom, cx: b.cx, cy: b.cy, ax: 0.5, ay: 0.5 }, 60);
       return;
     }
     const c = this.camera, tt = hc.target;
-    if (!c.tween && tt && tt.pos) {
+    // (Held still while the player sets something down, so the land doesn't slide under the tap.)
+    if (c.tween || !tt || !tt.pos || this.movingPlaceable || this._moveDrag || this._toolDrag) return;
+    if (hc.zoomIn) {
+      // Follow the hunt: ease toward its framing, the zoom as well as the middle.
+      const f = this._huntFraming(hc);
+      c.zoom = Math.exp(Math.log(c.zoom) + (Math.log(f.zoom) - Math.log(c.zoom)) * 0.03);
+      c.cx += (f.cx - c.cx) * 0.05; c.cy += (f.cy - c.cy) * 0.05; c.ax = c.ay = 0.5;
+    } else {
       const mx = (e.pos.x + tt.pos.x) / 2;
       const my = (this._groundPaintY(e.pos.x, e.pos.y) + this._groundPaintY(tt.pos.x, tt.pos.y)) / 2;
       c.cx += (mx - c.cx) * 0.08; c.cy += (my - c.cy) * 0.08; c.ax = c.ay = 0.5;
-      this._updateViewTransform();
+    }
+    this._updateViewTransform();
+  }
+
+  // A catch, on a level whose camera goes to hunts (mechanics.huntCamera): the hunt view has
+  // drawn the eye to it, so it is said in words over the play area for a few seconds
+  // (_renderCatchCaption), in place of the simulation's own notification. Returns whether it
+  // was said. (The simulation calls this from handleEagleCatch and handleEagleCatchFlyer.)
+  _onEagleCatch(eagle, prey) {
+    if (!this._huntCamCfg() || !prey) return false;
+    this._catchCaption = { text: `The Pouākai took ${this._preyWords(prey)}`, t0: millis() };
+    return true;
+  }
+
+  // Who was taken, in words: a named bird by its title, else "a" or "an" and its kind.
+  _preyWords(p) {
+    const ch = this.chapters;
+    if (ch && p.castName && ch.castDefs && ch.castDefs[p.castName]) return ch.castDefs[p.castName].title;
+    const name = this._freeplaySpeciesName(p.speciesKey) || 'bird';
+    return (/^[aeiouāēīōū]/i.test(name) ? 'an ' : 'a ') + name;
+  }
+
+  // The catch's words, over the top of the play area, fading in and out (CATCH_CAPTION_MS).
+  _renderCatchCaption() {
+    const c = this._catchCaption;
+    if (!c) return;
+    const t = millis() - c.t0;
+    if (t > CATCH_CAPTION_MS) { this._catchCaption = null; return; }
+    const a = 255 * Math.min(1, t / 250, (CATCH_CAPTION_MS - t) / 450);
+    const area = this.tutorial && this.tutorial.playArea ? this.tutorial.playArea()
+      : { x: 0, y: 0, w: CONFIG.canvasWidth, h: CONFIG.canvasHeight };
+    const size = 34 * (typeof TIP_PANEL_SCALE !== 'undefined' ? TIP_PANEL_SCALE : 1) * (CONFIG.portrait ? 0.8 : 1);
+    push();
+    if (typeof FreckleFace !== 'undefined') textFont(FreckleFace);
+    textSize(size);
+    textAlign(CENTER, CENTER);
+    stroke(12, 22, 16, a * 0.9);
+    strokeWeight(size * 0.14);
+    strokeJoin(ROUND);
+    fill(255, 214, 196, a);   // (a moment's catch colour)
+    text(c.text, area.x + area.w * 0.5, area.y + area.h * 0.17);
+    pop();
+  }
+
+  // A level without the player's camera whose huntCamera zooms in: the hunt view alone. A hunt
+  // that began while something else held the camera is taken up once it is free.
+  _updateHuntOnly() {
+    const H = this._huntCamCfg();
+    if (!H || !H.zoomIn) { this._huntCam = null; return; }
+    if (!this._huntCamFree()) return;    // (the hunt view waits while a moment, a hatching... has the view)
+    if (this._huntCam) { this._updateHuntCam(this._huntCam); return; }
+    const sim = this.simulation;
+    if (!sim || frameCount < (this._huntCamRest || 0)) return;
+    for (const e of sim.eagles || []) {
+      if (!e.alive || !e.hunting || !e.target || !e.target.alive) continue;
+      this._onHuntStart(e, e.target);
+      if (this._huntCam) return;
     }
   }
 
   // Every real frame (from render, before the camera's own ease): the drag, the hunt, the follow.
   _updateUserCamera() {
-    if (!this.currentLevel || !this.currentLevel.userCamera || !this.camera) return;
+    if (!this.currentLevel || !this.camera) return;
+    if (!this.currentLevel.userCamera) { this._updateHuntOnly(); return; }
     if (this._selected && !this._selected.alive) this.clearSelection();
     if (!this.userCameraOn()) { this._panCand = null; return; }
     this._updatePan();
@@ -2350,6 +2555,8 @@ class Game {
   
   update(dt = 1) {
     this._watchAttempt();   // a win or loss this frame goes into the save with its seed
+    // A journey tile's way on: the view pans across to the next tile (the world is cleared).
+    if (this._journeyPan) { this._updateJourneyPan(dt); return; }
     if (this.state !== GAME_STATE.PLAYING && this.state !== GAME_STATE.PAUSED) return;
     // A module's "moment" (Free Play: a hatching, a catch) holds the whole world still while it
     // plays: no sim, no clock, no tips; only the moment's own timeline runs.
@@ -2388,6 +2595,8 @@ class Game {
     if (this.seasonManager.update(_seasonDt)) this.onSeasonChange();
 
     this.simulation.update(this.mauri, dt);
+    // A raid at a nest counts down to its roll (mauri_raid.js).
+    if (typeof RAIDS !== 'undefined') RAIDS.update(this, dt);
     // Module levels: the story moves on after the birds have moved.
     if (this.module) this.module.update(dt);
     // Chapter levels: the chapter reacts to what the birds just did, and checks its goals.
@@ -2527,15 +2736,6 @@ class Game {
     }
   }
   
-  // Headline for the WON overlay. Only claims "all goals achieved" when it's actually true;
-  // timed and phased levels can end with goals unmet. Levels may override with `endMessage`.
-  _endMessage() {
-    if (this.currentLevel && this.currentLevel.endMessage) return this.currentLevel.endMessage;
-    const goals = this.goals || [];
-    const allDone = goals.length > 0 && goals.every(g => g.achieved);
-    return allDone ? "All goals achieved!" : "";
-  }
-
   // Snapshot passed to the (per-level tunable) score formula. See
   // computeLevelScore / defaultLevelScore in mauri_level_format.js.
   _scoreContext() {
@@ -4515,30 +4715,84 @@ class Game {
     hc.heldFrames += dt;
     if (hc.heldFrames >= 60) {   // ~1 second
       this._holdCandidate = null;
+      this._sproutPress = null;                       // (a hold, not a sprouting tap)
       if (this._panCand) this._panCand.held = true;   // (not a tap: see handleRelease)
-      if (hc.action === 'sprout') { this._sprout(hc.p); return; }
       this._beginMove(hc.p);
       // Still held: dragging on from here and letting go sets it down there (handleRelease).
       if (this.movingPlaceable === hc.p) this._moveDrag = { p: hc.p, x0: mouseX, y0: mouseY };
     }
   }
 
-  // A press and hold on an unsprouted pātōtara (a patch, or a wild plant; the modules'
-  // mechanics.sproutPatotara) brings out its berries. Not in winter: pātōtara fruits in the
-  // warm months. A module hears of both (onSprouted, onSproutRefused). It comes into leaf first
-  // and into fruit a moment later (Plant.sprout's `staged`), quietly: no rustle, only the
-  // small patter of the berries coming out (the 'sprout' touch cue).
+  // ---- Sprouting by hand: three quick taps ------------------------------------------------
+  // An unsprouted pātōtara or wharariki (a patch, or a wild plant; Plant.sproutsByHand) is
+  // brought into fruit or flower by SPROUT_TAPS quick taps on it. Each tap shakes it (and a
+  // plant with food on it draws the hungry over, as any tap on a plant does); pips over it
+  // count the taps (renderSproutTaps). A press held on a patch is a move instead, so a patch
+  // can be both sprouted and moved.
+
+  // The unsprouted plant a press at world (tx, ty) is on, if any: a patch first (within 26), then
+  // a wild plant (within 14). (A direct search, not the placeable grid: that's only rebuilt while
+  // the game runs, and a patch planted while a prompt has it paused must be found at once.)
+  _sproutTargetAt(tx, ty) {
+    const sim = this.simulation;
+    if (!sim) return null;
+    let best = null, bestD = 26;
+    for (const pl of sim.placeables) {
+      if (!pl.alive || !pl.unsprouted) continue;
+      const dd = Math.hypot(pl.pos.x - tx, pl.pos.y - ty);
+      if (dd < bestD) { bestD = dd; best = pl; }
+    }
+    return best || sim.getClosestPlant(tx, ty, 14, (pl) => pl.alive && pl.unsprouted && !pl.isSpawned) || null;
+  }
+
+  // A press on a sprout target: remembered, and counted as a tap if it lets go soon and close
+  // by (handleRelease).
+  _armSproutTap(p, mx, my, tx, ty) {
+    this._sproutPress = { p, mx, my, tx, ty, t: millis() };
+  }
+
+  // The press is over (handleRelease): was it a quick tap on the plant it began on?
+  _sproutPressIsTap(mx, my) {
+    const sp = this._sproutPress;
+    return !!sp && sp.p.alive && sp.p.unsprouted && !this.movingPlaceable &&
+      millis() - sp.t <= SPROUT_TAP_MAX_MS && Math.hypot(mx - sp.mx, my - sp.my) <= 14;
+  }
+
+  // Count a tap; the third in quick succession sprouts it.
+  _sproutTap(sp) {
+    const p = sp.p, now = millis(), T = this._sproutTaps;
+    const n = (T && T.p === p && now - T.last <= SPROUT_TAP_GAP_MS) ? T.n + 1 : 1;
+    this._sproutTaps = { p, n, last: now };
+    // It shakes: a patch's plants together, or the wild plant itself; a tap on one with food on
+    // it (wharariki in leaf) also draws the hungry over, as a tap on a plant does.
+    const plants = p.spawnedPlants ? p.spawnedPlants.filter(pl => pl.alive) : [p];
+    for (const pl of plants) pl.shake();
+    const fed = plants.find(pl => pl.hasFood());
+    if (fed && this.simulation) {
+      this.simulation.lurePlant(fed);
+      if (this.tutorial) this.tutorial.fireEvent(TUTORIAL_EVENTS.PLANT_TAPPED, { plant: fed, type: fed.type });
+    }
+    if (n >= SPROUT_TAPS) { this._sproutTaps = null; this._sprout(p); return; }
+    if (audioManager && audioManager.playPlantRustle) audioManager.playPlantRustle();
+  }
+
+  // Brought into fruit or flower (the third tap). Only in its seasons (HAND_SPROUT): pātōtara
+  // fruits in the warm months, not winter; wharariki flowers in spring and summer. A module hears
+  // of both (onSprouted, onSproutRefused). It comes into leaf first and into fruit or flower a
+  // moment later (Plant.sprout's `staged`), quietly: no rustle, only the small patter of the
+  // berries coming out (the 'sprout' touch cue).
   _sprout(t) {
     if (!t || !t.alive || !t.unsprouted) return;
-    if (this.seasonManager && this.seasonManager.currentKey === 'winter') {
-      this._refuse("Pātōtara has no berries to sprout in winter.", 'info');
+    const type = t.type || 'patotara', season = this.seasonManager ? this.seasonManager.currentKey : 'summer';
+    if (!Plant.canSproutIn(type, season)) {
+      this._refuse((HAND_SPROUT[type] && HAND_SPROUT[type].refuse) || "It can't be sprouted now.", 'info');
       if (this.module && this.module.onSproutRefused) this.module.onSproutRefused(t);
       return;
     }
     t.sprout(true);
     touchSound('sprout');
     if (this.module && this.module.onSprouted) this.module.onSprouted(t);
-    if (this.tutorial) this.tutorial.fireEvent(TUTORIAL_EVENTS.PLANT_SPROUTED, { sprouted: t, type: t.type || 'patotara' });
+    if (this.tutorial) this.tutorial.fireEvent(TUTORIAL_EVENTS.PLANT_SPROUTED, { sprouted: t, type });
   }
 
   _beginMove(p) {
@@ -4578,20 +4832,32 @@ class Game {
     this._moveDrag = null;
     const pc = this._panCand;   // (a userCamera level's press on the land: a pan, or a tap)
     this._panCand = null;
+    const sproutTap = this._sproutPressIsTap(mx, my) ? this._sproutPress : null;
+    this._sproutPress = null;
     if (this.state !== GAME_STATE.PLAYING && this.state !== GAME_STATE.PAUSED) return;
     if (pc && pc.active) return;   // the end of a pan: nothing was tapped or dropped
     const dropsHere = (d) => Math.hypot(mx - d.x0, my - d.y0) > DRAG_SLOP_PX &&
                              this.isInGameArea(mx, my) && !this._pointerOverChrome(mx, my);
+    const tapHere = pc && !pc.held && !this.movingPlaceable && !this.selectedPlaceable &&
+                    Math.hypot(mx - pc.x0, my - pc.y0) <= 14 && this.userCameraOn();
     if (tool && this.selectedPlaceable === tool.type && dropsHere(tool)) {
       const { x, y } = this._pointerWorld(mx, my);
       this.tryPlace(x, y);            // a refused spot leaves the tool selected, as a click does
     } else if (lift && this.movingPlaceable === lift.p && dropsHere(lift)) {
       const { x, y } = this._pointerWorld(mx, my);
       this.tryDropMove(x, y);
-    } else if (pc && !pc.held && !this.movingPlaceable && !this.selectedPlaceable &&
-               Math.hypot(mx - pc.x0, my - pc.y0) <= 14 && this.userCameraOn()) {
+    } else if (sproutTap && !(tapHere && this._animalNearerThan(sproutTap))) {
+      this._sproutTap(sproutTap);     // (a quick tap on a bare pātōtara or a wharariki in leaf)
+    } else if (tapHere) {
       this._tapAt(pc);
     }
+  }
+
+  // On a userCamera level a tap selects an animal: one standing nearer the tap than the plant
+  // being sprouted takes the tap instead.
+  _animalNearerThan(sp) {
+    const e = this._animalAt(sp.tx, sp.ty);
+    return !!e && Math.hypot(e.pos.x - sp.tx, e.pos.y - sp.ty) < Math.hypot(sp.p.pos.x - sp.tx, sp.p.pos.y - sp.ty);
   }
 
   // Whether (mx, my) is over something a click there would hit instead of the map: HUD
@@ -4927,6 +5193,8 @@ class Game {
     const done = new Set();
     for (const egg of sim.eggs) {
       if (!egg.alive || egg.hatched || (egg.offspringType && egg.offspringType !== 'moa')) continue;
+      // (A raid already counting down there draws its own odds: RAIDS. A story's egg is no kea's.)
+      if (egg._story || (typeof RAIDS !== 'undefined' && RAIDS.find(egg))) continue;
       const site = (sim.nestingSites || []).find(s => s.alive !== false && s.isInRange && s.isInRange(egg.pos)) || null;
       if (done.has(site || egg)) continue;
       done.add(site || egg);
@@ -4942,19 +5210,29 @@ class Game {
   // A raid's odds over a nest (world pass): a dashed ring round who counts, and over it the
   // chance in big figures (red when the kea have the better of it, green when the moa do),
   // flanked by the nest's moa (its species' sprite and how many) and the kea (and how many).
-  // `s` scales the words and sprites (1: module 1's size).
-  _drawRaidOdds(at, radius, chance, keaN, moaN, moaSpecies = 'upland_moa', s = 1) {
+  // `s` scales the words and sprites (1: module 1's size). opts (a raid that counts down before
+  // it is rolled: RAIDS in mauri_raid.js, and module 1's kea raid):
+  //   countdown   whole seconds left, drawn big in a ring over the figure
+  //   attacker    'kea' (default) or 'haasts_eagle': whose picture is on the raiders' side
+  //   raid        the RAIDS entry: each side's picture is a button that gives it mana, with a
+  //               pip under it for each mana given and an empty one for each still to give
+  _drawRaidOdds(at, radius, chance, keaN, moaN, moaSpecies = 'upland_moa', s = 1, opts = {}) {
     const px = 1 / CONFIG.viewZoom, k = px * s;   // (one screen pixel, in world units)
     const col = chance < 0.5 ? [140, 230, 150] : [255, 140, 110];
+    const paintY = this._groundPaintY(at.x, at.y);
     push();
-    translate(at.x, this._groundPaintY(at.x, at.y));
+    translate(at.x, paintY);
     noFill();
     stroke(col[0], col[1], col[2], 200);
     strokeWeight(2 * px);
     drawingContext.setLineDash([8 * px, 6 * px]);
     ellipse(0, 0, radius * 2, radius * 1.24);
     drawingContext.setLineDash([]);
-    const y0 = -radius * 0.62 - 40 * k;
+    // (Over the nest, or under it where there is no room over it: a nest by the top of the land.)
+    let y0 = -radius * 0.62 - 40 * k;
+    const vp = this._viewport ? this._viewport() : { y: 0 };
+    const below = (paintY + y0 - 124 * k) * CONFIG.viewZoom + CONFIG.viewY < vp.y + 6;
+    if (below) y0 = radius * 0.62 + 44 * k;
     textAlign(CENTER, CENTER);
     if (typeof FreckleFace !== 'undefined') textFont(FreckleFace);
     strokeJoin(ROUND);
@@ -4979,9 +5257,43 @@ class Game {
     let moaImg = typeof EntitySprites !== 'undefined' ? EntitySprites.getMoaSprite(0, false, false, sp.spriteSet || null) : null;
     if (moaImg && !sp.spriteSet && sp.tint && EntitySprites.getTintedMoaFrame) moaImg = EntitySprites.getTintedMoaFrame(moaImg, sp.tint);
     const moaFace = (typeof EntitySprites !== 'undefined' && EntitySprites.getMoaFaceSign) ? EntitySprites.getMoaFaceSign(sp.spriteSet || null) : 1;
-    const keaImg = typeof EntitySprites !== 'undefined' ? EntitySprites.getKeaSprite() : null;
-    this._raidOddsSide(-1, half, y0, moaImg, moaFace, moaN, [228, 238, 214], k);
-    this._raidOddsSide(1, half, y0, keaImg, 1, keaN, [255, 196, 120], k);
+    const eagleSide = opts.attacker === 'haasts_eagle';
+    const keaImg = typeof EntitySprites === 'undefined' ? null
+      : (eagleSide ? ((this._eagleHeadSprite && this._eagleHeadSprite()) || EntitySprites.getEagleSprite(0, 'flying')) : EntitySprites.getKeaSprite());
+    const left = this._raidOddsSide(-1, half, y0, moaImg, moaFace, moaN, [228, 238, 214], k);
+    const right = this._raidOddsSide(1, half, y0, keaImg, 1, keaN, eagleSide ? [255, 150, 120] : [255, 196, 120], k);
+    // The countdown to the roll: whole seconds, big, in a ring over the figure.
+    if (opts.countdown != null) {
+      const cy = below ? y0 + 86 * k : y0 - 86 * k, R = 34 * k;
+      noStroke(); fill(14, 20, 16, 200); ellipse(0, cy, R * 2, R * 2);
+      noFill(); stroke(col[0], col[1], col[2], 230); strokeWeight(4 * k); ellipse(0, cy, R * 2, R * 2);
+      stroke(15, 20, 15, 230); strokeWeight(6 * k); fill(255, 250, 235);
+      textAlign(CENTER, CENTER); textSize(46 * k);
+      text(`${opts.countdown}`, 0, cy + 2 * k);
+    }
+    // Mana: each side's picture is a button; a pip under it for each mana given (filled) and
+    // still to give (empty). Where each picture is on the screen goes to RAIDS for its taps.
+    const r = opts.raid;
+    if (r && typeof RAIDS !== 'undefined') {
+      const pipY = below ? y0 - 54 * k : y0 + 54 * k, pipR = 11 * k, gap = 28 * k, mcol = [200, 170, 255];
+      for (const [side, s0, given] of [['def', left, r.mana.def], ['att', right, r.mana.att]]) {
+        const n = r.manaCfg.max;
+        for (let i = 0; i < n; i++) {
+          const x = s0.cx + (i - (n - 1) / 2) * gap;
+          stroke(15, 20, 15, 220); strokeWeight(2 * k);
+          if (i < given) fill(mcol[0], mcol[1], mcol[2]); else fill(40, 36, 60, 200);
+          ellipse(x, pipY, pipR * 2, pipR * 2);
+        }
+        const sx = (at.x + s0.cx) * CONFIG.viewZoom + CONFIG.viewX, sy = (paintY + y0) * CONFIG.viewZoom + CONFIG.viewY;
+        RAIDS._hit(r, side, sx, sy, Math.max(28, (s0.h / 2 + 10 * k) * CONFIG.viewZoom));
+      }
+      // (The hint, on a dark strip of its own so it reads over any ground.)
+      const hy = pipY + (below ? -36 : 36) * k, hint = `Tap a side to give it mana (${r.manaCfg.cost} mauri)`;
+      textSize(28 * k); textAlign(CENTER, CENTER);
+      noStroke(); fill(14, 20, 16, 190);
+      rect(-textWidth(hint) / 2 - 12 * k, hy - 18 * k, textWidth(hint) + 24 * k, 36 * k, 18 * k);
+      fill(mcol[0], mcol[1], mcol[2]); text(hint, 0, hy);
+    }
     pop();
   }
 
@@ -5011,6 +5323,7 @@ class Game {
     textSize(38 * k);
     textAlign(dir < 0 ? RIGHT : LEFT, CENTER);
     text(`${n}`, dir * (half + w + 6 * k), y0);
+    return { cx, w, h };   // (where the picture is: a raid's mana button, _drawRaidOdds)
   }
 
   // The signs of the journey's rules, drawn in the world pass over the birds: a mark over a
@@ -5237,8 +5550,10 @@ class Game {
     if (typeof GLBatch !== 'undefined' && GLBatch.enabled && GLBatch._open) GLBatch.composite(drawingContext);
     if (this.module) this.module.renderOver();   // a module's markers, over the birds
     else this._renderRaidOdds();                 // (kea at a moa nest: the raid's odds)
+    if (typeof RAIDS !== 'undefined') RAIDS.render(this);   // (a raid counting down: odds, count, mana)
     this._renderInspect();
     this._renderWorldSigns();
+    if (this.chapters && this.chapters.renderNameTags) this.chapters.renderNameTags();   // (Pukepuke and Koukou)
     this._renderSelection();
     this.mauri.renderFloatingTexts();
     if (_castAlpha < 1) drawingContext.globalAlpha = 1;
@@ -5250,6 +5565,7 @@ class Game {
         (this.state === GAME_STATE.PLAYING || this.state === GAME_STATE.PAUSED)) {
       this.renderMovePreview();
     }
+    if (this._sproutTaps && (this.state === GAME_STATE.PLAYING || this.state === GAME_STATE.PAUSED)) this.renderSproutTaps();
 
     // Debug lenses: world-space balance overlays, on TOP of the cast, still inside the
     // game-area clip + camera transform (so they align with the world). Inert unless on.
@@ -5297,6 +5613,7 @@ class Game {
     }
 
     const _moment = this._storyMoment();
+    if (!_moment && this._catchCaption) this._renderCatchCaption();   // (a catch, said: _onEagleCatch)
     if (_moment) {
       _moment.renderMoment();   // its big words, in place of any tip
     } else if (this.tutorial) {
@@ -5349,12 +5666,11 @@ class Game {
       const next = !done && m.nextModuleDef ? m.nextModuleDef() : null;
       const item = next && next.menu && next.menu.focusItem;
       this._renderOverlay(...CONFIG.col_UI.slice(0,3), done ? 90 : 150, {
-        title: done ? "ONWARD" : (m.cfg.winTitle || "HOME AGAIN"),
+        title: done ? "ONWARD" : "STAGE COMPLETE!",
         titleColor: [180, 255, 180],
         lines: done
           ? [{ text: m.cfg.nextText || "The next module is on its way.", color: [150, 220, 150], size: 18 }]
-          : [{ text: m.cfg.winText || "The family is back at the nest.", color: [150, 220, 150], size: 18 },
-             { text: `Total mauri earned: ${this.mauri.totalEarned | 0}`, color: [120, 180, 120], size: 14 }],
+          : [],
         art: item ? { h: 190, draw: (cx, top) => this._renderNextUp(item, cx, top) } : null,
         boxColor: [30, 60, 40, 250],
         strokeColor: [100, 180, 120],
@@ -5373,41 +5689,39 @@ class Game {
           { label: "Back to Menu", action: () => this._returnToMenuFromEnd() }
         ]
       });
+    } else if (this.state === GAME_STATE.WON && (this._journeyPan || this._handoffPending)) {
+      // (A journey tile's way on is panning to the next tile: no card meanwhile.)
     } else if (this.state === GAME_STATE.WON) {
-      // "Thriving" is reserved for a full-clear; a win with unmet goals is
-      // merely "balanced". (_goalsTally() also lazily fills _goalsTotal.)
-      const goalsTally = this._goalsTally();
-      const allGoalsMet = (this._goalsCompleted || 0) >= this._goalsTotal;
-      // A chapters module's card also says what it taught (its claim) and offers the next
-      // module (its nextLevel), with that module's focus item as "Next up".
+      // Kept short: a generic header, and only what the player needs. A journey stage says
+      // who was lost here, what it unlocked, and each way on (a subheading over a "Continue
+      // journey · N years" button); any other level its score and seed. A chapters module
+      // offers the next module (its nextLevel), with that module's focus item as "Next up".
       const L = this.currentLevel || {};
       const nextDef = L.nextLevel ? LEVEL_REGISTRY.get(L.nextLevel) : null;
       const nextItem = nextDef && nextDef.menu && nextDef.menu.focusItem;
       const buttons = [];
       if (nextDef && PROGRESS.isUnlocked(nextDef.id)) buttons.push({ label: "Next module", action: () => this._startLevel(nextDef.id) });
-      // A journey level offers its ways on (mauri_campaign.js): west or north after the five
-      // years, the free play after a lesson, the next tile.
+      // A journey level offers its ways on (mauri_campaign.js): west or north after the four
+      // years, the free play after a lesson, the next tile. Each goes on across the same land
+      // (_journeyOnward).
       const _journey = (typeof CAMPAIGN !== 'undefined' && L.journey) ? CAMPAIGN : null;
-      if (_journey) for (const w of _journey.waysOn(L)) buttons.push({ label: w.label, action: () => this._startLevel(w.id) });
-      if (this.runSeed != null && buttons.length < 3) buttons.push({ label: "Replay seed", action: () => this._replayThisSeed() });
+      if (_journey) for (const w of _journey.waysOn(L)) buttons.push({ label: w.label, caption: w.sub, action: () => this._journeyOnward(w.id) });
+      if (!_journey && this.runSeed != null && buttons.length < 3) buttons.push({ label: "Replay seed", action: () => this._replayThisSeed() });
+      const unlocked = _journey ? _journey.unlocks(L).map(id => ({ placeable: id })) : [];
+      const art = unlocked.length ? { h: 190, w: unlocked.length * 170 + 40, draw: (cx, top) => this._renderItemsBlock("YOU'VE UNLOCKED:", unlocked, cx, top) }
+        : nextItem ? { h: 190, draw: (cx, top) => this._renderNextUp(nextItem, cx, top) } : null;
       buttons.push({ label: "Back to Menu", action: () => this._returnToMenuFromEnd() });
       const _seedLine = this._attemptLine();
       this._renderOverlay(...CONFIG.col_UI.slice(0,3), 150, {
-        title: L.winTitle || (allGoalsMet ? "ECOSYSTEM THRIVING!" : "ECOSYSTEM BALANCED"),
+        title: "STAGE COMPLETE!",
         titleColor: [180, 255, 180],
-        lines: [
-          { text: L.winText || this._endMessage(), color: [150, 220, 150], size: 18 },
-          ...(this.chapters && L.claim ? [{ text: L.claim, color: [200, 240, 200], size: 15 }] : []),
-          ...(this.chapters && this.chapters.unaidedLine() ? [{ text: this.chapters.unaidedLine(), color: [255, 240, 170], size: 15 }] : []),
-          ...(_journey ? _journey.cardLines(L, this.chapters).map(text => ({ text, color: [226, 226, 214], size: 14 })) : []),
-          { text: goalsTally, color: [150, 220, 150], size: 14 },
-          { text: `Final population: ${this._cachedMoaCount} moa`, color: [120, 180, 120], size: 14 },
-          { text: `Total mauri earned: ${this.mauri.totalEarned | 0}`, color: [120, 180, 120], size: 14 },
-          { text: `Time elapsed: ${(this.playTime / 60) | 0} seconds`, color: [120, 180, 120], size: 14 },
-          { text: `Final Score: ${computeLevelScore(this.currentLevel, this._scoreContext())} points`, color: [200, 240, 200], size: 16 },
-          ...(_seedLine ? [{ text: _seedLine, color: [255, 240, 170], size: 14 }] : [])
-        ],
-        art: nextItem ? { h: 190, draw: (cx, top) => this._renderNextUp(nextItem, cx, top) } : null,
+        lines: _journey
+          ? _journey.cardLines(L).map(text => ({ text, color: [226, 226, 214], size: 15 }))
+          : [
+              { text: `Score: ${computeLevelScore(this.currentLevel, this._scoreContext())} points`, color: [200, 240, 200], size: 16 },
+              ...(_seedLine ? [{ text: _seedLine, color: [255, 240, 170], size: 14 }] : [])
+            ],
+        art,
         boxColor: [30, 60, 40, 250],
         strokeColor: [100, 180, 120],
         buttons
@@ -5685,10 +5999,27 @@ class Game {
       'haasts_eagle': this._eagleHeadSprite(),
       // The Pouākai on the hunt: the "stop it!" prompts (a module's banners)
       'haasts_eagle_hunt': EntitySprites.isValid(EntitySprites.eagle.hunt)
-        ? EntitySprites.eagle.hunt : EntitySprites.getEagleSprite(0, 'hunting')
+        ? EntitySprites.eagle.hunt : EntitySprites.getEagleSprite(0, 'hunting'),
+      // A voice not yet seen (2f's "???", the kākāpō in the dark): two eyes in the dark.
+      'shadow': this._shadowSprite()
       //add others here
     };
     return spriteMap[spriteKey] || tutorialMantisSprite;
+  }
+
+  // PLACEHOLDER ART: a dark round shape with two glinting eyes, for a speaker not yet seen.
+  _shadowSprite() {
+    if (this._shadowImg) return this._shadowImg;
+    try {
+      const g = createGraphics(128, 128);
+      g.noStroke();
+      g.fill(18, 22, 20, 235); g.ellipse(64, 70, 110, 96);
+      g.fill(34, 44, 36, 255); g.ellipse(64, 64, 84, 70);
+      g.fill(236, 214, 120); g.ellipse(48, 60, 13, 9); g.ellipse(80, 60, 13, 9);
+      g.fill(20, 16, 10); g.ellipse(49, 60, 4, 7); g.ellipse(81, 60, 4, 7);
+      this._shadowImg = g;
+    } catch (e) { this._shadowImg = null; }
+    return this._shadowImg;
   }
 
   // "Goals completed: X / Y" for the end screen. Total spans every phase's
@@ -5708,19 +6039,30 @@ class Game {
   // e.g. { placeable: 'patotara', name: 'Pātōtara' }): the item's picture and its common name,
   // in a block 190 tall from `top`.
   _renderNextUp(item, cx, top) {
-    const def = (typeof PLACEABLES !== 'undefined' && PLACEABLES[item.placeable]) || null;
+    this._renderItemsBlock("NEXT UP:", [item], cx, top);
+  }
+
+  // A heading over one or more items side by side: each its picture and its name (`name`, or
+  // the placeable's own), in a block 190 tall from `top`. (Next up; a journey's "You've unlocked".)
+  _renderItemsBlock(heading, items, cx, top) {
     noStroke();
     textAlign(CENTER, CENTER);
     if (typeof FreckleFace !== 'undefined') textFont(FreckleFace);
     fill(255, 222, 140);
     textSize(26);
-    text("NEXT UP:", cx, top + 14);
-    fill(255, 255, 255, 24);
-    ellipse(cx, top + 88, 120, 120);
-    if (def && this.ui) this.ui.renderPlaceableIcon(def, cx, top + 88, 100, 64);
-    fill(220, 250, 225);
-    textSize(32);
-    text(item.name || (def && def.name) || '', cx, top + 166);
+    text(heading, cx, top + 14);
+    const n = items.length, step = n > 1 ? 170 : 0;
+    const d = n > 1 ? 100 : 120, nameSize = n > 1 ? 22 : 32;
+    items.forEach((item, i) => {
+      const def = (typeof PLACEABLES !== 'undefined' && PLACEABLES[item.placeable]) || null;
+      const x = cx + (i - (n - 1) / 2) * step;
+      fill(255, 255, 255, 24);
+      ellipse(x, top + 88, d, d);
+      if (def && this.ui) this.ui.renderPlaceableIcon(def, x, top + 88, d * 0.83, d * 0.53);
+      fill(220, 250, 225);
+      textSize(nameSize);
+      text(item.name || (def && def.name) || '', x, top + 166);
+    });
   }
 
   // The gap between an overlay card's top and the tops of its title's letters, drawn centred
@@ -5764,14 +6106,26 @@ class Game {
     // letters is left again under the last button (or line, or picture).
     const titleSize = 42, titleOff = 40;            // the title's centre, below the box top
     const topGap = this._overlayTitleGap(opts.title, titleSize, titleOff);
-    const bw = 220, bh = 46, gap = 10;              // the stacked buttons
+    const bh = 46, gap = 10;                        // the stacked buttons
+    // A button may carry a `caption`: a line of its own just above it (a journey's way on).
+    const capSize = 16, capH = 30;
+    const btnSpan = (btn, i) => (btn.caption ? capH + (i ? 8 : 0) : 0) + bh;
+    // Widths: the buttons as wide as their longest label (at least 220), the box as wide as
+    // its widest line, caption or button (at least 400), within the screen.
+    push();
+    textSize(18);
+    const bw = Math.min(cw - 64, Math.max(220, ...buttons.map(btn => textWidth(btn.label) + 40)));
+    textSize(capSize);
+    let widest = Math.max(bw + 60, (art && art.w) || 0, ...buttons.map(btn => btn.caption ? textWidth(btn.caption) + 48 : 0));
+    for (const line of opts.lines) { textSize(line.size); widest = Math.max(widest, textWidth(line.text) + 48); }
+    pop();
+    const boxW = Math.min(cw - 24, Math.max(400, widest));
     let contentH = titleOff + 50;                   // where the first line's centre sits
     let lastBottom = titleOff;
     for (const line of opts.lines) { lastBottom = contentH + line.size / 2; contentH += line.size + 10; }
     if (art) { contentH += art.h; lastBottom = contentH; }
-    if (buttons.length) lastBottom = contentH + 12 + buttons.length * bh + (buttons.length - 1) * gap;
+    if (buttons.length) lastBottom = contentH + 12 + buttons.reduce((s, btn, i) => s + btnSpan(btn, i), 0) + (buttons.length - 1) * gap;
     const boxH = Math.round(lastBottom + topGap);
-    const boxW = Math.max(300, 400);
     
     push();
     translate(0, cy);
@@ -5814,7 +6168,15 @@ class Game {
       const bx = centerX - bw / 2;
       const rects = [];
       let by = lineY + 12;
-      for (const btn of buttons) {
+      buttons.forEach((btn, i) => {
+        if (btn.caption) {
+          if (i) by += 8;
+          noStroke();
+          fill(255, 236, 180);
+          textSize(capSize);
+          text(btn.caption, centerX, by + capH / 2 - 3);
+          by += capH;
+        }
         const hovBtn = mouseX > bx && mouseX < bx + bw &&
                        mouseY > (cy + by) && mouseY < (cy + by + bh);
         fill(hovBtn ? [70, 110, 85] : [45, 75, 55]);
@@ -5827,7 +6189,7 @@ class Game {
         text(btn.label, centerX, by + bh / 2);
         rects.push({ x: bx, y: cy + by, w: bw, h: bh, action: btn.action, label: btn.label });
         by += bh + gap;
-      }
+      });
       this._overlayBtns = rects;
     }
 
@@ -7125,6 +7487,29 @@ class Game {
     }
   }
 
+  // The taps counted toward sprouting a plant (_sproutTap): a pip for each of SPROUT_TAPS over
+  // it, filled in berry orange (pātōtara) or flower yellow (wharariki) as the taps land, fading
+  // as the moment for the next one runs out.
+  renderSproutTaps() {
+    const T = this._sproutTaps;
+    const age = T ? millis() - T.last : Infinity;
+    if (!T || !T.p.alive || !T.p.unsprouted || age > SPROUT_TAP_GAP_MS) { this._sproutTaps = null; return; }
+    const a = Math.min(1, (SPROUT_TAP_GAP_MS - age) / 200);
+    const k = Math.pow(Math.max(1, this.camera ? this.camera.zoom : 1), -0.5);
+    const col = T.p.type === 'wharariki' ? [250, 222, 96] : [255, 165, 70];
+    const x = T.p.pos.x, y = this._groundPaintY(T.p.pos.x, T.p.pos.y) - (T.p.spawnedPlants ? 30 : 22);
+    const gap = 7 * k, r = 5 * k;
+    push();
+    strokeWeight(1.2 * k);
+    for (let i = 0; i < SPROUT_TAPS; i++) {
+      const px = x + (i - (SPROUT_TAPS - 1) / 2) * gap;
+      stroke(16, 22, 28, 200 * a);
+      if (i < T.n) fill(col[0], col[1], col[2], 255 * a); else fill(255, 255, 255, 70 * a);
+      ellipse(px, y, r, r);
+    }
+    pop();
+  }
+
   // Visuals for the touch-and-hold move: a filling progress ring while the
   // press is held, then a dashed marker on the lifted item plus a validity
   // ghost that follows the cursor until the drop click. (A storm itself follows the cursor;
@@ -7132,17 +7517,17 @@ class Game {
   renderMovePreview() {
     const hc = this._holdCandidate;
     if (hc && hc.p.alive) {
-      const prog = constrain(hc.heldFrames / 60, 0, 1);
-      // (Sprouting a pātōtara fills in berry orange; a move, in green.)
-      const sprout = hc.action === 'sprout', d = sprout && !hc.p.spawnedPlants ? 26 : 34;
+      // (On a patch waiting to be sprouted the ring waits a moment, so the quick taps that
+      // sprout it don't each flash one: _sproutTap.)
+      if (this._sproutPress && hc.heldFrames < 15) return;
+      const prog = constrain(hc.heldFrames / 60, 0, 1), d = 34;
       push();
       translate(hc.p.pos.x, this._groundPaintY(hc.p.pos.x, hc.p.pos.y));
       noFill();
       stroke(255, 255, 255, 90);
       strokeWeight(3);
       ellipse(0, 0, d, d);
-      if (sprout) stroke(255, 165, 70, 235);
-      else stroke(180, 240, 200, 230);
+      stroke(180, 240, 200, 230);
       arc(0, 0, d, d, -HALF_PI, -HALF_PI + prog * TWO_PI);
       pop();
       return;
@@ -7167,6 +7552,8 @@ class Game {
     if (!this.isInGameArea(mouseX, mouseY)) return;
     const { x: tx, y: ty } = this._pointerWorld(mouseX, mouseY);
     if (tx < 0 || tx > this.terrain.mapWidth || ty < 0 || ty > this.terrain.mapHeight) return;
+    // (Berries being moved: the nests they would aim the kea at, as when placing them.)
+    if (p.type === 'keaLure' || p.type === 'patotara') this._renderBerryRaidPreview(tx, ty, p.type);
 
     const spacingCheck = this.canPlaceWithSpacing(tx, ty, p.type, p);
     let biomeOk = true;
@@ -7244,6 +7631,7 @@ class Game {
     // target moa nest), the wide invisible-in-play kea draw reach, and every moa nest + kea
     // the cache will touch, highlighted. Helps aim the cache at a real nest.
     if (this.selectedPlaceable === 'keaLure') this._renderKeaLurePreview(tx, ty, def);
+    if (this.selectedPlaceable === 'keaLure' || this.selectedPlaceable === 'patotara') this._renderBerryRaidPreview(tx, ty, this.selectedPlaceable);
     if (this.selectedPlaceable === 'Storm' && def.blocksEagleVision) this._renderStormCoverPreview(tx, ty, def.radius, null, canPlace);
 
     if (!spacingCheck.allowed && spacingCheck.blocker) {
@@ -7323,6 +7711,46 @@ class Game {
         ellipse(0, -(k._altitude || 0), 15, 15);
         pop();
       }
+    }
+  }
+
+  // Berries in hand (pātōtara where its berries draw kea, or a Berry Cache), being placed or
+  // moved, on a level whose kea raid at the odds: a faint ring for how far from the berries the
+  // kea go for a nest (keaBerryRaidReach), and on each moa nest inside it the raid's odds as they
+  // stand: the moa guarding it against the kea the berries would draw (Kea._berryRaidEgg). So
+  // the player sees whose nest the berries aim the kea at: a rival herd's, to move it on, or
+  // their own, to guard.
+  _renderBerryRaidPreview(tx, ty, type) {
+    const M = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS) || null;
+    const sim = this.simulation;
+    if (!M || M.keaRaidsEggs !== 'odds' || !sim || typeof keaBerryRaidReach !== 'function') return;
+    const lureDef = (this.activePlaceables && this.activePlaceables.keaLure) || PLACEABLES.keaLure || {};
+    const drawR = type === 'keaLure' ? (lureDef.keaAttractRadius || 520) : (M.keaBerryLureRadius || 0);
+    const reach = keaBerryRaidReach();
+    if (!drawR || !reach) return;
+    let keaN = 0;
+    for (const k of (sim.otherEntities && sim.otherEntities.kea) || []) {
+      if (k.alive && (k.pos.x - tx) ** 2 + (k.pos.y - ty) ** 2 <= drawR * drawR) keaN++;
+    }
+    const moaR = (M.keaRaid && M.keaRaid.moaRadius) ?? 90, px = 1 / CONFIG.viewZoom;
+    push();
+    translate(tx, this._groundPaintY(tx, ty));
+    noFill();
+    drawingContext.setLineDash([5 * px, 7 * px]);
+    stroke(255, 196, 120, 120); strokeWeight(1.5 * px);
+    ellipse(0, 0, reach * 2, reach * 2);
+    drawingContext.setLineDash([]);
+    pop();
+    const done = new Set();
+    for (const egg of sim.eggs) {
+      if (!egg.alive || egg.hatched || (egg.offspringType && egg.offspringType !== 'moa')) continue;
+      if ((egg.pos.x - tx) ** 2 + (egg.pos.y - ty) ** 2 > reach * reach) continue;
+      const site = (sim.nestingSites || []).find(s => s.alive !== false && s.isInRange && s.isInRange(egg.pos)) || null;
+      if (done.has(site || egg)) continue;
+      done.add(site || egg);
+      const at = site ? site.pos : egg.pos;
+      this._drawRaidOdds(at, moaR, sim.raidSuccessChance(site, egg.pos), keaN, sim.moaNear(at, moaR),
+                         egg.parentSpecies || 'upland_moa', 0.6);
     }
   }
 
@@ -7445,19 +7873,11 @@ class Game {
       noStroke();
     }
 
-    // The words, over the ring.
-    const lines = [];
+    // The words, over the ring: only a warning, when the move would leave one of the family in
+    // the open. (The outlines and the walk's dots already say whom it hides and where they go.)
     const list = (a) => a.length <= 2 ? a.join(' and ') : `${a.slice(0, -1).join(', ')} and ${a[a.length - 1]}`;
-    const named = hides.slice();
-    if (extraHidden) named.push(`${extraHidden} other moa`);
-    if (named.length) lines.push({ t: hidesHunted ? `Hides ${list(named)} from the Pouākai` : `Hides ${list(named)}`,
-                                   c: hidesHunted ? [150, 240, 170] : [235, 244, 255] });
-    else lines.push({ t: "Hides no moa here", c: [190, 196, 204] });
-    if (leaves.length) lines.push({ t: `Leaves ${list(leaves)} in the open`, c: [255, 190, 90] });
-    if (walkN && walkNew) lines.push({ t: `Covers ${Math.max(1, Math.round(100 * walkNew / walkN))}% of the walk ahead`, c: [220, 232, 250] });
-    if (bent) lines.push({ t: "Draws their walk this way", c: [220, 232, 250] });
     pop();
-    this._stormPreviewLabel(tx, gy(tx, ty) - R, u, lines);
+    if (leaves.length) this._stormPreviewLabel(tx, gy(tx, ty) - R, u, [{ t: `Leaves ${list(leaves)} in the open`, c: [255, 190, 90] }]);
   }
 
   // The route a bird at (sx, sy) would walk to dest among these storms: points every 5 px.
@@ -7653,6 +8073,8 @@ class Game {
       // Lens legend takes clicks first, so toggling a lens never also places an item.
       if (typeof Lens !== 'undefined' && Lens.handleClick(mx, my)) return;
       if (this.ui.handleClick(mx, my)) return;
+      // A raid counting down: a tap on a side's picture gives it mana (mauri_raid.js).
+      if (this.state === GAME_STATE.PLAYING && typeof RAIDS !== 'undefined' && RAIDS.click(this, mx, my)) return;
       // Tap a moa egg (when not placing) to send a hungry kea to eat it.
       if (!this.selectedPlaceable && !this.movingPlaceable &&
           this.isInGameArea(mx, my) && this._tryDirectKeaToEgg(mx, my)) return;
@@ -7667,24 +8089,19 @@ class Game {
 
       if (this.movingPlaceable) { this.tryDropMove(tx, ty); return; }
       const sim = this.simulation;
-      // (A direct search, not the placeable grid: that's only rebuilt while the game runs, and a
-      // patch planted while a prompt has it paused must be found at once.)
-      const bareAt = () => {
-        let best = null, bestD = 26;
-        if (sim) for (const pl of sim.placeables) {
-          if (!pl.alive || !pl.unsprouted) continue;
-          const dd = Math.hypot(pl.pos.x - tx, pl.pos.y - ty);
-          if (dd < bestD) { bestD = dd; best = pl; }
-        }
-        return best;
-      };
+      // An unsprouted pātōtara or wharariki under the press (a patch, else a wild plant): a
+      // quick tap on it counts toward sprouting it (see _sproutTap).
+      const sproutAt = this._sproutTargetAt(tx, ty);
+      const sproutPatch = sproutAt && sproutAt.spawnedPlants ? sproutAt : null;
       if (this.selectedPlaceable) {
-        // Pressing on a bare pātōtara patch with a tool in hand (just after planting it, say)
-        // sprouts it: nothing could be planted on top of it anyway.
-        const bare = bareAt();
-        if (!bare) { this.tryPlace(tx, ty); return; }
+        // Pressing on an unsprouted patch with its own tool in hand (just after planting it, say)
+        // puts the tool down and counts as the first tap on it: no second one could be planted on
+        // top of it anyway. (Held, it is lifted to move, as with no tool in hand.) Another tool
+        // (a storm over the moa feeding there) is placed as usual.
+        if (!sproutPatch || sproutPatch.type !== this.selectedPlaceable) { this.tryPlace(tx, ty); return; }
         this.selectedPlaceable = null;
-        this._holdCandidate = { p: bare, action: 'sprout', heldFrames: 0, startMX: mx, startMY: my };
+        this._armSproutTap(sproutPatch, mx, my, tx, ty);
+        this._holdCandidate = { p: sproutPatch, heldFrames: 0, startMX: mx, startMY: my };
         return;
       }
 
@@ -7706,27 +8123,23 @@ class Game {
       // Nothing selected: pressing near a placed item's center arms a touch-and-hold;
       // held ~1s it becomes a move (see updateHoldToMove).
       // A storm is wide and has no solid centre, so it can be taken anywhere in its inner half.
-      // An unsprouted pātōtara (a patch, or failing anything else, a wild one) is sprouted by
-      // the hold instead (see _sprout).
-      const sproutPatch = bareAt();
-      const held = !sproutPatch && sim &&
-        (sim.getClosestPlaceable(tx, ty, 26, (pl) => pl.alive) || sim.stormAt(tx, ty, 0, 0.5));
-      const wild = !sproutPatch && !held && sim &&
-        sim.getClosestPlant(tx, ty, 14, (pl) => pl.alive && pl.unsprouted && !pl.isSpawned);
-      if (sproutPatch || wild) {
-        this._holdCandidate = { p: sproutPatch || wild, action: 'sprout', heldFrames: 0, startMX: mx, startMY: my };
-      } else if (held) {
-        this._holdCandidate = { p: held, heldFrames: 0, startMX: mx, startMY: my };
-      }
-      // A tap on a plant rustles it (as well as arming a move above), unless it's a pātōtara
-      // being sprouted, or the press is on a storm (taking it up, or anywhere under its clouds)
-      // or just after placing or setting something down (a quick second tap meant for the tool).
+      // An unsprouted patch arms both: held, it moves; tapped quickly three times, it sprouts
+      // (a wild unsprouted plant can only be sprouted). See _sproutTap.
+      const wild = sproutAt && !sproutPatch ? sproutAt : null;
+      const held = sproutPatch || (!wild && sim &&
+        (sim.getClosestPlaceable(tx, ty, 26, (pl) => pl.alive) || sim.stormAt(tx, ty, 0, 0.5)));
+      if (sproutAt) this._armSproutTap(sproutAt, mx, my, tx, ty);
+      if (held) this._holdCandidate = { p: held, heldFrames: 0, startMX: mx, startMY: my };
+      // A tap on a plant rustles it (as well as arming a move above), unless it's one being
+      // sprouted (its taps shake it themselves), or the press is on a storm (taking it up, or
+      // anywhere under its clouds) or just after placing or setting something down (a quick
+      // second tap meant for the tool).
       const justPlaced = millis() - (this._lastPlacedMs || -1e9) < 500;
       // (lureUnderStorm, a chapter level's rule: a tap under the clouds still rustles a plant,
       // unless it's the press that takes the storm itself up.)
       const underStorm = !!(sim && sim.stormAt(tx, ty)) &&
         !(typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.lureUnderStorm);
-      if (!sproutPatch && !wild && !justPlaced && !(held && held.type === 'Storm') &&
+      if (!sproutAt && !justPlaced && !(held && held.type === 'Storm') &&
           !underStorm) { if (pc) pc.plantTap = true; else this._tapPlant(tx, ty); }
     }
   }

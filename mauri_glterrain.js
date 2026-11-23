@@ -196,7 +196,9 @@ const GLTerrain = {
     const _cfg = (typeof CONFIG !== 'undefined') ? CONFIG : {};
     const overFar = Math.max(0, _cfg.view3DOverscan != null ? _cfg.view3DOverscan : 0.45);
     const overNear = Math.max(0, _cfg.view3DOverscanNear != null ? _cfg.view3DOverscanNear : 0.28);
-    const winWorldH = (terrain.hasWorldGrid && terrain.worldGridRows) ? worldH / terrain.worldGridRows : worldH;
+    // (A larger land's areas are a set size, not a window: the window depth is the view's.)
+    const winWorldH = (terrain.hasWorldGrid && terrain._landCfg) ? terrain.viewH
+      : (terrain.hasWorldGrid && terrain.worldGridRows) ? worldH / terrain.worldGridRows : worldH;
     const marginFar = overFar * winWorldH, marginNear = overNear * winWorldH;
     const dyMesh = worldH / Math.max(1, rows - 1);        // world units between world mesh rows
     // Skirt rows at the world's row pitch, coarsened by SKIRT_STEP (invisible in the hazed

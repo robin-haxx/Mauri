@@ -73,6 +73,9 @@ class Egg {
   
   update() {
     if (!this.alive || this.hatched) return;
+    // Carried off by a Pouākai for a story (HaastsEagle.carryOff): held at its talons, it neither
+    // incubates nor hatches.
+    if (this._carriedBy) { this.pos.set(this._carriedBy.pos.x, this._carriedBy.pos.y + 5); return; }
 
     // A story egg (hatchScene { frames }, a chapter's `lay` with `scene`): its time up, it rocks
     // and cracks for a few seconds (hatchProgress 0..1, drawn in render) before the chick is out.
@@ -124,7 +127,8 @@ class Egg {
   
   render() {
     if (!this.alive) return;
-    
+    if (this._carriedBy && !this._drawCarried) return;   // (a carried egg is drawn by its eagle)
+
     const px = this.pos.x;
     const py = this.pos.y;
     const progress = this.currentTime / this.incubationTime;

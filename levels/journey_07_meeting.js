@@ -116,7 +116,7 @@ const JOURNEY_MEETING = (() => {
         nesting: { species: FOCUS, plant: 'speargrass' },
         goals: [
           { id: 'nests', name: "{$nestLine}", done: (x) => nests(x) >= want(x), reward: 25 },
-          { id: 'chick', name: "Koukou and Pukepuke's chick hatches", done: chick, reward: 30 }
+          { id: 'chick', name: "Hatch a chick for Koukou and Pukepuke", done: chick, reward: 30 }
         ],
         // The one guaranteed beat: the new chick's egg.
         beats: [{ id: 'new_egg', when: { seasonProgress: ['>=', D.chickBy] },
@@ -127,7 +127,7 @@ const JOURNEY_MEETING = (() => {
       { id: 'autumn', title: "Autumn",
         tools: ['speargrass', 'lancewood', 'Storm'],
         start: [{ fade: { type: 'Storm', sec: 60, refreshOnMove: true } }, K.eagleComes('koukou', 41)],
-        goals: [{ id: 'autumn_safe', name: "The whole clan through the autumn", keep: (x) => clan(x) >= (x.runner.vars.clanAutumn || 0), reward: 20 }],
+        goals: [{ id: 'autumn_safe', name: "Keep the whole clan alive through autumn", keep: (x) => clan(x) >= (x.runner.vars.clanAutumn || 0), reward: 20 }],
         reactions: [{ id: 'autumn_count', on: 'chapter_start', if: K.opens('autumn'), do: [(x) => { x.runner.vars.clanAutumn = clan(x); }] }]
       },
       { id: 'winter', title: "Winter",
@@ -136,13 +136,13 @@ const JOURNEY_MEETING = (() => {
           { spawn: { type: 'little_bush_moa', at: 'meet', count: 3, radius: 45, sexes: 'pair', hunger: 40 } },
           (x) => { x.runner.vars.clanWinter = clan(x); }
         ],
-        goals: [{ id: 'winter_all', name: "Every upland moa through the winter", keep: (x) => clan(x) >= (x.runner.vars.clanWinter || 0), reward: 25 }]
+        goals: [{ id: 'winter_all', name: "Keep every upland moa alive through winter", keep: (x) => clan(x) >= (x.runner.vars.clanWinter || 0), reward: 25 }]
       },
       { id: 'spring', title: "Spring", transfer: true,
         tools: ['speargrass', 'lancewood', 'Storm'],
         start: [K.eagleComes('chick', 42)],
         reactions: [{ id: 'spring_press', when: { after: 24 }, do: [K.eagleComes('koukou', 47)] }],
-        goals: [{ id: 'own', name: "Meet a problem with no help", done: { gained: ['unaided', '>=', 1] }, stretch: true, reward: 30 }],
+        goals: [{ id: 'own', name: "Solve a problem before any hint", done: { gained: ['unaided', '>=', 1] }, stretch: true, reward: 30 }],
         next: 'finale'
       },
       { id: 'finale', title: "A year where the paths met", tools: [],
@@ -172,7 +172,7 @@ const JOURNEY_MEETING = (() => {
           (x) => {
             const f = x.runner.flags, v = x.runner.vars;
             v.wantNests = f.elders_both ? 2 : 1;
-            v.nestLine = v.wantNests === 2 ? "Two nests: one for Koukou and Pukepuke, one for Mama and Papa" : "A nest for Koukou and Pukepuke";
+            v.nestLine = v.wantNests === 2 ? "Make two nests: one for Koukou and Pukepuke, one for Mama and Papa" : "Make a nest for Koukou and Pukepuke";
             v.eldersWords = f.elders_both ? "Mama and Papa are with him, and will want a nest of their own."
               : (f.elders_one ? `Only ${v.elders} is with him now. One nest, and a place beside it for the winter.`
                               : "He has come alone. Mama and Papa did not live to see this place.");

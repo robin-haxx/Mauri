@@ -16,6 +16,37 @@
 // Berry Cache seeds across its habitats, so a cache draws the flock wherever it's placed.
 const KEA_BERRY_PLANTS = new Set(['coprosma', 'patotara', 'dracophyllum', 'toatoa', 'pohuehue']);
 
+// How far from the berries it is drawn to a kea goes for a moa nest (Kea._berryRaidEgg):
+// mechanics.keaRaid.lureReach, 150 by default; 0 leaves berries out of it (a kea raids only
+// what it comes across).
+function keaBerryRaidReach() {
+  const M = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS) ? LEVEL_MECHANICS : {};
+  return (M.keaRaid && M.keaRaid.lureReach != null) ? M.keaRaid.lureReach : 150;
+}
+
+// The un-hatched moa egg nearest (x, y) within `reach`, or null (kea rob moa nests only).
+// How long a kea raid at the odds counts down before it is rolled, in seconds
+// (mechanics.keaRaid.rollSec; 4 by default, 0 to roll the moment the kea reach the egg). While
+// it counts, the player can lean on the odds with mana (RAIDS, mauri_raid.js).
+function keaRaidRollSec() {
+  const M = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS) || {};
+  return (M.keaRaid && M.keaRaid.rollSec != null) ? M.keaRaid.rollSec : 4;
+}
+
+function nearestRaidableEgg(sim, x, y, reach) {
+  if (!sim || !sim.getNearbyEggs) return null;
+  const eggs = sim.getNearbyEggs(x, y, reach);
+  let best = null, bestSq = reach * reach;
+  for (let i = 0; i < eggs.length; i++) {
+    const e = eggs[i];
+    if (!e.alive || e.hatched || e._story) continue;   // (a story's egg is the story's: 2f's Pipi)
+    if (e.offspringType && e.offspringType !== 'moa') continue;
+    const dx = e.pos.x - x, dy = e.pos.y - y, d2 = dx * dx + dy * dy;
+    if (d2 <= bestSq) { bestSq = d2; best = e; }
+  }
+  return best;
+}
+
 class Kea extends Kereru {
   constructor(x, y, terrain, config, speciesData) {
     super(x, y, terrain, config, speciesData);
@@ -88,6 +119,7 @@ class Kea extends Kereru {
     this._simRef = sim;   // (for the storm checks in helpers that aren't passed it)
     this._shielded = this._starveImmune(sim);   // for the security bar (see _renderExtra)
     if (this._raidCooldown > 0) this._raidCooldown -= dt;
+    this._checkStormDrop(sim);
 
     // Perch tree: each kea holds a fruiting forest tree (chosen by nearby food) as its home
     // perch, refreshed when lost or on a timer. _anchorPoint() feeds it to the base loop.
@@ -130,7 +162,9 @@ class Kea extends Kereru {
         }
       }
       const lure = this._lureChoice;
-      if (lure) {
+      if (lure && this._raiding) {
+        // (Off to the nest by the berries: the berries' own pull waits till it's back.)
+      } else if (lure) {
         const lr = (lure.def && lure.def.radius) || 70;
         const dx = lure.pos.x - this.pos.x, dy = lure.pos.y - this.pos.y;
         // Only pull toward the cache while still arriving; once on the patch, let the perch
@@ -406,7 +440,23 @@ class Kea extends Kereru {
   }
   _raidCfg() {
     const M = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS) ? LEVEL_MECHANICS : {};
-    return { radius: M.keaRaidRadius ?? 95, nutrition: M.keaRaidNutrition ?? 46, cooldown: (M.keaRaidCooldownSec ?? 5) * 60 };
+    return { radius: M.keaRaidRadius ?? 95, nutrition: M.keaRaidNutrition ?? 46, cooldown: (M.keaRaidCooldownSec ?? 5) * 60,
+             lureReach: keaBerryRaidReach() };
+  }
+
+  // Berries direct a raid: a kea drawn to berries (its committed lure: a Berry Cache, or
+  // sprouted pātōtara where keaBerryLureRadius is set) goes for the moa egg nearest those
+  // berries, within keaRaid.lureReach of them, from wherever it is. So berries set beside a nest
+  // bring the kea down on it, whoever's nest it is: a tool against a rival herd (a raid that
+  // takes an egg moves that herd off: Simulation.unsettleHerd), and a risk beside the player's
+  // own, answered by the moa gathered there (the odds), by moving the berries, or by a storm
+  // over them (berries under a storm draw no kea). With no berries drawing it, a kea still takes
+  // an egg it comes across (_findMoaEgg).
+  _berryRaidEgg(sim) {
+    const reach = this._raidCfg().lureReach;
+    if (!reach || !sim.getNearbyEggs || !this._lureValid()) return null;
+    const c = this._lureChoice;
+    return nearestRaidableEgg(sim, c.pos.x, c.pos.y, reach);
   }
 
   // Driven off a nest: fly clear of it for a moment (no feeding, no raiding).
@@ -427,7 +477,42 @@ class Kea extends Kereru {
     this.edges();
   }
 
-  // A storm flushes the kea (the base _fleeStorm carries it out from under the cloud). Then it
+  // A storm deters a kea only when it is set down or moved onto it. A storm already standing
+  // is no wall: a kea on its way to berries flies straight through one (though it still won't
+  // choose to feed, perch or land under one). So a kea only looks at the storms dropped since
+  // its last tick (PlaceableObject.stormDrops; each storm keeps its own _dropN), and one that
+  // lands on it (its flush range covers the kea) flushes it: _flushedBy, until it is clear.
+  _checkStormDrop(sim) {
+    const n = (typeof PlaceableObject !== 'undefined') ? PlaceableObject.stormDrops : 0;
+    const since = this._stormDropsSeen;
+    if (n === since) return;
+    this._stormDropsSeen = n;
+    if (since === undefined) return;   // its first look: storms already standing aren't drops on it
+    const list = sim.placeables;
+    if (!list) return;
+    for (let i = 0; i < list.length; i++) {
+      const p = list[i];
+      if (p.alive && p.type === 'Storm' && p._dropN > since && this._inFlush(p)) this._flushedBy = p;
+    }
+  }
+
+  // Is the kea inside this storm's flush range (see _stormFlushMult)?
+  _inFlush(p) {
+    const r = (p.radius || 70) * this._stormFlushMult(), dx = p.pos.x - this.pos.x, dy = p.pos.y - this.pos.y;
+    return dx * dx + dy * dy <= r * r;
+  }
+
+  // The storm the kea is fleeing: only the one dropped on it (_checkStormDrop), while it is
+  // still under it. (The base's nearest covering storm, which made every storm a wall.)
+  _nearestStorm(sim) {
+    const p = this._flushedBy;
+    if (!p) return null;
+    if (p.alive && p.type === 'Storm' && this._inFlush(p)) return p;
+    this._flushedBy = null;
+    return null;
+  }
+
+  // A storm dropped on it flushes the kea (the base _fleeStorm carries it out from under the cloud). Then it
   // picks a REFUGE outside the storm, somewhere to land (_findStormRefuge), and flies on to it
   // (_refugeStep). Without one it got just clear of the cloud, its food, perch or lure pulled
   // it straight back under, and it was flushed again, hovering at the storm's edge until it
@@ -451,7 +536,7 @@ class Kea extends Kereru {
         if (r) { r.escape = true; this._refuge = r; this._fledStorm = false; return false; }
       }
     } else this._fleeProgress = null;
-    if (!fled && !this._refuge && this._stormAt(sim, this.pos.x, this.pos.y)) {
+    if (!fled && !this._refuge && this._nearestStorm(sim)) {   // flushed, but no straight way out
       this._refugeSearch = (this._refugeSearch || 0) - dt;
       if (this._refugeSearch <= 0) { this._refugeSearch = 30; this._refuge = this._findStormRefuge(sim); }
     }
@@ -579,6 +664,7 @@ class Kea extends Kereru {
   // Raiding overrides foraging: while airborne and off cooldown, a moa egg in reach makes
   // the kea divert to rob it. Inside _runState so the base bookkeeping still runs.
   _runState(sim, dt) {
+    this._raiding = false;   // (set by _raidStep: behave leaves the lure's pull off while it raids)
     if (this._shoo) { this._shooStep(dt); return; }
     // Player-directed egg raid (tap a moa egg): the assigned kea flies to it and eats it.
     if (this._directedEgg) {
@@ -590,11 +676,32 @@ class Kea extends Kereru {
         return;
       }
     }
-    // Flushed by a storm: on to somewhere outside it to land (see _fleeStorm).
+    // Flushed by a storm: on to somewhere outside it to land (see _fleeStorm). (A kea flushed
+    // while it waited on a raid's count has left that raid.)
+    // (While a lesson holds the raid's count, its kea stay put: the lesson is about that raid.)
+    if (this._refuge && this._standoff) {
+      if (this._standoff.hold && this._standoff.hold()) this._refuge = null;
+      else this._leaveStandoff();
+    }
     if (this._refuge && this._refugeStep(sim, dt)) return;
+    // At a nest, waiting on a raid's count (RAIDS): it hovers over the egg until the roll.
+    if (this._standoff) {
+      const st = this._standoff;
+      if (st.done || !st.egg.alive || st.egg.hatched) { this._leaveStandoff(); }
+      else {
+        this._raiding = true;
+        this.state = KERERU_STATE.FLYING;
+        this.maxSpeed = ((this.speciesData && this.speciesData.config && this.speciesData.config.baseSpeed) || 0.4) * 0.6;
+        const slot = this._slot || { x: 0, y: 0 };
+        this._target.set(st.egg.pos.x + slot.x, st.egg.pos.y + slot.y);
+        this.applyForce(this.seek(this._target, 1.0, 12));
+        return;
+      }
+    }
     // A raid of its own (keaRaidsEggs: true, or 'odds'). OFF in Free Play, where the player raids.
+    // The nest by the berries it is drawn to first (_berryRaidEgg), else one it has come across.
     if (this._raidMode() && this._raidCooldown <= 0 && this.state === KERERU_STATE.FLYING) {
-      const egg = this._findMoaEgg(sim);
+      const egg = this._berryRaidEgg(sim) || this._findMoaEgg(sim);
       if (egg) { this._raidStep(sim, egg, dt); return; }
     }
     super._runState(sim, dt);
@@ -608,7 +715,7 @@ class Kea extends Kereru {
     let best = null, bestSq = Infinity;
     for (let i = 0; i < eggs.length; i++) {
       const e = eggs[i];
-      if (!e.alive || e.hatched) continue;
+      if (!e.alive || e.hatched || e._story) continue;
       if (e.offspringType && e.offspringType !== 'moa') continue;   // only moa nests
       const dx = e.pos.x - px, dy = e.pos.y - py, d2 = dx * dx + dy * dy;
       if (d2 < bestSq) { bestSq = d2; best = e; }
@@ -618,33 +725,106 @@ class Kea extends Kereru {
 
   // Fly to the egg; on arrival, rob it, take the meal, start the cooldown, and perch.
   _raidStep(sim, egg, dt) {
+    this._raiding = true;
     this.maxSpeed = (this.speciesData && this.speciesData.config && this.speciesData.config.baseSpeed) || 0.4;
     const dx = egg.pos.x - this.pos.x, dy = egg.pos.y - this.pos.y;
     if (dx * dx + dy * dy < 13 * 13) {
-      const cfg = this._raidCfg(), mode = this._raidMode();
+      const mode = this._raidMode();
       const site = (sim.nestingSites || []).find(s => s.alive !== false && s.isInRange && s.isInRange(egg.pos)) || null;
+      // At the odds with a count (keaRaid.rollSec): the kea gather over the nest and the raid
+      // is rolled when the count runs out, with whatever mana the player gave each side.
+      if (mode === 'odds' && !this._directedEgg && keaRaidRollSec() > 0 && sim.game && typeof RAIDS !== 'undefined') {
+        this._joinStandoff(sim, egg, site);
+        return;
+      }
       // At the odds: the moa around the nest decide it. A kea that loses is driven off.
       const success = mode === 'odds' && sim.raidSuccessChance ? random() < sim.raidSuccessChance(site, egg.pos) : true;
-      if (success) {
-        if (sim.raidMoaEgg) sim.raidMoaEgg(egg, this);
-        const scale = (typeof CONFIG !== 'undefined' && CONFIG.faunaNutritionScale) ? CONFIG.faunaNutritionScale : 1;
-        this.hunger = Math.max(0, this.hunger - cfg.nutrition * scale);
-        this._raidCooldown = cfg.cooldown;
-        this.state = KERERU_STATE.PERCHED;
-        this._restTimer = this._restFrames;
-      } else {
-        this._raidCooldown = cfg.cooldown * 2;
-        this._shoo = { x: egg.pos.x, y: egg.pos.y, t: 150 };
-        this.state = KERERU_STATE.FLYING;
-        if (sim.game && sim.game.addNotification) sim.game.addNotification("The moa drove a kea off the nest.", 'info');
-      }
-      if (mode === 'odds' && sim.game && sim.game.tutorial && typeof TUTORIAL_EVENTS !== 'undefined') {
-        sim.game.tutorial.fireEvent(TUTORIAL_EVENTS.NEST_RAID, { site, success, kea: this, egg });
-      }
+      if (success) this._raidWon(sim, egg, mode);
+      else this._raidLost(sim, egg);
+      if (mode === 'odds') this._raidEvent(sim, site, success, egg);
       return;
     }
     this._target.set(egg.pos.x, egg.pos.y);
     this.applyForce(this.seek(this._target, 1.2, 20));
+  }
+
+  // The raid worked: the egg is taken, the herd that laid it may move on, and the kea feeds.
+  _raidWon(sim, egg, mode) {
+    const cfg = this._raidCfg();
+    if (sim.raidMoaEgg) sim.raidMoaEgg(egg, this);
+    // (The herd whose egg it was moves off, unless it is one the player keeps.)
+    const moved = mode === 'odds' && sim.unsettleHerd ? sim.unsettleHerd(egg) : 0;
+    if (moved && sim.game && sim.game.addNotification) {
+      const g = sim.game, name = g._freeplaySpeciesName ? g._freeplaySpeciesName(egg.parentSpecies) : 'moa';
+      g.addNotification(`The kea raid moved the ${name} herd on.`, 'info');
+    }
+    const scale = (typeof CONFIG !== 'undefined' && CONFIG.faunaNutritionScale) ? CONFIG.faunaNutritionScale : 1;
+    this.hunger = Math.max(0, this.hunger - cfg.nutrition * scale);
+    this._raidCooldown = cfg.cooldown;
+    this.state = KERERU_STATE.PERCHED;
+    this._restTimer = this._restFrames;
+  }
+
+  // The raid failed: driven off the nest, and slower to try again.
+  _raidLost(sim, egg) {
+    const cfg = this._raidCfg();
+    this._raidCooldown = cfg.cooldown * 2;
+    this._shoo = { x: egg.pos.x, y: egg.pos.y, t: 150 };
+    this.state = KERERU_STATE.FLYING;
+    if (sim.game && sim.game.addNotification) sim.game.addNotification("The moa drove a kea off the nest.", 'info');
+  }
+
+  _raidEvent(sim, site, success, egg) {
+    if (sim.game && sim.game.tutorial && typeof TUTORIAL_EVENTS !== 'undefined') {
+      sim.game.tutorial.fireEvent(TUTORIAL_EVENTS.NEST_RAID, { site, success, kea: this, egg });
+    }
+  }
+
+  // Into the raid counting down at this egg (RAIDS), or one opened here now. The first kea
+  // there opens it; others that come while it counts join it. At nought one roll decides it
+  // for all of them: the first takes the egg, or every one of them is driven off.
+  _joinStandoff(sim, egg, site) {
+    const g = sim.game, moaR = (LEVEL_MECHANICS.keaRaid && LEVEL_MECHANICS.keaRaid.moaRadius) ?? 90;
+    let raid = RAIDS.find(egg);
+    if (!raid) {
+      const at = site ? { x: site.pos.x, y: site.pos.y } : { x: egg.pos.x, y: egg.pos.y };
+      const kea = [];
+      const rc = LEVEL_MECHANICS.keaRaid || {};
+      raid = RAIDS.open(g, {
+        key: egg, egg, kea, at, radius: moaR, sec: keaRaidRollSec(), attacker: 'kea', defender: egg.parentSpecies || 'upland_moa',
+        mana: rc.mana, quiet: !!rc.teach,   // (keaRaid.mana: the level's own; teach: it says how itself)
+        attackers: () => kea.filter(k => k.alive && k._standoff === raid).length,
+        defenders: () => sim.moaNear(at, moaR),
+        chance: () => sim.raidSuccessChance(site, egg.pos),
+        alive: () => egg.alive && !egg.hatched && kea.some(k => k.alive && k._standoff === raid),
+        onRoll: (success) => {
+          const here = kea.filter(k => k.alive && k._standoff === raid);
+          for (const k of here) { k._standoff = null; k._slot = null; }
+          if (!here.length) return;
+          if (success) {
+            here[0]._raidWon(sim, egg, 'odds');
+            for (const k of here.slice(1)) { k._raidCooldown = k._raidCfg().cooldown; }
+          } else {
+            for (const k of here) k._raidLost(sim, egg);
+          }
+          here[0]._raidEvent(sim, site, success, egg);
+        },
+        onCancel: () => { for (const k of kea) if (k._standoff === raid) { k._standoff = null; k._slot = null; } }
+      });
+    }
+    // (A level that teaches the raid, keaRaid.teach: its first raid waits, count held, until
+    // the lesson has been given: RAIDS.lessonDone, set by the level's own reaction.)
+    const rc2 = LEVEL_MECHANICS.keaRaid || {};
+    if (rc2.teach && !RAIDS.lessonDone && !raid.hold) raid.hold = () => !RAIDS.lessonDone;
+    if (!raid.kea.includes(this)) raid.kea.push(this);
+    this._standoff = raid;
+    const i = raid.kea.indexOf(this);
+    this._slot = { x: Math.cos(i * 2.4) * 9, y: Math.sin(i * 2.4) * 6 - 4 };
+  }
+
+  _leaveStandoff() {
+    this._standoff = null;
+    this._slot = null;
   }
 
   // The nearest walkable step (of 8) whose elevation is closer to the band centre; one

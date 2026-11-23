@@ -83,7 +83,7 @@ const JOURNEY_BUSH = (() => {
     teaches: ['crowding', 'favoured_plant'],
     guide: ['little_bush_moa', 'upland_moa', 'favoured_plants', 'coexistence', 'beech_refuge'],
     unlockCondition: null,
-    waysOn: [{ label: "North, to the booming", tile: 't4' }],
+    waysOn: [{ label: "North, to the booming", tile: 't4', sub: "Koukou heads north, to the booming kākāpō" }],
     outcome: { birds: FAMILY, herds: { bush_moa: 'little_bush_moa' } },
 
     zoom: 2.0,
@@ -142,9 +142,9 @@ const JOURNEY_BUSH = (() => {
         tools: ['lancewood'],
         focus: ['upland_moa'],
         goals: [
-          { id: 'uncrowded', name: "Half the bush moa drawn off to their own plant, and the family's meals uncrowded",
+          { id: 'uncrowded', name: "Plant lancewood to draw half the bush moa away from the family",
             done: { all: [drawnOff, calmFor(D.calmSec)] }, reward: 20 },
-          { id: 'summer_fed', name: "Koukou's family fed through the summer", survive: true, reward: 10 }
+          { id: 'summer_fed', name: "Keep Koukou's family fed through summer", survive: true, reward: 10 }
         ],
         holdSeason: { until: { goal: 'uncrowded' }, at: 0.9, maxSec: 30 }
       },
@@ -158,7 +158,7 @@ const JOURNEY_BUSH = (() => {
           K.eagleComes('koukou')
         ],
         goals: [
-          { id: 'autumn_safe', name: "Koukou's family through the autumn", survive: true, reward: 15 }
+          { id: 'autumn_safe', name: "Keep Koukou's family safe through autumn", survive: true, reward: 15 }
         ]
       },
 
@@ -170,9 +170,9 @@ const JOURNEY_BUSH = (() => {
           { say: [['guide', "Winter. More bush moa have come down into the refuge, and everyone is feeding in the same small forest.", { lit: ['little_bush_moa'] }]] }
         ],
         goals: [
-          { id: 'winter_uncrowded', name: "Half the winter herd drawn off, and the family's meals uncrowded",
+          { id: 'winter_uncrowded', name: "Plant lancewood to draw half the winter herd away from the family",
             done: { all: [drawnOff, calmFor(D.calmSec)] }, reward: 25 },
-          { id: 'winter_through', name: "Through the winter", survive: true, reward: 15 }
+          { id: 'winter_through', name: "Make it through winter", survive: true, reward: 15 }
         ]
       },
 
@@ -183,9 +183,9 @@ const JOURNEY_BUSH = (() => {
           // (FULLGAMESCRIPT 3: the kākāpō speaks to Koukou. Unseen here, so tile 4 keeps its reveal;
           // the voice is Te Whē's panel with its own title. Words drafted from the script.)
           { say: [['guide', "Spring. At night, from the north, a deep booming comes through the trees. Then a voice, out of the dark.", { lit: ['koukou'], speaker: 'boom' }],
-                  ['guide', "Upland moa. Get ready. The winters will be colder than these.", { title: "A voice in the dark" }],
-                  ['guide', "Many creatures deep in this forest have been here a long time. Longer than the Pouākai.", { title: "A voice in the dark" }],
-                  ['guide', "The Pouākai grew great with the giant moa. So the bush moa learned to eat the lancewood while it is small.", { title: "A voice in the dark", lit: ['little_bush_moa'] }],
+                  ['guide', "Upland moa. Get ready. The winters will be colder than these.", { title: "A voice in the dark", guideSprite: 'shadow' }],
+                  ['guide', "Many creatures deep in this forest have been here a long time. Longer than the Pouākai.", { title: "A voice in the dark", guideSprite: 'shadow' }],
+                  ['guide', "The Pouākai grew great with the giant moa. So the bush moa learned to eat the lancewood while it is small.", { title: "A voice in the dark", guideSprite: 'shadow', lit: ['little_bush_moa'] }],
                   ['guide', "One more season in this forest. This time nobody will tell you what to do."]] },
           K.eagleComes('koukou', 42)
         ],
@@ -193,7 +193,7 @@ const JOURNEY_BUSH = (() => {
           { id: 'spring_press', when: { after: 24 }, do: [K.eagleComes('koukou', 47)] }
         ],
         goals: [
-          { id: 'own', name: "Meet a problem with no help", done: { gained: ['unaided', '>=', 1] }, stretch: true, reward: 30 }
+          { id: 'own', name: "Solve a problem before any hint", done: { gained: ['unaided', '>=', 1] }, stretch: true, reward: 30 }
         ],
         next: 'onward'
       },

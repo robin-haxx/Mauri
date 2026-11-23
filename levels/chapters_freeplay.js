@@ -45,19 +45,19 @@ const FREEPLAY_SKETCHES = {
   //   - Pukepuke and Koukou are not hatched again. They hatched on tiles 1 and 2, so they open
   //     these years as the half-grown birds they are: Pukepuke two years old, a cock bird, at
   //     Mama's side; Koukou a year old, a hen, at her mother's.
-  //   - Te Whē opens with the free play's own words (the five winters, then the three parts of
-  //     the screen: mauri, the goals and the season ring, the toolbox), says why the Pouākai's
-  //     hunting is all right the first time it feeds, and closes the five years. The Pouākai
-  //     keeps its one line, as the question rung of a hunt.
-  //   - Mauri comes in from every bird on the land (mechanics.ecosystemIncome), as Te Whē says.
-  //   - No moa courts its own parent, chick or sibling (mechanics.noKinPairing).
-  //   - In the fifth year a nest of their own stands between the two families' nests, and
-  //     Koukou's first clutch is due (her calendar is set so): the chick is Pipi (cast name
-  //     `baby`). If no chick of hers is alive by the fifth spring an egg is set beside her
-  //     (logged as forced).
-  //   - After the closing words, outside play, the Pouākai carries Pipi off (FULLGAMESCRIPT;
-  //     CHAPTERS_KIT.carryOff). Pukepuke swears to get her back; Koukou hears a booming voice
-  //     from the west. The record keeps Pipi as taken, not lost.
+  //   - FOUR years, not five (JOURNEY_2F_DIAL.years).
+  //   - Te Whē opens with the author's narration (FULLGAMESCRIPT, 23 November 2026: the
+  //     player as kaitiaki, the ice age coming, summer returned). After that Te Whē says
+  //     nothing more: what was a speech is a message on the screen. The Pouākai keeps its one
+  //     line, as the question rung of a hunt.
+  //   - Mauri comes in from every bird on the land (mechanics.ecosystemIncome), said once as
+  //     a message.
+  //   - No moa courts its own parent, chick or sibling (mechanics.noKinPairing), and Pukepuke
+  //     and Koukou lay no clutch of their own in these years: their egg is the story's.
+  //   - In the fourth year pātōtara founds nests, and the first is Pukepuke and Koukou's home
+  //     nest, theirs alone. After the fourth spring the story plays: the egg (Pipi), the two
+  //     Pouākai, the raid, the scatter and the walk west (levels/journey_02f_story.js). The
+  //     record keeps Pipi as taken, not lost, and counts the unnamed upland moa who went west.
   //   - The win writes the campaign record and offers the two ways on.
   journey: { label: 'Journey', graceSec: 8, floors: 0, eagleBreeding: false, pause: true, eagleHungerRate: 0.012, clues: true, journey: true }
 };
@@ -70,7 +70,7 @@ function freeplayCluesReactions(list, D) {
   return [
     ...(D && D.journey ? K.huntInVoice({ species: 'upland_moa', teach: false }) : [...K.coverLadder({ species: 'upland_moa' }), ...K.praise()]),
     ...K.stormLadder({ lit: ['pukepuke', 'koukou'], unlock: false }),
-    ...K.gaveUp(),
+    ...K.gaveUp({ words: !(D && D.journey) }),   // (on the journey, a message: Te Whē has said her piece)
     ...K.arrivals(),
     ...kept
   ];
@@ -80,6 +80,8 @@ const FREEPLAY_YEARS = 5;
 
 function makeChaptersFreeplay(sketchKey) {
   const D = FREEPLAY_SKETCHES[sketchKey];
+  // (The journey's years on the tops are four, and end in its story: JOURNEY_2F.)
+  const YEARS = D.journey && typeof JOURNEY_2F !== 'undefined' ? JOURNEY_2F.years : FREEPLAY_YEARS;
   const id = `${CHAPTERS_FREEPLAY_FAMILY}_${sketchKey}`;
   const coverUntil = { any: [{ hidden: '$target' }, { not: { alive: '$target' } }, { not: { hunted: '$target' } }] };
   const floors = D.floors ? { stout_legged_moa: D.floors, south_island_giant_moa: D.floors, kea: D.floors, kaka: D.floors, kokako: D.floors } : {};
@@ -89,17 +91,10 @@ function makeChaptersFreeplay(sketchKey) {
   const youngNear = (place, dist) => ({ any: [{ near: ['pukepuke', place, dist] }, { near: ['koukou', place, dist] }] });
 
   // ---- The journey sketch's additions (D.journey; see FREEPLAY_SKETCHES) -------------------
-  // Koukou's living chick under two years old, if she has one.
-  const koukousChick = (x) => {
-    const k = x.runner.castEnts.koukou;
-    if (!k) return null;
-    const young = x.runner.sim.moas.filter(m => m.alive && m.mother === k && m._calYears() != null && m._calYears() < 2);
-    return young.sort((a, b) => a._calYears() - b._calYears())[0] || null;
-  };
   const journeyParts = !D.journey ? {} : {
     section: 'journey', journey: true, sketch: undefined,
-    name: "Pukepuke & Koukou: the five years",
-    winText: "Pukepuke and Koukou are grown, and the Pouākai has carried their chick Pipi away. Two ways lead on from here.",
+    name: "Pukepuke & Koukou: the four years",
+    winText: "The Pouākai have carried Pipi's egg away. Pukepuke has gone north alone; Koukou leads the tribe west. Two ways lead on from here.",
     cast: {
       mama:       { title: "Mama Moa",        species: 'upland_moa', manual: true, pitch: 0.85 },
       papa:       { title: "Papa Moa",        species: 'upland_moa', manual: true },
@@ -107,20 +102,39 @@ function makeChaptersFreeplay(sketchKey) {
       friendPapa: { title: "Koukou's father", species: 'upland_moa', manual: true, pitch: 1.1 },
       pukepuke:   { title: "Pukepuke",        species: 'upland_moa', manual: true },
       koukou:     { title: "Koukou",          species: 'upland_moa', manual: true },
-      baby:       { title: "Pipi",        species: 'upland_moa', manual: true, scale: 0.6 }
+      baby:       { title: "Pipi",        species: 'upland_moa', manual: true, scale: 0.6 },   // (an egg, in the story)
+      ...(typeof JOURNEY_2F !== 'undefined' ? JOURNEY_2F.cast : {})
     },
-    waysOn: [{ label: "West with Koukou", tile: 't3' }, { label: "North with Pukepuke", tile: 't5' }],
+    waysOn: [
+      { label: "West with Koukou", tile: 't3', sub: "Koukou sets off west, into the dense forest" },
+      { label: "North with Pukepuke", tile: 't5', sub: "Pukepuke sets off north, into higher country" }
+    ],
+    // The win card says who went which way (CAMPAIGN.cardLines).
+    closingLines: (rec) => {
+      const C = CAMPAIGN, west = CHAPTERS_KIT.WEST.filter(n => n !== 'koukou' && C.alive(n)), t = rec.tribe || 0;
+      const south = ['friendMama', 'friendPapa'].filter(n => !CHAPTERS_KIT.WEST.includes(n) && C.alive(n));
+      return [
+        "Pukepuke went north alone.",
+        `Koukou led ${west.length ? C._list(west) : 'the tribe'}${t ? ` and ${t} more upland moa` : ''} west.`,
+        ...(south.length ? [`${C._list(south)} went home to the south.`] : [])
+      ];
+    },
     sites: {
       nestA:   { find: 'high', near: { fx: 0.5, fy: 0.42 }, within: 240 },
       nestB:   { find: 'open', near: 'nestA', dist: [80, 130] },
       tops:    { near: 'nestA', dist: [60, 110] },
       lookout: { near: 'nestB', dist: [70, 130] },
-      tarn:    { find: 'low', near: 'nestA', within: 560 },
+      // The winter waterhole: a glade in the montane forest below both nests, where upland moa
+      // drift in the cold anyway (not the lowest ground, out on the flats at the map's far side).
+      tarn:    { find: 'refuge', near: 'nestA', from: ['nestB'], biome: 'forestRefuge', dist: [140, 260], ideal: 180 },
       nestC:   { find: 'open', near: 'nestA', dist: [50, 95] }     // where the two young make their own nest, in year five
     },
     outcome: {
       birds: ['mama', 'papa', 'friendMama', 'friendPapa', 'pukepuke', 'koukou', 'baby'],
-      also: (rec, r) => { rec.babyHatch = r.beatsDone.has('baby') ? ((r.log.some(l => l.kind === 'beat' && l.id === 'baby' && /forced/.test(l.info))) ? 'forced' : 'natural') : 'set down'; }
+      also: (rec, r) => {
+        rec.babyHatch = 'egg';   // (Pipi was carried off as an egg: she hatches off the land)
+        if (typeof JOURNEY_2F !== 'undefined') rec.tribe = JOURNEY_2F.tribeCount(r);
+      }
     }
   };
   // A half-grown bird of one of the families, set down beside its parents as the years open.
@@ -132,7 +146,8 @@ function makeChaptersFreeplay(sketchKey) {
     e._bornTurn = -4 * years; e._bornYear = -years;
     e.isFemale = female;
     e.mother = r.castEnts[mum] || null; e.father = r.castEnts[dad] || null;
-    e._nextClutchYear = FREEPLAY_YEARS - 1;     // (their first clutch is the fifth year's: see the dial's note)
+    // (Their first clutch is the fifth year's; on the journey they lay none: their egg is the story's.)
+    e._nextClutchYear = D.journey ? 99 : FREEPLAY_YEARS - 1;
     e.updateAge(0);
     r.castEnts[name] = e; e.castName = name;
     r._log('cast', name, `set down, ${years} years old`);
@@ -183,8 +198,10 @@ function makeChaptersFreeplay(sketchKey) {
       maxPerSpecies: 12,
       // Everyone breeds by its own calendar (the species files carry them).
       seasonalBirdBreeding: 'calendar',
-      // Food and the kea, as the Pātōtara lesson.
-      sproutPatotara: true, placedPlantsSeasonal: true,
+      // Food and the kea, as the Pātōtara lesson. Wharariki starts in leaf (food at half) and
+      // three taps bring it into flower in spring and summer; out of them it is in leaf again,
+      // so it is a hardy winter food but a reduced one (HAND_SPROUT in mauri_plant.js).
+      sproutPatotara: true, sproutWharariki: true, placedPlantsSeasonal: true,
       keaBerryLureRadius: 400, keaRaidsEggs: 'odds', keaRaidRadius: 95, keaRaidNutrition: 40, keaRaidCooldownSec: 6,
       keaRaid: { baseSuccess: 0.9, moaPenalty: 0.15, minSuccess: 0.05, moaRadius: 95 },
       flyerEdgeMargin: 14, stormFlushMult: 1.0,
@@ -195,6 +212,9 @@ function makeChaptersFreeplay(sketchKey) {
       eagleHuntsFlyers: true, eagleFlyerHungerGate: 50, eagleFlyerPreyPenalty: 1.3, eagleFlyerFeed: 60,
       eagleTelegraph: { graceSec: D.graceSec, warnBelow: 10 },
       coverBreaksLock: true, coverCalmsMoa: true, lureUnderStorm: true, placeableQueryRadius: 100,
+      // The camera closes in on each hunt, bird or moa, so the player sees what the Pouākai is
+      // after, and eases back out to the whole land when it is over (Game._onHuntStart).
+      huntCamera: { zoomIn: true },
       populationFloors: floors,
       birdPopulationFloor: D.floors,
       ...(D.clues ? Object.assign({
@@ -206,7 +226,13 @@ function makeChaptersFreeplay(sketchKey) {
       habitatStress: true, habitatStressMargin: 0.08, habitatStressPenalty: 0.4, winterStressMult: 1.4,
       hungerRateMult: 0.6, juvenileHungerMult: 1.0,
       ...(D.journey ? { ecosystemIncome: { base: 0.08, perFocusAnimal: 0.015, perAnimal: 0.006 }, noEggLaidMauri: true,
-                        noPopulationMilestones: true, noKinPairing: true } : {})
+                        noPopulationMilestones: true, noKinPairing: true,
+                        // (The fourth year: two pātōtara patches with upland moa near found a nest. The
+                        // rule waits for the year's watch, JOURNEY_2F's nest_year; the ring shows the reach.)
+                        nestingSites: { forestCount: 0, openCount: 0, radius: 40, laySnapRadius: 150, drawRadius: 260, layBoost: 0.5,
+                                        eggSpeedBonus: 1.5, foundPatches: 2, foundRadius: 110,
+                                        minGap: 70 },   // (the pair live by their families' nests: room for theirs between)
+                        nestFoundingSign: true } : {})
     },
 
     cast: {
@@ -237,7 +263,7 @@ function makeChaptersFreeplay(sketchKey) {
           ...(D.journey ? [] : [{ say: [['guide', "Summer. Keep an eye on who is out in the open.", { lit: ['haasts_eagle'] }]] }])
         ],
         goals: [
-          { id: 'summer_through', name: "Year {year}: through the summer", survive: true, reward: 10 }
+          { id: 'summer_through', name: "Make it through summer", survive: true, reward: 10 }
         ],
         // (Not on the journey: there the two young hatched on tiles 1 and 2.)
         reactions: D.journey ? [] : [
@@ -251,7 +277,7 @@ function makeChaptersFreeplay(sketchKey) {
         tools: seasonTools.autumn,
         start: [ { fade: { type: 'Storm', sec: 45, refreshOnMove: true } } ],
         goals: [
-          { id: 'down', name: "Year {year}: the young down to the water", done: youngNear('tarn', 110), reward: 15 }
+          { id: 'down', name: "Get Pukepuke and Koukou down to the water", done: youngNear('tarn', 110), reward: 15 }
         ]
       },
       { id: 'winter', title: "Winter",
@@ -261,74 +287,36 @@ function makeChaptersFreeplay(sketchKey) {
           { id: 'winter_press', when: { seasonProgress: ['>=', 0.35] }, do: [{ eagle: { hunger: 50, watch: 'tarn' } }] }
         ],
         goals: [
-          { id: 'fed', name: "Year {year}: wharariki by the young", done: { any: [{ near: ['wharariki', 'pukepuke', 90] }, { near: ['wharariki', 'koukou', 90] }] }, reward: 10 },
-          { id: 'winter_through', name: "Year {year}: through the winter", survive: true, reward: 20 }
+          { id: 'fed', name: "Grow wharariki by Pukepuke or Koukou", done: { any: [{ near: ['wharariki', 'pukepuke', 90] }, { near: ['wharariki', 'koukou', 90] }] }, reward: 10 },
+          { id: 'winter_through', name: "Make it through winter", survive: true, reward: 20 }
         ]
       },
       { id: 'spring', title: "Spring",
         tools: seasonTools.spring,
         goals: [
-          { id: 'home', name: "Year {year}: the young home to the tops", done: youngNear('nestA', 160), reward: 15 }
+          { id: 'home', name: "Get Pukepuke and Koukou home to the tops", done: youngNear('nestA', 160), reward: 15 }
         ],
         // Journey: the one guaranteed beat. By the fifth spring Koukou has a living chick. It
         // is invited by the simulation itself (she is of age from year four and lays in summer
         // if she is fed and Pukepuke is near); if none is alive twelve seconds into that spring
         // an egg is set down beside her, and the record says it was forced.
-        ...(D.journey ? {
-          beats: [{ id: 'baby', when: { year: ['>=', FREEPLAY_YEARS] },
-            until: (x) => !!koukousChick(x), by: 12,
-            force: [{ lay: { species: 'upland_moa', at: 'koukou', incubationSec: 14 } }, { notify: "Koukou has laid an egg." }] }],
-          holdSeason: { until: (x) => x.runner.yearNow() < FREEPLAY_YEARS || !!koukousChick(x), at: 0.9, maxSec: 30 }
-        } : {}),
-        // Five years turned: the finale. Else round again.
-        next: [[{ year: ['>=', FREEPLAY_YEARS + 1] }, 'finale'], [true, 'summer']]
+        // The years turned: the finale (the journey's story: JOURNEY_2F). Else round again.
+        next: [[{ year: ['>=', YEARS + 1] }, D.journey ? 'egg' : 'finale'], [true, 'summer']]
       },
-      { id: 'finale', title: "Five years on",
-        ...(D.journey ? { tools: [] } : {}),
+      // (Not on the journey: its years end in its story, JOURNEY_2F's chapters.)
+      ...(D.journey ? [] : [{ id: 'finale', title: "Five years on",
         start: [
-          // Journey: Koukou's youngest living chick is Pipi (set down beside her if the egg did
-          // not make it: the story needs Pipi, and the log says how she came). Pipi is a hen.
-          ...(D.journey ? [(x) => {
-            const r = x.runner, c = koukousChick(x);
-            if (c) { r.castEnts.baby = c; c.castName = 'baby'; c.isFemale = true; r._log('cast', 'baby', 'adopted'); }
-            else if (r.castEnts.koukou) { CHAPTERS_KIT.party([{ name: 'baby', years: 0.1, mother: 'koukou', female: true, newborn: true }], 'koukou')(x); r._log('beat', 'baby', 'set down at the finale'); }
-          }] : []),
           { moment: { on: 'pukepuke', text: "Grown up", sec: 3 } },
-          ...(D.journey ? [{ say: [
-            ['guide', "Five years have passed on the tops."],
-            ['guide', "Pukepuke and Koukou are grown, and they've made a nest of their own.", { lit: ['pukepuke', 'koukou', 'nests'] }],
-            ['guide', "And now they have a chick of their own. They name her Pipi.", { lit: ['baby', 'koukou'] }],   // (new: the journey's baby, named in FULLGAMESCRIPT)
-            ['guide', "As long as there are kaitiaki to watch over them, the upland moa will go on in Kahurangi."],
-            ['guide', "Then a shadow falls across the nest.", { lit: ['baby', 'haasts_eagle'] }]   // (new, draft: FULLGAMESCRIPT 2f)
-          ] }] : [{ say: [['guide', "Five years have passed on the tops. Pukepuke and Koukou are grown.", { lit: ['pukepuke', 'koukou'] }],
+          { say: [['guide', "Five years have passed on the tops. Pukepuke and Koukou are grown.", { lit: ['pukepuke', 'koukou'] }],
                   ['guide', "As long as there are kaitiaki to watch over them, the upland moa will go on in Kahurangi."]] },
-                  { win: true }])
+          { win: true }
         ],
-        until: { after: D.journey ? 1.5 : 8 },
-        next: D.journey ? 'taken' : 'win'
-      },
-      // Journey (FULLGAMESCRIPT 2f): the Pouākai carries Pipi off, outside play. Nothing the
-      // player does can stop it (CHAPTERS_KIT.carryOff), so it comes only after the five years
-      // are won; the toolbar is empty. Pipi leaves the land alive and the record keeps her as
-      // taken (CAMPAIGN.finish): she is found again on tile 7.
-      ...(D.journey ? [
-        { id: 'taken', title: "The Pouākai", tools: [],
-          start: [CHAPTERS_KIT.carryOff('baby', { sides: ['north', 'west'] })],
-          until: { any: [CHAPTERS_KIT.isTaken('baby'), { after: 25 }] },
-          next: 'vow' },
-        { id: 'vow', title: "Carried off", tools: [],
-          start: [
-            CHAPTERS_KIT.makeTaken('baby'),   // (only if the eagle somehow never left with her: logged as forced)
-            // (new, drafts: FULLGAMESCRIPT 2f, for the author to rewrite)
-            { say: [
-              ['koukou', "Pipi! PIPI!", { lit: ['koukou'] }],
-              ['pukepuke', "I'll get her back. And I'll find a way to make the uplands safe.", { lit: ['pukepuke'] }],
-              ['guide', "Koukou cannot be comforted. Then, from far to the west, a deep, booming voice.", { lit: ['koukou'], speaker: 'boom' }]
-            ] }
-          ],
-          until: { after: 3 },
-          next: 'win' }
-      ] : [])
+        until: { after: 8 },
+        next: 'win'
+      }]),
+      // Journey (FULLGAMESCRIPT 2f, 23 November): the egg, the two Pouākai, the raid, the scatter
+      // and the walk west, outside play (levels/journey_02f_story.js).
+      ...(D.journey && typeof JOURNEY_2F !== 'undefined' ? JOURNEY_2F.chapters : [])
     ],
 
     reactions: (D.clues ? ((list) => freeplayCluesReactions(list, D)) : (list) => list)([
@@ -350,20 +338,14 @@ function makeChaptersFreeplay(sketchKey) {
           { place: { type: 'Storm', at: 'lookout', standing: true } },
           { place: { type: 'waterhole', at: 'tarn', standing: true } },
           { eagle: { which: 'nearest', near: 'nestA', watch: 'lookout', hunger: 25 } },
-          // Te Whē's opening, as the first free play: the goal, then the three parts of the screen.
+          // Te Whē's opening (FULLGAMESCRIPT, 23 November 2026: the author's words). After it,
+          // Te Whē says nothing more in these years: the rest are messages on the screen.
           { say: [
-            ['guide', "Pukepuke and Koukou are still young, and need your protection.", { lit: ['pukepuke', 'koukou'] }],
-            ['guide', "Keep them safe for five winters, and we can watch them grow up!", { lit: ['pukepuke', 'koukou'] }],
-            ['guide', "", { title: "The Mauri level of the forest",
-              content: ["Mauri is the spiritual energy of this ngahere.", "As well as Upland Moa, all birds on the land add to it. Use it to shape the forest."],
-              highlight: { type: 'element', target: 'mauriDisplay' }, guidePosition: 'topLeft' }],
-            ['guide', "", { title: "Goals & Information",
-              content: ["Try to achieve your GOALs every season.", "Use the SEASON RING to prepare for what comes next!"],
-              highlight: { type: 'element', target: 'goalsPanel' }, highlightAlt: { type: 'element', target: 'seasonDisplay' }, guidePosition: 'left' }],
-            ['guide', "", { title: "You have a toolbox for shaping the ecosystem!",
-              content: ["Mauri can become pātōtara, wharariki and storms.", "Select a tool, then a spot in the world to place it."],
-              highlight: { type: 'element', target: 'toolbar' }, guidePosition: 'bottomLeft' }]
-          ] }
+            ['guide', "Your role is kaitiaki of the glacial Alps, and you will learn that the tribe of Upland Moa is key to this land staying fruitful, for all those who live in its forests."],
+            ['guide', "The upland moa can sense that it is getting colder; it’s heading into an ice age, and with time, the forests will stop growing as far up the mountains. Whole forests will die back, and the moa will have to learn to share the space with the other birds of the forest…"],
+            ['guide', "But let’s not get ahead of ourselves. Summer has returned; why don’t you use the mauri of the forest to help the families of Pukepuke and Koukou?", { lit: ['pukepuke', 'koukou'] }]
+          ] },
+          { notify: ["Every bird on the land adds to the forest's MAURI. Spend it on pātōtara, wharariki and storms.", 'info'] }
         ] : [
           { flag: 'staged' },
           { nest: { at: 'nestA', radius: 40, hideClutch: true, as: 'homeA' } },
@@ -385,13 +367,10 @@ function makeChaptersFreeplay(sketchKey) {
             ['guide', "The Pouākai takes whatever it can see, bird or moa. Your storms, pātōtara and wharariki are what you have.", { lit: ['haasts_eagle'] }]
           ] }
         ] },
-      // Journey, the fifth summer: a nest of their own stands between the families' nests.
-      ...(D.journey ? [{ id: 'own_nest', on: 'chapter_start', if: (x) => !!x.event && x.event.chapter === 'summer' && x.runner.yearNow() === FREEPLAY_YEARS,
-        // (The two move in beside it: the invitation to their first clutch.)
-        do: [{ nest: { at: 'nestC', radius: 40, hideClutch: true, as: 'homeC' } }, CHAPTERS_KIT.headFor(['pukepuke', 'koukou'], 'nestC')],
-        moment: { on: 'nestC', text: "A nest of their own" } }] : []),
-      // A new year.
-      { id: 'new_year', on: 'season_change', if: (x) => x.event && x.event.seasonKey === 'summer', once: false,
+      // Journey, the fourth year: Pukepuke and Koukou's home nest (levels/journey_02f_story.js).
+      ...(D.journey && typeof JOURNEY_2F !== 'undefined' ? JOURNEY_2F.reactions : []),
+      // A new year (not once the journey's years are done and its story plays).
+      { id: 'new_year', on: 'season_change', if: (x) => x.event && x.event.seasonKey === 'summer' && x.runner.yearNow() <= YEARS, once: false,
         notify: ["Year {year} begins on the tops.", 'success'] },
       // The eagle: cover the hunted; the first time paused in the guided sketch.
       { id: 'cover', on: 'eagle_hunting', if: { species: 'upland_moa' },
@@ -402,15 +381,11 @@ function makeChaptersFreeplay(sketchKey) {
                   until: coverUntil, lit: ['$target', '$eagle'], pause: false, maxSec: 20 } },
       { id: 'bird_hunted', on: 'eagle_hunting', if: { species: ['kea', 'kaka', 'kokako'] }, once: false, cooldown: 30,
         notify: "The Pouākai is after a {species}." },
-      { id: 'bird_taken', on: 'bird_killed', once: false, cooldown: 10,
-        notify: ["The Pouākai took a {species}.", 'error'] },
+      // (Each catch is said over the play area as the hunt view shows it: Game._onEagleCatch.)
       { id: 'giant_taken', on: 'moa_killed', if: { species: 'south_island_giant_moa' },
-        say: D.journey ? [
-          ['guide', "Haast's eagle evolved alongside the moa. As predator and prey, they keep each other in balance.", { lit: ['haasts_eagle'] }],
-          ['guide', "So it's good for the ngahere that the Pouākai hunts. But Pukepuke and Koukou's families are yours to keep safe!", { lit: ['pukepuke', 'koukou'] }]
-        ] : [['guide', "The Pouākai took a giant moa: a meal to last it a while.", { lit: ['south_island_giant_moa'] }]] },
-      { id: 'taken_again', on: 'moa_killed', if: { species: 'south_island_giant_moa' }, once: false, cooldown: 40,
-        notify: "The Pouākai fed on the giant moa." },
+        ...(D.journey
+          ? { notify: ["The Pouākai took a giant moa. Predator and prey keep each other in balance; Pukepuke and Koukou's families are yours to keep safe.", 'info'] }
+          : { say: [['guide', "The Pouākai took a giant moa: a meal to last it a while.", { lit: ['south_island_giant_moa'] }]] }) },
       { id: 'hungry_eagle', when: { eagleHunger: ['>=', 38] }, once: false, cooldown: 45,
         notify: "The Pouākai is getting hungry. Who is out in the open?" },
       // The birds' year: the first hatch of each kind is a moment; later ones a word.
@@ -429,6 +404,11 @@ function makeChaptersFreeplay(sketchKey) {
       { id: 'winter_food', when: { all: [{ season: 'winter' }, { not: { any: [{ near: ['wharariki', 'pukepuke', 90] }, { near: ['wharariki', 'koukou', 90] }] } }] },
         for: 20, once: false, cooldown: 45,
         notify: ["The pātōtara is bare in winter. Grow WHARARIKI by the young so they can feed.", 'error'] },
+      // Wharariki in leaf in the warm months: three taps bring it into flower. (Draft words.)
+      { id: 'flower_wharariki', when: { all: [{ season: ['spring', 'summer'] },
+          (x) => x.runner.sim.placeables.some(p => p.alive && p.type === 'wharariki' && p.unsprouted)] },
+        for: 12, once: false, cooldown: 120,
+        notify: "Tap a WHARARIKI three times to bring out its flowers: more food for the moa." },
       // Losses: the two young are the stake; everyone else is a line.
       { id: 'pukepuke_lost', on: 'cast_lost', if: { cast: 'pukepuke', cause: 'eagle' }, do: [{ lose: "The Pouākai took Pukepuke." }] },
       { id: 'pukepuke_starved', on: 'cast_lost', if: { cast: 'pukepuke', cause: ['starved', 'unknown'] }, do: [{ lose: "Pukepuke starved. Keep food growing by the families: pātōtara in the warm months, wharariki in winter." }] },
@@ -440,7 +420,8 @@ function makeChaptersFreeplay(sketchKey) {
         notify: ["One of the grown moa starved. Tap plants near the families to bring them to food.", 'error'] }
     ]),
 
-    lose: [{ when: { extinct: 'focus' }, reason: "The upland moa are gone from the tops." }],
+    // (Not in the journey's story, where every upland moa leaves the land on its way on.)
+    lose: [{ when: { all: [{ extinct: 'focus' }, (x) => !x.runner.flags.story] }, reason: "The upland moa are gone from the tops." }],
 
     winTitle: "GROWN UP",
     winText: "Pukepuke and Koukou are grown, five years on.",

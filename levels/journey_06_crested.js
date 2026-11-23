@@ -101,7 +101,7 @@ const JOURNEY_NORTH = (() => {
     claim: "Two patches of a moa's favoured plant, with the pair near, found a nest.",
     teaches: ['nest_founding', 'favoured_plant'],
     guide: ['upland_moa', 'favoured_plants', 'kea', 'subalpine'],
-    waysOn: [{ label: "Stay among the giant moa", tile: 't6f' }],
+    waysOn: [{ label: "Stay among the giant moa", tile: 't6f', sub: "Pukepuke's clan stays among the giant moa" }],
     outcome: { birds: FAMILY, herds: { clan: FOCUS },
                also: (rec, r) => { const m = r.castEnts.mama; rec.siblings = r.sim.moas.filter(b => b.alive && b.speciesKey === FOCUS && !b.castName && b._bornTurn != null).length; } },
 
@@ -133,26 +133,26 @@ const JOURNEY_NORTH = (() => {
         tools: ['speargrass', 'Storm'], focus: [FOCUS],
         nesting: { species: FOCUS, plant: 'speargrass' },
         goals: [
-          { id: 'nest', name: "A nest for the family", done: (x) => nests(x) >= 1, reward: 25 },
-          { id: 'egg', name: "An egg in the nest", done: { seen: ['egg_laid', { species: FOCUS }] }, reward: 15 }
+          { id: 'nest', name: "Make the family a nest", done: (x) => nests(x) >= 1, reward: 25 },
+          { id: 'egg', name: "Get an egg laid in the nest", done: { seen: ['egg_laid', { species: FOCUS }] }, reward: 15 }
         ],
         holdSeason: { until: { goal: 'nest' }, at: 0.85, maxSec: 30 }
       },
       { id: 'autumn', title: "Autumn: before the cold",
         tools: ['speargrass', 'harakeke', 'Storm'],
         start: [{ fade: { type: 'Storm', sec: 60, refreshOnMove: true } }, K.eagleComes('pukepuke', 40)],
-        goals: [{ id: 'ahead', name: "Winter food growing by the family", done: groveNear, reward: 15 }]
+        goals: [{ id: 'ahead', name: "Plant flax by the family before winter", done: groveNear, reward: 15 }]
       },
       { id: 'winter', title: "Winter",
         tools: ['harakeke', 'Storm'],
         start: [(x) => { x.runner.vars.winterStart = clan(x); }],
-        goals: [{ id: 'winter_all', name: "Every upland moa through the winter", keep: (x) => clan(x) >= (x.runner.vars.winterStart || 0), reward: 25 }]
+        goals: [{ id: 'winter_all', name: "Keep every upland moa alive through winter", keep: (x) => clan(x) >= (x.runner.vars.winterStart || 0), reward: 25 }]
       },
       { id: 'spring', title: "Spring: the family turns west", transfer: true,
         tools: ['speargrass', 'harakeke', 'Storm'],
         start: [{ say: [['guide', "Spring. One more season in the high country, and nobody will tell you what to do."]] }, K.eagleComes('pukepuke', 42)],
         reactions: [{ id: 'spring_press', when: { after: 24 }, do: [K.eagleComes('pukepuke', 47)] }],
-        goals: [{ id: 'own', name: "Meet a problem with no help", done: { gained: ['unaided', '>=', 1] }, stretch: true, reward: 30 }],
+        goals: [{ id: 'own', name: "Solve a problem before any hint", done: { gained: ['unaided', '>=', 1] }, stretch: true, reward: 30 }],
         next: 'onward'
       },
       { id: 'onward', title: "West", tools: [],
@@ -210,7 +210,7 @@ const JOURNEY_NORTH = (() => {
   const toolsFor = (season) => (x) => x.runner.setTools({ summer: ['speargrass', 'Storm'], autumn: ['speargrass', 'harakeke', 'Storm'],
                                                          winter: ['harakeke', 'Storm'], spring: ['speargrass', 'Storm'] }[season]);
   const lines = (x) => { const v = x.runner.vars; v.clan = clan(x); v.giants = giants(x);
-    v.clanLine = `The clan: ${v.clan} of ${D.fClan} upland moa`; v.giantLine = `Giant moa: ${v.giants} (there were ${v.giantStart != null ? v.giantStart : v.giants})`; };
+    v.clanLine = `Grow the clan to ${D.fClan} upland moa (now ${v.clan})`; v.giantLine = `Keep the giant moa alive (${v.giants} now)`; };
   const season = (key, extra = {}) => ({
     start: [toolsFor(key), lines, ...(extra.start || [])],
     goals: [
@@ -246,6 +246,7 @@ const JOURNEY_NORTH = (() => {
       eagleHuntsFlyers: true, eagleFlyerHungerGate: 55, eagleFlyerPreyPenalty: 1.4, eagleFlyerFeed: 60,
       focalSpecies: [FOCUS], focalWildFoodMult: 0.5,
       ecosystemIncome: { base: 0.08, perFocusAnimal: 0.015, perAnimal: 0.006 }, noEggLaidMauri: true, noPopulationMilestones: true,
+      huntCamera: { zoomIn: true },   // the view closes in on each hunt and back (Game._onHuntStart)
       // Upland moa arrive over the pass while the clan is small; nothing brings giant moa back.
       eagleHungerRate: D.fEagleHunger,
       rescueImmigration: { upland_moa: { below: 5, count: 2, afterSeasons: 3 }, stout_legged_moa: { below: 4, count: 3, afterSeasons: 2 }, kea: { below: 2, count: 2, afterSeasons: 3 }, kaka: { below: 2, count: 2, afterSeasons: 4 } }
@@ -261,8 +262,8 @@ const JOURNEY_NORTH = (() => {
         summer: Object.assign(season('summer'), { focus: [FOCUS], nesting: { species: FOCUS, plant: 'speargrass' } }),
         autumn: season('autumn', { start: [{ fade: { type: 'Storm', sec: 60, refreshOnMove: true } }] }),
         winter: season('winter', { start: [(x) => { x.runner.vars.winterStart = clan(x); }],
-          goals: [{ id: 'winter_all', name: "Year {year}: every upland moa through the winter", keep: (x) => clan(x) >= (x.runner.vars.winterStart || 0), reward: 15 }] }),
-        spring: season('spring', { goals: [{ id: 'year_done', name: "Year {year} of " + D.fYears, survive: true, reward: 10 }] })
+          goals: [{ id: 'winter_all', name: "Keep every upland moa alive through winter", keep: (x) => clan(x) >= (x.runner.vars.winterStart || 0), reward: 15 }] }),
+        spring: season('spring', { goals: [{ id: 'year_done', name: "Make it through year {year} of " + D.fYears, survive: true, reward: 10 }] })
       }, { years: D.fYears }),
       K.wonAfterYears({
         title: "Eight years on",

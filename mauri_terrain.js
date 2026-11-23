@@ -114,6 +114,12 @@ class TerrainGenerator {
     this.worldGridRows = wg ? Math.max(1, wg.rows || 1) : 1;
     this.hasWorldGrid = (this.worldGridCols * this.worldGridRows) > 1;
     this._worldGridCfg = wg || {};
+    // A world grid can be a window onto a LARGER land (worldGrid.land: { cols, rows, col, row }):
+    // the grid's areas are land.cols × land.rows windows of one land, starting at window (col,
+    // row) of it. The heights are the larger land's, so two levels whose grids overlap share
+    // the same ground where they meet (the journey's tiles: CAMPAIGN.worldGridFor). Null on
+    // every other level, where the grid is the whole land.
+    this._landCfg = (wg && wg.land) || null;
     // Circular tour order [col,row]. Default (2×2) starts at the east/alps window and
     // loops west → across → east, so year 1 is the alps→podo upper slope.
     this._quadOrder = (wg && wg.order) || this._defaultQuadOrder(this.worldGridCols, this.worldGridRows);
@@ -198,9 +204,24 @@ class TerrainGenerator {
 
     this.viewW = this.mapWidth;    // one area / play window, world units
     this.viewH = this.mapHeight;
-    // Full continuous world extent (world units). Classic levels: one window.
-    this.worldW = this.viewW * this.worldGridCols;
-    this.worldH = this.viewH * this.worldGridRows;
+    // The pitch between areas. Usually an area IS a window, so it follows the screen's shape.
+    // A larger land (worldGrid.land) fixes the size of its areas instead (land.areaW/areaH,
+    // world units), so the same area is the same ground whatever the window: each window is
+    // centred on its area, cropping it on a narrower screen and taking in a little of its
+    // neighbours on a wider one.
+    const L = this._landCfg;
+    this._pitchX = (L && L.areaW) || this.viewW;
+    this._pitchY = (L && L.areaH) || this.viewH;
+    // Full continuous world extent (world units): every area's window. Classic levels: one window.
+    this.worldW = this._pitchX * (this.worldGridCols - 1) + this.viewW;
+    this.worldH = this._pitchY * (this.worldGridRows - 1) + this.viewH;
+    // The whole land this grid is part of (worldGrid.land), and where world (0, 0) lies on it,
+    // in world units: area (c, r)'s window centre is land cell (land.col + c, land.row + r)'s
+    // centre. Without one the grid is the whole land, at no offset.
+    this._landOffX = L ? (L.col || 0) * this._pitchX + (this._pitchX - this.viewW) / 2 : 0;
+    this._landOffY = L ? (L.row || 0) * this._pitchY + (this._pitchY - this.viewH) / 2 : 0;
+    this._landW = L ? (L.cols || this.worldGridCols) * this._pitchX : this.worldW;
+    this._landH = L ? (L.rows || this.worldGridRows) * this._pitchY : this.worldH;
 
     // Island Y-pad: on a classic (single-window) level the island falloff spans
     // mapHeight + 2·worldPadY so the window is the centre of a larger island (the 3D over-scan
@@ -229,8 +250,8 @@ class TerrainGenerator {
 
   // World-space top-left of the active area (window). Camera settles here.
   _updateActiveOrigin() {
-    this._activeOriginX = this.activeCol * this.viewW;
-    this._activeOriginY = this.activeRow * this.viewH;
+    this._activeOriginX = this.activeCol * this._pitchX;
+    this._activeOriginY = this.activeRow * this._pitchY;
   }
 
   _smoothstep(edge0, edge1, x) {
@@ -406,9 +427,12 @@ class TerrainGenerator {
     // falloff spans all cols×rows windows, making ONE continuous alps→shore descent
     // (low/sea at the west, high/alps at the east) that a single window only samples
     // part of. The pad still centres a classic island; a grid uses no pad (worldPadY 0).
-    const nx = x / this.worldW;
+    // (x, y) here are on the whole land (getElevation adds a grid's place in it), and the
+    // falloff spans that land: _landW/_landH, which are worldW/worldH unless the grid is a
+    // window of a larger land.
+    const nx = x / this._landW;
     const pad = this.worldPadY || 0;
-    const ny = (y + pad) / (this.worldH + 2 * pad);
+    const ny = (y + pad) / (this._landH + 2 * pad);
 
     const warpX = noise(x * 0.01 + this.seed, y * 0.01) * 0.2;
     const warpY = noise(x * 0.01 + this.seed * 2, y * 0.01 + this.seed) * 0.2;
@@ -454,9 +478,11 @@ class TerrainGenerator {
     // A level made in the Engine editor brings its own land (see _engineElevation).
     if (this._engineLand) return this._engineElevation(x, y);
     // (x, y) are full-world coordinates. The whole land is one continuous noise field, so
-    // neighbouring areas flow into each other.
-    const base = this.fractalNoise(x, y);
-    const ridge = this.ridgeNoise(x, y);
+    // neighbouring areas flow into each other. A grid that is a window of a larger land
+    // (worldGrid.land) reads that land's noise at its own place in it.
+    const lx = x + this._landOffX, ly = y + this._landOffY;
+    const base = this.fractalNoise(lx, ly);
+    const ridge = this.ridgeNoise(lx, ly);
     let elevation = base * (1 - this.config.ridgeInfluence) + ridge * this.config.ridgeInfluence;
     elevation = Math.pow(elevation, this.config.elevationPower);
 
@@ -465,7 +491,7 @@ class TerrainGenerator {
       elevation = this._applyLakeBasins(x, y, elevation);
     } else {
       // Original coastal island behavior
-      const falloff = this.getIslandFalloff(x, y);
+      const falloff = this.getIslandFalloff(lx, ly);
       elevation *= falloff;
     }
     // Gentle alps + broad forest at the opening; glacial habitats spread over the years.
@@ -1302,8 +1328,12 @@ class TerrainGenerator {
     // PER-ROW relief: bake only the active row's window depth, full width, so one window
     // fills the frame. The over-scan reads neighbouring rows (or the falloff past the edge).
     // An E–W pan scrolls X across this buffer; an N–S row change re-bakes.
-    const winRows = this.hasWorldGrid ? Math.round(fullRows / this.worldGridRows) : fullRows;
-    const rowOff = this.hasWorldGrid ? (this.activeRow * winRows) : 0;
+    // (A larger land's areas are a set size, not a window: its window depth and the active
+    // window's first row come from the view and the origin. Elsewhere area == window.)
+    const winRows = !this.hasWorldGrid ? fullRows
+      : this._landCfg ? Math.round(this.viewH / renderScale) : Math.round(fullRows / this.worldGridRows);
+    const rowOff = !this.hasWorldGrid ? 0
+      : this._landCfg ? Math.round(this._activeOriginY / renderScale) : (this.activeRow * winRows);
     const marginFar = Math.round(overFar * winRows);
     const marginNear = Math.round(overNear * winRows);
     const extRows = marginFar + winRows + marginNear;

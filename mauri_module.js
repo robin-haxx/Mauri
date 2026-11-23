@@ -1773,7 +1773,7 @@ class ModuleDirector {
       .map(p => ({ type: p.type, x: p.pos.x, y: p.pos.y, radius: p.radius, sprouted: !p.unsprouted }));
     g.startModuleHandoff({
       levelId: this.cfg.continueTo,
-      seed: t.seed,
+      seed: t.seed, noise: g.landNoise,   // (the land's noise seed too: Game._initTerrainAndSeason)
       elevFit: t._elevFit ? Object.assign({}, t._elevFit) : null,
       sites: JSON.parse(JSON.stringify(this.sites)),
       moa, placed,
@@ -1823,7 +1823,12 @@ class ModuleDirector {
     g.fadeScreen(1, 0);
     this._intro = { phase: seen ? 'fade' : 'talk' };
     if (seen) g.fadeScreen(0, this._sec(this.cfg.fadeSec));
-    else this._beat('intro');
+    else {
+      // (The birds' own voices wait on black, so Te Whē's click is heard alone; the line with
+      // `voices` brings them in, and the rest start as the screen fades in.)
+      if (audioManager && audioManager.holdVoices) audioManager.holdVoices();
+      this._beat('intro');
+    }
     return true;
   }
 
@@ -1832,6 +1837,7 @@ class ModuleDirector {
     if (o.phase === 'talk') {
       if (!this._tutorialIdle()) return;
       o.phase = 'fade';
+      if (audioManager && audioManager.releaseVoices) audioManager.releaseVoices();
       g.fadeScreen(0, this._sec(this.cfg.fadeSec));
     } else if (g.screenFadeDone()) {
       this._intro = null;
@@ -1898,7 +1904,7 @@ class ModuleDirector {
         const lead = this._leader();
         o.handoff = {
           levelId: this.cfg.nextModule || null,
-          seed: t.seed,
+          seed: t.seed, noise: g.landNoise,   // (the land's noise seed too: Game._initTerrainAndSeason)
           elevFit: t._elevFit ? Object.assign({}, t._elevFit) : null,
           entryX: lead ? Math.max(0, Math.min(t.mapWidth, lead.pos.x)) : null,
           family: this._living().map(m => ({ role: m.lifeScript.role, female: m.isFemale })),

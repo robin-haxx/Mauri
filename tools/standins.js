@@ -119,7 +119,8 @@ window.STANDINS = {
         const hungry = focus().find(m => m.hunger > (cold ? 45 : 55) && !live(type).some(p => dist(p.pos, m.pos) < 90));
         if (hungry) put(type, spotNear(hungry.pos, 20, type) || hungry.pos, type, 6);
       }
-      for (const p of sim.placeables) if (p.alive && p.unsprouted && game._sprout && has('patotara')) game._sprout(p);
+      // (Sprouted in its seasons only: wharariki flowers in spring and summer; Plant.canSproutIn.)
+      for (const p of sim.placeables) if (p.alive && p.unsprouted && game._sprout && has(p.type) && Plant.canSproutIn(p.type, sk)) game._sprout(p);
 
       // ---- The Forest Seed: a grove by the kākāpō, sown ahead of the mast ----------------------------
       if (has('forestBoost')) {

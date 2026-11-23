@@ -51,7 +51,7 @@ const CHAPTER_EVENTS = {
   cast_taken:      { subject: 'entity' },                  // a named bird carried off alive (CHAPTERS_KIT.carryOff): `cast`
   beat:            {},
   placeable_expired: { count: 'expired' },          // a placed item wore out: `type` (expired:Storm)
-  plant_sprouted:  { count: 'sprouted' },           // a pātōtara sprouted by hand: `sprouted`, `type`
+  plant_sprouted:  { count: 'sprouted' },           // a pātōtara or wharariki sprouted by hand (three taps): `sprouted`, `type` (sprouted:patotara)
   bird_hatched:    { subject: 'bird', count: 'hatched' },  // a flighted bird's egg hatched: `$bird`, `$egg`
   bird_killed:     { subject: 'bird', count: 'killed' },   // an eagle took a flighted bird: `$bird`, `$eagle` (counts with the moa under killed:<species>)
   species_arrived: { count: 'arrived' },                   // newcomers came in (rescueImmigration, eagleReturns): `species`, `count`
@@ -213,7 +213,10 @@ const CHAPTER_KEYS = new Set(['id', 'title', 'sites', 'start', 'goals', 'reactio
   'holdSeason', 'next', 'transfer', ...CHAPTER_LEVERS.map(([key]) => key)]);
 
 // The ways a site can be found (see ChapterRunner._findSite).
-const CHAPTER_SITE_FINDERS = new Set(['flock', 'nest', 'biome', 'high', 'low', 'open', 'edge']);
+const CHAPTER_SITE_FINDERS = new Set(['flock', 'nest', 'biome', 'high', 'low', 'open', 'edge', 'refuge']);
+
+// The story's own birds: name-tagged, and they breed only when a story says (_markStoryBirds).
+const CHAPTER_STORY_BIRDS = ['pukepuke', 'koukou'];
 
 // Who can speak (besides `cast` names and `$roles`): the guide.
 const CHAPTER_GUIDE = { title: "Te Whē, the Mantis", sprite: 'mantis_talk' };
@@ -355,7 +358,7 @@ class ChapterRunner {
 
   _compileChapter(def, i) {
     const id = def.id || `chapter_${i + 1}`;
-    const ch = { id, def, title: def.title || id };
+    const ch = { id, def, title: def.title != null ? def.title : id };   // (title: '' says nothing as it opens)
     ch.goals = (def.goals || []).map((g, gi) => this._compileGoal(g, id, gi));
     const ids = ch.goals.map(g => g.id);
     if (new Set(ids).size !== ids.length) this._issue(`chapter "${id}" has two goals with the same id`);
@@ -542,6 +545,9 @@ class ChapterRunner {
       const litNow = () => [...sp.entities(), ...this.lit(lit, this.cueData[cue])];
       out[tipId(i)] = Object.assign({
         id: tipId(i),
+        // A creature's line (or a voice in Te Whē's panel with another face: 'shadow') is the
+        // story: "Skip Tutorial" passes over only Te Whē's own (TutorialManager.skipTutorial).
+        story: who !== 'guide' || (!!more.guideSprite && more.guideSprite !== CHAPTER_GUIDE.sprite),
         trigger: i === 0 ? this._beatTrigger(cue) : { type: TRIGGER_TYPE.IMMEDIATE },
         title: sp.title,
         content: () => [this.fill(text, this.cueData[cue])],
@@ -704,6 +710,7 @@ class ChapterRunner {
     if (!spec || typeof spec !== 'object') { this._issue(`${where}: a site is an object`); return; }
     if (spec.find && !CHAPTER_SITE_FINDERS.has(spec.find)) this._issue(`${where}: unknown site finder "${spec.find}"`);
     if (spec.near) this._checkPoint(spec.near, `${where}: near`);
+    for (const f of [].concat(spec.from || [])) this._checkPoint(f, `${where}: from`);
     if (spec.species) { if (!this._speciesKeys.has(spec.species)) this._issue(`${where}: "${spec.species}" isn't in the level's species`); }
   }
 
@@ -1030,7 +1037,7 @@ class ChapterRunner {
     this._goalsOffered += this.goals.length;
     g._goalsTotal = this._goalsOffered;
 
-    g.addNotification(ch.title, 'success');
+    if (ch.title) g.addNotification(ch.title, 'success');   // (a scene's beat with no title says nothing)
     this._log('chapter', id);
     this._emit('chapter_start', { chapter: id });
     this._run(ch.start, null);
@@ -1588,6 +1595,17 @@ class ChapterRunner {
   //   biome   a spot in a biome (biome: a key or keys), nearest `near` (far: true, furthest)
   //   high, low   the highest / lowest walkable ground within `within` (200) of `near`
   //   open    open ground to place on (not forest), dist: [min, max] from `near`
+  //   refuge  where a family winters (the waterhole): a glade in the main forest downhill of
+  //           `near`, and of every place in `from` (more homes), dist: [min, max] from the
+  //           nearest of them (140 to 260 if not given), best at `ideal` (the middle). Forest is
+  //           `biome` (a key or keys), else every biome whose plants include forest trees. It
+  //           favours the biggest stretch of forest over a side patch, the body of it over its
+  //           fringe, the way the whole land falls (toward the flats), the main slope (the land
+  //           still falling beyond it) over a pocket, few trees close by, a straight walkable way
+  //           down, and room from the map's edges; with no forest below, the lowest ground
+  //           within `within` (as low).
+  //           Upland moa drift into the montane forest in winter, so a refuge there is on
+  //           their way, as the tutorial's tarn is, not out on the flats at the map's far side.
   //   edge    walkable ground by an edge of the map (side: 'north' | 'south' | 'east' | 'west')
   // or { near, dist: [min, max] } alone: any walkable spot that far from a place. A site is
   // found once, as the level (or the chapter that names it) starts, and later ones can be near
@@ -1655,6 +1673,94 @@ class ChapterRunner {
         const [r0, r1] = spec.dist || [60, 140];
         const forest = (p) => typeof FOREST_BIOMES !== 'undefined' && FOREST_BIOMES.has(t.getBiomeAt(p.x, p.y).key);
         return this._sample(around(near, r0, r1), p => walk(p) && t.canPlace(p.x, p.y) && !forest(p), null, 300);
+      }
+      case 'refuge': {
+        if (!near) return null;
+        const homes = [near, ...[].concat(spec.from || []).map(f => this.point(f)).filter(Boolean)];
+        const keys = spec.biome ? [].concat(spec.biome) : Object.values(t.biomes || {})
+          .filter(b => (b.plantTypes || []).some(k => typeof FOREST_TREES !== 'undefined' && FOREST_TREES.has(k))).map(b => b.key);
+        const onMap = (x, y) => x >= 0 && y >= 0 && x < W && y < H;
+        const inForest = (x, y) => onMap(x, y) && keys.includes(t.getBiomeAt(x, y).key);
+        const [r0, r1] = spec.dist || [140, 260], ideal = spec.ideal || (r0 + r1) / 2, m = 40;
+        const below = Math.min(...homes.map(h => t.getElevationAt(h.x, h.y))) - 0.03;
+        const home = (p) => homes.reduce((a, b) => dist(p, a) <= dist(p, b) ? a : b);
+        // The main forest: each stretch of forest (joined cells of a coarse grid) by its size,
+        // as a share of the biggest. A side patch or a copse scores low.
+        const st = 8, cols = Math.ceil(W / st), rows = Math.ceil(H / st);
+        const isF = new Uint8Array(cols * rows), patch = new Int32Array(cols * rows).fill(-1), sizes = [];
+        for (let i = 0; i < isF.length; i++) isF[i] = inForest(((i % cols) + 0.5) * st, (((i / cols) | 0) + 0.5) * st) ? 1 : 0;
+        for (let i = 0; i < isF.length; i++) {
+          if (!isF[i] || patch[i] >= 0) continue;
+          const k = sizes.length, stack = [i];
+          let n = 0;
+          patch[i] = k;
+          while (stack.length) {
+            const j = stack.pop(), c = j % cols, r = (j / cols) | 0;
+            n++;
+            for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+              const nc = c + dc, nr = r + dr, jj = nr * cols + nc;
+              if (nc >= 0 && nr >= 0 && nc < cols && nr < rows && isF[jj] && patch[jj] < 0) { patch[jj] = k; stack.push(jj); }
+            }
+          }
+          sizes.push(n);
+        }
+        const biggest = Math.max(1, ...sizes);
+        const mainForest = (p) => {
+          const k = patch[Math.min(rows - 1, (p.y / st) | 0) * cols + Math.min(cols - 1, (p.x / st) | 0)];
+          return k < 0 ? 0 : sizes[k] / biggest;
+        };
+        // Share of forest on two rings round p: the body of the forest, not a fringe or a copse.
+        const share = (p, rad) => {
+          let f = 0;
+          for (let k = 0; k < 16; k++) {
+            const a = k / 16 * TWO_PI, c = Math.cos(a), s = Math.sin(a);
+            if (inForest(p.x + c * rad * 0.5, p.y + s * rad * 0.5)) f++;
+            if (inForest(p.x + c * rad, p.y + s * rad)) f++;
+          }
+          return f / 32;
+        };
+        const trees = (p) => typeof FOREST_TREES === 'undefined' ? 0 : this.sim.getNearbyPlants(p.x, p.y, 24)
+          .filter(pl => pl.alive && FOREST_TREES.has(pl.type) && dist(pl.pos, p) < 24).length;
+        // The straight way down from the nearest home stays on walkable ground (no scree between).
+        const wayDown = (p) => {
+          const h = home(p), n = Math.ceil(dist(p, h) / 8);
+          for (let i = 1; i < n; i++) if (!t.isWalkable(h.x + (p.x - h.x) * i / n, h.y + (p.y - h.y) * i / n)) return false;
+          return true;
+        };
+        // On the main slope, the land goes on falling past p (away from home); in a pocket or a
+        // side valley it rises again.
+        const fallsOn = (p) => {
+          const h = home(p), d = dist(p, h) || 1, q = { x: p.x + (p.x - h.x) / d * 70, y: p.y + (p.y - h.y) / d * 70 };
+          return onMap(q.x, q.y) ? Math.max(-2, Math.min(2, (t.getElevationAt(p.x, p.y) - t.getElevationAt(q.x, q.y)) * 20)) : 0;
+        };
+        // Which way the land falls from the homes, taken over the whole map (the way down to the
+        // flats), and how far p lies that way (1 straight down it, -1 straight up).
+        const c0 = this._centroid(homes.map(h => ({ pos: h }))), e0 = t.getElevationAt(c0.x, c0.y);
+        let gx = 0, gy = 0;
+        for (let k = 0; k < 16; k++) {
+          const a = k / 16 * TWO_PI, c = Math.cos(a), s = Math.sin(a);
+          for (const R of [120, 240, 360]) {
+            const x = c0.x + c * R, y = c0.y + s * R;
+            if (onMap(x, y)) { const drop = e0 - t.getElevationAt(x, y); gx += c * drop; gy += s * drop; }
+          }
+        }
+        const gl = Math.hypot(gx, gy) || 1;
+        const downhill = (p) => ((p.x - c0.x) * gx + (p.y - c0.y) * gy) / ((dist(p, c0) || 1) * gl);
+        // Off the edge of the map is no place to winter: a refuge close to it is cut off on screen.
+        const edgeNear = (p) => Math.max(0, 80 - Math.min(p.x, p.y, W - p.x, H - p.y)) / 40;
+        const gen = () => around(homes[Math.floor(random(homes.length))], r0, r1)();
+        const ok = (p) => {
+          if (p.x < m || p.y < m || p.x > W - m || p.y > H - m) return false;
+          const d = dist(p, home(p));
+          return d >= r0 && d <= r1 && walk(p) && t.canPlace(p.x, p.y) && inForest(p.x, p.y) && t.getElevationAt(p.x, p.y) <= below;
+        };
+        const score = (p) => share(p, 45) * 3 + share(p, 90) * 2 + share(p, 140) * 2 + mainForest(p) * 3 -
+          Math.min(6, trees(p)) * 0.5 - Math.abs(dist(p, home(p)) - ideal) / 60 - (wayDown(p) ? 0 : 3) + fallsOn(p) * 1.5 +
+          downhill(p) * 2 - edgeNear(p);
+        const found = keys.length ? this._sample(gen, ok, score, 1200) : null;
+        if (found) return found;
+        this._log('issue', 'refuge', 'no forest below the homes: the lowest ground instead');
+        return this._sample(around(near, 0, spec.within || 560), walk, p => -t.getElevationAt(p.x, p.y), 300);
       }
       case 'edge': {
         const m = 30, side = spec.side || 'north';
@@ -1862,7 +1968,47 @@ class ChapterRunner {
     }
   }
 
+  // The story's own birds (Pukepuke and Koukou, wherever they are cast, and any cast entry with
+  // `tag: true`) wear a name tag (renderNameTags). Pukepuke and Koukou also court nobody until a
+  // story says so (cast entry `breeds: true`, or the script setting _noBreed = false): their
+  // first egg is the story's (Moa.isReadyToMate, canBeMate).
+  _markStoryBirds() {
+    for (const name in this.castEnts) {
+      const e = this.castEnts[name], c = this.castDefs[name] || {};
+      if (!e || !e.alive) continue;
+      const story = CHAPTER_STORY_BIRDS.includes(name);
+      if (story || c.tag) e._nameTag = c.title || name;
+      if (story && !c.breeds && e._noBreed === undefined) e._noBreed = true;
+    }
+  }
+
+  // Name tags over the story's birds (world pass, over the birds; Game.render). Render only.
+  renderNameTags() {
+    const g = this.game;
+    if (!g || !g.camera) return;
+    // (In screen pixels, easing smaller as the camera closes in; sat just over the bird's
+    // hunger bars, Moa.renderIndicators.)
+    const k = Math.pow(Math.max(1, g.camera.zoom || 1), -0.35), px = 1 / CONFIG.viewZoom;
+    const h = 24 * px * k;
+    push();
+    textAlign(CENTER, CENTER);
+    if (typeof FreckleFace !== 'undefined') textFont(FreckleFace);
+    textSize(19 * px * k);
+    for (const name in this.castEnts) {
+      const e = this.castEnts[name];
+      if (!e || !e.alive || !e._nameTag || e._carriedBy || !e.pos || !e.size) continue;
+      const x = e.pos.x, bottom = g._groundPaintY(x, e.pos.y) - e.size * 0.8 - 4 - 5 - 3 * px;
+      const w = textWidth(e._nameTag) + 14 * px * k;
+      noStroke(); fill(14, 20, 16, 185);
+      rect(x - w / 2, bottom - h, w, h, h / 2);
+      fill(250, 240, 210);
+      text(e._nameTag, x, bottom - h / 2);
+    }
+    pop();
+  }
+
   _watchCast() {
+    this._markStoryBirds();
     for (const name in this.castEnts) {
       const e = this.castEnts[name];
       if (!e || e.alive) continue;
@@ -2038,6 +2184,7 @@ class MomentPlayer {
     g.selectedPlaceable = null;
     g.movingPlaceable = null;
     g._holdCandidate = null;
+    g._sproutPress = null;
     for (const mo of g.simulation.moas) mo.settleFacing();
     this.current = m;
   }

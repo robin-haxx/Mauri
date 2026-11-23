@@ -51,7 +51,7 @@ function patotaraCluesReactions(list) {
   const kept = list.filter(r => !['cover', 'cover_again', 'storm_gone', 'kea_near', 'sprouted'].includes(r.id));
   return K.quietAfterYear([
     // The berries are out: said as what happened, not as what to do about it.
-    { id: 'sprouted', on: 'plant_sprouted',
+    { id: 'sprouted', on: 'plant_sprouted', if: { type: 'patotara' },
       say: [['guide', "Berries! Kea can smell those from far off.", { lit: ['kea'] }]] },
     // Kea at a nest with an egg in it: the lesson's own ladder. Answered when the moa see a
     // kea off; lost when a kea takes the egg.
@@ -122,6 +122,9 @@ function makeChaptersPatotara(sketchKey) {
       // Pātōtara comes up bare until the player sprouts it; grown food follows the seasons, so
       // it bears nothing in winter.
       sproutPatotara: true,
+      // Wharariki starts in leaf (food at half); three taps flower it in spring and summer, and out
+      // of them it is in leaf again: a hardy winter food, but a reduced one (HAND_SPROUT).
+      sproutWharariki: true,
       placedPlantsSeasonal: true,
       // Kea: drawn from afar by sprouted berries, and raiding a nest at the odds the moa set.
       keaBerryLureRadius: 400,
@@ -188,21 +191,21 @@ function makeChaptersPatotara(sketchKey) {
           { eagle: { which: 'nearest', near: 'home', watch: 'lookout', hunger: 25 } },
           { say: [
             ['guide', "A year on. Pukepuke's family has neighbours: another pair of upland moa, with an egg in their nest.", { lit: ['friendMama', 'friendPapa', 'pukepuke'] }],
-            ['guide', "By their nest grows a pātōtara bush, still bare. Tap and hold it to sprout its berries.", { lit: ['patotara'] }],
+            ['guide', "By their nest grows a pātōtara bush, still bare. Tap it three times to sprout its berries.", { lit: ['patotara'] }],
             ['guide', "Berries draw kea, and kea rob nests. But a kea won't dare a nest with moa around it.", { lit: ['kea'] }]
           ] },
-          { banner: { words: ["Tap and hold the PĀTŌTARA to sprout its berries", "Tap and hold the PĀTŌTARA to sprout its berries"],
-                      until: { seen: ['plant_sprouted'] }, lit: ['patotara'], pause: D.pause, maxSec: 40 } }
+          { banner: { words: ["Tap the PĀTŌTARA three times to sprout its berries", "Tap the PĀTŌTARA three times to sprout its berries"],
+                      until: { seen: ['plant_sprouted', { type: 'patotara' }] }, lit: ['patotara'], pause: D.pause, maxSec: 40 } }
         ],
         beats: [
           // A raid is attempted in summer: the berries invite the kea; the guided sketch sends
           // two more to the bush if none has tried within 45 s of the sprouting.
-          Object.assign({ id: 'raid_comes', when: { seen: ['plant_sprouted'] },
+          Object.assign({ id: 'raid_comes', when: { seen: ['plant_sprouted', { type: 'patotara' }] },
             until: { seen: ['nest_raid'] }, once: true },
             D.forced ? { by: 45, force: [{ spawn: { type: 'kea', at: 'patch', count: 2, radius: 20 } }] } : {})
         ],
         goals: [
-          { id: 'sprout', name: "Sprout the pātōtara by the nest", done: { seen: ['plant_sprouted'] }, reward: 10 },
+          { id: 'sprout', name: "Sprout the pātōtara by the nest", done: { seen: ['plant_sprouted', { type: 'patotara' }] }, reward: 10 },
           { id: 'defend', name: "The moa drive a kea off the nest", done: { seen: ['nest_raid', { success: false }] }, reward: 20 },
           { id: 'koukou', name: "The neighbours' egg hatches", done: { seen: ['egg_hatched', { near: ['$egg', 'friendsHome', 60] }] }, reward: 20 }
         ],
@@ -260,7 +263,7 @@ function makeChaptersPatotara(sketchKey) {
 
     reactions: (D.clues ? patotaraCluesReactions : (list) => list)([
       // The berries are out: now the kea.
-      { id: 'sprouted', on: 'plant_sprouted',
+      { id: 'sprouted', on: 'plant_sprouted', if: { type: 'patotara' },
         say: [['guide', "Berries! Kea can smell those from far off. Grow more PĀTŌTARA beside the nest and sprout it, so the moa gather there to feed.", { lit: ['friendMama', 'friendPapa', 'mama'] }]] },
       { id: 'kea_near', when: { near: ['kea', 'friendsHome', 170] },
         banner: { words: ["Kea! Gather the moa at the nest: grow PĀTŌTARA beside it and sprout it", "Tap beside the nest to grow PĀTŌTARA"],

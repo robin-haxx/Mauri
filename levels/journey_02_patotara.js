@@ -8,7 +8,7 @@
 // The sequence, as module 1:
 //   opening    A line from Te Whē on black (a year has passed), then the family walks in:
 //              "Are we there yet?" They reach another family's nest and are made welcome.
-//   summer     The pātōtara by the nest is bare: press and hold to sprout it. The berries
+//   summer     The pātōtara by the nest is bare: three quick taps sprout it. The berries
 //              bring Strongbeak, who calls Skraak and Huft-Tuft. They mean to have the egg.
 //              Moa gathered at the nest drive them off. The egg hatches: Koukou.
 //   autumn     The families part for winter, each to its own low ground. The Pouākai.
@@ -52,16 +52,28 @@ const JOURNEY_PATOTARA = (() => {
   const eggInNest = (x) => x.runner.sim.eggs.some(e => e.alive && !e.hatched && e.parentSpecies === 'upland_moa');
   const homeNow = { all: [{ near: ['mama', 'home', 120] }, { near: ['pukepuke', 'home', 140] }] };
   const flaxNear = { near: ['wharariki', 'mama', 90] };
-  const sprouted = (x) => (x.runner.counters.sprouted || 0) > 0;
+  const sprouted = (x) => (x.runner.counters['sprouted:patotara'] || 0) > 0;   // (pātōtara: wharariki flowering counts apart)
   const firedAgo = (x, id, sec) => x.runner.reactions.some(r => r.id === id && r.fired && r.lastAt < x.game.playTime - sec * 60);
+
+  // THE VIEW (CHAPTERS_KIT.storyView), as tile 1's but not as close (1.2x at most): the two
+  // nests, the pātōtara, where the family walks in, the storms standing by, and the way down to
+  // the waterhole. Wide from autumn, when the families part and the Pouākai has the open land,
+  // through winter; close again as spring begins. The Pouākai comes in from out of sight.
+  const V = K.storyView({ sites: ['friendNest', 'home', 'patch', 'arrive', 'tops', 'lookout', 'tarn', 'shore'], zoom: [1.05, 1.2] });
 
   return Object.assign({}, base, {
     id: 'journey_patotara',
     name: "Pātōtara",
     section: 'journey', journey: true, sketch: undefined,
     nextLevel: undefined,
-    waysOn: [{ label: "The five years", tile: 't2f' }],
+    waysOn: [{ label: "The four years", tile: 't2f', sub: "Pukepuke and Koukou grow up on the tops" }],
     outcome: { birds: [...FAMILY, ...FRIENDS] },
+
+    // The raid is taught here: a longer count, cheaper mana, and the level says how itself
+    // (raid_teach), so the general first-raid notice stays quiet (RAIDS, mauri_raid.js).
+    mechanics: Object.assign({}, base.mechanics, {
+      keaRaid: Object.assign({}, base.mechanics.keaRaid, { rollSec: 8, teach: true, mana: { cost: 5, swing: 0.08, max: 3 } })
+    }),
 
     cast: {
       mama:       { title: "Mama Moa",       species: 'upland_moa', manual: true, pitch: 0.85 },
@@ -74,6 +86,9 @@ const JOURNEY_PATOTARA = (() => {
 
     sites: Object.assign({}, base.sites, {
       arrive:     { near: 'friendNest', dist: [125, 165] },   // where the family walks in from
+      // The winter waterhole: a glade in the montane forest below both homes, where upland moa
+      // drift in the cold anyway (not the lowest ground, out on the flats at the map's far side).
+      tarn:       { find: 'refuge', near: 'home', from: ['friendNest'], biome: 'forestRefuge', dist: [140, 260], ideal: 180 },
       shore:      { near: 'tarn', dist: [34, 60] },           // the family's winter ground, by the water
       friendSpot: { near: 'tarn', dist: [130, 190] }          // the neighbours' own winter ground
     }),
@@ -85,14 +100,14 @@ const JOURNEY_PATOTARA = (() => {
         beats: [
           // A raid is tried in summer: the berries invite the kea; two more are sent to the
           // bush if none has tried within 45 seconds of the sprouting (logged as forced).
-          { id: 'raid_comes', when: { seen: ['plant_sprouted'] },
+          { id: 'raid_comes', when: { seen: ['plant_sprouted', { type: 'patotara' }] },
             until: { seen: ['nest_raid'] }, once: true,
             by: 45, force: [{ spawn: { type: 'kea', at: 'patch', count: 2, radius: 20 } }] }
         ],
         goals: [
-          { id: 'sprout', name: "Sprout the pātōtara by the nest", done: { seen: ['plant_sprouted'] }, reward: 10 },
-          { id: 'defend', name: "The moa drive the kea off the nest", done: { seen: ['nest_raid', { success: false }] }, reward: 20 },
-          { id: 'koukou', name: "The neighbours' egg hatches", done: { seen: ['egg_hatched', { near: ['$egg', 'friendsHome', 60] }] }, reward: 20 }
+          { id: 'sprout', name: "Grow pātōtara by the nest", done: { seen: ['plant_sprouted', { type: 'patotara' }] }, reward: 10 },
+          { id: 'defend', name: "Drive the kea off the nest", done: { seen: ['nest_raid', { success: false }] }, reward: 20 },
+          { id: 'koukou', name: "Keep the neighbours' egg safe until it hatches", done: { seen: ['egg_hatched', { near: ['$egg', 'friendsHome', 60] }] }, reward: 20 }
         ],
         holdSeason: { until: { goal: 'koukou' }, at: 0.9, maxSec: 75 }
       },
@@ -100,6 +115,7 @@ const JOURNEY_PATOTARA = (() => {
       { id: 'autumn', title: "Autumn: the families part",
         tools: ['patotara', 'Storm'],
         start: [
+          V.to('wide', 150),               // (the families part, and the Pouākai has the open land)
           { place: { type: 'waterhole', at: 'tarn', standing: true } },
           { fade: { type: 'Storm', sec: 45, refreshOnMove: true } },
           { say: [
@@ -111,7 +127,7 @@ const JOURNEY_PATOTARA = (() => {
           K.headFor(FRIENDS, 'friendSpot')
         ],
         goals: [
-          { id: 'down', name: "Pukepuke's family down to the waterhole, unseen", done: { near: ['mama', 'tarn', 100] }, reward: 20 }
+          { id: 'down', name: "Get Pukepuke's family to the waterhole unseen", done: { near: ['mama', 'tarn', 100] }, reward: 20 }
         ],
         holdSeason: { until: { goal: 'down' }, at: 0.9, maxSec: 45 }
       },
@@ -119,6 +135,7 @@ const JOURNEY_PATOTARA = (() => {
       { id: 'winter', title: "Winter: by the waterhole",
         tools: ['wharariki', 'Storm'],
         start: [
+          V.to('wide', 150),               // (wide all winter)
           { fade: { type: 'Storm', sec: 25, refreshOnMove: true } },
           K.headFor(FAMILY, 'shore'),      // (whoever is not yet down goes on)
           { say: [
@@ -130,8 +147,8 @@ const JOURNEY_PATOTARA = (() => {
           { id: 'winter_press', when: { seasonProgress: ['>=', 0.35] }, do: [{ eagle: { hunger: 50, watch: 'tarn' } }] }
         ],
         goals: [
-          { id: 'fed', name: "Wharariki growing by the family", done: flaxNear, reward: 15 },
-          { id: 'through', name: "Come through the winter", survive: true, reward: 25 }
+          { id: 'fed', name: "Grow wharariki by the family", done: flaxNear, reward: 15 },
+          { id: 'through', name: "Make it through winter", survive: true, reward: 25 }
         ]
       },
 
@@ -139,6 +156,7 @@ const JOURNEY_PATOTARA = (() => {
       { id: 'spring', title: "Spring: back to the glade", transfer: true,
         tools: ['patotara', 'Storm'],
         start: [
+          V.to('story', 150),              // (winter is over: close in on the way back to the glade)
           { say: [
             ['pukepuke', "Look! I got some flax flowers to give to Koukou's family!", { lit: ['wharariki'] }],   // (M1)
             ['mama', "That's so thoughtful, pookie! You can lead the way!", { lit: ['nests'] }]                  // (M1)
@@ -153,8 +171,8 @@ const JOURNEY_PATOTARA = (() => {
             do: [K.headFor(FAMILY, 'home'), K.headFor(FRIENDS, 'friendsHome')] }
         ],
         goals: [
-          { id: 'home', name: "The family back beside their friends, unseen", reward: 25, done: homeNow },
-          { id: 'own', name: "Meet a danger with no help", done: { gained: ['unaided', '>=', 1] }, stretch: true, reward: 30 }
+          { id: 'home', name: "Get the family back to their friends unseen", reward: 25, done: homeNow },
+          { id: 'own', name: "Deal with a danger before any hint", done: { gained: ['unaided', '>=', 1] }, stretch: true, reward: 30 }
         ],
         holdSeason: { until: { goal: 'home' }, at: 0.9, maxSec: 90 },
         until: { any: [{ seasons: 1 }, K.saidAndRead('home_said')] },
@@ -193,10 +211,17 @@ const JOURNEY_PATOTARA = (() => {
           { spawn: { type: 'kea', at: 'keaNest', count: D.kea, radius: 24 } },
           { place: { type: 'Storm', at: 'tops', standing: true } },
           { place: { type: 'Storm', at: 'lookout', standing: true } },
-          { eagle: { which: 'nearest', near: 'home', watch: 'lookout', hunger: 25 } },
+          // (The Pouākai is set down out of sight, away from both families, and flies in to patrol
+          // the lookout: see THE VIEW.)
+          V.holdOffView({ at: 'home', awayFrom: 'tarn', keepFrom: ['mama', 'papa', 'friendNest', 'arrive'], hunger: 25 }),
+          { eagle: { which: 'nearest', near: 'home', release: true, watch: 'lookout', hunger: 25 } },
           // The family walks in to the glade beside the neighbours' nest.
-          K.headFor(FAMILY, 'home')
+          K.headFor(FAMILY, 'home'),
+          V.to('story', 1)
         ] },
+
+      // (The view held where the level says: see THE VIEW.)
+      V.keeper(['summer', 'autumn', 'winter', 'spring', 'closing']),
 
       // ---- A line on black, the fade in, and the walk in -------------------------------------------
       ...K.prologue({
@@ -215,16 +240,16 @@ const JOURNEY_PATOTARA = (() => {
           ['friendMama', "Nice to meet you! Want to help us forage pātōtara, Pukie-pukie? There is plenty for all of us!", { lit: ['patotara'] }]   // (M1)
         ],
         // A new control, so it is told outright.
-        banner: { words: ["Tap and hold the PĀTŌTARA to sprout its berries", "Tap and hold the PĀTŌTARA to sprout its berries"],
-                  until: { seen: ['plant_sprouted'] }, lit: ['patotara', 'friendMama', 'friendPapa'], pause: true, maxSec: 40 } },
+        banner: { words: ["Tap the PĀTŌTARA three times to sprout its berries", "Tap the PĀTŌTARA three times to sprout its berries"],
+                  until: { seen: ['plant_sprouted', { type: 'patotara' }] }, lit: ['patotara', 'friendMama', 'friendPapa'], pause: true, maxSec: 40 } },
       // (If they are slow to arrive, the bush is still there to be sprouted: a quiet prompt.)
       { id: 'meet_late', chapters: ['summer'],
         when: (x) => !!x.runner.flags.opened && x.runner.scopeTime() > 30 * 60 && !sprouted(x) && !x.runner.reactions.some(r => r.id === 'meet' && r.fired),
-        banner: { words: ["Tap and hold the PĀTŌTARA to sprout its berries", "Tap and hold the PĀTŌTARA to sprout its berries"],
-                  until: { seen: ['plant_sprouted'] }, lit: ['patotara'], pause: false, maxSec: 30 } },
+        banner: { words: ["Tap the PĀTŌTARA three times to sprout its berries", "Tap the PĀTŌTARA three times to sprout its berries"],
+                  until: { seen: ['plant_sprouted', { type: 'patotara' }] }, lit: ['patotara'], pause: false, maxSec: 30 } },
 
       // ---- The kea: Strongbeak finds the berries, and calls the others ---------------------------------
-      { id: 'kea_threat', on: 'plant_sprouted',
+      { id: 'kea_threat', on: 'plant_sprouted', if: { type: 'patotara' },
         say: [
           kea("Strongbeak", "KEE-A! KEE-A! BERRIES! Juicy pātōtara berries!", { lit: ['kea', 'patotara'] }),             // (M1)
           kea("Strongbeak", "Skraak, Huft-Tuft, get over here to eat the BERRIES!", { lit: ['kea'] })                     // (M1)
@@ -262,6 +287,29 @@ const JOURNEY_PATOTARA = (() => {
       { id: 'koukou_owed', chapters: ['summer'], once: false, cooldown: 14,
         when: (x) => !!x.runner.flags.staged && x.runner.castEnts.koukou === undefined && (x.runner._heldFrames || 0) >= 40 * 60,
         do: [(x) => { x.runner.lay({ species: 'upland_moa', at: 'friendsHome', incubationSec: 6, scene: true }); x.runner._log('beat', 'koukou', 'forced: an egg near hatching set down'); }] },
+      // The first raid: the mantis says what a raid is and what mana does, and the count waits
+      // (RAIDS hold) until the moa have three mana or twenty seconds have gone. Enough mauri for
+      // three taps is made sure of, and logged. (Words: the author's, 24 November.)
+      // (After the kea's own scene, with nothing else on screen. Until then the raid's count is
+      // held: Kea._joinStandoff.)
+      { id: 'raid_teach', when: (x) => typeof RAIDS !== 'undefined' && RAIDS.list.some(r => !r.done && r.attacker === 'kea') &&
+                                       x.runner.reactions.some(r => r.id === 'kea_gang' && r.fired) && K.idle(x),
+        do: [(x) => {
+          const raid = RAIDS.list.find(r => !r.done && r.attacker === 'kea'), g = x.game, t0 = g.playTime;
+          RAIDS._told = true;
+          RAIDS.lessonDone = true;
+          raid.hold = () => raid.mana.def < raid.manaCfg.max && g.playTime - t0 < 20 * 60;
+          x.runner.vars._teachRaid = raid;
+          const need = raid.manaCfg.cost * raid.manaCfg.max - g.mauri.mauri;
+          if (need > 0) { g.mauri.earn(need); x.runner._log('beat', 'raid_teach', `mauri made up by ${need}`); }
+        }],
+        say: [
+          ['guide', "Think fast! A raid means Kea want to take over a moa nest. You can boost the mana of either bird with mauri.", { lit: ['kea', 'nests'] }],
+          ['guide', "Boost the moa’s mana, by tapping the moa three times, to help Pukepuke’s family save their new friends’ nest!"]
+        ],
+        banner: { words: ["Tap the MOA beside the odds three times to boost its MANA", "Tap the MOA beside the odds three times to boost its MANA"],
+                  until: (x) => { const r = x.runner.vars._teachRaid; return !r || r.done || r.mana.def >= r.manaCfg.max; },
+                  lit: ['nests'], pause: false, maxSec: 20 } },
       // The raid, both ways. The scenes play only once the kea have been met (kea_gang); a raid
       // before that, while the families are still talking, is a notice.
       { id: 'raid_early', on: 'nest_raid', once: false, cooldown: 10, if: (x) => !x.runner.reactions.some(r => r.id === 'kea_gang' && r.fired),

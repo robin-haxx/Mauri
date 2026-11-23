@@ -313,6 +313,7 @@ class Moa extends Boid {
   // ============================================
 
   isReadyToMate() {
+    if (this._noBreed) return false;   // (a story's bird, until its story says: ChapterRunner._markStoryBirds)
     const ready = this.canMate && this.mateCooldown <= 0 && this.canMateByAge() && 
       !this.isPregnant && !this.matingPartner && 
       this.hunger < this.matingHungerThreshold && 
@@ -335,7 +336,7 @@ class Moa extends Boid {
   }
 
   canBeMate() {
-    return this.alive && this.canMate && this.mateCooldown <= 0 && this.canMateByAge() &&
+    return this.alive && !this._noBreed && this.canMate && this.mateCooldown <= 0 && this.canMateByAge() &&
       !this.isPregnant && !this.matingPartner &&
       this.hunger < this.matingHungerThreshold * 1.5 && this._calendarAllows();
   }
@@ -373,6 +374,17 @@ class Moa extends Boid {
     if (this._carriedBy) {
       this.vel.mult(0);
       this.pos.set(this._carriedBy.pos.x, this._carriedBy.pos.y + 5);
+      return;
+    }
+    // Held to a spot by a story (a chapter's scene: the pair standing at their nest as the
+    // Pouākai come, then scattering a few steps): it walks there and stands, and does nothing
+    // else of its own (no feeding, no fleeing) until the story lets it go (_stayAt = null).
+    if (this._stayAt) {
+      const s = this._stayAt, dx = s.x - this.pos.x, dy = s.y - this.pos.y;
+      this.animTime += dt;
+      this.maxSpeed = this.baseSpeed * (s.speed || 1);
+      if (dx * dx + dy * dy > 9) this.applyForce(this.seekPoint(s.x, s.y, 1, 20));
+      else this.vel.mult(0.6);
       return;
     }
     if (this._leaving) { this._leaveStep(dt); return; }   // (dispersal: on its way off the land)
@@ -522,7 +534,8 @@ class Moa extends Boid {
     }
     
     const terrainMult = this.getTerrainSpeedMultiplier();
-    this.maxSpeed *= terrainMult;
+    // (A moa an eagle has been after a couple of seconds tires: chaseTireMult, mauri_eagle.js.)
+    this.maxSpeed *= terrainMult * (typeof chaseTireMult === 'function' ? chaseTireMult(this) : 1);
     if (terrainMult < 0.7) this.vel.mult(0.95);
   }
 
@@ -887,7 +900,7 @@ class Moa extends Boid {
     // and eggs cluster. Gentle, so feeding/fleeing still win.
     if (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.nestingSites && simulation.getNearestNestingSite) {
       const ns = LEVEL_MECHANICS.nestingSites;
-      const site = simulation.getNearestNestingSite(this.pos.x, this.pos.y, ns.drawRadius ?? 520, this.speciesKey);
+      const site = simulation.getNearestNestingSite(this.pos.x, this.pos.y, ns.drawRadius ?? 520, this.speciesKey, this);
       if (site && !site.isInRange(this.pos)) {
         this.applyForce(this.seekPoint(site.pos.x, site.pos.y, 0.7));
       } else if (site && ns.layBoost) {
@@ -917,7 +930,7 @@ class Moa extends Boid {
     let ex = this.pos.x, ey = this.pos.y, nestBonus = 1;
     if (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.nestingSites && simulation.getNearestNestingSite) {
       const snap = LEVEL_MECHANICS.nestingSites.laySnapRadius ?? 160;
-      const site = simulation.getNearestNestingSite(this.pos.x, this.pos.y, snap, this.speciesKey);
+      const site = simulation.getNearestNestingSite(this.pos.x, this.pos.y, snap, this.speciesKey, this);
       if (site) {
         ex = site.pos.x + random(-site.radius * 0.5, site.radius * 0.5);
         ey = site.pos.y + random(-site.radius * 0.4, site.radius * 0.4);
@@ -1224,11 +1237,11 @@ class Moa extends Boid {
         } else if (!this.isFocal && typeof LEVEL_MECHANICS !== 'undefined') {
           gain *= (LEVEL_MECHANICS.nonFocalGeneralistBonus ?? 1); // wild plant + generalist
         } else if (this.isFocal && typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.focalWildFoodMult != null &&
-                   !this.targetPlant.isSpawned && !Plant.sproutsByHand(this.targetPlant.type)) {
+                   !this.targetPlant.isSpawned && !(Plant.sproutsByHand(this.targetPlant.type) && this.targetPlant.sprouted)) {
           // focalWildFoodMult (a level's rule, after the Stories' free play): wild browse only
           // partly feeds the focal families. What the player grows for them (a patch's plants),
-          // and pātōtara the player has sprouted, feed in full, so tended food is what carries
-          // a family through a winter.
+          // and pātōtara or wharariki the player has sprouted, feed in full, so tended food is
+          // what carries a family through a winter.
           gain *= LEVEL_MECHANICS.focalWildFoodMult;
         }
 
@@ -1270,8 +1283,9 @@ class Moa extends Boid {
       if (!p.alive || p.growth < 0.5) continue;
       // Nothing to eat on it: an unsprouted pātōtara (a bare bush waiting for the player's hand;
       // consume() gives nothing), or a plant eaten down to nothing. Without this a wild moa
-      // stands at a bare bush beside its nest and starves.
-      if (p.unsprouted || !(p.nutrition > 0)) continue;
+      // stands at a bare bush beside its nest and starves. (Wharariki waiting to flower is in
+      // leaf, and feeds: Plant.isBare.)
+      if (p.isBare() || !(p.nutrition > 0)) continue;
       if (this._unreachable && this._unreachable.get(p) > frameCount) continue;   // (given up on, for now: see forage)
       // Free Play: a winter-inedible plant still stands (frosted) but has no food value;
       // skip it as forage, so the flock must seek the evergreen refuge.
@@ -1541,15 +1555,16 @@ class Moa extends Boid {
   // Dispersal (mechanics.dispersal; Game._seasonalArrivals picks the bird): a grown young bird
   // walks to the edge of the land and is gone, to found a family elsewhere. It can still be
   // caught on the way. After forty seconds without reaching the edge it is taken as gone.
-  beginLeaving(x, y) {
-    this._leaving = { x, y, t: 0 };
+  beginLeaving(x, y, { speed = 1.15 } = {}) {
+    this._stayAt = null;
+    this._leaving = { x, y, t: 0, speed };
     this.targetPlant = null; this.targetMate = null; this.matingPartner = null; this.isMigrating = false;
   }
   _leaveStep(dt) {
     const L = this._leaving;
     L.t += dt;
     this.currentState = MOA_STATE.MIGRATING;
-    this.maxSpeed = this.baseSpeed * 1.15;
+    this.maxSpeed = this.baseSpeed * (L.speed || 1.15);
     this._leaveTarget = this._leaveTarget || createVector(L.x, L.y);
     this.applyForce(this.seek(this._leaveTarget, 0.9, 10));
     const avoid = this.avoidUnwalkable();
@@ -1629,7 +1644,8 @@ class Moa extends Boid {
     // this rotated/mirrored frame so it lines up.
     // A mark on this one bird (EntitySprites.mark: the storm's cover preview, the selected
     // animal) outlines it in its own colour, over any species highlight.
-    const _mk = EntitySprites.markOf(this);
+    // (The Pouākai's quarry first: a pulsing red outline, huntedOutline in mauri_eagle.js.)
+    const _mk = (typeof huntedOutline === 'function' && huntedOutline(this)) || EntitySprites.markOf(this);
     const _olCol = _mk ? _mk.col : (typeof highlightOutlineColor !== 'undefined')
       ? highlightOutlineColor(this.speciesKey, this.speciesConfig.highlightColor) : null;
     if (_olCol) EntitySprites.drawSpriteOutline(sprite, _drawSize, _drawSize, _olCol, this.speciesConfig.outlineThickness || 6, _mk ? _mk.alpha : null);

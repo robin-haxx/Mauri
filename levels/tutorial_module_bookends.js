@@ -28,9 +28,9 @@ const TIPS = Object.assign({},
 
   scene('bookend_intro', onBeat('intro'), [
     ['teWhe', "Before people found the land, Aotearoa New Zealand was ruled by birds."],
-    // (The kea's and the kākāpō's own calls play under this line.)
+    // (The moa's call opens this line in place of the click; the kea and the kākāpō join it.)
     ['teWhe', "Forests like Kahurangi in the Southern Alps bustled with the calls of Kea, Kiwi, Kākā, Kākāpō, Kōkako, Takahē and Huia.",
-      { voices: ['kea', 'kakapo'], voicesSec: 7 }],
+      { voices: ['moa', 'kea', 'kakapo'], voicesSec: 7 }],
     ['teWhe', "But the forests they filled weren't always that dense, dark green bush we think of when we visit the native back country."],
     ['teWhe', "Over the last 100,000 years, the earth's temperature rose and fell in cycles. This was called the OTIRA GLACIATION. Each time it fell, more of the ancient forest died back, taking hundreds of years to regrow."],
     // (Opens on the winter wind.)

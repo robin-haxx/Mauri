@@ -355,8 +355,9 @@ class Kereru extends Boid {
     this.state = KERERU_STATE.FLYING;
     this._targetTree = null;
     const base = this.speciesData?.config?.baseSpeed || 0.42;
-    // Only a shade faster than cruise, BELOW the eagle's hunt speed so a chase resolves.
-    this.maxSpeed = base * ((typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.flyerFleeMult) ?? 1.15);
+    // Only a shade faster than cruise, BELOW the eagle's hunt speed so a chase resolves; and
+    // the bird the eagle has been after a couple of seconds tires (chaseTireMult, mauri_eagle.js).
+    this.maxSpeed = base * ((typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.flyerFleeMult) ?? 1.15) * (typeof chaseTireMult === 'function' ? chaseTireMult(this) : 1);
     const m = Math.hypot(ex, ey) || 1;
     const land = this._clampToLand(this.pos.x + (ex / m) * 60, this.pos.y + (ey / m) * 60);
     this._target.set(land.x, land.y);
@@ -829,7 +830,7 @@ class Kereru extends Boid {
       scale(this._flip >= 0 ? 1 : -1, 1);            // art faces up-and-right; mirror for leftward
       // Highlight outline: field-guide selection or the player's species toggle.
       const _hlCfg = this.speciesData && this.speciesData.config && this.speciesData.config.highlightColor;
-      const _mk = EntitySprites.markOf(this);   // (a mark on this one bird: EntitySprites.mark)
+      const _mk = (typeof huntedOutline === 'function' && huntedOutline(this)) || EntitySprites.markOf(this);   // (the Pouākai's quarry, else a mark: EntitySprites.mark)
       const _olCol = _mk ? _mk.col : (typeof highlightOutlineColor !== 'undefined')
         ? highlightOutlineColor(this.speciesKey, _hlCfg) : null;
       if (_olCol) EntitySprites.drawSpriteOutline(sprite, drawW, drawH, _olCol, 6, _mk ? _mk.alpha : null);

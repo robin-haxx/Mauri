@@ -4,7 +4,7 @@
 // Lines marked [Placeholder: …] are still to be written: each marks a moment, who speaks, and
 // roughly what it's about. The arrival and meeting lines and the kea's lines are written
 // (Strongbeak's call for the others is Free Play's), and the banners (the "do this" prompts)
-// are real. Pātōtara here comes up bare: a press and hold on it sprouts its berries, and the
+// are real. Pātōtara here comes up bare: three quick taps on it sprout its berries, and the
 // prompts teach that (the one by their nest first, then the player's own). The player already knows
 // the storms from Module 0, so nothing here teaches them again: the eagle only gets a warning.
 //
@@ -34,7 +34,7 @@
 //   refuge, winter_pass, eagle_gave_up, eagle_left: the eagle and the walks, as Module 0
 //   kea_lured        (after summer) berries the player grew, or the family near the kea's nest,
 //                    have drawn kea (data.at, data.count)
-//   kea_storm        a coming kea flew into a storm and turned back
+//   kea_storm        a storm was set down or moved onto a coming kea and turned it back
 //   kea_warn         kea have landed where the family is: a raid, at real odds (data.at)
 //   kea_raid_won     the raid worked: the family scatters, the kea eat the berries there
 //   kea_raid_lost    the raid failed: the kea go home
@@ -105,7 +105,7 @@ const TIPS = Object.assign({},
   ], 'sprout_lesson'),
 
   {
-    // Sprout the pātōtara by their nest (press and hold on it): it and the neighbours lit.
+    // Sprout the pātōtara by their nest (three quick taps on it): it and the neighbours lit.
     sprout_lesson: sproutBanner('sprout_lesson', { type: TRIGGER_TYPE.IMMEDIATE },
       (game) => game.module && game.module.patch,
       (game) => game.renderEntitiesAboveUI([game.module && game.module.patch, ...neighbours(game)]))

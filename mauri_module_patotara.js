@@ -7,7 +7,7 @@
 // with a few additions:
 //
 //   summer  The family arrives from the south and meets the other family at their nest. The
-//           pātōtara by their nest is still bare: the player sprouts it (press and hold on it;
+//           pātōtara by their nest is still bare: the player sprouts it (three quick taps on it;
 //           every pātōtara here, wild or grown, needs sprouting before it bears berries). The
 //           berries draw a kea (Strongbeak), who calls two more (Skraak and Huft-Tuft); the three
 //           mean to raid the egg. The player grows more pātōtara (the toolbar) by the nest and
@@ -20,7 +20,8 @@
 //           reach of it. Kea come at the family if it wanders near their nest, too. Kea that
 //           land where the family is warn them and raid, at real odds (more kea, better odds;
 //           more moa, worse): a raid that works scatters the family and the kea eat the berries
-//           there. A storm in a coming kea's way turns it back.
+//           there. A storm set down or moved onto a coming kea turns it back (one already
+//           standing in its way doesn't: it flies through).
 //   autumn  The two families head downhill to different places: the other family walks to
 //           its own winter spot by itself; ours makes the storm path to the waterhole.
 //   winter  Pātōtara fruits in the warm months: in winter its plants stand bare (moa can't
@@ -620,11 +621,17 @@ class PatotaraDirector extends ModuleDirector {
       if (intruder) this._lureKea(intruder.pos, (k) => k.lifeScript.atHome());
     }
 
+    const drops = (typeof PlaceableObject !== 'undefined') ? PlaceableObject.stormDrops : 0;
     for (const k of keas) {
       const ks = k.lifeScript;
+      // (The storms dropped since this kea's last look; a storm already standing isn't one.)
+      const since = ks._stormDropsSeen ?? drops;
+      ks._stormDropsSeen = drops;
       if (!ks.lured) continue;
-      // A storm in the way turns a coming kea back.
-      if (ks.mode === 'fly' && sim.stormAt(k.pos.x, k.pos.y)) {
+      // A storm set down or moved onto a coming kea turns it back. One already standing in its
+      // way doesn't: the kea flies through it.
+      const st = ks.mode === 'fly' && drops > since && sim.stormAt(k.pos.x, k.pos.y);
+      if (st && st._dropN > since) {
         ks.goHome();
         this._beat('kea_storm');
         continue;
@@ -741,18 +748,21 @@ class PatotaraDirector extends ModuleDirector {
   renderOver() {
     super.renderOver();   // (the walk's guide)
     const r = this.raid, kr = this.keaRaid;
+    // (Each with its countdown in whole seconds: to the kea taking the egg in summer, and to
+    // the roll after it.)
+    const left = (total, t) => Math.max(0, Math.ceil((total - t) / this._sec(1)));
     if (r && !r.done && this.beats.keaGang) {
       this._drawOdds(this.sites.friendNest, this.k.defence.radius, this._summerChance(r.count),
-        this.keas.filter(k => k.alive).length, r.count);
+        this.keas.filter(k => k.alive).length, r.count, left(this._sec(this.k.defence.raidSec), r.t));
     } else if (kr) {
-      this._drawOdds(kr.at, this.k.keaLife.raidRadius, kr.chance, kr.kea, kr.moa);
+      this._drawOdds(kr.at, this.k.keaLife.raidRadius, kr.chance, kr.kea, kr.moa, left(this._sec(this.k.keaLife.rollSec), kr.t));
     }
   }
 
   // (The upland moa on one side of the figure and the kea on the other: Game._drawRaidOdds,
   // shared with the journey's kea raids.)
-  _drawOdds(at, radius, chance, kea, moa) {
-    this.game._drawRaidOdds(at, radius, chance, kea, moa, 'upland_moa', 1);
+  _drawOdds(at, radius, chance, kea, moa, countdown = null) {
+    this.game._drawRaidOdds(at, radius, chance, kea, moa, 'upland_moa', 1, { countdown });
   }
 
   // ==========================================================================

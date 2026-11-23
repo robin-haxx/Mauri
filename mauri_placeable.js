@@ -77,7 +77,8 @@ class PlaceableObject {
     this.feedingParticles = [];
     
     // A pātōtara patch in the modules starts unsprouted, its plants bare, until the player
-    // sprouts it by pressing and holding on it (see sprout, Plant.sproutsByHand).
+    // sprouts it by tapping it three times (see sprout, Plant.sproutsByHand); a wharariki patch
+    // (mechanics.sproutWharariki) starts in leaf, feeding at half, until it is brought into flower.
     this.unsprouted = typeof Plant !== 'undefined' && Plant.sproutsByHand(type);
 
     // Spawn plants if applicable
@@ -98,6 +99,7 @@ class PlaceableObject {
     // Storm-specific
     if (this.type === 'Storm') {
       this._initThunderstorm();
+      this._markStormDrop();
     }
 
     // Shelter-specific: the fern canopy grows in rather than appearing full-size, with
@@ -153,6 +155,14 @@ class PlaceableObject {
     this.boltY = 0;
     this.boltScale = 1;
     this.boltRotation = 0;
+  }
+
+  // A storm set down or moved is a "drop": it gets the next number from the running count
+  // (PlaceableObject.stormDrops). The kea read it: a storm dropped onto a kea flushes it,
+  // but one already standing is no wall to a kea flying through (see Kea._checkStormDrop).
+  static stormDrops = 0;
+  _markStormDrop() {
+    this._dropN = ++PlaceableObject.stormDrops;
   }
 
   // ---- Standing storms (module levels) -------------------------------------------------
@@ -419,13 +429,21 @@ class PlaceableObject {
   // FEEDING
   // ============================================
   
-  // placedPlantsSeasonal: a patch that stands bare (unsprouted, or its plants without winter
-  // food) neither feeds nor draws a moa.
+  // placedPlantsSeasonal: a patch that stands bare (unsprouted pātōtara, or its plants without
+  // winter food) neither feeds nor draws a moa. (Wharariki waiting to flower is in leaf: it
+  // feeds, at its share; see _bloomShare.)
   _bare() {
     if (!(typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.placedPlantsSeasonal)) return false;
-    if (this.unsprouted) return true;
+    if (this.unsprouted && !Plant.leafShare(this.type)) return true;
     const ps = this.spawnedPlants;
-    return !!(ps && ps.length && ps.every(p => !p.alive || p.unsprouted || p.winterInedible));
+    return !!(ps && ps.length && ps.every(p => !p.alive || p.isBare() || p.winterInedible));
+  }
+
+  // The share of its food the patch gives now: 1 in fruit or flower, less in leaf (a wharariki
+  // patch not yet brought into flower, or out of its flowering seasons: Plant.bloomShare).
+  _bloomShare() {
+    if (typeof Plant === 'undefined' || !this.seasonManager) return 1;
+    return Plant.bloomShare(this.type, this.unsprouted, this.seasonManager.currentKey);
   }
 
   feedMoa(moa, dt = 1) {
@@ -448,7 +466,7 @@ class PlaceableObject {
       this.spawnFeedingParticle(moa.pos.x, moa.pos.y);
     }
 
-    return this.def.baseFeedingRate * this.seasonalMultiplier * dt * sel * this.growFrac();
+    return this.def.baseFeedingRate * this.seasonalMultiplier * dt * sel * this.growFrac() * this._bloomShare();
   }
   
   spawnFeedingParticle(x, y) {
@@ -502,7 +520,7 @@ class PlaceableObject {
       strength *= 0.2;
     }
 
-    return strength * this.growFrac();
+    return strength * this.growFrac() * this._bloomShare();
   }
   
   isInRange(pos) {
@@ -519,6 +537,7 @@ class PlaceableObject {
   // regrown at the new spot, remaining life unchanged.
   moveTo(x, y) {
     this.pos.set(x, y);
+    if (this.type === 'Storm') this._markStormDrop();
     // Moving a fading standing storm tops it back up, when the level allows it (fadeOver).
     if (this.standing && this.fading && this.refreshOnMove) this.life = this.maxLife;
     if (this.def.plantSpawnCount) {
@@ -547,7 +566,8 @@ class PlaceableObject {
     }
   }
 
-  // An unsprouted pātōtara patch brought into fruit (a press and hold on it; Game._sprout).
+  // An unsprouted pātōtara patch brought into fruit, or a wharariki patch into flower (three
+  // taps on it; Game._sprout).
   sprout(staged = false) {
     this.unsprouted = false;
     for (const plant of this.spawnedPlants) plant.sprout(staged);
@@ -734,7 +754,8 @@ class PlaceableObject {
     
     // Seasonal multiplier indicator (not on a module's standing patches: they're scenery the
     // story points at, not tools being tuned; nor on a matured stand, which no longer feeds)
-    if (this.seasonalMultiplier !== 1.0 && !this.standing && !this.matured) {
+    // (Nor on a storm: its cover doesn't change with the season, whatever the number says.)
+    if (this.seasonalMultiplier !== 1.0 && !this.standing && !this.matured && this.type !== 'Storm') {
       fill(255, 255, 255, 200 * lifeRatio);
       textSize(7);
       textAlign(CENTER, CENTER);

@@ -3,7 +3,7 @@
 // ============================================================================
 // The year after Module 0. The family walks north onto new tops and meets another upland moa
 // family, sitting on an egg in an established nest. The player sprouts the pātōtara by their
-// nest (press and hold: all pātōtara here starts bare), and a kea, drawn by the berries, means
+// nest (three quick taps: all pātōtara here starts bare), and a kea, drawn by the berries, means
 // to raid it; the player grows and sprouts more pātōtara to bring the family over to defend it.
 // Then the year plays out as in Module 0: storm paths down to a waterhole for winter and back
 // up in spring. In winter the pātōtara bears no berries, and the player moves the wharariki
@@ -46,7 +46,7 @@ const MODULE_PATOTARA = {
 
   economy: Object.assign({}, MODULE_STORMS.economy, { startingMauri: 80 }),
 
-  // Pātōtara and storms (as Module 0). Pātōtara comes up bare: a press and hold on it sprouts
+  // Pātōtara and storms (as Module 0). Pātōtara comes up bare: three quick taps on it sprout
   // its berries. The story's pātōtara patch and the wharariki are on the map too (a press and
   // hold moves the wharariki, and a sprouted patch).
   availablePlaceables: {
@@ -57,7 +57,7 @@ const MODULE_PATOTARA = {
   mechanics: {
     noSpeciation: true,
     evergreenPlants: MODULE_STORMS.mechanics.evergreenPlants,   // (as Module 0)
-    sproutPatotara: true   // pātōtara, wild or grown, is sprouted by a press and hold (as Module 0)
+    sproutPatotara: true   // pātōtara, wild or grown, is sprouted by three quick taps (as Module 0)
   },
 
   // ---- The story (PatotaraDirector). Anything left out uses MODULE_STORY_DEFAULTS. --------

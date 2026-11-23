@@ -57,7 +57,7 @@ const MODULE_FREEPLAY = {
   mechanics: {
     noSpeciation: true,
     evergreenPlants: MODULE_STORMS.mechanics.evergreenPlants,
-    sproutPatotara: true,   // pātōtara, wild or grown, is sprouted by a press and hold (as the modules)
+    sproutPatotara: true,   // pātōtara, wild or grown, is sprouted by three quick taps (as the modules)
     // The birds and the giant moa breed by the season, a clutch a year, and come of age by the
     // year (the director runs it: BIRD_CALENDAR), not on their own seconds-based timers. (The
     // giant moa never pair up on their own: matingAge.)

@@ -65,7 +65,7 @@ const JOURNEY_KAKA = (() => {
     teaches: ['shared_forest', 'grow_ahead'],
     guide: ['kaka', 'upland_moa', 'beech_refuge', 'winter_food'],
     unlockCondition: null,
-    waysOn: [{ label: "North again", tile: 't6' }],
+    waysOn: [{ label: "North again", tile: 't6', sub: "Pukepuke climbs north again, into the high country" }],
     outcome: { birds: FAMILY, herds: { kaka: 'kaka' } },
 
     zoom: 2.0,
@@ -127,7 +127,7 @@ const JOURNEY_KAKA = (() => {
         tools: ['Storm'],
         focus: ['upland_moa'],
         goals: [
-          { id: 'summer_safe', name: "The family through the summer", survive: true, reward: 15 }
+          { id: 'summer_safe', name: "Keep the family safe through summer", survive: true, reward: 15 }
         ]
       },
 
@@ -138,7 +138,7 @@ const JOURNEY_KAKA = (() => {
           { say: [['guide', "Autumn. When the cold comes, upland moa go down to the forest edge. Look who has been feeding there all season.", { lit: ['kaka'] }]] }
         ],
         goals: [
-          { id: 'grove_ahead', name: "Food growing at the forest edge before winter", done: groveIn, reward: 20 }
+          { id: 'grove_ahead', name: "Plant flax at the forest edge before winter", done: groveIn, reward: 20 }
         ]
       },
 
@@ -149,8 +149,8 @@ const JOURNEY_KAKA = (() => {
           K.eagleComes('winterGround', 38)
         ],
         goals: [
-          { id: 'fed', name: "The family feeding at a grown grove", done: fedAtGrove, reward: 25 },
-          { id: 'winter_all', name: "Every one of the family through the winter",
+          { id: 'fed', name: "Get the family feeding at grown flax", done: fedAtGrove, reward: 25 },
+          { id: 'winter_all', name: "Keep the whole family alive through winter",
             keep: (x) => family(x).length >= (x.runner.vars.winterStart || 0), reward: 25 }
         ]
       },
@@ -166,7 +166,7 @@ const JOURNEY_KAKA = (() => {
           { id: 'spring_press', when: { after: 24 }, do: [K.eagleComes('pukepuke', 47)] }
         ],
         goals: [
-          { id: 'own', name: "Meet a problem with no help", done: { gained: ['unaided', '>=', 1] }, stretch: true, reward: 30 }
+          { id: 'own', name: "Solve a problem before any hint", done: { gained: ['unaided', '>=', 1] }, stretch: true, reward: 30 }
         ],
         next: 'onward'
       },

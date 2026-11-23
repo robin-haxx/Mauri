@@ -55,6 +55,10 @@ const VOICE_SNIPPET_SEC  = 5.0;   // audible length of a one-shot voice snippet
 const VOICE_FADE_IN_SEC  = 0.9;   // fade-in when a voice (or a crossfade target) starts
 const VOICE_FADE_OUT_SEC = 1.3;   // fade-out at a snippet's end or when un-highlighted
 const VOICE_VOLUME       = 0.6;   // voice level, relative to the SFX volume
+const VOICE_CUE_AFTER_TIP_GAP_SEC  = 0.15;  // the beat between Te Whē's chime ending and the birds
+const VOICE_CUE_AFTER_TIP_FADE_SEC = 1.2;   // the birds' fade-in under a Te Whē line (playVoiceChorus)
+const CHORUS_JOIN_SEC = 1.5;   // how long the lead bird sounds alone before the rest join (playVoiceChorus)
+const AUDIBLE_END_DB = -30;   // a sound has "ended" once it stays this far under its peak (_audibleEnd)
 const KAKAPO_TERRITORIAL_MIN = 2; // this many males actively contesting → territorial track
 
 // ============================================
@@ -454,6 +458,8 @@ class AudioManager {
     this._prevVoiceDesired = new Set();
     this._fadingVoices = [];
     this._muted = false;   // tab-blur duck (mute()/unmute()); silences voices like music
+    this._pendingCues = [];     // timers for bird cues still to come in (playVoiceChorus)
+    this._voicesHeld = false;   // highlight voices held back during Te Whē's intro (holdVoices)
     
     // State
     this.loaded = false;
@@ -848,7 +854,7 @@ class AudioManager {
   // tutorial tip). Its fade-out and stop are scheduled on the audio clock, so it ends on
   // time even while the game is paused (the per-frame voice driver only runs in play).
   // Returns true if it played.
-  playVoiceCue(voiceKey, seconds = 3) {
+  playVoiceCue(voiceKey, seconds = 3, fadeIn = 0.2) {
     const bank = this.sounds.speciesVoices[voiceKey];
     const vol = this._getVolume() * VOICE_VOLUME;
     if (!bank || this._muted || vol <= 0) return false;
@@ -856,13 +862,72 @@ class AudioManager {
     const sf = stateName && bank[stateName];
     if (!this._voiceReady(sf)) return false;
     try {
-      this._voicePlayback(sf, vol, { offset: this._randomCue(sf, seconds), fadeIn: 0.2,
+      this._voicePlayback(sf, vol, { offset: this._randomCue(sf, seconds), fadeIn,
                                      duration: seconds, fadeOut: 0.8 });
       return true;
     } catch (e) {
       console.warn('Voice cue failed:', e);
       return false;
     }
+  }
+
+  // A Te Whē line about the birds (a tip's `voices`), in place of the chime: the first bird
+  // leads (the moa, on the first level), and the rest fade in to join it CHORUS_JOIN_SEC later.
+  // A chime still ringing from the line before is let finish first, so the click is always
+  // heard on its own. Returns true if anything will sound (so the tip plays no chime).
+  playVoiceChorus(keys, seconds = 6) {
+    if (!this.enabled || this._muted || this._getVolume() <= 0 || !keys || !keys.length) return false;
+    let wait = 0;
+    const pb = this._tipPlayback, sf = this.sounds.tutorialTip;
+    if (pb && pb.isPlaying() && sf && sf.buffer) {
+      wait = Math.max(0, this._audibleEnd(sf.buffer) - (getAudioContext().currentTime - pb._t0));
+      if (wait > 0) wait += VOICE_CUE_AFTER_TIP_GAP_SEC;
+    }
+    this._cancelPendingCues();
+    const later = (sec, fn) => {
+      if (sec <= 0) return fn();
+      const id = setTimeout(() => { this._pendingCues = this._pendingCues.filter(t => t !== id); fn(); }, sec * 1000);
+      this._pendingCues.push(id);
+    };
+    const [lead, ...rest] = keys;
+    later(wait, () => this.playVoiceCue(lead, seconds, VOICE_CUE_AFTER_TIP_FADE_SEC));
+    if (rest.length) {
+      later(wait + CHORUS_JOIN_SEC, () => {
+        for (const k of rest) this.playVoiceCue(k, seconds - CHORUS_JOIN_SEC, VOICE_CUE_AFTER_TIP_FADE_SEC);
+      });
+    }
+    return true;
+  }
+
+  // Hold the highlighted species' voices back (Te Whē's intro on black: the first level's focus
+  // moa would otherwise start under the first click) until releaseVoices(), when the screen
+  // fades in. A level change (stopAllVoices) lets go too.
+  holdVoices()    { this._voicesHeld = true; }
+  releaseVoices() { this._voicesHeld = false; }
+
+  // Seconds until a buffer's sound has died away: the end of its last 50 ms window within
+  // AUDIBLE_END_DB of its peak (the chime's clicks end ~1.6 s into a 3.8 s file; the rest is a
+  // faint tail). Measured once per buffer.
+  _audibleEnd(buf) {
+    if (buf._audibleEnd !== undefined) return buf._audibleEnd;
+    const d = buf.getChannelData(0), win = Math.max(1, Math.round(buf.sampleRate * 0.05));
+    let peak = 0;
+    for (let i = 0; i < d.length; i++) { const a = Math.abs(d[i]); if (a > peak) peak = a; }
+    const floor = peak * Math.pow(10, AUDIBLE_END_DB / 20);
+    let end = 0;
+    for (let i = 0; i < d.length; i += win) {
+      let s = 0;
+      const n = Math.min(win, d.length - i);
+      for (let j = 0; j < n; j++) s += d[i + j] * d[i + j];
+      if (Math.sqrt(s / n) >= floor) end = (i + n) / buf.sampleRate;
+    }
+    return (buf._audibleEnd = end);
+  }
+
+  // Drop bird cues still waiting on a chime (a level change, the audio switched off).
+  _cancelPendingCues() {
+    for (const id of this._pendingCues) clearTimeout(id);
+    this._pendingCues = [];
   }
 
   // A line of story dialogue opens on its speaker's own sound: 'moa' (the moa call; `rate`
@@ -1230,6 +1295,8 @@ class AudioManager {
 
   // Stop every extended voice immediately (level change, win/loss, audio off).
   stopAllVoices() {
+    this._cancelPendingCues();
+    this._voicesHeld = false;
     for (const vk of Object.keys(this._voices)) this._stopVoice(vk);
     for (const f of this._fadingVoices) this._stopSound(f.sound);
     this._fadingVoices = [];
@@ -1265,9 +1332,9 @@ class AudioManager {
     }
     const voiceVol = this._muted ? 0 : baseVol;
 
-    // Voice keys highlighted this frame.
+    // Voice keys highlighted this frame (none while held: they start on release).
     const desired = new Set();
-    if (typeof SPECIES_HIGHLIGHT !== 'undefined') {
+    if (!this._voicesHeld && typeof SPECIES_HIGHLIGHT !== 'undefined') {
       for (const key of SPECIES_HIGHLIGHT) {
         const vk = this._voiceKeyFor(key);
         if (vk) desired.add(vk);

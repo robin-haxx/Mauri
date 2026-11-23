@@ -821,3 +821,159 @@ error, and the right birds were set down.
 **Not done.** Nobody has played the scene with their own eyes at full speed. The carried chick
 uses the adult moa picture, because the juvenile one (`sprites/moa_juvenile.png`) is missing.
 The lines are drafts.
+
+### 14.9 2f rewritten to the new script, and raids that count down, 23 November 2026
+
+Nothing is committed. Every chapters level validates clean, and all 24 playable levels start
+and run 40 seconds with no error.
+
+**2f is four years, and ends in the story** (`levels/journey_02f_story.js`, spliced into the
+journey setting of `levels/chapters_freeplay.js`).
+
+- **Opening.** Te Whē says the author's three lines of narration. After that Te Whē says nothing
+  in these years: the mauri explainer, the giant moa line and "the Pouākai has given up" are
+  messages on the screen. The three screen-tour panels are cut (tiles 1 and 2 have shown them).
+- **Year 4.** Pātōtara founds nests: two patches side by side with upland moa near. The first
+  nest that year is Pukepuke and Koukou's home nest. Only they nest or lay there, and they use
+  no other (`NestingSite.heldBy`, `Moa._homeNest`). The message: "Pukepuke and Koukou have made a
+  nest together!" A nest may stand 70 px from another here (the pair live by their families'
+  nests). If the year ends with no nest, one is made for them (logged as forced).
+- **After year 4,** outside play with the toolbar empty: the camera closes on the nest, the pair
+  come together, "Pukepuke and Koukou have laid an egg!" The two Pouākai talk at their lair, with
+  portraits facing each other (`guideFlip`). They fly at the nest; Koukou and Pukepuke see them;
+  the Pouākai threaten. **The raid** shows the odds (96% before mana), a 6-second countdown and
+  mana for either side, and the Pouākai win whatever the player gives (the story's outcome). One
+  carries the egg off (Pipi is recorded as taken). The other lands on the nest, then chases
+  Pukepuke off the land to the north and cannot catch him. Koukou calls the migration. Her mother
+  and father walk south, home. Mama, Papa and every unnamed upland moa gather round her. The voice
+  in the dark (titled "???", the kākāpō's boom under it, a placeholder portrait of two eyes) speaks,
+  and the tribe walks off the land to the west.
+- **The record** counts the unnamed upland moa who went west (`rec.tribe`). Tiles 3, 4 and 4f set
+  up to four of them down beside the party. The west party is now Koukou, Mama and Papa
+  (`CHAPTERS_KIT.WEST`), since the script sends Koukou's parents home.
+- **The win card** says who went which way.
+
+Every scripted line is the author's word for word, except the typo "lokes". New engine pieces,
+each idle unless a story uses it: an eagle can land and rest (`landAt`), chase a bird off the
+land without catching it (`chaseOff`), circle faster (`holdOver`'s speed) and carry an egg; a moa
+can be held to a spot (`_stayAt`) and leave at a run (`beginLeaving`'s speed); a chapter with an
+empty title opens silently.
+
+**Raids count down, and mana swings them** (`mauri_raid.js`).
+
+- A kea raid at the odds no longer rolls the instant a kea reaches the egg. The kea gather over
+  the nest, a countdown runs (`keaRaid.rollSec`, 4 seconds by default, 0 for the old instant
+  roll), and the raid is rolled at nought. Kea that come during the count join it. One roll
+  decides it for all of them.
+- During the count, the moa's picture and the raiders' picture are buttons. Each tap spends 10
+  mauri and swings the odds 8 points that side's way, up to 3 taps a side (`RAID_MANA`). Pips
+  under each picture show the taps. The first raid of a session says how.
+- The countdown is a whole-seconds number in a ring over the odds. Module 1's two raids show it
+  too (the summer standoff and the later kea raids).
+- Where the nest is too near the top of the land, the odds draw under it.
+- **This changes every level whose kea raid at the odds** (tiles 2, 6 and 7, 2f, the chapters
+  Pātōtara lessons and the chapters Endless level): a raid there now takes a few seconds and
+  can be leaned on. Seeded replays of those levels differ from before once a raid happens.
+
+**Tested in the app's browser:** the whole 2f ending ran from the egg to the win, with each line
+in order, the right portraits, flips and sounds, the record written (Pipi taken, two unnamed moa
+west), and a mana tap moving the odds from 96% to 88%. The year-4 nest formed and was held for
+the pair. A two-kea raid on a test egg counted down, took the egg and released both kea. Module
+0's "Continue" still walks off, pans north and hands over to Module 1 on the same land.
+
+**Not done.**
+
+- ~~The journey tiles do not carry the land or pan between them.~~ Done: section 14.10.
+- Nobody has watched the scene at full speed or tapped mana by hand.
+- The voice's portrait is a placeholder.
+- The north path still has Mama and Papa with Pukepuke (stage J), so for now they walk both paths.
+
+**Questions on the script for the author.**
+
+1. The second Pouākai says "We'll wait until the little one has hatched," and then they take the
+   egg straight away. One of the two may want to change.
+2. "Mother, father, head back South" is read as Koukou's own parents going home, with Mama Moa
+   (Pukepuke's mother) joining the tribe. If you meant otherwise, it is one list in the kit.
+3. Should the player get mana in the Pouākai raid at all, knowing it cannot be won?
+
+### 14.10 The tiles share one land and pan between them, 23 November 2026
+
+Nothing is committed.
+
+**One land.** The map's cells are areas of one continuous land (`CAMPAIGN.LAND` in
+`mauri_campaign.js`): three columns, east high and falling west to the sea as Free Play's slope,
+with a spare row north and south so no tile sits on the land's edge. An area is a set size of
+ground (680 × 380 world units, the play window of a 16:9 screen at the tiles' zoom of 2), so it
+is the same ground whatever shape the screen is, or becomes between tiles (a tablet turned).
+Each window is centred on its area. Each tile generates only the areas it needs: its own and
+the ones its ways on lead to (`CAMPAIGN.worldGridFor`, applied in `applyLevelToConfig`). A
+one-area tile also takes the area south of it. The terrain reads that land's noise at the
+tile's place in it (`worldGrid.land` in `mauri_terrain.js`).
+
+**The ways on.** Each way-on button on a tile's win card now goes across the land
+(`Game._journeyOnward`). The party has already walked off in each tile's ending. If the next
+tile is in another area, the land is cleared, the card goes, and the view pans there over
+three seconds. The next tile then loads behind a still of the last frame and fades in, as the
+modules do (`startModuleHandoff`). If the next tile is in the same area (2 to 2f, 4 to 4f, 6 to
+6f), it loads in place with no pan. The pans: 1 to 2 north, 2f west to 3 and north to 5, 3 to
+4 north, 5 to 6 north. 4f and 6f have no ways on yet (7 needs both paths).
+
+**What is carried:** the land (its seed and its noise), so the ground is identical, and the
+record, as before. A restart or "Replay seed" of a tile reached this way keeps the land.
+**Not carried:** mauri, sites and placed patches. Each tile keeps its own economy and finds its
+own sites. Each tile also fits its own area's heights to its own lesson (its `elevationWindow`)
+and draws its own biomes. So during the pan the next area is coloured as the old tile sees it,
+and it settles into the new tile's colours as the still fades.
+
+**Every tile's land has changed.** They are now areas of the one land, not each their own
+island. Each tile's height fit still sets its mix of ground. On seeds 1 to 3 each tile came out
+as its lesson wants: the tops tiles (1, 2, 2f, 5, 6) are mostly tussock and forest with some
+scree, and tiles 3 and 4 are mostly flats and forest. The stand-in results in the tables above
+were measured on the old land and need running again (`tools/batch.js`, which needs Playwright).
+
+**A fix for the modules.** The land's noise comes from each attempt's run seed, and the
+modules' "Continue" only carried the terrain's own seed. So Module 1 (and the modules' free
+play) after "Continue" got different ground from Module 0's, though in the same style. The
+hand-off now carries the noise seed too (`Game.landNoise`), for the modules and the tiles.
+
+**Tested in the app's browser.** Forced wins, then the way-on buttons. 2f west to 3, 1 north to
+2, and 2 to 2f in place each landed on identical ground, sampled at five points either side, and
+the same area gave the same ground at two different window widths. Tile 3 arrived with Koukou,
+Mama and Papa set down. Module 0's "Continue" now gives Module 1 identical ground; before the fix
+it did not. All 30 registered levels start and run 15 seconds with no error.
+
+**Not done.**
+
+- The party does not walk in from the edge they left by. Each tile sets them down at its own
+  sites, as before, under the fade.
+- Nobody has watched a pan at full speed. My checks stepped frames by hand.
+
+### 14.10 Tile 2's raid taught, skip, the hunted outline, name tags, 24 November 2026
+
+Nothing is committed. Every chapters level validates clean.
+
+- **Tile 2's first raid is taught.** Its count is 8 seconds, mana costs 5 mauri a tap, and the
+  first raid's count is held (the kea hover over the nest) until the lesson has been given. After
+  the kea's own scene, the mantis says the author's two lines ("Think fast!..."). A banner asks
+  for three taps on the moa beside the odds, and the count waits for them, or for 20 seconds. If
+  the player hasn't the mauri for three taps, it is made up, and logged. While the count is held,
+  a storm does not flush those kea. Settings: `keaRaid.teach`, `keaRaid.mana`, `RAIDS.lessonDone`.
+  Tested: the count stayed at 8 through the scene, the lesson and four more seconds; three taps
+  started it; the moa drove the kea off.
+- **A standing storm is no wall to kea.** A kea is flushed only by a storm set down or moved
+  onto it (each storm's drop is numbered, `PlaceableObject.stormDrops` / `_dropN`; the kea checks
+  the drops since its last tick, `Kea._checkStormDrop`). A kea on its way to berries flies
+  straight through a storm already standing. It still won't feed, perch or land under one, and
+  berries under a storm still draw no kea. The scripted M1 kea (`_updateKeaBand`) match.
+- **"Skip Tutorial" skips only Te Whē.** Her lines, banners and hints stop. Every creature's line
+  still plays, including in scenes that mix the two, and the skip button is not shown on a
+  creature's line. T brings Te Whē back. (A line is the story when its speaker is not the guide,
+  or when it wears another face: the voice in the dark on tiles 2f and 3, now drawn as the dark
+  portrait on both.) Tested on tile 2.
+- **The Pouākai's quarry has a pulsing red outline**, moa or flying bird, for as long as the hunt
+  is on (`huntedOutline`, set each step by Simulation.updateEagles).
+- **Pukepuke and Koukou wear name tags** over their hunger bars wherever the chapters engine casts
+  them (any other cast entry can ask for one with `tag: true`). **They court nobody until a story
+  says so** (`breeds: true` on the cast entry, or a script clearing `_noBreed`): 2f's egg is
+  forced by its story, tile 7's chick by its beat. Note for stage J: tile 6f's clan target counts
+  on Pukepuke fathering chicks, and now he does not.

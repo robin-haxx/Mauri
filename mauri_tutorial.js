@@ -34,7 +34,7 @@ const TUTORIAL_EVENTS = {
   PLACEABLE_MOVED: 'placeable_moved', // a touch-and-hold move set an item down, data: { type }
   MODULE_BEAT: 'module_beat',         // a module level's story moment, data: { beat, director, ... }
   STORY_BEAT: 'story_beat',           // a chapter level's line or banner (mauri_chapters.js), data: { cue }
-  PLANT_SPROUTED: 'plant_sprouted',   // a pātōtara (patch or wild plant) sprouted by hand, data: { sprouted, type }
+  PLANT_SPROUTED: 'plant_sprouted',   // a pātōtara or wharariki (patch or wild plant) sprouted by hand (three taps), data: { sprouted, type }
   BIRD_HATCHED: 'bird_hatched',       // a flighted bird's (or kākāpō's) egg hatched, data: { egg, bird, speciesKey }
   BIRD_KILLED: 'bird_killed',         // an eagle took a flighted bird, data: { bird, eagle, speciesKey }
   SPECIES_ARRIVED: 'species_arrived', // newcomers walked or flew in (mechanics.rescueImmigration, eagleReturns), data: { speciesKey, count }
@@ -312,6 +312,12 @@ class TutorialManager {
   }
   
   toggle() {
+    // (Te Whē's tips skipped: T brings them back, and the rest were never off.)
+    if (this.skipGuide && this.enabled) {
+      this.skipGuide = false;
+      this.game.addNotification("Te Whē's tips are back on.", 'info');
+      return;
+    }
     this.enabled = !this.enabled;
     if (!this.enabled) this.dismissCurrentTip();
     this.game.addNotification(
@@ -320,12 +326,28 @@ class TutorialManager {
     );
   }
   
+  // "Skip Tutorial" skips Te Whē's tips only: her lines, banners and hints. What the creatures
+  // say to each other is the story (a tip marked `story`, ChapterRunner._lineTips) and still
+  // plays, and a scene that mixes the two plays its creatures' lines and passes over hers.
   skipTutorial() {
-    this.enabled = false;
-    this.pendingTips = [];
-    this.eventQueue = [];
+    this.skipGuide = true;
+    this.pendingTips = this.pendingTips.filter(q => this._isStory(q.tip) || this._nextStory(q.tip));
     this.dismissCurrentTip();
-    this.game.addNotification("Tutorial skipped. Press T anytime for tips!", 'info');
+    this.game.addNotification("Te Whē's tips skipped. Press T to bring them back.", 'info');
+  }
+
+  _isStory(tip) { return !!(tip && tip.story); }
+
+  // The first story tip a chain reaches from `tip` (its own lines passed over), or null.
+  _nextStory(tip) {
+    const seen = new Set();
+    let id = tip && tip.nextTip;
+    while (id && this.tips[id] && !seen.has(id)) {
+      seen.add(id);
+      if (this._isStory(this.tips[id])) return id;
+      id = this.tips[id].nextTip;
+    }
+    return null;
   }
 
   // ============================================
@@ -512,6 +534,12 @@ class TutorialManager {
   _showTip(tipId, data = {}) {
     const tip = this.tips[tipId];
     if (!tip) return;
+    // Te Whē skipped: her tip is passed over, to the next story line in its chain if any.
+    if (this.skipGuide && !this._isStory(tip)) {
+      const next = this._nextStory(tip);
+      if (next) this._showTip(next, data);
+      return;
+    }
     
     this.currentTip = { ...tip, data };
     // title / content / guidePosition / highlight / guideSprite / speaker may be
@@ -546,11 +574,12 @@ class TutorialManager {
     // A tip spoken by a bird (tip.voice) opens on a snippet of its call, or on its one-shot
     // species call (tip.call, e.g. the eagle's cry), or on its speaker's sound (tip.speaker:
     // a story line, see AudioManager.playSpeaker), else the chime. A tip about birds can play
-    // their recordings instead, together (tip.voices: voice keys, for tip.voicesSec seconds).
+    // their recordings instead: the first leads and the rest join it (tip.voices: voice keys,
+    // for tip.voicesSec seconds; see AudioManager.playVoiceChorus).
     if (audioManager) {
       let voiced = tip.voice && audioManager.playVoiceCue && audioManager.playVoiceCue(tip.voice);
-      if (!voiced && tip.voices && audioManager.playVoiceCue) {
-        for (const v of tip.voices) if (audioManager.playVoiceCue(v, tip.voicesSec || 6)) voiced = true;
+      if (!voiced && tip.voices && audioManager.playVoiceChorus) {
+        voiced = audioManager.playVoiceChorus(tip.voices, tip.voicesSec || 6);
       }
       if (!voiced && tip.call && audioManager.playSpeciesCall) {
         audioManager.playSpeciesCall(tip.call);
@@ -918,7 +947,7 @@ class TutorialManager {
     pop();
 
     // Guide sprite (outside push/pop). (guideCX, guideCY) is the sprite's centre.
-    this._renderGuide(guideCX, guideCY, alpha, spriteSize, this._tipGuideSprite(tip));
+    this._renderGuide(guideCX, guideCY, alpha, spriteSize, this._tipGuideSprite(tip), !!tip.guideFlip);
   }
 
   // Greedy word-wrap of each paragraph to maxW at the current text font/size.
@@ -947,7 +976,9 @@ class TutorialManager {
   }
 
   // Draws the guide sprite centred on (cx, cy).
-  _renderGuide(cx, cy, alpha, size, sprite = this.guideSprite) {
+  // `flip` (a tip's guideFlip) mirrors it: two speakers of one kind told apart by facing each
+  // other (2f's two Pouākai).
+  _renderGuide(cx, cy, alpha, size, sprite = this.guideSprite, flip = false) {
     push();
     imageMode(CENTER);
 
@@ -955,7 +986,8 @@ class TutorialManager {
       // Fit the sprite in a size x size square, keeping its shape (a moa is taller than wide).
       const sw = sprite.width || 1, sh = sprite.height || 1, k = size / Math.max(sw, sh);
       tint(255, alpha);
-      image(sprite, cx, cy, sw * k, sh * k);
+      if (flip) { translate(cx, cy); scale(-1, 1); image(sprite, 0, 0, sw * k, sh * k); }
+      else image(sprite, cx, cy, sw * k, sh * k);
     } else {
       // Minimal fallback
       fill(80, 150, 80, alpha);
@@ -990,8 +1022,9 @@ class TutorialManager {
     
     this.nextButtonBounds = { x: nextBtnX, y: btnY, w: nextBtnW, h: btnHeight };
 
-    // "Skip Tutorial" button (not in the module levels: their tips tell the story)
-    if (this.game.module) { this.skipButtonBounds = null; return; }
+    // "Skip Tutorial" button (not in the module levels: their tips tell the story; nor on a
+    // story line: what the creatures say can't be skipped)
+    if (this.game.module || this._isStory(tip)) { this.skipButtonBounds = null; return; }
     const skipBtnX = x + 25 * S;
     const skipBtnW = 100 * S;
     const hoverSkip = this._hitTest({ x: skipBtnX, y: btnY, w: skipBtnW, h: btnHeight }, mouseX, mouseY);

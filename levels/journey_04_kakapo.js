@@ -97,7 +97,7 @@ const JOURNEY_WEST = (() => {
     claim: "Kākāpō breed only in a mast year, and the mast can be seen coming a year ahead.",
     teaches: ['mast_year', 'mast_ahead', 'forest_tools'],
     guide: ['kakapo', 'rimu', 'beech_refuge'],
-    waysOn: [{ label: "Stay for the mast years", tile: 't4f' }],
+    waysOn: [{ label: "Stay for the mast years", tile: 't4f', sub: "Koukou stays for the mast years" }],
     outcome: { birds: FAMILY, herds: { kakapo: 'kakapo' },
                also: (rec, r) => { const c = r.caseLog.find(k => k.id === 'riddle'); rec.riddleRung = c ? (c.outcome === 'solved' ? c.rung : 'unanswered') : null; } },
 
@@ -121,22 +121,22 @@ const JOURNEY_WEST = (() => {
 
     chapters: [
       { id: 'summer', title: "Summer", tools: ['forestBoost', 'Storm'], focus: ['upland_moa'],
-        goals: [{ id: 'sown', name: "Year {year}: be ready for what is coming", done: sownByFlock, reward: 20, stretch: true }] },
+        goals: [{ id: 'sown', name: "Get the kākāpō ready for next summer", done: sownByFlock, reward: 20, stretch: true }] },
       { id: 'autumn', title: "Autumn", tools: ['forestBoost', 'Storm'],
         start: [{ fade: { type: 'Storm', sec: 60, refreshOnMove: true } }, K.eagleComes('koukou', 40)],
-        goals: [{ id: 'autumn_safe', name: "Year {year}: Koukou's family through the autumn", survive: true, reward: 10 }] },
+        goals: [{ id: 'autumn_safe', name: "Keep Koukou's family safe through autumn", survive: true, reward: 10 }] },
       { id: 'winter', title: "Winter", tools: ['forestBoost', 'Storm'],
         start: [(x) => { x.runner.vars.flockStart = kakapo(x); }],
-        goals: [{ id: 'flock_through', name: "Year {year}: the flock through the winter", keep: (x) => kakapo(x) >= (x.runner.vars.flockStart || 0), reward: 20 }],
+        goals: [{ id: 'flock_through', name: "Keep every kākāpō alive through winter", keep: (x) => kakapo(x) >= (x.runner.vars.flockStart || 0), reward: 20 }],
         next: [[{ year: ['>=', 2] }, 'last'], [true, 'spring']] },
       { id: 'spring', title: "Spring", tools: ['forestBoost', 'Storm'],
-        goals: [{ id: 'year_one', name: "The first year among the night parrots", survive: true, reward: 15 }],
+        goals: [{ id: 'year_one', name: "Make it through the first year", survive: true, reward: 15 }],
         next: 'summer' },
       // The unprompted season: the second spring.
       { id: 'last', title: "Spring: after the mast", transfer: true, tools: ['forestBoost', 'Storm'],
         start: [{ say: [['guide', "The last season here. Nobody will tell you what to do."]] }, K.eagleComes('koukou', 42)],
         reactions: [{ id: 'last_press', when: { after: 24 }, do: [K.eagleComes('koukou', 47)] }],
-        goals: [{ id: 'own', name: "Meet a problem with no help", done: { gained: ['unaided', '>=', 1] }, stretch: true, reward: 30 }],
+        goals: [{ id: 'own', name: "Solve a problem before any hint", done: { gained: ['unaided', '>=', 1] }, stretch: true, reward: 30 }],
         next: 'onward' },
       { id: 'onward', title: "The mast is over", tools: [],
         start: [(x) => { x.runner.vars.chicks = x.runner.counters['hatched:kakapo'] || 0; },
@@ -183,7 +183,7 @@ const JOURNEY_WEST = (() => {
   // ==========================================================================================
   const mastNow = (x) => !!x.game._isMastYear();
   const toolsFor = (x) => { const t = ['lancewood', 'forestBoost']; if (mastNow(x)) t.push('rimuScramble'); t.push('Storm'); x.runner.setTools(t); };
-  const bountyLine = (x) => { const v = x.runner.vars; v.bounty = bounty(x); v.bountyLine = `Forest bounty: ${v.bounty} fruiting trees (it began at ${v.bountyStart != null ? v.bountyStart : v.bounty})`; return v.bounty; };
+  const bountyLine = (x) => { const v = x.runner.vars; v.bounty = bounty(x); const aim = (v.bountyBest || v.bountyStart || v.bounty) + 5; v.bountyLine = `Grow the forest to ${aim} fruiting trees (now ${v.bounty})`; return v.bounty; };
   const bountyGoal = (season) => ({ id: `bounty_${season}`, name: "{$bountyLine}", stretch: true, reward: 10,
     done: (x) => { const b = bountyLine(x); return b > (x.runner.vars.bountyBest || x.runner.vars.bountyStart || Infinity) + 4; } });
   const season = (key, extra = {}) => Object.assign({
@@ -225,6 +225,7 @@ const JOURNEY_WEST = (() => {
       climateDrift: { periodYears: 3, rampCycles: 8, coldCap: 0.7, baselineFrac: 0.2, starkness: 1.0 },
       winterInedibility: true, winterEdibilityMult: 1.3, winterEdibilityErosion: 0.6,
       ecosystemIncome: { base: 0.08, perFocusAnimal: 0.015, perAnimal: 0.006 }, noEggLaidMauri: true, noPopulationMilestones: true,
+      huntCamera: { zoomIn: true },   // the view closes in on each hunt and back (Game._onHuntStart)
       eagleHungerRate: D.fEagleHunger,
       rescueImmigration: { little_bush_moa: { below: 4, count: 3, afterSeasons: 2 } }
     }),
@@ -234,8 +235,8 @@ const JOURNEY_WEST = (() => {
         summer: Object.assign(season('summer'), { focus: ['upland_moa'] }),
         autumn: season('autumn', { start: [{ fade: { type: 'Storm', sec: 60, refreshOnMove: true } }] }),
         winter: season('winter', { start: [(x) => { x.runner.vars.flockStart = kakapo(x); }],
-          goals: [{ id: 'flock_through', name: "Year {year}: the flock through the winter", keep: (x) => kakapo(x) >= (x.runner.vars.flockStart || 0), reward: 15 }] }),
-        spring: season('spring', { goals: [{ id: 'year_done', name: "Year {year} of " + D.fYears, survive: true, reward: 10 }] })
+          goals: [{ id: 'flock_through', name: "Keep every kākāpō alive through winter", keep: (x) => kakapo(x) >= (x.runner.vars.flockStart || 0), reward: 15 }] }),
+        spring: season('spring', { goals: [{ id: 'year_done', name: "Make it through year {year} of " + D.fYears, survive: true, reward: 10 }] })
       }, { years: D.fYears }),
       K.wonAfterYears({
         title: "Eight years on",

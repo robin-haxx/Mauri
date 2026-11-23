@@ -506,7 +506,15 @@ class Simulation {
   // Nearest ALIVE nesting site within radius (optionally only those whose habitat a
   // species favours; forest sites for the forest-dwelling little bush moa). With a species,
   // another species' designated nest is skipped; without one (eagles, spacing) every nest counts.
-  getNearestNestingSite(x, y, radius = Infinity, speciesKey = null) {
+  // With `who` (the moa asking): a nest held for named birds (site.heldBy, a story's: 2f's home
+  // nest for Pukepuke and Koukou) is theirs alone, and a bird with a home nest (_homeNest) has
+  // that one and no other.
+  getNearestNestingSite(x, y, radius = Infinity, speciesKey = null, who = null) {
+    if (who && who._homeNest) {
+      const h = who._homeNest;
+      if (h.alive === false) return null;
+      return (radius === Infinity || (h.pos.x - x) ** 2 + (h.pos.y - y) ** 2 <= radius * radius) ? h : null;
+    }
     const forestSpecies = speciesKey === 'little_bush_moa';
     const rSq = radius === Infinity ? Infinity : radius * radius;
     let best = null, bestSq = rSq;
@@ -515,6 +523,7 @@ class Simulation {
       if (!s.alive) continue;
       // A designated nest is its own species': other moa neither gather nor lay there.
       if (speciesKey && s.reservedFor && s.reservedFor !== speciesKey) continue;
+      if (who && s.heldBy && !s.heldBy.includes(who)) continue;
       const dx = s.pos.x - x, dy = s.pos.y - y, dSq = dx * dx + dy * dy;
       // Soft habitat preference: forest moa favour forest sites (feel them nearer).
       const eff = (forestSpecies && s.habitat === 'forest') ? dSq * 0.5 : dSq;
@@ -1053,6 +1062,8 @@ class Simulation {
     moa.alive = false;
     moa.causeOfDeath = 'eagle';
     if (audioManager) audioManager.playEagleCatch();
+    // (A level whose camera goes to hunts says the catch in words: Game._onEagleCatch.)
+    const _said = !!(this.game && this.game._onEagleCatch && this.game._onEagleCatch(eagle, moa));
 
     eagle.kills++;
     if (this.stats) this.stats.eagleStrikes = (this.stats.eagleStrikes || 0) + 1;
@@ -1083,7 +1094,7 @@ class Simulation {
       const balanceReward = 5;
       mauri.earn(balanceReward, moa.pos.x, moa.pos.y, 'ecosystem_balance');
       this.game.addNotification(`Balanced ecosystem! Eagle fed. +${balanceReward} mauri`, 'info');
-    } else {
+    } else if (!_said) {
       this.game.addNotification('Eagle caught a moa - population low!', 'error');
     }
 
@@ -1119,7 +1130,9 @@ class Simulation {
     else eagle.patrolCenter.set(eagle.pos.x, eagle.pos.y);
 
     const name = (prey.species && prey.species.displayName) || (prey._label) || 'bird';
-    if (this.game) this.game.addNotification(`An eagle seized a ${name}!`, 'error');
+    // (A level whose camera goes to hunts says the catch in words: Game._onEagleCatch.)
+    const said = !!(this.game && this.game._onEagleCatch && this.game._onEagleCatch(eagle, prey));
+    if (this.game && !said) this.game.addNotification(`An eagle seized a ${name}!`, 'error');
     if (this.game && this.game.tutorial) {
       this.game.tutorial.fireEvent(TUTORIAL_EVENTS.BIRD_KILLED, { bird: prey, eagle, speciesKey: key });
     }
@@ -1195,6 +1208,47 @@ class Simulation {
     const moa = this.moaNear(p, cfg.moaRadius ?? 90);
     const prob = (cfg.baseSuccess ?? 0.9) - (cfg.moaPenalty ?? 0.12) * moa;
     return Math.max(cfg.minSuccess ?? 0.05, Math.min(1, prob));
+  }
+
+  // A kea raid that took an egg (keaRaidsEggs 'odds') unsettles that nest's herd: the grown moa
+  // of the egg's species within keaRaid.unsettleRadius (110) of it walk off to a new home range
+  // unsettleDist (220) away, on the far side from the nest. So berries set by a rival herd's nest
+  // move that herd on (Kea._berryRaidEgg). Not the level's focus species (the player's families
+  // keep their nests: the lost egg is their cost), nor a named bird, nor one on a story's walk or
+  // a script. keaRaid.unsettle: false turns it off. Returns how many moved.
+  unsettleHerd(egg) {
+    const M = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS) ? LEVEL_MECHANICS : {};
+    const cfg = M.keaRaid || {};
+    const sp = egg && egg.parentSpecies;
+    if (cfg.unsettle === false || !sp) return 0;
+    const g = this.game;
+    const focus = (g && g.chapters && g.chapters.focus) || (g && g.freeplayFocus) || [];
+    if (focus.includes(sp)) return 0;
+    const R = cfg.unsettleRadius ?? 110, D = cfg.unsettleDist ?? 220, R2 = R * R;
+    const herd = this.moas.filter(m => m.alive && m.speciesKey === sp && !m.castName && !m.lifeScript && !m._boundFor &&
+      !m._leaving && (m.pos.x - egg.pos.x) ** 2 + (m.pos.y - egg.pos.y) ** 2 <= R2);
+    if (!herd.length) return 0;
+    // Away from the nest, on the herd's side of it (else any way), onto ground they can walk.
+    let hx = 0, hy = 0;
+    for (const m of herd) { hx += m.pos.x - egg.pos.x; hy += m.pos.y - egg.pos.y; }
+    const a0 = (hx || hy) ? Math.atan2(hy, hx) : random(TWO_PI);
+    const t = this.terrain, edge = 30;
+    let to = null;
+    for (const da of [0, 0.5, -0.5, 1, -1, 1.6, -1.6, Math.PI]) {
+      for (const d of [D, D * 0.75, D * 1.25]) {
+        const x = egg.pos.x + Math.cos(a0 + da) * d, y = egg.pos.y + Math.sin(a0 + da) * d;
+        if (x < edge || y < edge || x > t.mapWidth - edge || y > t.mapHeight - edge || !t.isWalkable(x, y)) continue;
+        to = { x, y }; break;
+      }
+      if (to) break;
+    }
+    if (!to) return 0;
+    for (const m of herd) {
+      m.migrationTarget = createVector(to.x + random(-18, 18), to.y + random(-18, 18));
+      m.isMigrating = true;
+      m.migrationCooldown = 0;
+    }
+    return herd.length;
   }
 
   // A kea robs a moa nest: destroy the egg and seed a disturbance the moa avoid.
@@ -2114,6 +2168,8 @@ class Simulation {
       if (!eagle.alive) continue;   // starved emergent birds await cleanup()
       eagle.behave(this, mauri, dt);
       eagle.update(dt);
+      // (Its quarry knows it is hunted: drawn with a pulsing red outline, huntedOutline.)
+      if (eagle.hunting && eagle.target) eagle.target._huntedBy = eagle;
       // A module's eagle can fly off the map and back (EagleLife.offMap).
       // (Or a chapter's eagle on an errand off the land: HaastsEagle.sendAway.)
       if (!(eagle.lifeScript && eagle.lifeScript.offMap) && !eagle._away && !eagle._carry) this.constrainToBounds(eagle.pos);

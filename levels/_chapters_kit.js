@@ -100,10 +100,13 @@ const CHAPTERS_KIT = {
   },
 
   // ---- Hidden twice, the eagle goes for the herd (mechanics.coverSendsEagleAway) ----------
-  gaveUp() {
+  // (words: false says the first one as a message too, not in Te Whē's voice: 2f.)
+  gaveUp({ words = true } = {}) {
     return [
-      { id: 'gave_up', on: 'eagle_gave_up',
-        say: [['guide', "Hidden from it twice, the Pouākai has given the family up and gone after the {species}. It still has to eat.", { lit: ['$eagle'] }]] },
+      words ? { id: 'gave_up', on: 'eagle_gave_up',
+        say: [['guide', "Hidden from it twice, the Pouākai has given the family up and gone after the {species}. It still has to eat.", { lit: ['$eagle'] }]] }
+            : { id: 'gave_up', on: 'eagle_gave_up',
+        notify: ["Hidden from it twice, the Pouākai has given up on the family and gone after the {species}.", 'success'] },
       { id: 'gave_up_again', on: 'eagle_gave_up', once: false, cooldown: 5,
         notify: ["The Pouākai has given up here and gone after the {species}.", 'success'] }
     ];
@@ -146,7 +149,7 @@ const CHAPTERS_KIT = {
         ...reactions
       ],
       goals: [
-        { id: `${id}_own`, name: "Meet a danger with no help", done: { gained: ['unaided', '>=', 1] }, stretch: true, reward: 30 },
+        { id: `${id}_own`, name: "Deal with a danger before any hint", done: { gained: ['unaided', '>=', 1] }, stretch: true, reward: 30 },
         ...goals
       ],
       until: { any: [{ seasons: 1 }, { all: [{ gained: ['cases', '>=', cases] }, { after: 30 }] }] },
@@ -269,10 +272,13 @@ Object.assign(CHAPTERS_KIT, {
   },
 
   // ---- The west path's party (FULLGAMESCRIPT: Koukou's tribe) -------------------------------------
-  // Who walks west with Koukou after 2f: her own family. Add 'mama' and 'papa' here to send
-  // Pukepuke's elders west too (CAMPAIGN_PLAN.md section 14, decision 18). Upland moa that arrive
-  // on a tile join the tribe as the simulation brings them; they are not named here.
-  WEST: ['koukou', 'friendMama', 'friendPapa'],
+  // Who walks west with Koukou after 2f. As 2f's ending tells it (23 November): Koukou sends her
+  // own mother and father south, home to their safe nest, and Mama Moa ("Lead our tribe with
+  // strength, Kou!") and Papa follow her west with the rest of the tribe. To send Koukou's
+  // parents west instead, put 'friendMama', 'friendPapa' here (CAMPAIGN_PLAN.md section 14,
+  // decision 18). The unnamed upland moa who followed her are counted in the record (rec.tribe)
+  // and set down beside the party (westParty).
+  WEST: ['koukou', 'mama', 'papa'],
   _WEST_BIRDS: {
     koukou:     { title: "Koukou",          female: true,  pitch: 0.9 },
     friendMama: { title: "Koukou's mother", female: true,  pitch: 0.95 },
@@ -291,7 +297,13 @@ Object.assign(CHAPTERS_KIT, {
   },
   // A start action: the west party set down at `at` (CAMPAIGN.alive decides who is still walking).
   westParty(at, opts = {}) {
-    return this.party(this.WEST.map(n => ({ name: n, female: this._WEST_BIRDS[n].female })), at, opts);
+    const named = this.party(this.WEST.map(n => ({ name: n, female: this._WEST_BIRDS[n].female })), at, opts);
+    return (x) => {
+      named(x);
+      // The rest of the tribe: upland moa who followed Koukou west at the end of 2f (at most four).
+      const r = x.runner, n = Math.min(4, (r.level.journey && r.record && r.record.tribe) || 0);
+      if (n) r.spawn({ type: 'upland_moa', at, count: n, sexes: 'pair', radius: (opts.radius || 14) + 10, hunger: opts.hunger ?? 30 });
+    };
   },
   // The party's elders, as elderLost wants them: { castName: "Title" }.
   westElders() {
@@ -454,10 +466,14 @@ Object.assign(CHAPTERS_KIT, {
   // stage must be set by an earlier reaction, or by the chapter's own start.
   //   chapter   the chapter it opens (the level's first)
   //   seenKey   the Game field that remembers the prologue was read this session
+  // The birds' own voices (the focus moa's highlight track) wait on black, so Te Whē's click is
+  // heard alone; a line with `voices` brings the birds in, and the rest start as it fades in.
   prologue({ chapter = 'summer', lines = [], opening = [], seenKey = '_journeyPrologueSeen', fadeFrames = 90 } = {}) {
     const K = CHAPTERS_KIT, first = K.opens(chapter, 'prologued');
+    const voices = (held) => { if (typeof audioManager !== 'undefined' && audioManager && audioManager.holdVoices) {
+      if (held) audioManager.holdVoices(); else audioManager.releaseVoices(); } };
     return [
-      { id: 'black', on: 'chapter_start', if: first, do: [(x) => x.game.fadeScreen(1, 0)] },
+      { id: 'black', on: 'chapter_start', if: first, do: [(x) => { x.game.fadeScreen(1, 0); voices(true); }] },
       ...(lines.length ? [{ id: 'prologue', on: 'chapter_start', if: (x) => first(x) && !x.game[seenKey],
         // (On black there is nothing to stand clear of: Te Whē speaks from the middle.)
         say: lines.map(l => ['guide', typeof l === 'string' ? l : l[0],
@@ -465,7 +481,7 @@ Object.assign(CHAPTERS_KIT, {
         do: [(x) => { x.game[seenKey] = true; }] }] : []),
       { id: 'prologued', on: 'chapter_start', if: first, do: [{ flag: 'prologued' }] },
       { id: 'fade_in', when: (x) => !!x.runner.flags.prologued && K.idle(x),
-        do: [(x) => { x.game.fadeScreen(0, fadeFrames); x.runner.vars._fadeAt = x.game.playTime; }, { flag: 'fading' }] },
+        do: [(x) => { x.game.fadeScreen(0, fadeFrames); x.runner.vars._fadeAt = x.game.playTime; voices(false); }, { flag: 'fading' }] },
       // (The fade is drawn, not simulated, so on a slow machine it can lag the simulation's
       // clock: wait for it to finish, or seven seconds where nothing is being drawn at all.)
       Object.assign({ id: 'opening', when: (x) => !!x.runner.flags.fading && x.game.playTime - x.runner.vars._fadeAt >= 20 &&
@@ -573,4 +589,104 @@ Object.assign(CHAPTERS_KIT, {
   // A scene's last line said, play resumes, and then this holds: for a chapter that ends (or
   // a level that is won) once its closing words have been read.
   saidAndRead(flag) { return (x) => !!x.runner.flags[flag] && CHAPTERS_KIT.idle(x); }
+});
+
+// ============================================================================
+// THE STORY VIEW (journey tiles 1 and 2)
+// ============================================================================
+// A journey lesson's story happens on one stretch of its land: the nests, the food, the
+// storms standing by, and the way down to winter ground. The view is held close on that
+// stretch, with room round it for a storm or the Pouākai to come in from, and opened to the
+// whole land only where the level says (the Pouākai's return, winter). The hatch and the
+// story moments take the view and give it back; a keeper puts it back if anything leaves it
+// elsewhere. Render-only: nothing here touches the simulation.
+//
+//   const V = CHAPTERS_KIT.storyView({ sites: [...], zoom: [lo, hi], pad });
+//   V.to('story' | 'wide', frames)  a start/do action: the view the level rests on, eased to
+//                                   (frames <= 2: a cut)
+//   V.keeper(chapters)              the reaction that holds it there
+//   V.holdOffView({ at, awayFrom, keepFrom, fallback, hunger })
+//                                   the Pouākai's entrance: circling out of sight, off the story
+//                                   view and well away from `keepFrom` (sites or cast), leaning
+//                                   away from `awayFrom`; let go, it flies in over `at`
+// ============================================================================
+Object.assign(CHAPTERS_KIT, {
+  storyView({ sites, zoom = [1.1, 1.3], pad = 50 } = {}) {
+    // The view framing the story's sites: their middle, as close as `zoom` allows while they
+    // all fit with `pad` (world units) round them.
+    const frame = (x) => {
+      const r = x.runner, g = x.game;
+      const pts = sites.map(n => r.point(n)).filter(p => p && p.x != null);
+      if (!pts.length) return null;
+      let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+      for (const p of pts) {
+        const py = g._groundPaintY(p.x, p.y);
+        x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x); y0 = Math.min(y0, py); y1 = Math.max(y1, py);
+      }
+      const v = g._viewport(), b = g._baseView();
+      const fit = Math.min(v.w / (x1 - x0 + pad * 2), v.h / (y1 - y0 + pad * 2)) / b.z;
+      return { zoom: Math.max(zoom[0], Math.min(zoom[1], fit)), cx: (x0 + x1) / 2, cy: (y0 + y1) / 2, ax: 0.5, ay: 0.5 };
+    };
+    // The stretch of land a framing shows, in paint space (as Game._updateViewTransform clamps
+    // it to the map's edges).
+    const rect = (x, sv) => {
+      const g = x.game, t = g.terrain, v = g._viewport(), b = g._baseView(), z = b.z * sv.zoom;
+      const vx = Math.min(b.x, Math.max(b.x + t.mapWidth * b.z - t.mapWidth * z, v.x + v.w * 0.5 - sv.cx * z));
+      const vy = Math.min(b.y, Math.max(b.y + t.mapHeight * b.z - t.mapHeight * z, v.y + v.h * 0.5 - sv.cy * z));
+      return { x0: (v.x - vx) / z, x1: (v.x + v.w - vx) / z, y0: (v.y - vy) / z, y1: (v.y + v.h - vy) / z };
+    };
+    const to = (which, frames) => (x) => {
+      x.runner.vars._view = which;
+      const sv = which === 'story' ? frame(x) : null;
+      x.game.cameraTo(sv || { zoom: 1 }, frames);
+    };
+    const keeper = (chapters) => ({
+      id: 'view_keep', chapters, once: false, cooldown: 1,
+      when: (x) => {
+        const g = x.game, c = g.camera, want = x.runner.vars._view;
+        if (!want || !c || c.tween || g._hatchCam || (g.chapters && g.chapters.moment)) return false;
+        if (want === 'wide') return c.zoom > 1.02;
+        const sv = frame(x);
+        return !!sv && (Math.abs(c.zoom - sv.zoom) > 0.03 || Math.hypot(c.cx - sv.cx, c.cy - sv.cy) > 24);
+      },
+      do: [(x) => to(x.runner.vars._view, 120)(x)]
+    });
+    // (The old entrance, `dist` from the food away from the low ground, was pushed back onto the
+    // land at the map's edge: on a nest near the edge, right over the family.)
+    //
+    // Of the points just off the view along each bearing from `at` (and on the land), the
+    // nearest to `at` that is at least KEEP from everything in keepFrom, leaning away from
+    // `awayFrom` (so it is soon seen coming, not a slow crossing from the far corner); with none
+    // that far from them, the furthest from them there is.
+    const GAP = 40;   // (beyond the view's edge, past its circling radius)
+    const KEEP = 130;
+    const holdOffView = ({ at, awayFrom, keepFrom = [], fallback, hunger = 30 }) => (x) => {
+      const r = x.runner, g = x.game, t = g.terrain, sv = frame(x);
+      const a = r.point(at), lake = awayFrom ? r.point(awayFrom) : null;
+      const keep = keepFrom.map(n => r.point(n)).filter(Boolean).concat(a ? [a] : []);
+      let best = null;
+      if (sv && a) {
+        const R = rect(x, sv), m = 24;
+        const away = lake ? Math.atan2(a.y - lake.y, a.x - lake.x) : 0;
+        for (let k = 0; k < 24; k++) {
+          const ang = k * Math.PI / 12, dx = Math.cos(ang), dy = Math.sin(ang);
+          for (let d = 40; d <= 700; d += 10) {
+            const px = a.x + dx * d, py = a.y + dy * d;
+            if (px < m || py < m || px > t.mapWidth - m || py > t.mapHeight - m) break;   // (off the land first)
+            const qy = g._groundPaintY(px, py);
+            if (px > R.x0 - GAP && px < R.x1 + GAP && qy > R.y0 - GAP && qy < R.y1 + GAP) continue;
+            const near = Math.min(...keep.map(p => Math.hypot(p.x - px, p.y - py)));
+            const lean = lake ? 60 * Math.cos(ang - away) : 0;
+            const score = near >= KEEP ? 1e6 - d + lean : near + lean;
+            if (!best || score > best.score) best = { x: px, y: py, score };
+            break;
+          }
+        }
+      }
+      const hold = best ? { at: { x: best.x, y: best.y } } : (fallback || { at });
+      r._log('eagle_entrance', best ? 'off view' : 'fallback');
+      r.eaglePressure({ which: 'nearest', near: at, hold, hunger }, x.event);
+    };
+    return { frame, to, keeper, holdOffView };
+  }
 });

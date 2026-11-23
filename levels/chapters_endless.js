@@ -151,7 +151,7 @@ const CHAPTERS_ENDLESS = (() => {
       wharariki:  { cost: 25 },
       Storm:      { cost: 40, moveCost: 10, radius: 64, blocksEagleVision: true, distractsEagles: false,
                     description: "A moa under the storm can't be seen by the Pouākai." },
-      keaLure:    { cost: 30, description: "Berries draw kea: set a cache away from the nests." },
+      keaLure:    { cost: 30, description: "Berries draw kea to the nearest nest: set a cache by a rival herd's, away from your own." },
       waterhole:  { cost: 45, radius: 40 }
     },
     paletteOrder: [['speargrass'], ['patotara', 'wharariki'], ['Storm', 'keaLure', 'waterhole']],
@@ -190,7 +190,7 @@ const CHAPTERS_ENDLESS = (() => {
       hatchReward: { perSpecies: true, full: 6, reduced: 10, fullAmount: 2, reducedAmount: 1, allSpecies: true },
 
       // ---- Food and the kea, as the Pātōtara lesson ---------------------------------
-      sproutPatotara: true, placedPlantsSeasonal: true,
+      sproutPatotara: true, sproutWharariki: true, placedPlantsSeasonal: true,   // (wharariki: in leaf till three taps flower it, spring and summer)
       keaBerryLureRadius: 400, keaRaidsEggs: 'odds', keaRaidRadius: 95, keaRaidNutrition: 40, keaRaidCooldownSec: 8,
       keaRaid: { baseSuccess: 0.9, moaPenalty: 0.2, minSuccess: 0.05, moaRadius: 95 },
       flyerEdgeMargin: 14, stormFlushMult: 1.0,
@@ -206,7 +206,7 @@ const CHAPTERS_ENDLESS = (() => {
       // Hide its bird twice in one hunger and it gives the upland moa up for a while and goes
       // for other prey, by preference a herd with numbers to spare.
       coverSendsEagleAway: { after: 2, sec: 50 },
-      huntCamera: { focusOnly: true },    // when zoomed in, the view eases to a hunt and back
+      huntCamera: { focusOnly: true, zoomIn: true },   // the view eases to a hunt (closing in from the whole land) and back
 
       nestingSites: { forestCount: 0, openCount: 0, foundPatches: 2, foundRadius: 110, radius: 40,
                       laySnapRadius: 150, drawRadius: 260, layBoost: 0.5, eggSpeedBonus: 1.5 },
@@ -350,11 +350,9 @@ const CHAPTERS_ENDLESS = (() => {
         notify: ["The Pouākai has given up here and gone after the {species}.", 'success'] },
       { id: 'herd_taken', on: 'moa_killed', if: (x) => x.event && x.event.moa && x.event.moa.speciesKey !== FOCUS,
         say: [['guide', "The Pouākai took a {species}. It has to eat, and a fed eagle rests a long while.", { lit: ['$eagle'] }]] },
-      { id: 'herd_taken_again', on: 'moa_killed', if: (x) => x.event && x.event.moa && x.event.moa.speciesKey !== FOCUS, once: false, cooldown: 10,
-        notify: "The Pouākai took a {species}." },
+      // (Later catches are said over the play area as the hunt view shows them: Game._onEagleCatch.)
       { id: 'upland_taken', on: 'moa_killed', if: (x) => x.event && x.event.moa && x.event.moa.speciesKey === FOCUS, once: false,
         do: [(x) => { x.runner.vars.who = callIt(x.runner, x.event.moa); }, { notify: ["The Pouākai took {$who}.", 'error'] }] },
-      { id: 'bird_taken', on: 'bird_killed', once: false, cooldown: 10, notify: "The Pouākai took a {species}." },
       { id: 'hungry_eagle', when: { eagleHunger: ['>=', 38] }, once: false, cooldown: 60,
         notify: "The Pouākai is getting hungry. Who is out in the open?" },
 

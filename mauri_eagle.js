@@ -2,6 +2,21 @@
 // HAAST'S EAGLE CLASS
 // ============================================
 
+// A bird an eagle is after tires: from afterSec of the chase its top speed falls, over
+// overSec, to `to` of what it was, and comes back once nothing is after it. A level can tune it
+// (mechanics.chaseTire: { afterSec, overSec, to }) or turn it off (chaseTire: false).
+const CHASE_TIRE = { afterSec: 2, overSec: 2, to: 0.55 };
+
+// The share of its top speed a hunted bird (moa or flyer) has left (see CHASE_TIRE).
+function chaseTireMult(b) {
+  if (!b || b._chasedAt == null || frameCount - b._chasedAt > 3) return 1;
+  const M = typeof LEVEL_MECHANICS !== 'undefined' ? LEVEL_MECHANICS : null;
+  if (M && M.chaseTire === false) return 1;
+  const T = Object.assign({}, CHASE_TIRE, (M && M.chaseTire) || {});
+  const k = Math.max(0, Math.min(1, ((b._chasedFrames || 0) / 60 - T.afterSec) / Math.max(0.01, T.overSec)));
+  return 1 - (1 - T.to) * k;
+}
+
 class HaastsEagle extends Boid {
   static WARN_COL = [255, 190, 70];   // eagleTelegraph: the outline of a bird near its hunt
   get outlinable() { return true; }   // (its sprite takes an outline mark: EntitySprites.mark)
@@ -152,6 +167,9 @@ class HaastsEagle extends Boid {
     // Held over a place by a story (holdOver): it circles there, not hunting and not getting
     // hungrier, until the story releases it (as module 0's eagle waits through the opening).
     if (this._hold) { this._holdFlight(dt); return; }
+    // A story's landing (landAt) and its chase off the land (chaseOff): out of the hunt too.
+    if (this._perch) { this._perchFlight(dt); return; }
+    if (this._chase) { this._chaseFlight(dt); return; }
 
     this.hunger = Math.min(this.hunger + this.hungerRate * dt, this.maxHunger);
     if (this._hungerRamp) this._stepHungerRamp(dt);
@@ -558,6 +576,14 @@ class HaastsEagle extends Boid {
       this.huntSearchTimer = 0;
       this.lastTargetTime = frameCount;
 
+      // The hunted bird tires (chaseTireMult): how long this eagle has been after it, handed to
+      // the bird, which slows from CHASE_TIRE.afterSec on, so a chase closes rather than running
+      // the length of the land. (The count starts again on a new bird.)
+      if (this._chaseOf !== target) { this._chaseOf = target; this._chaseFrames = 0; }
+      else this._chaseFrames += dt;
+      target._chasedFrames = this._chaseFrames;
+      target._chasedAt = frameCount;
+
       // Fresh lock-on: arm the strike windup so the catch can't land in the first moments.
       if (hadNoTarget || retarget) this.huntWindupTimer = this.huntWindupDuration;
 
@@ -917,7 +943,7 @@ class HaastsEagle extends Boid {
     const t = this.terrain, W = t.mapWidth, H = t.mapHeight, x = prey.pos.x, y = prey.pos.y;
     const edge = { north: [x, -90, y], south: [x, H + 90, H - y], west: [-90, y, x], east: [W + 90, y, W - x] };
     const out = sides.map(s => edge[s]).filter(Boolean).sort((a, b) => a[2] - b[2])[0] || edge.north;
-    this._hold = null; this._away = null; this._hungerRamp = null;
+    this._hold = null; this._away = null; this._perch = null; this._chase = null; this._hungerRamp = null;
     this._carry = { phase: 'stoop', prey, to: { x: out[0], y: out[1] }, t: 0, sec, fade: 1, held: false };
     this.hunting = false; this.target = null; this.aimAt = null;
     this.state = 'patrol'; this._chaseLoop = null; this._huntEventFired = false;
@@ -939,7 +965,7 @@ class HaastsEagle extends Boid {
       if (Math.hypot(this.pos.x - p.pos.x, this.pos.y - p.pos.y) < 12 || c.t > 6 * 60) {
         c.phase = 'lift'; c.held = true; c.t = 0;
         p._carriedBy = this;
-        p.vel.mult(0);
+        if (p.vel) p.vel.mult(0);   // (an egg has no velocity)
         if (typeof audioManager !== 'undefined' && audioManager && audioManager.playEagleCatch) audioManager.playEagleCatch();
       }
     } else {
@@ -960,23 +986,68 @@ class HaastsEagle extends Boid {
 
   // A story's entrance (a chapter's `eagle: { hold }`; tile 1, as module 0): it circles a
   // point, out of the hunt, until release(). Its patrol is moved there too.
-  holdOver(x, y, r = 22) {
-    this._hold = { x, y, r, a: random(TWO_PI) };
+  // (`speed`: how fast it flies there and circles, as a share of its own; 0.6 by default.)
+  holdOver(x, y, r = 22, speed = 0.6) {
+    this._hold = { x, y, r, speed, a: random(TWO_PI) };
     this.hunting = false; this.target = null; this.aimAt = null;
     this.state = 'patrol'; this._chaseLoop = null; this._huntEventFired = false; this.restTimer = 0;
     this._relocateTerritory(x, y);
   }
 
   release() {
-    if (!this._hold) return;
-    this._hold = null;
+    if (!this._hold && !this._perch && !this._chase) return;
+    this._hold = null; this._perch = null; this._chase = null;
+    if (this.state === 'resting') this.state = 'patrol';
     this._noTargetFrames = 30;   // (its first hunt is a fresh one, with its wind-up)
+  }
+
+  // A story's landing (the end of 2f: the Pouākai that stays sets down where the nest was): it
+  // flies to (x, y) and settles there, resting, out of the hunt, until release() or another
+  // errand.
+  landAt(x, y) {
+    this._hold = null; this._carry = null; this._chase = null;
+    this._perch = { x, y };
+    this.hunting = false; this.target = null; this.aimAt = null;
+    this.state = 'patrol'; this._chaseLoop = null; this._huntEventFired = false;
+  }
+
+  _perchFlight(dt) {
+    const p = this._perch;
+    this.hunting = false; this.target = null;
+    const d = Math.hypot(this.pos.x - p.x, this.pos.y - p.y);
+    if (d < 3) { this.vel.mult(0); this.state = 'resting'; return; }
+    this.state = 'patrol';
+    this.maxSpeed = this.baseSpeed * 1.1;
+    this.applyForce(this.seekPoint(p.x, p.y, 1, 40));
+  }
+
+  // A story's chase (the end of 2f: the Pouākai drives Pukepuke off the land): it flies at
+  // `target` and keeps `gap` behind it, never closing, until the bird has left the land; then
+  // it goes off after it over the nearest edge and is away `sec` seconds. Never a hunt: it
+  // cannot catch what it chases.
+  chaseOff(target, { gap = 28, sec = 40 } = {}) {
+    if (!target || !target.alive) return false;
+    this._hold = null; this._carry = null; this._perch = null;
+    this._chase = { target, gap, sec };
+    this.hunting = false; this.target = null; this.aimAt = null;
+    this.state = 'patrol'; this._chaseLoop = null; this._huntEventFired = false;
+    return true;
+  }
+
+  _chaseFlight(dt) {
+    const c = this._chase, t = c.target;
+    this.hunting = false; this.target = null; this.state = 'patrol';
+    if (!t || !t.alive) { this._chase = null; this.sendAway(c.sec, { hungerBack: 30 }); return; }
+    const v = t.vel, m = Math.hypot(v.x, v.y) || 1;
+    const bx = t.pos.x - (v.x / m) * c.gap, by = t.pos.y - (v.y / m) * c.gap;
+    this.maxSpeed = Math.max(this.baseSpeed * 0.8, (t.maxSpeed || 1) * 1.1);
+    this.applyForce(this.seekPoint(bx, by, 1.2, 20));
   }
 
   _holdFlight(dt) {
     const h = this._hold;
     this.hunting = false; this.target = null; this.state = 'patrol';
-    this.maxSpeed = this.baseSpeed * 0.6;
+    this.maxSpeed = this.baseSpeed * (h.speed || 0.6);
     h.a += 0.02 * dt * (this.personality ? this.personality.turniness || 1 : 1);
     this.applyForce(this.seekPoint(h.x + Math.cos(h.a) * h.r, h.y + Math.sin(h.a) * h.r, 0.7));
     this.edges();
@@ -1143,7 +1214,7 @@ class HaastsEagle extends Boid {
     const fade = (this.lifeScript && this.lifeScript.fade != null) ? this.lifeScript.fade
                : this._away ? this._away.fade : this._carry ? this._carry.fade : 1;
     if (fade <= 0) return;
-    const isActiveHunt = (this.hunting && this.target !== null) || (!!this._carry && this._carry.phase === 'stoop');
+    const isActiveHunt = (this.hunting && this.target !== null) || (!!this._carry && this._carry.phase === 'stoop') || !!this._chase;
     const spriteState = isActiveHunt ? 'hunting' : (this.state === 'resting' ? 'resting' : 'flying');
     const sprite = EntitySprites.getEagleSprite(this.animTime, spriteState);
 
@@ -1195,13 +1266,15 @@ class HaastsEagle extends Boid {
       const v = this.vel, m = Math.hypot(v.x, v.y) || 1, back = this.wingspan * 0.4;
       push();
       if (fade < 1) drawingContext.globalAlpha *= fade;   // restored by pop()
-      translate(this.pos.x - (v.x / m) * back - held.pos.x, this.pos.y - (v.y / m) * back - held.pos.y);
+      translate(this.pos.x - (v.x / m) * back, this.pos.y - (v.y / m) * back);
+      if (!held.vel) scale(1.8);   // (an egg, drawn large enough to read in the talons)
+      translate(-held.pos.x, -held.pos.y);
       held._drawCarried = true;
       held.render();
       held._drawCarried = false;
       pop();
     }
-    if (this._away || this._carry) return;   // (on its errand: no rings or bars over a bird half gone)
+    if (this._away || this._carry || this._perch || this._chase) return;   // (on its errand: no rings or bars over a bird half gone)
 
     if (this.state === 'distracted') {
       fill(255, 200, 100);
@@ -1233,7 +1306,7 @@ class HaastsEagle extends Boid {
   // threshold, not hunting yet): its outline shows amber (render).
   _telegraphing() {
     const _T = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS) ? LEVEL_MECHANICS.eagleTelegraph : null;
-    return !!_T && !this._away && !this._carry && !this.hunting && this.state !== 'resting' && this.state !== 'distracted' &&
+    return !!_T && !this._away && !this._carry && !this._perch && !this._chase && !this.hunting && this.state !== 'resting' && this.state !== 'distracted' &&
       this.hunger >= (this._huntThreshEff ?? this.huntThreshold) - (_T.warnBelow ?? 10);
   }
 
@@ -1303,4 +1376,13 @@ class HaastsEagle extends Boid {
       );
     }
   }
+}
+// The bird a Pouākai is hunting right now is drawn with a pulsing red outline (Moa.render,
+// Kereru.render), so the player can see whose life is at stake. The eagle names its quarry each
+// step (Simulation.updateEagles sets _huntedBy); this checks the hunt is still on. Render only.
+function huntedOutline(e) {
+  const h = e && e._huntedBy;
+  if (!h || !h.alive || !h.hunting || h.target !== e) return null;
+  const t = (typeof millis === 'function') ? millis() : 0;
+  return { col: [235, 40, 30], alpha: 0.45 + 0.55 * (0.5 + 0.5 * Math.sin(t / 130)) };
 }

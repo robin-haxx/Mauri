@@ -124,7 +124,7 @@ function seedList(opt) {
           for (const [t] of seenHunt) if (!t.alive || !sim.eagles.some(e => e.alive && e.hunting && e.target === t)) seenHunt.delete(t);
           if (KIND.feed && now >= nextFeed) {
             nextFeed = now + KIND.feedEvery * 60;
-            for (const p of sim.placeables) if (p.alive && p.unsprouted && game._sprout) game._sprout(p);   // (free)
+            for (const p of sim.placeables) if (p.alive && p.unsprouted && game._sprout && Plant.canSproutIn(p.type, game.seasonManager.currentKey)) game._sprout(p);   // (free; in its seasons)
             const sk = game.seasonManager.currentKey;
             const cold = sk === 'winter' || (sk === 'autumn' && game.seasonManager.progress > 0.6);
             const type = cold ? 'wharariki' : 'patotara', line = cold ? 45 : 55;
@@ -143,7 +143,7 @@ function seedList(opt) {
           }
           if (player !== 'basic') return;
           // ...and, with 'basic': sprout any bare patch, and in winter set flax by the family.
-          for (const p of sim.placeables) if (p.alive && p.unsprouted && game._sprout) { game._sprout(p); ch._log('player', 'sprout', p.type); }
+          for (const p of sim.placeables) if (p.alive && p.unsprouted && game._sprout && Plant.canSproutIn(p.type, game.seasonManager.currentKey)) { game._sprout(p); ch._log('player', 'sprout', p.type); }
           if (game.seasonManager.currentKey === 'winter') {
             const m = ch.castEnts.mama || ch.castEnts.papa;
             if (m && m.alive && !sim.placeables.some(p => p.alive && p.type === 'wharariki' && Math.hypot(p.pos.x - m.pos.x, p.pos.y - m.pos.y) < 80) &&

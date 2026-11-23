@@ -54,17 +54,19 @@ const CAMPAIGN = {
   },
 
   // The tiles. `needs`: the tiles that must be won first. A tile with no level is still to come.
+  // `years`: how long the tile plays (the win card's "Continue journey · N years");
+  // `freePlay`: a free play (its subheading on the win card starts "Free Play:").
   TILES: {
-    t1:  { label: '1',  title: "The Storm",        level: 'journey_storm',            needs: [] },
-    t2:  { label: '2',  title: "Pātōtara",         level: 'journey_patotara',         needs: ['t1'] },
-    t2f: { label: '2f', title: "Five years",       level: 'chapters_freeplay_journey', needs: ['t2'] },
-    t3:  { label: '3',  title: "Into the bush",    level: 'journey_bush',             needs: ['t2f'] },
-    t4:  { label: '4',  title: "Night parrots",    level: 'journey_kakapo',           needs: ['t3'] },
-    t4f: { label: '4f', title: "Mast years",       level: 'journey_mast_years',       needs: ['t4'] },
-    t5:  { label: '5',  title: "The crowded forest", level: 'journey_kaka',           needs: ['t2f'] },
-    t6:  { label: '6',  title: "The crested one",  level: 'journey_crested',          needs: ['t5'] },
-    t6f: { label: '6f', title: "Giant moa",        level: 'journey_giants',           needs: ['t6'] },
-    t7:  { label: '7',  title: "Paths meet",       level: 'journey_meeting',          needs: ['t4', 't6'] },
+    t1:  { label: '1',  title: "The Storm",        level: 'journey_storm',            needs: [],     years: 1 },
+    t2:  { label: '2',  title: "Pātōtara",         level: 'journey_patotara',         needs: ['t1'], years: 1 },
+    t2f: { label: '2f', title: "Four years",       level: 'chapters_freeplay_journey', needs: ['t2'], years: 4, freePlay: true },
+    t3:  { label: '3',  title: "Into the bush",    level: 'journey_bush',             needs: ['t2f'], years: 1 },
+    t4:  { label: '4',  title: "Night parrots",    level: 'journey_kakapo',           needs: ['t3'], years: 2 },
+    t4f: { label: '4f', title: "Mast years",       level: 'journey_mast_years',       needs: ['t4'], years: 8, freePlay: true },
+    t5:  { label: '5',  title: "The crowded forest", level: 'journey_kaka',           needs: ['t2f'], years: 1 },
+    t6:  { label: '6',  title: "The crested one",  level: 'journey_crested',          needs: ['t5'], years: 1 },
+    t6f: { label: '6f', title: "Giant moa",        level: 'journey_giants',           needs: ['t6'], years: 8, freePlay: true },
+    t7:  { label: '7',  title: "Paths meet",       level: 'journey_meeting',          needs: ['t4', 't6'], years: 1 },
     t7f: { label: '7f', title: "Endless",          level: null,                       needs: ['t7'] },
     qNE: { label: '7f', title: "year 2",           level: null,                       needs: ['t7'] },
     qNW: { label: '7f', title: "year 3",           level: null,                       needs: ['t7'] },
@@ -84,6 +86,50 @@ const CAMPAIGN = {
     { name: 'west',     color: [150, 210, 170], cells: [[2, 3], [1, 3], [1, 2], [1, 1]] },   // with Koukou
     { name: 'north',    color: [170, 196, 236], cells: [[2, 3], [2, 2], [2, 1], [1, 1]] }    // with Pukepuke
   ],
+
+  // THE ONE LAND. The CELLS are areas (play windows) of one continuous land, east high and
+  // falling west to the sea, as Free Play's slope. It is LAND.cols × LAND.rows windows, with a
+  // spare row north and south (rowOffset: CELLS row r is land row r + 1), so no tile lies on
+  // the land's edge, where the island falls away. Each tile generates only the areas it needs
+  // of it (worldGridFor), so the ground is the same wherever two tiles meet. A tile's way on
+  // pans across that ground to the next tile's area and loads it there, on the same seed
+  // (Game._journeyOnward). An area is a set size of ground (areaW × areaH world units: the play
+  // window of a 16:9 screen at the tiles' zoom of 2), so it is the same ground whatever shape
+  // the screen is, or becomes between tiles (a tablet turned); each window is centred on it.
+  LAND: { cols: 3, rows: 7, rowOffset: 1, areaW: 680, areaH: 380,
+          // (As the modules' grid: the raw alps kept under the height clamp, so each tile's
+          // elevationWindow fit has relief to work with. The sea is held back off the
+          // western cells, as Free Play does, so the middle column is all land.)
+          openLandScale: 0.55, coastBase: 0.015, coastRange: 0.26,
+          pixelScaleMult: 1.4 },
+
+  // A tile's [col, row] on the land (CELLS, with LAND.rowOffset), or null if it isn't drawn.
+  landCell(id) {
+    for (const c of this.CELLS) if (c.tiles.includes(id)) return [c.col, c.row + this.LAND.rowOffset];
+    return null;
+  },
+
+  // The world grid for a journey level (applyLevelToConfig): the box of land cells holding its
+  // own tile and the tiles its ways on lead to, as a window of the one land. A box of one cell
+  // takes the cell south of it too (a world grid needs two areas). Null for a level that isn't
+  // a tile, or that gives its own worldGrid.
+  worldGridFor(level) {
+    if (!level || level.worldGrid) return null;
+    const id = this.tileOf(level.id), own = id && this.landCell(id);
+    if (!own) return null;
+    const L = this.LAND, cells = [own];
+    for (const w of (level.waysOn || [])) { const c = this.landCell(w.tile); if (c) cells.push(c); }
+    let c0 = Math.min(...cells.map(c => c[0])), c1 = Math.max(...cells.map(c => c[0]));
+    let r0 = Math.min(...cells.map(c => c[1])), r1 = Math.max(...cells.map(c => c[1]));
+    if (c0 === c1 && r0 === r1) { if (r1 + 1 < L.rows) r1++; else r0--; }
+    return {
+      cols: c1 - c0 + 1, rows: r1 - r0 + 1,
+      order: [[own[0] - c0, own[1] - r0]],
+      land: { cols: L.cols, rows: L.rows, col: c0, row: r0, areaW: L.areaW, areaH: L.areaH },
+      openLandScale: L.openLandScale, coastBase: L.coastBase, coastRange: L.coastRange,
+      pixelScaleMult: L.pixelScaleMult
+    };
+  },
 
   // The menu's sequence (Game._renderJourneyModules): the tiles in four groups, each a lesson
   // or two and the free play after them, laid out 2×2. `path` names the PATHS colour. A null
@@ -105,7 +151,7 @@ const CAMPAIGN = {
   BLURBS: {
     t1:  "A storm hides a moa from the Pouākai.",
     t2:  "Pātōtara feeds the family, and the kea come for the egg.",
-    t2f: "Five years on the same land. Pipi hatches.",
+    t2f: "Four years on the tops. Pipi's egg is laid, and taken.",
     t3:  "Koukou and her family meet the little bush moa.",
     t4:  "The kākāpō set a riddle about the rimu.",
     t4f: "Eight years. Keep the forest bountiful as the cold comes down.",
@@ -162,6 +208,7 @@ const CAMPAIGN = {
       v: this.VERSION, openAll: false,
       birds,                      // name -> { alive, born, taken?, cause?, at? (the tile it was lost or taken on) }
       siblings: 0,                // Pukepuke's younger siblings raised on the north path
+      tribe: 0,                   // unnamed upland moa who followed Koukou west at the end of 2f
       // Middling numbers stand in for a free play that was not played (decision 5).
       herds: { bush_moa: 6, kakapo: 5, giant: 3, kaka: 5, clan: 5 },
       played: {},                 // herd key -> true once a level has really written it
@@ -256,14 +303,50 @@ const CAMPAIGN = {
     return !!this.record.openAll || t.needs.every(n => this.isWon(n));
   },
 
-  // The win card's ways on: a level's `waysOn: [{ label, tile }]`, those that can be played.
+  // The win card's ways on: a level's `waysOn: [{ label, tile, sub }]`, those that can be played.
+  // Each comes back with its button label ("Continue journey · N years") and its subheading
+  // (`sub`, after "Free Play: " when the tile is a free play).
   waysOn(level) {
     const out = [];
     for (const w of (level.waysOn || [])) {
       const t = this.TILES[w.tile];
-      if (t && t.level && typeof LEVEL_REGISTRY !== 'undefined' && LEVEL_REGISTRY.get(t.level)) out.push({ label: w.label, id: t.level });
+      if (!t || !t.level || typeof LEVEL_REGISTRY === 'undefined' || !LEVEL_REGISTRY.get(t.level)) continue;
+      const y = t.years || 1;
+      out.push({
+        id: t.level,
+        label: `Continue journey · ${y} year${y === 1 ? '' : 's'}`,
+        sub: (t.freePlay ? 'Free Play: ' : '') + (w.sub || w.label)
+      });
     }
     return out;
+  },
+
+  // The tools a level's chapters hand the player (its `tools` and each chapter's).
+  _levelTools(def) {
+    const out = new Set();
+    if (!def) return out;
+    for (const t of [].concat(def.tools || [])) out.add(t);
+    const chs = Array.isArray(def.chapters) ? def.chapters : (def.chapters && typeof def.chapters === 'object' ? Object.values(def.chapters) : []);
+    for (const ch of chs) for (const t of ((ch && ch.tools) || [])) out.add(t);
+    return out;
+  },
+
+  // The win card's "You've unlocked": the tools this tile is the first on the way to use.
+  unlocks(level) {
+    const tile = this.tileOf(level.id);
+    if (!tile || typeof LEVEL_REGISTRY === 'undefined') return [];
+    const before = new Set(), seen = new Set();
+    const walk = (id) => {
+      for (const n of (this.TILES[id] || {}).needs || []) {
+        if (seen.has(n)) continue;
+        seen.add(n);
+        const t = this.TILES[n];
+        if (t && t.level) for (const x of this._levelTools(LEVEL_REGISTRY.get(t.level))) before.add(x);
+        walk(n);
+      }
+    };
+    walk(tile);
+    return [...this._levelTools(level)].filter(t => !before.has(t) && typeof PLACEABLES !== 'undefined' && PLACEABLES[t]);
   },
 
   // ---- Who is who ----------------------------------------------------------------------------
@@ -366,17 +449,13 @@ const CAMPAIGN = {
     this.save();
   },
 
-  // The win card's lines for a journey level: who walks on, and who was lost here.
-  cardLines(level, runner) {
+  // The win card's lines for a journey level: only who was lost or carried off here.
+  cardLines(level) {
     const rec = this.record, tile = this.tileOf(level.id), out = [];
-    const O = level.outcome || {};
-    const on = (O.birds || []).filter(n => this.alive(n));
-    if (on.length) out.push(`Walking on: ${this._list(on)}.`);
     const lostHere = Object.keys(rec.birds).filter(n => rec.birds[n].born && !rec.birds[n].alive && rec.birds[n].at === tile);
     for (const n of lostHere) out.push(`${this.title(n).charAt(0).toUpperCase() + this.title(n).slice(1)} was ${this._causeWords(rec.birds[n].cause)} here.`);
     const takenHere = Object.keys(rec.birds).filter(n => this.taken(n) && rec.birds[n].at === tile);
     for (const n of takenHere) out.push(`${this._cap(this.title(n))} was carried off by the Pouākai here.`);
-    if (level.closingLines) { try { out.push(...[].concat(level.closingLines(rec, runner) || [])); } catch (e) { /* a level's own words */ } }
     return out;
   }
 };

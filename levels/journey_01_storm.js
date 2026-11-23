@@ -86,12 +86,25 @@ const JOURNEY_STORM = (() => {
     return live.length ? live.reduce((a, b) => (a.pos.y <= b.pos.y ? a : b)) : null;
   };
 
+  // THE VIEW. The story happens on one stretch of the land: the nest and the berries on the
+  // tops, the storms standing round them, and the way down to the tarn and the wharariki. The
+  // view is held close on that stretch (1.3x at most), with room round it for a storm or the
+  // Pouākai to come in from. It opens wide only for the Pouākai's return in autumn (and winter,
+  // when it hunts the lake), and closes in again as spring begins. The hatch and the story
+  // moments take the view and give it back; a keeper puts it back if anything leaves it elsewhere.
+  const V = K.storyView({ sites: ['nest', 'grove', 'tops', 'lookout', 'tops2', 'lookout2', 'tarn', 'shore'], zoom: [1.1, 1.3] });
+  const viewTo = V.to;
+  // The Pouākai's entrance (CHAPTERS_KIT.storyView's holdOffView): circling out of sight, well
+  // away from the family, leaning away from the lake; let go, it flies in over the berries.
+  const holdOffView = V.holdOffView({ at: 'grove', awayFrom: 'tarn', keepFrom: ['mama', 'papa', 'nest'],
+                                      fallback: { at: 'grove', awayFrom: 'tarn', dist: 160 } });
+
   return Object.assign({}, base, {
     id: 'journey_storm',
     name: "The Storm",
     section: 'journey', journey: true, sketch: undefined,
     nextLevel: undefined,
-    waysOn: [{ label: "North, to the pātōtara glade", tile: 't2' }],
+    waysOn: [{ label: "North, to the pātōtara glade", tile: 't2', sub: "The family heads north, to the pātōtara glade" }],
     outcome: { birds: FAMILY },
 
     // The herd on the flats: one more stout-legged moa than the Storm lesson's seven.
@@ -105,6 +118,9 @@ const JOURNEY_STORM = (() => {
     },
 
     sites: Object.assign({}, base.sites, {
+      // The winter waterhole: a glade in the montane forest below the nest, where upland moa
+      // drift in the cold anyway (not the lowest ground, out on the flats at the map's far side).
+      tarn:  { find: 'refuge', near: 'nest', biome: 'forestRefuge', dist: [140, 260], ideal: 180 },
       shore: { near: 'tarn', dist: [34, 60] }      // where the wharariki grows, by the water
     }),
 
@@ -130,7 +146,7 @@ const JOURNEY_STORM = (() => {
         goals: [
           { id: 'seen_off', name: "Hide the family from the Pouākai",
             done: { all: [{ beat: 'first_hunt' }, { not: { hunting: true } }] }, reward: 15 },
-          { id: 'hatched', name: "The egg hatches", done: { seen: ['egg_hatched', { species: 'upland_moa' }] }, reward: 20 },
+          { id: 'hatched', name: "Keep the egg safe until it hatches", done: { seen: ['egg_hatched', { species: 'upland_moa' }] }, reward: 20 },
           parents('parents')
         ],
         holdSeason: { until: { all: [{ goal: 'hatched' }, { beat: 'first_hunt' }] }, at: 0.9, maxSec: 45 }
@@ -160,7 +176,7 @@ const JOURNEY_STORM = (() => {
           K.headFor(FAMILY, 'shore')
         ],
         goals: [
-          { id: 'down', name: "The family down to the wharariki, unseen", done: { near: ['mama', 'tarn', 100] }, reward: 20 },
+          { id: 'down', name: "Get the family to the wharariki unseen", done: { near: ['mama', 'tarn', 100] }, reward: 20 },
           parents('parents2')
         ],
         holdSeason: { until: { goal: 'down' }, at: 0.9, maxSec: 45 }
@@ -169,6 +185,7 @@ const JOURNEY_STORM = (() => {
       { id: 'winter', title: "Winter: by the lake",
         tools: ['Storm'],
         start: [
+          viewTo('wide', 150),             // (wide all winter, whether or not autumn's return opened it)
           { fade: { type: 'Storm', sec: 25, refreshOnMove: true } },
           K.headFor(FAMILY, 'shore'),      // (whoever is not yet at the tarn goes on down)
           { say: [
@@ -181,7 +198,7 @@ const JOURNEY_STORM = (() => {
           { id: 'winter_press2', when: { seasonProgress: ['>=', 0.7] }, do: [{ eagle: { hunger: 56 } }] }
         ],
         goals: [
-          { id: 'through', name: "Come through the winter", survive: true, reward: 25 },
+          { id: 'through', name: "Make it through winter", survive: true, reward: 25 },
           parents('parents3')
         ]
       },
@@ -190,6 +207,7 @@ const JOURNEY_STORM = (() => {
       { id: 'spring', title: "Spring: home to the tops", transfer: true,
         tools: ['Storm'],
         start: [
+          viewTo('story', 150),            // (winter is over: close in on the way home)
           { say: [
             ['pukepuke', "Yum! I love wharariki flowers!", { lit: ['wharariki'] }],                                         // (M0)
             ['papa', "Well, we have to leave this waterhole now, Pukepuke, so you better stuff as many into your beak as you can!"],   // (M0)
@@ -209,8 +227,8 @@ const JOURNEY_STORM = (() => {
             do: [K.headFor(FAMILY, 'home')] }
         ],
         goals: [
-          { id: 'home', name: "The family home to the nest, unseen", reward: 25, done: homeNow },
-          { id: 'own', name: "Meet a danger with no help", done: { gained: ['unaided', '>=', 1] }, stretch: true, reward: 30 },
+          { id: 'home', name: "Get the family home to the nest unseen", reward: 25, done: homeNow },
+          { id: 'own', name: "Deal with a danger before any hint", done: { gained: ['unaided', '>=', 1] }, stretch: true, reward: 30 },
           parents('parents4')
         ],
         // (Spring waits a good while for them: the story ends at the nest.)
@@ -273,18 +291,23 @@ const JOURNEY_STORM = (() => {
           K.hensHaveLaid(['mama']),
           { sow: { plant: 'patotara', at: 'grove', count: 5, radius: 26, sprouted: true } },
           ...['tops', 'lookout', 'tops2', 'lookout2'].map(at => ({ place: { type: 'Storm', at, standing: true } })),
-          // The Pouākai's entrance, as module 0's: set down on its way over from the high ground
-          // (away from the flats and the herd), circling there out of the hunt through the
-          // opening, until the first hunt sends it for the family.
-          { eagle: { which: 'nearest', near: 'grove', hold: { at: 'grove', awayFrom: 'tarn', dist: 160 }, hunger: 30 } }
+          // The Pouākai's entrance, as module 0's: set down on its way over, out of sight (see
+          // holdOffView), circling there out of the hunt through the opening, until the first
+          // hunt sends it for the family.
+          holdOffView,
+          // (The view opens close on the story's stretch of land: see THE VIEW.)
+          viewTo('story', 1)
         ] },
+
+      // ---- The view: held where the level says, whatever took it meanwhile ---------------------------
+      V.keeper(['summer', 'autumn', 'winter', 'spring', 'closing']),
 
       // ---- Te Whē on black, the fade in, and the family's first words -----------------------------
       ...K.prologue({
         lines: [
           "Before people found the land, Aotearoa New Zealand was ruled by birds.",
           ["Forests like Kahurangi in the Southern Alps bustled with the calls of Kea, Kiwi, Kākā, Kākāpō, Kōkako, Takahē and Huia.",
-            { voices: ['kea', 'kakapo'], voicesSec: 7 }],
+            { voices: ['moa', 'kea', 'kakapo'], voicesSec: 7 }],   // (the moa leads; the others join it)
           "But the forests they filled weren't always that dense, dark green bush we think of when we visit the native back country.",
           "Over the last 100,000 years, the earth's temperature rose and fell in cycles. This was called the OTIRA GLACIATION. Each time it fell, more of the ancient forest died back, taking hundreds of years to regrow.",
           ["The final cold phase happened 30,000 years ago: The LAST GLACIAL MAXIMUM.", { speaker: 'gust' }],
@@ -352,12 +375,14 @@ const JOURNEY_STORM = (() => {
       // ---- Autumn: the Pouākai is back, the walk down, a hungry moa, a storm blown out ------------
       { id: 'eagle_back', when: (x) => x.game.seasonManager.currentKey === 'autumn' && x.runner.eagleHungerMax() >= 36 && !fedOnHerd(x),
         chapters: ['autumn'],
+        do: [viewTo('wide', 150)],         // (the view opens to show it coming: see THE VIEW)
         say: [
           P("Now, that was barely a meal at all... All those Kea had in their nest were disgusting, little round orange things!"),   // (M0)
           P("Aha! I spy something more kai-shaped moving, under that cloud... That's moa like it!", { lit: [...FAMILY, 'Storm'] })   // (M0)
         ] },
       { id: 'eagle_back_fed', when: (x) => x.game.seasonManager.currentKey === 'autumn' && x.runner.eagleHungerMax() >= 36 && fedOnHerd(x),
         chapters: ['autumn'],
+        do: [viewTo('wide', 150)],         // (the view opens to show it coming: see THE VIEW)
         say: [
           P("Now, that S... stout-legged supper was a long time ago... and my tummy knows it!"),                             // NEW
           P("Aha! I spy something more kai-shaped moving, under that cloud... That's moa like it!", { lit: [...FAMILY, 'Storm'] })   // (M0)

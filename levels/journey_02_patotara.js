@@ -12,7 +12,7 @@
 //              bring Strongbeak, who calls Skraak and Huft-Tuft. They mean to have the egg.
 //              Moa gathered at the nest drive them off. The egg hatches: Koukou.
 //   autumn     The families part for winter, each to its own low ground. The Pouākai.
-//   winter     The berries are gone. Flax: wharariki, grown by the family.
+//   winter     The berries are gone. Flax: wharariki, planted by the family and grown by three taps.
 //   spring     Flax flowers for Koukou's family, and the way home. NOTHING IS PROMPTED.
 //
 // What the simulation does on its own. As the Clues setting: the kea's interest in berries
@@ -24,8 +24,9 @@
 // How it teaches. By clue first, in voice:
 //   - Sprouting is a new control, so it is told outright.
 //   - The raid is the lesson. Nothing is said beyond the kea's own scene (Skraak sees the egg;
-//     Pukepuke shouts at them). Then Skraak counts the moa at the nest out loud. Then the
-//     instruction.
+//     Pukepuke shouts at them). Then Skraak counts the moa at the nest out loud, and the mantis
+//     teaches mana (raid_teach). Until the raid is over the Pouākai leaves the upland moa be
+//     (eagle_free).
 //   - Winter food climbs the same ladder: Papa's line, then Pukepuke's question, then the
 //     instruction.
 //   - The storm was taught on tile 1, so the Pouākai's hunts climb the ladder from the first.
@@ -51,8 +52,11 @@ const JOURNEY_PATOTARA = (() => {
   const kea = (title, text, extra) => ['kea', text, Object.assign({ title }, extra || {})];
   const eggInNest = (x) => x.runner.sim.eggs.some(e => e.alive && !e.hatched && e.parentSpecies === 'upland_moa');
   const homeNow = { all: [{ near: ['mama', 'home', 120] }, { near: ['pukepuke', 'home', 140] }] };
-  const flaxNear = { near: ['wharariki', 'mama', 90] };
-  const sprouted = (x) => (x.runner.counters['sprouted:patotara'] || 0) > 0;   // (pātōtara: wharariki flowering counts apart)
+  // A wharariki GROWN by Mama (three taps: planted, it is a young clump with nothing to eat yet).
+  const flaxNear = (x) => { const m = x.runner.castEnts.mama;
+    return !!m && m.alive && x.runner.sim.placeables.some(p => p.alive && p.type === 'wharariki' && !p.unsprouted &&
+      (p.pos.x - m.pos.x) ** 2 + (p.pos.y - m.pos.y) ** 2 <= 90 * 90); };
+  const sprouted = (x) => (x.runner.counters['sprouted:patotara'] || 0) > 0;   // (pātōtara: wharariki growing counts apart)
   const firedAgo = (x, id, sec) => x.runner.reactions.some(r => r.id === id && r.fired && r.lastAt < x.game.playTime - sec * 60);
 
   // THE VIEW (CHAPTERS_KIT.storyView), as tile 1's but not as close (1.2x at most): the two
@@ -214,7 +218,9 @@ const JOURNEY_PATOTARA = (() => {
           // (The Pouākai is set down out of sight, away from both families, and flies in to patrol
           // the lookout: see THE VIEW.)
           V.holdOffView({ at: 'home', awayFrom: 'tarn', keepFrom: ['mama', 'papa', 'friendNest', 'arrive'], hunger: 25 }),
-          { eagle: { which: 'nearest', near: 'home', release: true, watch: 'lookout', hunger: 25 } },
+          // (It leaves the upland moa be until the nest raid is over: see 'eagle_free'. It may
+          // still take one of the stout-legged herd.)
+          { eagle: { which: 'nearest', near: 'home', release: true, watch: 'lookout', hunger: 25, spare: ['upland_moa'] } },
           // The family walks in to the glade beside the neighbours' nest.
           K.headFor(FAMILY, 'home'),
           V.to('story', 1)
@@ -268,9 +274,7 @@ const JOURNEY_PATOTARA = (() => {
         until: { any: [{ seen: ['nest_raid'] }, { after: 40 }] },
         solved: { seen: ['nest_raid', { success: false }] }, lost: { seen: ['nest_raid', { success: true }] },
         hints: [
-          { after: 5, notify: ['Skraak: "Only two moa at that nest... easy pickings, boss!"', 'error'] },                  // NEW
-          { after: 11, banner: { words: ["Grow PĀTŌTARA by their NEST to bring your family over", "Tap beside their NEST to grow PĀTŌTARA, then sprout it"],   // (M1)
-                                 tool: 'patotara', lit: ['kea', 'nests', ...FAMILY], pause: false, maxSec: 22 } }
+          { after: 5, notify: ['Skraak: "Only two moa at that nest... easy pickings, boss!"', 'error'] }                   // NEW
         ] },
       // Later visits climb the same ladder, more slowly.
       { id: 'kea_again', when: (x) => eggInNest(x) && x.runner.nearCheck('kea', 'friendsHome', 170, null) && firedAgo(x, 'kea_gang', 30),
@@ -278,9 +282,7 @@ const JOURNEY_PATOTARA = (() => {
         until: { any: [{ seen: ['nest_raid'] }, { after: 40 }] },
         solved: { seen: ['nest_raid', { success: false }] }, lost: { seen: ['nest_raid', { success: true }] },
         hints: [
-          { after: 6, notify: ['Skraak: "Is anybody watching that nest?"', 'error'] },                                    // NEW
-          { after: 13, banner: { words: ["Gather the moa at the NEST: grow PĀTŌTARA beside it and sprout it", "Tap beside the NEST to grow PĀTŌTARA"],
-                                 tool: 'patotara', lit: ['kea', 'nests'], pause: false, maxSec: 20 } }
+          { after: 6, notify: ['Skraak: "Is anybody watching that nest?"', 'error'] }                                     // NEW
         ] },
       // ...and if summer has waited forty seconds for her and she still has not hatched, an egg
       // close to hatching is set down there: the story cannot go on without her.
@@ -329,6 +331,11 @@ const JOURNEY_PATOTARA = (() => {
           kea("Kea", "SKRAAWK! Move over, you giant wingless birds! This glade is ours now!", { lit: ['kea'] }),         // (M1)
           ['friendMama', "Our egg! ...There's still time for another this summer. Stay close to us this time, won't you?", { lit: ['nests', ...FAMILY] }]   // NEW
         ] },
+      // The raid is over (the moa saw the kea off, or the kea took the egg) and its scene has been
+      // read: from now on the Pouākai hunts the upland moa too. (As autumn opens at the latest.)
+      { id: 'eagle_free', when: (x) => (x.runner.reactions.some(r => (r.id === 'raid_failed' || r.id === 'raid_won') && r.fired) && K.idle(x)) ||
+                                      (!!x.runner.cur && x.runner.cur.id !== 'summer'),
+        do: [{ eagle: { spare: [] } }] },
       { id: 'raid_won_again', on: 'nest_raid', if: (x) => !!x.event && !!x.event.success && firedAgo(x, 'raid_won', 1), once: false, cooldown: 12,
         notify: ["The kea took an egg from the nest.", 'error'] },
       // The story needs Koukou. While she has not hatched and the neighbours' nest stands empty
@@ -359,9 +366,14 @@ const JOURNEY_PATOTARA = (() => {
         until: { any: [flaxNear, { after: 40 }] }, solved: { all: [flaxNear, { placed: 'wharariki' }] },
         hints: [
           { after: 12, notify: 'Pukepuke: "But papa, where IS the flax?"' },                                               // NEW
-          { after: 22, banner: { words: ["Grow WHARARIKI by the family: it keeps its food through the cold", "Tap beside the family to grow WHARARIKI"],
+          { after: 22, banner: { words: ["Grow WHARARIKI by the family: it keeps its food through the cold", "Tap beside the family to plant WHARARIKI"],
                                  tool: 'wharariki', lit: FAMILY, pause: false, maxSec: 22 } }
         ] },
+      // Planted, it is still a young clump: three taps grow it (as the pātōtara was sprouted).
+      { id: 'flax_grow', on: 'placement', if: (x) => !!x.event && x.event.type === 'wharariki' && !x.runner.counters['sprouted:wharariki'],
+        chapters: ['winter'], once: false, cooldown: 20,
+        banner: { words: ["Tap the WHARARIKI three times to grow it", "Tap the WHARARIKI three times to grow it"],
+                  until: { seen: ['plant_sprouted', { type: 'wharariki' }] }, lit: ['wharariki'], pause: false, maxSec: 30 } },
       { id: 'flax_home', on: 'case_closed', if: (x) => x.event && x.event.case === 'flax' && x.event.outcome === 'solved',
         say: [['mama', "There's plenty of kai at the WATERHOLE... We can watch the WHARARIKI grow its flowers!", { lit: ['wharariki', 'waterhole'] }]] },   // (M1)
 

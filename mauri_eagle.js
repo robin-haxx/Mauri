@@ -17,6 +17,11 @@ function chaseTireMult(b) {
   return 1 - (1 - T.to) * k;
 }
 
+// How close (in catch radii) the bird it is after must be for the Pouākai to come down among the
+// trees to strike (`in`), and how far it must get again before the Pouākai is drawn over the
+// canopy once more (`out`). See HaastsEagle.isStriking.
+const EAGLE_STRIKE_REACH = { in: 2.5, out: 3.5 };
+
 class HaastsEagle extends Boid {
   static WARN_COL = [255, 190, 70];   // eagleTelegraph: the outline of a bird near its hunt
   get outlinable() { return true; }   // (its sprite takes an outline mark: EntitySprites.mark)
@@ -461,7 +466,7 @@ class HaastsEagle extends Boid {
     for (let i = 0; i < nearbyMoas.length; i++) {
       const moa = nearbyMoas[i];
       if (!moa.alive) continue;
-      if (simulation.isSpeciesProtected && simulation.isSpeciesProtected(moa.speciesKey)) continue; // never target a protected floor species
+      if (this._offLimits(simulation, moa.speciesKey)) continue; // never a protected floor species, nor one a story spares (Simulation.eagleSpare)
       const dx = moa.pos.x - px;
       const dy = moa.pos.y - py;
       const dSq = dx * dx + dy * dy;
@@ -533,7 +538,7 @@ class HaastsEagle extends Boid {
       const frac = cur.shelterSpotFrac || 0;
       const hidden = !!cur.inShelter && (frac <= 0 || dSq > this.huntRadius * this.huntRadius * frac * frac);
       const shunned = this._shunSpecies === cur.speciesKey && this._clock < (this._shunUntil || 0);
-      const guarded = simulation.isSpeciesProtected && simulation.isSpeciesProtected(cur.speciesKey);
+      const guarded = this._offLimits(simulation, cur.speciesKey);
       if (!hidden && !shunned && !guarded && dSq <= this.huntRadius * this.huntRadius * 1.3) {
         target = cur; targetDistSq = dSq; targetIsFlyer = !!cur.isFlyer;
       }
@@ -542,7 +547,7 @@ class HaastsEagle extends Boid {
     // An aimed moa out in the open (a chapter level's `aim`) is gone after from any distance,
     // ahead of nearer prey. Under cover it can't be seen, so the scan above decides.
     const aim = this.aimAt;
-    if (aim && aim.alive && !aim.inShelter && target !== aim) {
+    if (aim && aim.alive && !aim.inShelter && target !== aim && !this._offLimits(simulation, aim.speciesKey)) {
       const dx = aim.pos.x - px, dy = aim.pos.y - py;
       target = aim; targetDistSq = dx * dx + dy * dy; targetIsFlyer = false;
     }
@@ -659,7 +664,7 @@ class HaastsEagle extends Boid {
         const prey = simulation.getClosestMoa(this.pos.x, this.pos.y, pr, m =>
           m.alive && !m.inShelter &&
           !(this._shunSpecies === m.speciesKey && this._clock < (this._shunUntil || 0)) &&
-          !(simulation.isSpeciesProtected && simulation.isSpeciesProtected(m.speciesKey)));
+          !this._offLimits(simulation, m.speciesKey));
         if (prey) {
           this.huntSearchTimer = 0;            // an active chase never "times out" into a relocate
           this.maxSpeed = this.huntSpeed;
@@ -691,7 +696,7 @@ class HaastsEagle extends Boid {
           }
           if (!anchor) {
             const prey = simulation.getClosestMoa
-              ? simulation.getClosestMoa(this.pos.x, this.pos.y, followR)
+              ? simulation.getClosestMoa(this.pos.x, this.pos.y, followR, m => m.alive && !this._offLimits(simulation, m.speciesKey))
               : null;
             if (prey) anchor = prey.pos;
           }
@@ -866,6 +871,14 @@ class HaastsEagle extends Boid {
 
   // Move this bird's territory onto (x, y) and drag a bonded partner to a nearby offset,
   // so a relocating pair stays inside mate range.
+  // A kind it may not hunt right now: one held at its population floor
+  // (Simulation.isSpeciesProtected), or one a story spares for a while (Simulation.eagleSpare,
+  // a chapter's eagle { spare }). Only the hunt: a spared kind still starves like any other.
+  _offLimits(simulation, key) {
+    if (simulation.eagleSpare && simulation.eagleSpare.has(key)) return true;
+    return !!(simulation.isSpeciesProtected && simulation.isSpeciesProtected(key));
+  }
+
   // Give up on `shun` (a species whose birds keep getting under cover) and take the hunt to
   // other prey: the nearest moa in the open of another kind, a plentiful kind reading as nearer
   // and a scarce one as further. The territory moves there, and the shunned kind is not seen
@@ -877,7 +890,7 @@ class HaastsEagle extends Boid {
     for (let i = 0; i < moas.length; i++) {
       const m = moas[i];
       if (!m.alive || m.inShelter || m.speciesKey === shun) continue;
-      if (simulation.isSpeciesProtected && simulation.isSpeciesProtected(m.speciesKey)) continue;
+      if (this._offLimits(simulation, m.speciesKey)) continue;
       const n = simulation.getCachedSpeciesCount ? simulation.getCachedSpeciesCount(m.speciesKey) : 1;
       const dx = m.pos.x - this.pos.x, dy = m.pos.y - this.pos.y;
       let score = Math.sqrt(dx * dx + dy * dy) / Math.max(1, n);
@@ -951,6 +964,21 @@ class HaastsEagle extends Boid {
   }
 
   get isCarrying() { return !!this._carry; }
+
+  // About to take its prey: on a hunt it can strike (no grace window), its bird within
+  // EAGLE_STRIKE_REACH catch radii, or a story's stoop that close to the bird. The Pouākai is drawn
+  // over the trees in flight and down among them only then, with the bird it strikes
+  // (Simulation.render). It lets go a little further out than it takes hold (the `out` reach), so
+  // a bird dodging about at the edge doesn't flick it above and below the canopy.
+  isStriking() {
+    let prey = null;
+    if (this._carry) prey = this._carry.phase === 'stoop' ? this._carry.prey : null;
+    else if (this.hunting && this.tutorialGraceTimer <= 0) prey = this.target;
+    if (!prey || !prey.alive || !prey.pos) return (this._strikeDraw = false);
+    const reach = this.catchRadius * (this._strikeDraw ? EAGLE_STRIKE_REACH.out : EAGLE_STRIKE_REACH.in);
+    const dx = prey.pos.x - this.pos.x, dy = prey.pos.y - this.pos.y;
+    return (this._strikeDraw = dx * dx + dy * dy < reach * reach);
+  }
 
   _carryFlight(dt) {
     const c = this._carry, p = c.prey;

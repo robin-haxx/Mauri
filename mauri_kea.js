@@ -738,7 +738,7 @@ class Kea extends Kereru {
         return;
       }
       // At the odds: the moa around the nest decide it. A kea that loses is driven off.
-      const success = mode === 'odds' && sim.raidSuccessChance ? random() < sim.raidSuccessChance(site, egg.pos) : true;
+      const success = mode === 'odds' && sim.raidSuccessChance ? random() < sim.raidSuccessChance(site, egg.pos, egg.parentSpecies) : true;
       if (success) this._raidWon(sim, egg, mode);
       else this._raidLost(sim, egg);
       if (mode === 'odds') this._raidEvent(sim, site, success, egg);
@@ -794,8 +794,9 @@ class Kea extends Kereru {
         key: egg, egg, kea, at, radius: moaR, sec: keaRaidRollSec(), attacker: 'kea', defender: egg.parentSpecies || 'upland_moa',
         mana: rc.mana, quiet: !!rc.teach,   // (keaRaid.mana: the level's own; teach: it says how itself)
         attackers: () => kea.filter(k => k.alive && k._standoff === raid).length,
-        defenders: () => sim.moaNear(at, moaR),
-        chance: () => sim.raidSuccessChance(site, egg.pos),
+        // (Only the nest's own kind defend it, and are shown: another herd by it is no help.)
+        defenders: () => sim.moaNear(at, moaR, egg.parentSpecies),
+        chance: () => sim.raidSuccessChance(site, egg.pos, egg.parentSpecies),
         alive: () => egg.alive && !egg.hatched && kea.some(k => k.alive && k._standoff === raid),
         onRoll: (success) => {
           const here = kea.filter(k => k.alive && k._standoff === raid);

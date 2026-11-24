@@ -1327,6 +1327,16 @@ class ChapterRunner {
   // it flies off the land on an errand and comes back to its patrol (HaastsEagle.sendAway);
   // `hunger` is then its hunger as it comes back.
   eaglePressure(spec, ev) {
+    // spare [species]: no eagle hunts those kinds until a later eagle { spare: [] } lifts it
+    // (Simulation.eagleSpare; HaastsEagle._offLimits). For all of them, whatever `which` says.
+    if (spec.spare) {
+      this.sim.eagleSpare = new Set([].concat(spec.spare));
+      for (const e of this.sim.eagles || []) {
+        if (e.target && e.target.speciesKey && this.sim.eagleSpare.has(e.target.speciesKey)) { e.hunting = false; e.target = null; }
+        if (e.aimAt && this.sim.eagleSpare.has(e.aimAt.speciesKey)) e.aimAt = null;
+      }
+      this._log('eagle_spare', [...this.sim.eagleSpare].join(',') || 'none');
+    }
     const p = spec.watch ? this.point(spec.watch, ev) : null;
     for (const e of this._eagles(spec, ev)) {
       // hold { at, from | awayFrom, dist = 200, r = 22, place = true }: the story's entrance, as

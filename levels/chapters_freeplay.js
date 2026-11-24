@@ -198,9 +198,9 @@ function makeChaptersFreeplay(sketchKey) {
       maxPerSpecies: 12,
       // Everyone breeds by its own calendar (the species files carry them).
       seasonalBirdBreeding: 'calendar',
-      // Food and the kea, as the Pātōtara lesson. Wharariki starts in leaf (food at half) and
-      // three taps bring it into flower in spring and summer; out of them it is in leaf again,
-      // so it is a hardy winter food but a reduced one (HAND_SPROUT in mauri_plant.js).
+      // Food and the kea, as the Pātōtara lesson. Wharariki starts young, with nothing to eat,
+      // and three taps grow it, in any season; grown, it feeds in full all year, a hardy winter
+      // food (HAND_SPROUT in mauri_plant.js).
       sproutPatotara: true, sproutWharariki: true, placedPlantsSeasonal: true,
       keaBerryLureRadius: 400, keaRaidsEggs: 'odds', keaRaidRadius: 95, keaRaidNutrition: 40, keaRaidCooldownSec: 6,
       keaRaid: { baseSuccess: 0.9, moaPenalty: 0.15, minSuccess: 0.05, moaRadius: 95 },
@@ -404,11 +404,10 @@ function makeChaptersFreeplay(sketchKey) {
       { id: 'winter_food', when: { all: [{ season: 'winter' }, { not: { any: [{ near: ['wharariki', 'pukepuke', 90] }, { near: ['wharariki', 'koukou', 90] }] } }] },
         for: 20, once: false, cooldown: 45,
         notify: ["The pātōtara is bare in winter. Grow WHARARIKI by the young so they can feed.", 'error'] },
-      // Wharariki in leaf in the warm months: three taps bring it into flower. (Draft words.)
-      { id: 'flower_wharariki', when: { all: [{ season: ['spring', 'summer'] },
-          (x) => x.runner.sim.placeables.some(p => p.alive && p.type === 'wharariki' && p.unsprouted)] },
+      // Wharariki planted but not yet grown: three taps grow it, in any season. (Draft words.)
+      { id: 'grow_wharariki', when: (x) => x.runner.sim.placeables.some(p => p.alive && p.type === 'wharariki' && p.unsprouted),
         for: 12, once: false, cooldown: 120,
-        notify: "Tap a WHARARIKI three times to bring out its flowers: more food for the moa." },
+        notify: "Tap a WHARARIKI three times to grow it: until then it is too small to eat from." },
       // Losses: the two young are the stake; everyone else is a line.
       { id: 'pukepuke_lost', on: 'cast_lost', if: { cast: 'pukepuke', cause: 'eagle' }, do: [{ lose: "The Pouākai took Pukepuke." }] },
       { id: 'pukepuke_starved', on: 'cast_lost', if: { cast: 'pukepuke', cause: ['starved', 'unknown'] }, do: [{ lose: "Pukepuke starved. Keep food growing by the families: pātōtara in the warm months, wharariki in winter." }] },

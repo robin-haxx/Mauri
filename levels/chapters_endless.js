@@ -190,7 +190,7 @@ const CHAPTERS_ENDLESS = (() => {
       hatchReward: { perSpecies: true, full: 6, reduced: 10, fullAmount: 2, reducedAmount: 1, allSpecies: true },
 
       // ---- Food and the kea, as the Pātōtara lesson ---------------------------------
-      sproutPatotara: true, sproutWharariki: true, placedPlantsSeasonal: true,   // (wharariki: in leaf till three taps flower it, spring and summer)
+      sproutPatotara: true, sproutWharariki: true, placedPlantsSeasonal: true,   // (wharariki: young till three taps grow it, in any season)
       keaBerryLureRadius: 400, keaRaidsEggs: 'odds', keaRaidRadius: 95, keaRaidNutrition: 40, keaRaidCooldownSec: 8,
       keaRaid: { baseSuccess: 0.9, moaPenalty: 0.2, minSuccess: 0.05, moaRadius: 95 },
       flyerEdgeMargin: 14, stormFlushMult: 1.0,
@@ -370,6 +370,10 @@ const CHAPTERS_ENDLESS = (() => {
                                       uplands(x).some(m => m.hunger > m.hungerThreshold + 15),
         for: 15, once: false, cooldown: 45,
         notify: ["The upland moa are going hungry: pātōtara is bare in winter. Grow WHARARIKI by them.", 'error'] },
+      // Wharariki planted but not yet grown: three taps grow it, in any season. (Draft words.)
+      { id: 'grow_wharariki', when: (x) => x.runner.sim.placeables.some(p => p.alive && p.type === 'wharariki' && p.unsprouted),
+        for: 8, once: false, cooldown: 90,
+        notify: "Tap the WHARARIKI three times to grow it: until then it is too small to eat from." },
       { id: 'starving', when: (x) => uplands(x).some(m => m.hunger > m.criticalHunger), for: 8, once: false, cooldown: 40,
         notify: ["An upland moa is starving. Tap plants near it to bring it to food, or grow food beside it.", 'error'] },
       { id: 'starved', on: 'cast_lost', if: { cast: NAMED, cause: ['starved', 'unknown'] }, once: false,

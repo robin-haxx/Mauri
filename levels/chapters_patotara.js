@@ -122,8 +122,8 @@ function makeChaptersPatotara(sketchKey) {
       // Pātōtara comes up bare until the player sprouts it; grown food follows the seasons, so
       // it bears nothing in winter.
       sproutPatotara: true,
-      // Wharariki starts in leaf (food at half); three taps flower it in spring and summer, and out
-      // of them it is in leaf again: a hardy winter food, but a reduced one (HAND_SPROUT).
+      // Wharariki starts young, with nothing to eat, until three taps grow it (in any season);
+      // grown, it feeds in full all year: a hardy winter food (HAND_SPROUT).
       sproutWharariki: true,
       placedPlantsSeasonal: true,
       // Kea: drawn from afar by sprouted berries, and raiding a nest at the odds the moa set.
@@ -262,6 +262,10 @@ function makeChaptersPatotara(sketchKey) {
     ],
 
     reactions: (D.clues ? patotaraCluesReactions : (list) => list)([
+      // Wharariki planted but not yet grown: three taps grow it, in any season. (Draft words.)
+      { id: 'grow_wharariki', when: (x) => x.runner.sim.placeables.some(p => p.alive && p.type === 'wharariki' && p.unsprouted),
+        for: 8, once: false, cooldown: 90,
+        notify: "Tap the WHARARIKI three times to grow it: until then it is too small to eat from." },
       // The berries are out: now the kea.
       { id: 'sprouted', on: 'plant_sprouted', if: { type: 'patotara' },
         say: [['guide', "Berries! Kea can smell those from far off. Grow more PĀTŌTARA beside the nest and sprout it, so the moa gather there to feed.", { lit: ['friendMama', 'friendPapa', 'mama'] }]] },

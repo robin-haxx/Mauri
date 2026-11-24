@@ -4725,7 +4725,7 @@ class Game {
 
   // ---- Sprouting by hand: three quick taps ------------------------------------------------
   // An unsprouted pātōtara or wharariki (a patch, or a wild plant; Plant.sproutsByHand) is
-  // brought into fruit or flower by SPROUT_TAPS quick taps on it. Each tap shakes it (and a
+  // brought into fruit (pātōtara) or grown (wharariki) by SPROUT_TAPS quick taps on it. Each tap shakes it (and a
   // plant with food on it draws the hungry over, as any tap on a plant does); pips over it
   // count the taps (renderSproutTaps). A press held on a patch is a move instead, so a patch
   // can be both sprouted and moved.
@@ -4776,11 +4776,11 @@ class Game {
     if (audioManager && audioManager.playPlantRustle) audioManager.playPlantRustle();
   }
 
-  // Brought into fruit or flower (the third tap). Only in its seasons (HAND_SPROUT): pātōtara
-  // fruits in the warm months, not winter; wharariki flowers in spring and summer. A module hears
-  // of both (onSprouted, onSproutRefused). It comes into leaf first and into fruit or flower a
-  // moment later (Plant.sprout's `staged`), quietly: no rustle, only the small patter of the
-  // berries coming out (the 'sprout' touch cue).
+  // Brought into fruit, or grown (the third tap). Only in its seasons (HAND_SPROUT): pātōtara
+  // fruits in the warm months, not winter; wharariki grows in any season. A module hears of both
+  // (onSprouted, onSproutRefused). A pātōtara comes into leaf first and into fruit a moment
+  // later, a wharariki swells to full size (Plant.sprout's `staged`), quietly: no rustle, only
+  // the small patter of the 'sprout' touch cue.
   _sprout(t) {
     if (!t || !t.alive || !t.unsprouted) return;
     const type = t.type || 'patotara', season = this.seasonManager ? this.seasonManager.currentKey : 'summer';
@@ -4847,7 +4847,7 @@ class Game {
       const { x, y } = this._pointerWorld(mx, my);
       this.tryDropMove(x, y);
     } else if (sproutTap && !(tapHere && this._animalNearerThan(sproutTap))) {
-      this._sproutTap(sproutTap);     // (a quick tap on a bare pātōtara or a wharariki in leaf)
+      this._sproutTap(sproutTap);     // (a quick tap on a bare pātōtara or a young wharariki)
     } else if (tapHere) {
       this._tapAt(pc);
     }
@@ -5202,7 +5202,7 @@ class Game {
       let keaN = 0;
       for (const b of kea) if (b.alive && (b.pos.x - at.x) ** 2 + (b.pos.y - at.y) ** 2 <= R * R) keaN++;
       if (!keaN) continue;
-      this._drawRaidOdds(at, moaR, sim.raidSuccessChance(site, egg.pos), keaN, sim.moaNear(at, moaR),
+      this._drawRaidOdds(at, moaR, sim.raidSuccessChance(site, egg.pos, egg.parentSpecies), keaN, sim.moaNear(at, moaR, egg.parentSpecies),
                          egg.parentSpecies || 'upland_moa', 0.75);
     }
   }
@@ -7749,7 +7749,7 @@ class Game {
       if (done.has(site || egg)) continue;
       done.add(site || egg);
       const at = site ? site.pos : egg.pos;
-      this._drawRaidOdds(at, moaR, sim.raidSuccessChance(site, egg.pos), keaN, sim.moaNear(at, moaR),
+      this._drawRaidOdds(at, moaR, sim.raidSuccessChance(site, egg.pos, egg.parentSpecies), keaN, sim.moaNear(at, moaR, egg.parentSpecies),
                          egg.parentSpecies || 'upland_moa', 0.6);
     }
   }

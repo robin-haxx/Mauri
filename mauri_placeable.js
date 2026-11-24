@@ -78,7 +78,7 @@ class PlaceableObject {
     
     // A pātōtara patch in the modules starts unsprouted, its plants bare, until the player
     // sprouts it by tapping it three times (see sprout, Plant.sproutsByHand); a wharariki patch
-    // (mechanics.sproutWharariki) starts in leaf, feeding at half, until it is brought into flower.
+    // (mechanics.sproutWharariki) starts young, with nothing to eat, until three taps grow it.
     this.unsprouted = typeof Plant !== 'undefined' && Plant.sproutsByHand(type);
 
     // Spawn plants if applicable
@@ -429,9 +429,8 @@ class PlaceableObject {
   // FEEDING
   // ============================================
   
-  // placedPlantsSeasonal: a patch that stands bare (unsprouted pātōtara, or its plants without
-  // winter food) neither feeds nor draws a moa. (Wharariki waiting to flower is in leaf: it
-  // feeds, at its share; see _bloomShare.)
+  // placedPlantsSeasonal: a patch that stands bare (unsprouted pātōtara, a wharariki not yet
+  // grown, or its plants without winter food) neither feeds nor draws a moa.
   _bare() {
     if (!(typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.placedPlantsSeasonal)) return false;
     if (this.unsprouted && !Plant.leafShare(this.type)) return true;
@@ -439,8 +438,8 @@ class PlaceableObject {
     return !!(ps && ps.length && ps.every(p => !p.alive || p.isBare() || p.winterInedible));
   }
 
-  // The share of its food the patch gives now: 1 in fruit or flower, less in leaf (a wharariki
-  // patch not yet brought into flower, or out of its flowering seasons: Plant.bloomShare).
+  // The share of its food the patch gives now: its HAND_SPROUT leaf share until it is sprouted or
+  // grown, else 1 (Plant.bloomShare).
   _bloomShare() {
     if (typeof Plant === 'undefined' || !this.seasonManager) return 1;
     return Plant.bloomShare(this.type, this.unsprouted, this.seasonManager.currentKey);
@@ -566,8 +565,8 @@ class PlaceableObject {
     }
   }
 
-  // An unsprouted pātōtara patch brought into fruit, or a wharariki patch into flower (three
-  // taps on it; Game._sprout).
+  // An unsprouted pātōtara patch brought into fruit, or a wharariki patch grown (three taps on
+  // it; Game._sprout).
   sprout(staged = false) {
     this.unsprouted = false;
     for (const plant of this.spawnedPlants) plant.sprout(staged);

@@ -1044,7 +1044,8 @@ class Simulation {
   handleEagleCatch(eagle, moa, mauri) {
     // Protected floor species (e.g. the last Dinornis) can't be taken; the
     // eagle's strike fails and it breaks off.
-    if (this.isSpeciesProtected(moa.speciesKey)) {
+    // (Nor one a story spares for now: Simulation.eagleSpare, a chapter's eagle { spare }.)
+    if (this.isSpeciesProtected(moa.speciesKey) || (this.eagleSpare && this.eagleSpare.has(moa.speciesKey))) {
       eagle.hunting = false;
       eagle.target = null;
       eagle.huntSearchTimer = 0;
@@ -1184,13 +1185,14 @@ class Simulation {
     return site;
   }
 
-  // Moa within `radius` of a point.
-  moaNear(p, radius) {
+  // Moa within `radius` of a point; with `species`, only that kind (a nest is defended by its
+  // own kind: another herd grazing by it is no help against the kea).
+  moaNear(p, radius, species = null) {
     const rSq = radius * radius;
     let n = 0;
     for (let i = 0; i < this.moas.length; i++) {
       const m = this.moas[i];
-      if (!m.alive) continue;
+      if (!m.alive || (species && m.speciesKey !== species)) continue;
       const dx = m.pos.x - p.x, dy = m.pos.y - p.y;
       if (dx * dx + dy * dy <= rSq) n++;
     }
@@ -1200,12 +1202,13 @@ class Simulation {
   // The chance a kea raid on a nest succeeds right now: high with the moa away, falling with
   // every moa close by (they drive the kea off). One formula for the player's Nest Raid and
   // for kea raiding on their own (keaRaidsEggs: 'odds'); the numbers are mechanics.keaRaid.
-  // `at` stands in for a site when an egg lies in the open.
-  raidSuccessChance(site, at = null) {
+  // `at` stands in for a site when an egg lies in the open. `species`: the nest's kind, so only
+  // its own moa count (the egg's parentSpecies); without it, every moa near.
+  raidSuccessChance(site, at = null, species = null) {
     const cfg = (typeof LEVEL_MECHANICS !== 'undefined' && LEVEL_MECHANICS.keaRaid) || {};
     const p = site ? site.pos : at;
     if (!p) return 1;
-    const moa = this.moaNear(p, cfg.moaRadius ?? 90);
+    const moa = this.moaNear(p, cfg.moaRadius ?? 90, species);
     const prob = (cfg.baseSuccess ?? 0.9) - (cfg.moaPenalty ?? 0.12) * moa;
     return Math.max(cfg.minSuccess ?? 0.05, Math.min(1, prob));
   }
@@ -2343,6 +2346,8 @@ class Simulation {
 
     // Layer 4: Moas (body)
     this._renderFiltered(moas, 0, null, true, inView, 'render');
+    // (A Pouākai about to take its prey is down at the moa's level, under the canopy: layer 6.)
+    this._renderFiltered(eagles, 30, Simulation._eagleLow, true, inView);
 
     // Ground-dwelling other entities render here (below the trees); flighted birds are held
     // back to a pass above the trees.
@@ -2353,9 +2358,10 @@ class Simulation {
     // Layer 5: Trees (rimu, beech, fern; pre-partitioned)
     this._renderFiltered(this.treePlants, 30, null, true, inView);
 
-    // Layer 6: Eagles (aliveCheck true so a just-starved bird stops drawing
-    // immediately instead of lingering until the next cleanup pass)
-    this._renderFiltered(eagles, 30, null, true, inView);
+    // Layer 6: Eagles, over the trees in flight (aliveCheck true so a just-starved bird stops
+    // drawing immediately instead of lingering until the next cleanup pass). One about to take
+    // its prey was drawn with the moas, under the canopy (HaastsEagle.isStriking).
+    this._renderFiltered(eagles, 30, Simulation._eagleHigh, true, inView);
 
     // Layer 6b: Flighted other entities (kererū, kōkako); above the trees like the
     // eagles, since they fly over and perch in the canopy.
@@ -2426,7 +2432,8 @@ class Simulation {
       this._collectCast(this.otherEntities[type], cast, inView, lift, null);
     }
     this._collectCast(this.treePlants, cast, inView, lift, null);
-    this._collectCast(this.eagles, cast, inView, lift, null);
+    // (A Pouākai about to take its prey is down among the trees: sorted with them and the bird.)
+    this._collectCast(this.eagles, cast, inView, lift, Simulation._eagleLow);
     cast.sort(Simulation._castCmp);
     for (let i = 0; i < cast.length; i++) {
       const e = cast[i];
@@ -2437,6 +2444,14 @@ class Simulation {
     if (typeof GLTerrain !== 'undefined' && typeof GLBatch !== 'undefined' && GLBatch._open) {
       GLTerrain.drawWaterOverlay(this.game);
     }
+
+    // The Pouākai in flight, over the trees (and the water), back-to-front among themselves. One
+    // about to strike was in the cast above (HaastsEagle.isStriking).
+    const high = this._eagleScratch || (this._eagleScratch = []);
+    high.length = 0;
+    this._collectCast(this.eagles, high, inView, lift, Simulation._eagleHigh);
+    if (high.length > 1) high.sort(Simulation._castCmp);
+    for (let i = 0; i < high.length; i++) this._drawLifted(high[i], high[i]._py - high[i].pos.y, 'render');
 
     // Overlays on top: storms, then moa indicators (hunger bars / halos), then the
     // nest-raid hover cue (tint + success%) so it reads above the foliage.
@@ -2618,6 +2633,11 @@ class Simulation {
 // farther (higher on screen) entities paint first and nearer ones over them.
 // Module-level so the per-frame sort allocates no comparator closure.
 Simulation._castCmp = (a, b) => a._py - b._py;
+
+// The Pouākai's two draw passes (render, _render3D): over the trees in flight (_eagleHigh), and
+// down among them, with the moa, only while it is about to take its prey (_eagleLow).
+Simulation._eagleLow = (e) => !!(e.isStriking && e.isStriking());
+Simulation._eagleHigh = (e) => !(e.isStriking && e.isStriking());
 
 // ---- light push()/pop() for the billboard lift (Simulation._drawLifted) ----------------------
 // p5's push()/pop() allocate fresh style objects and read two colour strings back off the canvas

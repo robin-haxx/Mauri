@@ -191,7 +191,7 @@ All titles below are placeholders.
 - **It changes with the record.** See section 3.
 - **It is played on the same land as 7f.** The nests founded here are standing when the
   free play opens.
-- **Unlocked** when tiles 4 and 6 are both won.
+- **Unlocked** when free plays 4f and 6f are both won.
 
 ## 5. The three free plays
 
@@ -402,7 +402,7 @@ Building takes the default unless you say otherwise.
 | 2 | How the chick is taken | In a frozen story moment at the turn of the first autumn, outside play. It is carried to the roost alive, as you wrote | Every lesson teaches that a hidden moa is safe and a caught moa is dead. If the taking happens during play, the player either prevents it or watches a learned rule fail. See the note below |
 | 3 | If the player fails to bring the chick back in year 2 | The story goes on without it and the closing card says so | This is the strongest emergent outcome on offer |
 | 4 | Why the families split | Left to you. One suggestion: an early snow closes the pass between the two nests. Snow closing a pass is already a real rule of the land | The split would then be shown by the world and not only told |
-| 5 | What unlocks tile 7 | Tiles 4 and 6 won. The free plays feed the record if played, and middling numbers stand in if not | Requiring both free plays adds most of an hour before tile 7 |
+| 5 | What unlocks tile 7 | Free plays 4f and 6f won (decided 2026-11-25), so their records always feed tile 7 | It adds most of an hour before tile 7 |
 | 6 | Length of 6f | Eight years, like 4f | Both parties arrive the same number of years on |
 | 7 | Saving part-way | A free play can be resumed from the start of its current year | Eight years is about 25 minutes of running time. No run can be saved today |
 | 8 | Sketches per new lesson | One, clue-first, with the first problem of each lesson told outright | Three sketches of five lessons is fifteen levels to tune |

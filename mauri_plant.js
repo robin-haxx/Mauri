@@ -69,6 +69,13 @@ const HAND_SPROUT = {
 // A wharariki not yet grown (HAND_SPROUT.grows) stands at this share of its full size, and once
 // grown it swells to full size over PLANT_GROW_FRAMES (on the render clock).
 const PLANT_YOUNG_SIZE = 0.5;
+
+// Plants outlined over the rest of the foliage: the outline of the plant's sprite is drawn
+// again after the trees (Simulation.render, Plant.renderOverOutline), so it can be found under
+// a canopy or among other plants. col: RGB; thickness: the line, in sprite pixels; alpha: steady.
+const PLANT_OVER_OUTLINE = {
+  wharariki: { col: [236, 228, 150], thickness: 5, alpha: 0.85 }
+};
 const PLANT_GROW_FRAMES = 40;
 // How long a pātōtara's berries take to fall as winter comes in (Plant._drawBerryDrop).
 const BERRY_DROP_FRAMES = 80;
@@ -730,6 +737,11 @@ class Plant {
     }
     if (this._shakeStart != null) drawX += this._shakeX(halfSize);
     const dy = py - halfSize;
+    // (Where it was drawn this frame, for its outline over the trees: renderOverOutline.)
+    if (PLANT_OVER_OUTLINE[this.type]) {
+      const o = this._ol || (this._ol = {});
+      o.sprite = sprite; o.x = drawX + halfSize; o.y = py; o.size = spriteSize; o.f = frameCount;
+    }
     if (this._fadeSprite && fadeT < 1) {
       // Outgoing sprite fades out beneath the incoming one (a true crossfade).
       tint(255, (1 - fadeT) * 255);
@@ -746,6 +758,19 @@ class Plant {
     if (this.dormant) {
       this._drawDormantIndicator(px, py - displaySize * 0.5);
     }
+  }
+
+  // A plant in PLANT_OVER_OUTLINE, outlined again over the trees (Simulation draws this after
+  // them): the hollow outline of the sprite it drew this frame, where it drew it. Nothing if it
+  // was not drawn this frame (off screen, or too small to draw).
+  renderOverOutline() {
+    const o = this._ol, cfg = PLANT_OVER_OUTLINE[this.type];
+    if (!o || !cfg || o.f !== frameCount || !o.sprite) return;
+    push();
+    translate(o.x, o.y);
+    imageMode(CENTER);
+    EntitySprites.drawSpriteOutlineOnly(o.sprite, o.size, o.size, cfg.col, cfg.thickness, cfg.alpha);
+    pop();
   }
 
   // Pātōtara's berries falling as winter comes in (update sets _dropAt): a few berries drop from

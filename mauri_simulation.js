@@ -2357,6 +2357,8 @@ class Simulation {
 
     // Layer 5: Trees (rimu, beech, fern; pre-partitioned)
     this._renderFiltered(this.treePlants, 30, null, true, inView);
+    // Layer 5b: plants outlined over the foliage (PLANT_OVER_OUTLINE: wharariki).
+    this._renderFiltered(this.groundPlants, 0, Simulation._overOutline, false, inView, 'renderOverOutline');
 
     // Layer 6: Eagles, over the trees in flight (aliveCheck true so a just-starved bird stops
     // drawing immediately instead of lingering until the next cleanup pass). One about to take
@@ -2444,6 +2446,9 @@ class Simulation {
     if (typeof GLTerrain !== 'undefined' && typeof GLBatch !== 'undefined' && GLBatch._open) {
       GLTerrain.drawWaterOverlay(this.game);
     }
+
+    // Plants outlined over the foliage (PLANT_OVER_OUTLINE: wharariki), over the trees and water.
+    this._billboardList(this.groundPlants, 0, Simulation._overOutline, inView, lift, 'renderOverOutline');
 
     // The Pouākai in flight, over the trees (and the water), back-to-front among themselves. One
     // about to strike was in the cast above (HaastsEagle.isStriking).
@@ -2638,6 +2643,9 @@ Simulation._castCmp = (a, b) => a._py - b._py;
 // down among them, with the moa, only while it is about to take its prey (_eagleLow).
 Simulation._eagleLow = (e) => !!(e.isStriking && e.isStriking());
 Simulation._eagleHigh = (e) => !(e.isStriking && e.isStriking());
+
+// The plants outlined over the foliage (PLANT_OVER_OUTLINE, mauri_plant.js), drawn after the trees.
+Simulation._overOutline = (p) => typeof PLANT_OVER_OUTLINE !== 'undefined' && !!PLANT_OVER_OUTLINE[p.type];
 
 // ---- light push()/pop() for the billboard lift (Simulation._drawLifted) ----------------------
 // p5's push()/pop() allocate fresh style objects and read two colour strings back off the canvas

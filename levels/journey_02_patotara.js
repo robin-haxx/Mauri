@@ -63,7 +63,7 @@ const JOURNEY_PATOTARA = (() => {
   // nests, the pātōtara, where the family walks in, the storms standing by, and the way down to
   // the waterhole. Wide from autumn, when the families part and the Pouākai has the open land,
   // through winter; close again as spring begins. The Pouākai comes in from out of sight.
-  const V = K.storyView({ sites: ['friendNest', 'home', 'patch', 'arrive', 'tops', 'lookout', 'tarn', 'shore'], zoom: [1.05, 1.2] });
+  const V = K.storyView({ sites: ['friendNest', 'home', 'patch', 'arrive', 'stormTops', 'stormRidge', 'tarn', 'shore'], zoom: [1.05, 1.2] });
 
   return Object.assign({}, base, {
     id: 'journey_patotara',
@@ -90,6 +90,10 @@ const JOURNEY_PATOTARA = (() => {
 
     sites: Object.assign({}, base.sites, {
       arrive:     { near: 'friendNest', dist: [125, 165] },   // where the family walks in from
+      // The two storms standing at the start: up on the high ground, clear of both nests, the
+      // pātōtara and where the family walks in (mauri_chapters.js, the 'storm' site finder).
+      stormTops:  { find: 'storm', near: 'friendNest', clear: ['friendNest', 'home', 'patch', 'arrive'] },
+      stormRidge: { find: 'storm', near: 'home', clear: ['friendNest', 'home', 'patch', 'arrive'], apart: ['stormTops'] },
       // The winter waterhole: a glade in the montane forest below both homes, where upland moa
       // drift in the cold anyway (not the lowest ground, out on the flats at the map's far side).
       tarn:       { find: 'refuge', near: 'home', from: ['friendNest'], biome: 'forestRefuge', dist: [140, 260], ideal: 180 },
@@ -151,8 +155,7 @@ const JOURNEY_PATOTARA = (() => {
           { id: 'winter_press', when: { seasonProgress: ['>=', 0.35] }, do: [{ eagle: { hunger: 50, watch: 'tarn' } }] }
         ],
         goals: [
-          { id: 'fed', name: "Grow wharariki by the family", done: flaxNear, reward: 15 },
-          { id: 'through', name: "Make it through winter", survive: true, reward: 25 }
+          { id: 'fed', name: "Grow wharariki by the family", done: flaxNear, reward: 15 }
         ]
       },
 
@@ -213,8 +216,8 @@ const JOURNEY_PATOTARA = (() => {
           (x) => { const p = x.runner.castEnts.pukepuke; if (p) { p._bornTurn = -4; p._bornYear = -1; p.mother = x.runner.castEnts.mama || null; p.isFemale = false; p.updateAge(0); } },
           { place: { type: 'patotara', at: 'patch', standing: true } },
           { spawn: { type: 'kea', at: 'keaNest', count: D.kea, radius: 24 } },
-          { place: { type: 'Storm', at: 'tops', standing: true } },
-          { place: { type: 'Storm', at: 'lookout', standing: true } },
+          { place: { type: 'Storm', at: 'stormTops', standing: true } },
+          { place: { type: 'Storm', at: 'stormRidge', standing: true } },
           // (The Pouākai is set down out of sight, away from both families, and flies in to patrol
           // the lookout: see THE VIEW.)
           V.holdOffView({ at: 'home', awayFrom: 'tarn', keepFrom: ['mama', 'papa', 'friendNest', 'arrive'], hunger: 25 }),

@@ -16,6 +16,7 @@ const GLTerrain = {
   _prog: null,
   _buffers: null,       // { pos, nrm, colCur, colNext, idx, count }
   _dims: null,          // { cols, rows, worldW, worldH, key }  (rebuild trigger)
+  _buildSerial: 0,      // last build id stamped on a terrain (see build's key)
   _colKeyCur: null, _colKeyNext: null,
   _loc: {},
 
@@ -184,8 +185,14 @@ const GLTerrain = {
     const worldW = terrain.worldW, worldH = terrain.worldH;
     const H = terrain.renderHeightMap;
     const stride = this._meshStride(terrain);
+    // Keyed on the terrain OBJECT too (a build id stamped on it), not just its size and seed:
+    // every level load makes a new TerrainGenerator, and a journey tile carried on from the one
+    // before keeps the same seed and size but fits the heights to its own area (and plans its
+    // own tarns), so a key of size + seed alone kept the last tile's mesh: its heights and its
+    // sea, drawn as water over the new tile's lowland (the "sea bug").
+    if (!terrain._glBuildId) terrain._glBuildId = ++this._buildSerial;
     const key = cols + 'x' + rows + '@' + worldW + 'x' + worldH + '#' + (terrain.glacialAdvance || 0) +
-                ':' + (terrain.seed || 0) + '/' + stride;
+                ':' + (terrain.seed || 0) + '/' + stride + '~' + terrain._glBuildId;
     if (this._dims && this._dims.key === key && this._buffers) return true;   // already built for this land
 
     this._ensureProgram(gl);

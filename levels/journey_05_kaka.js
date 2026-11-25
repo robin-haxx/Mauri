@@ -125,10 +125,7 @@ const JOURNEY_KAKA = (() => {
     chapters: [
       { id: 'summer', title: "Summer: higher country",
         tools: ['Storm'],
-        focus: ['upland_moa'],
-        goals: [
-          { id: 'summer_safe', name: "Keep the family safe through summer", survive: true, reward: 15 }
-        ]
+        focus: ['upland_moa']
       },
 
       { id: 'autumn', title: "Autumn: the kākā at the forest edge",

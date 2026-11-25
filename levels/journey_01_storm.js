@@ -176,7 +176,7 @@ const JOURNEY_STORM = (() => {
           K.headFor(FAMILY, 'shore')
         ],
         goals: [
-          { id: 'down', name: "Get the family to the wharariki unseen", done: { near: ['mama', 'tarn', 100] }, reward: 20 },
+          { id: 'down', name: "Migrate safely to the wharariki", done: { near: ['mama', 'tarn', 100] }, reward: 20 },
           parents('parents2')
         ],
         holdSeason: { until: { goal: 'down' }, at: 0.9, maxSec: 45 }
@@ -198,7 +198,6 @@ const JOURNEY_STORM = (() => {
           { id: 'winter_press2', when: { seasonProgress: ['>=', 0.7] }, do: [{ eagle: { hunger: 56 } }] }
         ],
         goals: [
-          { id: 'through', name: "Make it through winter", survive: true, reward: 25 },
           parents('parents3')
         ]
       },
@@ -309,10 +308,10 @@ const JOURNEY_STORM = (() => {
           ["Forests like Kahurangi in the Southern Alps bustled with the calls of Kea, Kiwi, Kākā, Kākāpō, Kōkako, Takahē and Huia.",
             { voices: ['moa', 'kea', 'kakapo'], voicesSec: 7 }],   // (the moa leads; the others join it)
           "But the forests they filled weren't always that dense, dark green bush we think of when we visit the native back country.",
-          "Over the last 100,000 years, the earth's temperature rose and fell in cycles. This was called the OTIRA GLACIATION. Each time it fell, more of the ancient forest died back, taking hundreds of years to regrow.",
-          ["The final cold phase happened 30,000 years ago: The LAST GLACIAL MAXIMUM.", { speaker: 'gust' }],
-          "When forests shrank, replaced by glacial tussock land, most of the birds were pushed back into smaller patches of forest.",
-          "And only one moa was prepared to thrive in Kahurangi's alps...",
+          "Over the last 100,000 years, the earth's temperature rose and fell in cycles. Each time it fell, more of the ancient forest died back, taking hundreds of years to regrow.",
+          ["The final ice age happened 30,000 years ago, and now in New Zealand we call it the ŌTIRA GLACIATION.", { speaker: 'gust' }],
+          "When forests shrank, replaced by glacial tussock land, most of the birds were pushed back into smaller patches of forest, as the ice age approached its coldest point: the LAST GLACIAL MAXIMUM.",
+          "But only one moa was prepared to truly thrive in Kahurangi's alps...",
           "Moa Pukepuke, The Upland Moa.",
           "This is their story."
         ],
@@ -387,8 +386,6 @@ const JOURNEY_STORM = (() => {
           P("Now, that S... stout-legged supper was a long time ago... and my tummy knows it!"),                             // NEW
           P("Aha! I spy something more kai-shaped moving, under that cloud... That's moa like it!", { lit: [...FAMILY, 'Storm'] })   // (M0)
         ] },
-      { id: 'down', on: 'goal_met', if: (x) => x.event && x.event.goal === 'down',
-        moment: { on: 'mama', text: "The wharariki, by the lake" } },
       { id: 'hungry', when: (x) => hungryOnes(x).length > 0, chapters: ['autumn', 'winter'],
         banner: { words: ["Moa need to eat PLANTS to sustain Mauri (life force).", "Tap a PLANT near a hungry moa to call it over"],   // (M0), and how
                   // (Gone once a plant has been tapped: the moa still has to walk to it and eat.)

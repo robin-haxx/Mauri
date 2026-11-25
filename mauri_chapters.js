@@ -213,7 +213,7 @@ const CHAPTER_KEYS = new Set(['id', 'title', 'sites', 'start', 'goals', 'reactio
   'holdSeason', 'next', 'transfer', ...CHAPTER_LEVERS.map(([key]) => key)]);
 
 // The ways a site can be found (see ChapterRunner._findSite).
-const CHAPTER_SITE_FINDERS = new Set(['flock', 'nest', 'biome', 'high', 'low', 'open', 'edge', 'refuge']);
+const CHAPTER_SITE_FINDERS = new Set(['flock', 'nest', 'biome', 'high', 'low', 'open', 'edge', 'refuge', 'storm']);
 
 // The story's own birds: name-tagged, and they breed only when a story says (_markStoryBirds).
 const CHAPTER_STORY_BIRDS = ['pukepuke', 'koukou'];
@@ -1616,6 +1616,8 @@ class ChapterRunner {
   //           within `within` (as low).
   //           Upland moa drift into the montane forest in winter, so a refuge there is on
   //           their way, as the tutorial's tarn is, not out on the flats at the map's far side.
+  //   storm   where a storm stands at the start: the highest ground `dist` from `near`, clear of
+  //           the places in `clear` (by `by`) and of the storm sites in `apart` (by `apartBy`)
   //   edge    walkable ground by an edge of the map (side: 'north' | 'south' | 'east' | 'west')
   // or { near, dist: [min, max] } alone: any walkable spot that far from a place. A site is
   // found once, as the level (or the chapter that names it) starts, and later ones can be near
@@ -1771,6 +1773,37 @@ class ChapterRunner {
         if (found) return found;
         this._log('issue', 'refuge', 'no forest below the homes: the lowest ground instead');
         return this._sample(around(near, 0, spec.within || 560), walk, p => -t.getElevationAt(p.x, p.y), 300);
+      }
+      case 'storm': {
+        // Where a storm stands by itself at the start: weather gathers on the high ground, not
+        // down where the family is. The highest spot `dist` [min, max] from `near` (a little
+        // nearer if two are as high), `by` clear of each place in `clear` (sites or cast: where
+        // the family starts, so a hunt is not already answered before the player has moved a
+        // storm) and `apartBy` from each storm site in `apart`, and not much lower than `near`
+        // itself (so a later storm is not pushed downhill when the first ones have the peaks).
+        // On cramped land the storms may stand closer to each other and a little lower; the
+        // clearance from the family is eased only to 3/4 (a storm's own radius is 64), and with
+        // no such spot the one furthest from them is taken.
+        if (!near) return null;
+        const [r0, r1] = spec.dist || [80, 180], by = spec.by ?? 90, apartBy = spec.apartBy ?? 100, m = 24;
+        const keep = [].concat(spec.clear || []).map(n => this.point(n)).filter(Boolean);
+        const others = [].concat(spec.apart || []).map(n => this.sites[n]).filter(Boolean);
+        const onLand = (p) => p.x >= m && p.y >= m && p.x <= W - m && p.y <= H - m;
+        const high = (p) => t.getElevationAt(p.x, p.y) - dist(p, near) / 2500;
+        const floor = t.getElevationAt(near.x, near.y) - 0.05;
+        const clearOf = (p) => keep.length ? Math.min(...keep.map(c => dist(p, c))) : Infinity;
+        // [clearance from the family, from the other storms, kept up high]
+        for (const [fc, fa, up] of [[1, 1, true], [1, 0.6, true], [0.75, 0.6, true], [1, 0.6, false], [0.75, 0.4, false]]) {
+          const ok = (p) => onLand(p) && (!up || t.getElevationAt(p.x, p.y) >= floor) &&
+                            clearOf(p) >= by * fc && others.every(c => dist(p, c) >= apartBy * fa);
+          const q = this._sample(around(near, r0, r1), ok, high, 400);
+          if (q) {
+            if (fc < 1 || fa < 1 || !up) this._log('issue', 'storm', `cramped: clear by ${Math.round(by * fc)}, apart ${Math.round(apartBy * fa)}${up ? '' : ', lower than ' + (spec.near || '')}`);
+            return q;
+          }
+        }
+        this._log('issue', 'storm', 'no clear high ground: the spot furthest from the family');
+        return this._sample(around(near, r0, r1), onLand, clearOf, 300);
       }
       case 'edge': {
         const m = 30, side = spec.side || 'north';

@@ -143,8 +143,7 @@ const JOURNEY_BUSH = (() => {
         focus: ['upland_moa'],
         goals: [
           { id: 'uncrowded', name: "Plant lancewood to draw half the bush moa away from the family",
-            done: { all: [drawnOff, calmFor(D.calmSec)] }, reward: 20 },
-          { id: 'summer_fed', name: "Keep Koukou's family fed through summer", survive: true, reward: 10 }
+            done: { all: [drawnOff, calmFor(D.calmSec)] }, reward: 20 }
         ],
         holdSeason: { until: { goal: 'uncrowded' }, at: 0.9, maxSec: 30 }
       },
@@ -156,9 +155,6 @@ const JOURNEY_BUSH = (() => {
           { fade: { type: 'Storm', sec: 60, refreshOnMove: true } },
           { say: [['guide', "Autumn. A Pouākai has found this forest too. You know what hides a moa.", { lit: ['haasts_eagle', 'Storm'] }]] },
           K.eagleComes('koukou')
-        ],
-        goals: [
-          { id: 'autumn_safe', name: "Keep Koukou's family safe through autumn", survive: true, reward: 15 }
         ]
       },
 
@@ -171,8 +167,7 @@ const JOURNEY_BUSH = (() => {
         ],
         goals: [
           { id: 'winter_uncrowded', name: "Plant lancewood to draw half the winter herd away from the family",
-            done: { all: [drawnOff, calmFor(D.calmSec)] }, reward: 25 },
-          { id: 'winter_through', name: "Make it through winter", survive: true, reward: 15 }
+            done: { all: [drawnOff, calmFor(D.calmSec)] }, reward: 25 }
         ]
       },
 

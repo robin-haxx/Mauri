@@ -197,7 +197,7 @@ function preload(){
 // ============================================
 const CONFIG = {
   // ===== ENGINE CONSTANTS (never change between levels) =====
-  version: 'alpha 2.2 (VERTICAL SLICE)',
+  version: 'alpha 2.5 (VERTICAL SLICE WITH EMERGENT GAMEPLAY)',
 
   // The SHORT edge of the canvas is always 1080 (referenceHeight is kept as the name for
   // backwards compatibility). In landscape the short edge is the height; in portrait it is the
@@ -1250,13 +1250,9 @@ function levelSection(l) {
 
 class Game {
   // Outline colours for a marked animal (EntitySprites.mark): the selected one, and the storm
-  // cover preview's (hidden; hidden while hunted; left in the open by a moved storm; hunted in
-  // the open).
+  // cover preview's (one the storm in hand would hide).
   static SELECT_OUTLINE = [255, 236, 150];
-  static COVER_OUTLINE = [235, 244, 255];
-  static COVER_HUNTED_OUTLINE = [140, 240, 160];
-  static COVER_LEAVES_OUTLINE = [255, 184, 76];
-  static OPEN_HUNTED_OUTLINE = [255, 90, 70];
+  static COVER_OUTLINE = [140, 240, 160];
 
   constructor() {
     this.state = GAME_STATE.LEVEL_SELECT;
@@ -5288,7 +5284,7 @@ class Game {
         RAIDS._hit(r, side, sx, sy, Math.max(28, (s0.h / 2 + 10 * k) * CONFIG.viewZoom));
       }
       // (The hint, on a dark strip of its own so it reads over any ground.)
-      const hy = pipY + (below ? -36 : 36) * k, hint = `Tap a side to give it mana (${r.manaCfg.cost} mauri)`;
+      const hy = pipY + (below ? -36 : 36) * k, hint = `Tap to give MANA! [${r.manaCfg.cost} mauri]`;
       textSize(28 * k); textAlign(CENTER, CENTER);
       noStroke(); fill(14, 20, 16, 190);
       rect(-textWidth(hint) / 2 - 12 * k, hy - 18 * k, textWidth(hint) + 24 * k, 36 * k, 18 * k);
@@ -6370,7 +6366,7 @@ class Game {
     fill(msg && msg.error ? [240, 170, 150] : CACHED_COLORS.menuHint);
     smallTextSize(11);
     textAlign(CENTER, TOP);
-    text(msg ? msg.text : "Your progress, the journey's record, and every high score with its seed, in one file.",
+    text(msg ? msg.text : "Heads up; this downloads a .JSON file",
          cx - 240, sbY + sbH + 8, 480, 40);
     pop();
     return sbY + sbH + 48;
@@ -6433,7 +6429,7 @@ class Game {
     fill(unlocked ? [140, 180, 150] : [60, 60, 65]);
     smallTextSize(13);
     // (A long name is drawn smaller, to stay inside the card.)
-    const _nm = unlocked ? level.name : '🔒', _nw = textWidth(_nm);
+    const _nm = level.name, _nw = textWidth(_nm);   // (a locked card says so by its grey)
     if (_nw > s * 0.9) textSize((13 + SMALL_TEXT_BUMP) * s * 0.9 / _nw);
     text(_nm, bx, y + s * 0.82);
     pop();
@@ -6728,7 +6724,7 @@ class Game {
   // ---- The journey on the level select ----------------------------------------------------
   // Two parts. _renderJourneyModules: the tiles as a sequence in four groups (1 2 2f, 3 4 4f,
   // 5 6 6f, 7 7f; CAMPAIGN.GROUPS), 2×2, with lines showing that 2f opens both 3 and 5 and
-  // that 7 needs both 4 and 6. _renderJourneyPanel: the upper South Island with a marker on
+  // that 7 needs both 4f and 6f. _renderJourneyPanel: the upper South Island with a marker on
   // the tile's place in it, and under it the tile's name, the family as the record stands,
   // and the Start button at the bottom right. A click on a tile chooses it (the marker glides
   // there; pointing at one previews it); Start plays the chosen tile.
@@ -6811,7 +6807,6 @@ class Game {
       push(); textFont(FreckleFace); textSize(28); text(t.label, p.x + card / 2, p.y + 29); pop();
       smallTextSize(9);
       if (!def) { fill(96, 98, 104); text('to come', p.x + card / 2, p.y + 56); }
-      else if (!open) { fill(96, 98, 104); text('🔒', p.x + card / 2, p.y + 56); }
       this._journeyBtnBounds.push({ x: p.x, y: p.y, w: card, h: card, action: () => { this._journeySel = id; } });
     }
     pop();
@@ -6882,7 +6877,7 @@ class Game {
 
     // Under the map: the shown tile, and the family as the record stands.
     const t = C.tile(shown), def = t.level ? LEVEL_REGISTRY.get(t.level) : null;
-    const open = !!def && C.isOpen(shown), done = C.isWon(shown);
+    const open = !!def && C.isOpen(shown);
     const group = C.GROUPS.find(g => g.tiles.includes(shown));
     const iy = y + mh + 14;
     textAlign(LEFT, TOP);
@@ -6897,13 +6892,18 @@ class Game {
     let words = C.BLURBS[shown] || '';
     if (!def) words += ' Still to come.';
     else if (!open) words += ` Locked: win ${t.needs.filter(n => !C.isWon(n)).map(n => C.tile(n).label).join(' and ')} first.`;
-    else if (done) words += ' Won.';
-    const tBest = def ? SAVEGAME.best(def.id) : null;
+    // Debug only (D): the best run's score and seed, and the record's read-out (who walks, who
+    // was lost where, the learner's unaided answers). The record keeps all of it either way
+    // (CAMPAIGN.record, SAVEGAME scores; Settings' Export Save writes it out).
+    const dbg = !!CONFIG.debugMode;
+    const tBest = dbg && def ? SAVEGAME.best(def.id) : null;
     if (tBest) words += ` Best ${tBest.score} pts, seed ${tBest.seed}.`;
     fill(196, 212, 196); smallTextSize(12);
     text(words, x + 4, iy + 36, w - 8, 40);
-    fill(140, 164, 146); smallTextSize(9);
-    text(C.familyLines().join('  '), x + 4, iy + 80, w - 8, 34);
+    if (dbg) {
+      fill(140, 164, 146); smallTextSize(9);
+      text(C.familyLines().join('  '), x + 4, iy + 80, w - 8, 34);
+    }
 
     // The bottom row: two small buttons at the left, Start at the bottom right.
     const over = (bx, by, bw, bh) => mx > bx && mx < bx + bw && my > by && my < by + bh;
@@ -6916,13 +6916,13 @@ class Game {
     };
     const st = C.tile(sel), sdef = st.level ? LEVEL_REGISTRY.get(st.level) : null;
     const sOpen = !!sdef && C.isOpen(sel);
-    // The chosen tile's best run, to play again on its seed (mauri_save.js).
+    // The chosen tile's best run, to play again on its seed (mauri_save.js). "Open every tile"
+    // is debug only (D).
     const sBest = sOpen ? SAVEGAME.best(sdef.id) : null;
-    const nSmall = sBest ? 3 : 2;
-    const sw = Math.min(170, (w - 200) / nSmall - 6 - (nSmall - 2) * 4);
-    small(C.record.openAll ? "Every tile is open" : "Open every tile", x + 4, sw, () => C.toggleOpenAll());
-    small("Start again", x + 4 + sw + 10, sw, () => { C.reset(); this._journeySel = null; });
-    if (sBest) small("Best seed", x + 4 + (sw + 10) * 2, sw, () => {
+    const sw = Math.min(170, (w - 200) / 2 - 6);
+    let sx = x + 4;
+    if (dbg) { small(C.record.openAll ? "Every tile is open" : "Open every tile", sx, sw, () => C.toggleOpenAll()); sx += sw + 10; }
+    if (sBest) small("Best seed", sx, sw, () => {
       this.loadLevel(sdef.id);
       this._journeySel = null;
       this._replaySeed = sBest.seed;
@@ -7056,13 +7056,6 @@ class Game {
       const desc = (level.menu?.flavorText || []).slice(0, 2);
       for (let j = 0; j < desc.length; j++) {
         text(desc[j], x + cardW / 2, cardY + 100 + j * 18);
-      }
-
-      // Lock icon
-      if (!unlocked) {
-        fill(100, 100, 110);
-        textSize(32);
-        text("🔒", x + cardW / 2, cardY + 160);
       }
 
       // Best score, and the seed it was played on (mauri_save.js)
@@ -7756,16 +7749,13 @@ class Game {
 
   // A storm in hand (to call, or being moved), where it would be set down at (tx, ty) with
   // radius R: what it will do there. Only where the Storm is cover (blocksEagleVision). Where it
-  // can't be set down (ok false) it says only that.
-  //   - The moa it would hide: its sprite outlined cloud-white (pulsing green for one the Pouākai
-  //     is after). A moa the moved storm hides now and would leave in the open: outlined amber.
-  //     A hunted moa still in the open: outlined red. (EntitySprites.mark.)
+  // can't be set down (ok false) it shows nothing: the ring's colour says so.
+  //   - The moa it would hide: its sprite outlined green (EntitySprites.mark). Nothing else is
+  //     outlined and nothing is written: the green says who is protected.
   //   - The walk of each bird on its way somewhere (a story's walk, a seasonal migration): dots
   //     to where it is going, bright where the storm would cover them, pale under other cover,
   //     amber in the open.
-  //   - A label over the ring: whom it hides, whom it leaves, how much of the walk it covers.
-  // The family (the cast) and the focus species are shown wherever they are; other moa only
-  // when inside the ring.
+  // The walks are shown for the family (the cast) and the focus species wherever they are.
   _renderStormCoverPreview(tx, ty, R, held, ok = true) {
     const def = (this.activePlaceables && this.activePlaceables.Storm) || PLACEABLES.Storm;
     const sim = this.simulation;
@@ -7780,7 +7770,7 @@ class Game {
     // (One screen pixel, in world units: rings and words keep their size at any zoom.)
     const u = pixelDensity() / Math.max(0.05, Math.abs(drawingContext.getTransform().a));
     const gy = (x, y) => this._groundPaintY(x, y);
-    if (!ok) { this._stormPreviewLabel(tx, gy(tx, ty) - R, u, [{ t: "Can't set it down here", c: [255, 130, 110] }]); return; }
+    if (!ok) return; // (the ring's colour already says it can't go here)
 
     const cast = runner ? Object.values(runner.castEnts || {}).filter(e => e && e.alive && e.pos) : [];
     const watch = new Set(cast);
@@ -7790,29 +7780,11 @@ class Game {
     }
     const title = (m) => (runner && m.castName && runner.castDefs[m.castName]) ? runner.castDefs[m.castName].title : null;
 
-    const hides = [], leaves = [];
-    let hidesHunted = false, extraHidden = 0;
-    const pulse = 0.5 + 0.5 * Math.sin(frameCount * 0.15);
-    // Each bird is marked by its sprite's outline (EntitySprites.mark, drawn by Moa.render and,
-    // under a storm's clouds, Moa.renderOverStorm).
+    // Each moa the storm would hide is marked by its sprite's outline (EntitySprites.mark, drawn
+    // by Moa.render and, under a storm's clouds, Moa.renderOverStorm).
     push();
     noFill();
-    for (const m of watch) {
-      const under = inNew(m.pos.x, m.pos.y), sheltered = inOther(m.pos.x, m.pos.y);
-      const nowHeld = held && held.isInRange(m.pos);
-      const isHunted = hunted.has(m);
-      if (under) {
-        if (title(m)) hides.push(title(m)); else extraHidden++;
-        if (isHunted) hidesHunted = true;
-        if (isHunted) EntitySprites.mark(m, Game.COVER_HUNTED_OUTLINE, 0.65 + 0.35 * pulse);
-        else EntitySprites.mark(m, Game.COVER_OUTLINE, 0.95);
-      } else if (nowHeld && !sheltered) {
-        if (title(m)) leaves.push(title(m));
-        EntitySprites.mark(m, Game.COVER_LEAVES_OUTLINE, 0.95);
-      } else if (isHunted && !sheltered) {
-        EntitySprites.mark(m, Game.OPEN_HUNTED_OUTLINE, 0.6 + 0.4 * pulse);
-      }
-    }
+    for (const m of watch) if (inNew(m.pos.x, m.pos.y)) EntitySprites.mark(m, Game.COVER_OUTLINE, 0.95);
 
     // The walks: one route per destination, from the middle of those walking to it. Each is the
     // route predicted with the storm set down here (_predictWalk: the storms' pull bends it);
@@ -7872,12 +7844,7 @@ class Game {
       ellipse(d.x, gy(d.x, d.y), 12 * u, 8 * u);
       noStroke();
     }
-
-    // The words, over the ring: only a warning, when the move would leave one of the family in
-    // the open. (The outlines and the walk's dots already say whom it hides and where they go.)
-    const list = (a) => a.length <= 2 ? a.join(' and ') : `${a.slice(0, -1).join(', ')} and ${a[a.length - 1]}`;
     pop();
-    if (leaves.length) this._stormPreviewLabel(tx, gy(tx, ty) - R, u, [{ t: `Leaves ${list(leaves)} in the open`, c: [255, 190, 90] }]);
   }
 
   // The route a bird at (sx, sy) would walk to dest among these storms: points every 5 px.
@@ -7903,22 +7870,6 @@ class Game {
       pts.push({ x, y });
     }
     return pts;
-  }
-
-  // The storm preview's words: lines [{ t, c: [r, g, b] }] on a dark pill whose bottom sits
-  // just above y (world units; u is one screen pixel).
-  _stormPreviewLabel(x, y, u, lines) {
-    push();
-    noStroke();
-    textAlign(CENTER, CENTER);
-    textSize(13 * u);
-    const lh = 17 * u, padX = 8 * u;
-    const w = Math.max(...lines.map(l => textWidth(l.t))) + padX * 2;
-    const top = y - 8 * u - lines.length * lh;
-    fill(14, 20, 28, 185);
-    rect(x - w / 2, top - 4 * u, w, lines.length * lh + 8 * u, 6 * u);
-    lines.forEach((l, i) => { fill(l.c[0], l.c[1], l.c[2]); text(l.t, x, top + lh * (i + 0.5)); });
-    pop();
   }
 
   // Shared click handling for the level-select render settings (terrain-resolution slider,

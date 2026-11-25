@@ -491,11 +491,12 @@ if (require.main === module) {
   const GLACIER = [[170, 200, 222], [208, 228, 241], [242, 248, 252]];
   alpRelief.bands.forEach((b, i) => { b.colour = GLACIER[i]; });
 
+  const RIVER = [86, 92, 178];
   const C = {
-    sea:   meanWhere(pure('sea')),
+    sea:   [134, 192, 254],    // a clear mid blue (not the raster's near-white blue)
     shelf: meanWhere(pure('shelf')),
     lake:  meanWhere(pure('lake')),
-    river: [86, 92, 178]
+    river: RIVER
   };
   console.log('colours', Object.fromEntries(Object.entries(C).map(([k, c]) => [k, c && hex(c)])));
   console.log('land bands', landRelief.bands.map(b => b.colour && hex(b.colour)).join(' '));

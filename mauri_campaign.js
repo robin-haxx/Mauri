@@ -66,7 +66,7 @@ const CAMPAIGN = {
     t5:  { label: '5',  title: "The crowded forest", level: 'journey_kaka',           needs: ['t2f'], years: 1 },
     t6:  { label: '6',  title: "The crested one",  level: 'journey_crested',          needs: ['t5'], years: 1 },
     t6f: { label: '6f', title: "Giant moa",        level: 'journey_giants',           needs: ['t6'], years: 8, freePlay: true },
-    t7:  { label: '7',  title: "Paths meet",       level: 'journey_meeting',          needs: ['t4', 't6'], years: 1 },
+    t7:  { label: '7',  title: "Paths meet",       level: 'journey_meeting',          needs: ['t4f', 't6f'], years: 1 },
     t7f: { label: '7f', title: "Endless",          level: null,                       needs: ['t7'] },
     qNE: { label: '7f', title: "year 2",           level: null,                       needs: ['t7'] },
     qNW: { label: '7f', title: "year 3",           level: null,                       needs: ['t7'] },
@@ -133,19 +133,20 @@ const CAMPAIGN = {
 
   // The menu's sequence (Game._renderJourneyModules): the tiles in four groups, each a lesson
   // or two and the free play after them, laid out 2×2. `path` names the PATHS colour. A null
-  // slot is left empty (7 sits under 4, so the west path's line drops straight into it).
+  // slot is left empty.
   GROUPS: [
     { title: "Together",            path: 'together', tiles: ['t1', 't2', 't2f'] },
     { title: "West with Koukou",    path: 'west',     tiles: ['t3', 't4', 't4f'] },
     { title: "North with Pukepuke", path: 'north',    tiles: ['t5', 't6', 't6f'] },
-    { title: "The paths meet",      path: 'together', tiles: [null, 't7', 't7f'] }
+    { title: "The paths meet",      path: 'together', tiles: ['t7', 't7f', null] }
   ],
-  // The lines between groups: 2f opens both 3 and 5; 7 needs both 4 and 6.
+  // The lines between groups: 2f opens both 3 and 5; 7 needs both 4f and 6f (the same shapes:
+  // 4f drops round to 7 as 2f does to 5, and 6f runs straight across to it as 2f does to 3).
   LINKS: [
     { from: 't2f', to: 't3', path: 'west',  route: 'across' },
     { from: 't2f', to: 't5', path: 'north', route: 'under' },
-    { from: 't4',  to: 't7', path: 'west',  route: 'down' },
-    { from: 't6',  to: 't7', path: 'north', route: 'below' }
+    { from: 't4f', to: 't7', path: 'west',  route: 'under' },
+    { from: 't6f', to: 't7', path: 'north', route: 'across' }
   ],
   // One line per tile for the menu's panel. PLACEHOLDERS: the words are the author's.
   BLURBS: {

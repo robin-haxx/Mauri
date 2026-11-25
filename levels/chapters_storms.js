@@ -108,8 +108,8 @@ function makeChaptersStorms(sketchKey) {
   const D = STORM_SKETCHES[sketchKey];
   const id = `${CHAPTERS_STORMS_FAMILY}_${sketchKey}`;
 
-  // Standing storms at the start, on the tops near the nest (not over it: the family starts in
-  // the open, which is the point), for the player to move.
+  // Standing storms at the start, up on the tops round the nest (not over it or the berries: the
+  // family starts in the open, which is the point), for the player to move.
   const stormSites = ['tops', 'lookout', 'tops2', 'lookout2'].slice(0, D.storms);
   const openingStorms = stormSites.map(at => ({ place: { type: 'Storm', at, standing: true } }));
 
@@ -214,10 +214,13 @@ function makeChaptersStorms(sketchKey) {
     sites: {
       nest:    { find: 'high', near: { fx: 0.55, fy: 0.45 }, within: 260 },   // high open ground near the middle
       grove:   { find: 'open', near: 'nest', dist: [50, 100] },                // the berries, out in the open
-      tops:    { near: 'nest', dist: [60, 110] },                               // where the storms stand at the start
-      lookout: { near: 'nest', dist: [90, 150] },
-      tops2:   { near: 'grove', dist: [60, 110] },
-      lookout2: { near: 'tops', dist: [70, 130] },
+      // Where the storms stand at the start: up on the high ground round the nest, clear of the
+      // nest and the berries (where Papa and Mama start), so the first hunt is the player's to
+      // answer, not already answered by a storm that happens to stand over them.
+      tops:    { find: 'storm', near: 'nest', clear: ['nest', 'grove'] },
+      lookout: { find: 'storm', near: 'nest', clear: ['nest', 'grove'], apart: ['tops'] },
+      tops2:   { find: 'storm', near: 'grove', clear: ['nest', 'grove'], apart: ['tops', 'lookout'] },
+      lookout2: { find: 'storm', near: 'nest', clear: ['nest', 'grove'], apart: ['tops', 'lookout', 'tops2'] },
       tarn:    { find: 'low', near: 'nest', within: 560 }                      // the lowest ground within a walk
     },
 

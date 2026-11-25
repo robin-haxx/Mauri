@@ -4600,6 +4600,12 @@ class Game {
             (fam && fam.defaultSketch ? LEVEL_REGISTRY.get(fam.defaultSketch) : null) || sketches[0] || null;
     }
     if (!def) { console.warn(`[url] no level or family "${want}"`); return false; }
+    // A journey tile past this release's end can't be started from the URL either, except on
+    // localhost (tools/batch.js runs there).
+    if (typeof CAMPAIGN !== 'undefined') {
+      const tile = CAMPAIGN.tileOf(def.id);
+      if (tile && CAMPAIGN.isPastEnd(tile) && !CAMPAIGN._isLocal()) return false;
+    }
     const bench = Number(q.get('bench') || 0);
     if (bench > 0 && typeof BENCHMARK !== 'undefined') {
       BENCHMARK.armBatch(bench);
@@ -6919,18 +6925,25 @@ class Game {
     for (const id in pos) {
       const p = pos[id], t = C.tile(id), def = t.level ? LEVEL_REGISTRY.get(t.level) : null;
       const open = !!def && C.isOpen(id), done = C.isWon(id), chosen = id === sel;
+      const closed = C.isClosed(id);   // past this release's end (CAMPAIGN.LAST_PLAYABLE): red
       const hover = mx > p.x && mx < p.x + card && my > p.y && my < p.y + card;
       if (hover) this._journeyHover = id;
       this._cardFrame(p.x, p.y, card, card, open, hover || chosen, done, true);
+      if (closed) {
+        fill(118, 30, 34, hover || chosen ? 215 : 190); stroke(196, 74, 74, 220); strokeWeight(2);
+        rect(p.x, p.y, card, card, 12);
+        noStroke();
+      }
       if (chosen) {
         noFill(); stroke(250, 244, 222, 230); strokeWeight(2.5);
         rect(p.x - 4, p.y - 4, card + 8, card + 8, 15);
         noStroke();
       }
-      fill(open ? [226, 246, 228] : [104, 106, 112]);
+      fill(closed ? [236, 170, 166] : open ? [226, 246, 228] : [104, 106, 112]);
       push(); textFont(FreckleFace); textSize(28); text(t.label, p.x + card / 2, p.y + 29); pop();
       smallTextSize(9);
-      if (!def) { fill(96, 98, 104); text('to come', p.x + card / 2, p.y + 56); }
+      if (closed) { fill(236, 170, 166); text('coming soon', p.x + card / 2, p.y + 56); }
+      else if (!def) { fill(96, 98, 104); text('to come', p.x + card / 2, p.y + 56); }
       this._journeyBtnBounds.push({ x: p.x, y: p.y, w: card, h: card, action: () => { this._journeySel = id; } });
     }
     pop();
@@ -7014,7 +7027,8 @@ class Game {
       textAlign(LEFT, TOP);
     }
     let words = C.BLURBS[shown] || '';
-    if (!def) words += ' Still to come.';
+    if (C.isClosed(shown)) words += ' Coming in a later update.';
+    else if (!def) words += ' Still to come.';
     else if (!open) words += ` Locked: win ${t.needs.filter(n => !C.isWon(n)).map(n => C.tile(n).label).join(' and ')} first.`;
     // Debug only (D): the best run's score and seed, and the record's read-out (who walks, who
     // was lost where, the learner's unaided answers). The record keeps all of it either way
@@ -7053,14 +7067,14 @@ class Game {
       this._startLoading();
     });
     const bw = 180, bh = 54, bx = x + w - bw - 4, by = y + H - bh - 4;
-    const hover = live && sOpen && over(bx, by, bw, bh);
-    stroke(sOpen ? (hover ? [220, 250, 226] : [130, 200, 146]) : [60, 62, 66]); strokeWeight(2.5);
-    fill(sOpen ? (hover ? [76, 150, 96] : [56, 122, 76]) : [38, 40, 44]);
+    const hover = live && sOpen && over(bx, by, bw, bh), sClosed = C.isClosed(sel);
+    stroke(sOpen ? (hover ? [220, 250, 226] : [130, 200, 146]) : sClosed ? [150, 64, 64] : [60, 62, 66]); strokeWeight(2.5);
+    fill(sOpen ? (hover ? [76, 150, 96] : [56, 122, 76]) : sClosed ? [86, 28, 32] : [38, 40, 44]);
     rect(bx, by, bw, bh, 14);
     stroke(255, 255, 255, sOpen ? 50 : 14); strokeWeight(2); line(bx + 14, by + 5, bx + bw - 14, by + 5);
-    noStroke(); fill(sOpen ? [250, 246, 226] : [110, 112, 118]); textAlign(CENTER, CENTER);
+    noStroke(); fill(sOpen ? [250, 246, 226] : sClosed ? [226, 160, 156] : [110, 112, 118]); textAlign(CENTER, CENTER);
     push(); textFont(FreckleFace); textSize(23);
-    text(!sdef ? "To come" : !sOpen ? `${st.label} is locked` : C.isWon(sel) ? `Replay ${st.label}` : `Start ${st.label}`, bx + bw / 2, by + bh / 2 + 1);
+    text(sClosed ? "Coming soon" : !sdef ? "To come" : !sOpen ? `${st.label} is locked` : C.isWon(sel) ? `Replay ${st.label}` : `Start ${st.label}`, bx + bw / 2, by + bh / 2 + 1);
     pop();
     if (sdef) this._levelCardBounds.push({ x: bx, y: by, w: bw, h: bh, levelId: sdef.id, unlocked: sOpen, module: true, chapters: true });
     ctx.restore();

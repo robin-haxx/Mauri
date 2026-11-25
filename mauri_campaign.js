@@ -300,8 +300,28 @@ const CAMPAIGN = {
   },
   isOpen(id) {
     const t = this.TILES[id];
-    if (!t || !t.level) return false;
+    if (!t || !t.level || this.isClosed(id)) return false;
     return !!this.record.openAll || t.needs.every(n => this.isWon(n));
+  },
+
+  // THE RELEASE'S END. The tiles after LAST_PLAYABLE (in GROUPS order) are shown on the menu,
+  // drawn red, but can't be played: no Start, no "Continue journey" onto them, no ?level= start.
+  // On localhost (or a file:// page) the debug "Open every tile" switch (D) still opens them, so
+  // they can be worked on; a player on itch.io can't. Set LAST_PLAYABLE to null to open them all.
+  LAST_PLAYABLE: 't2f',
+  _isLocal() {
+    if (typeof window === 'undefined' || !window.location) return true;
+    return ['localhost', '127.0.0.1', '[::1]', ''].includes(window.location.hostname);
+  },
+  // Past the release's end, whoever is playing (a tile in no group counts as past it).
+  isPastEnd(id) {
+    if (!this.LAST_PLAYABLE) return false;
+    const order = this.GROUPS.flatMap(g => g.tiles).filter(Boolean);
+    const i = order.indexOf(id);
+    return i < 0 || i > order.indexOf(this.LAST_PLAYABLE);
+  },
+  isClosed(id) {
+    return this.isPastEnd(id) && !(this._isLocal() && this.record && this.record.openAll);
   },
 
   // The win card's ways on: a level's `waysOn: [{ label, tile, sub }]`, those that can be played.
@@ -311,7 +331,7 @@ const CAMPAIGN = {
     const out = [];
     for (const w of (level.waysOn || [])) {
       const t = this.TILES[w.tile];
-      if (!t || !t.level || typeof LEVEL_REGISTRY === 'undefined' || !LEVEL_REGISTRY.get(t.level)) continue;
+      if (!t || !t.level || this.isClosed(w.tile) || typeof LEVEL_REGISTRY === 'undefined' || !LEVEL_REGISTRY.get(t.level)) continue;
       const y = t.years || 1;
       out.push({
         id: t.level,

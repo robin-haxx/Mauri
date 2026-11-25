@@ -2174,14 +2174,13 @@ class GameUI {
 
     // Global interactions (Mast Year, Nest Raid, ...) have no footprint or lifetime, so
     // only list the stats a tool actually has. A module's story levels show just the name and
-    // description (their Free Play keeps the stats).
+    // description (their Free Play keeps the stats). The cost is on the button itself, so the
+    // tooltip doesn't repeat it.
     const stats = [];
     const lv = this.game.currentLevel;
     if (!(lv && lv.module && !lv.freePlay)) {
-      if (def.cost != null) stats.push(`Cost: ${def.cost} mauri`);
       if (def.duration) stats.push(`Lasts: ${(def.duration / 60).toFixed(0)}s`);
       if (def.matureAfterYears) stats.push(`Matures: after ${def.matureAfterYears} year${def.matureAfterYears === 1 ? '' : 's'}`);
-      if (def.moveCost != null) stats.push(`Moving one: ${def.moveCost} mauri`);
       if (def.radius) stats.push(`Radius: ${def.radius}px`);
     }
 

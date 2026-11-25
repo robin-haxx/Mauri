@@ -248,6 +248,21 @@ const PlantStatics = {
     return this.swayTable[index | 0] * 0.05 * modifier;
   },
 
+  // A side-on sprite (a tree) sways from its foot, not its middle: a shear about its base
+  // line (screen y = baseY) moves its top `topDx` px while the trunk stays planted. Applied
+  // straight to the 2D context's transform (the GL batch reads that per image()), and undone
+  // with its exact inverse by leanEnd: no push/pop or save/restore per tree.
+  // Returns the shear factor to hand back to leanEnd (0 = nothing applied).
+  leanBegin(baseY, h, topDx) {
+    if (!topDx || !(h > 0) || typeof drawingContext === 'undefined' || !drawingContext.transform) return 0;
+    const k = -topDx / h;                 // x' = x + k(y - baseY): the top (y = baseY - h) moves topDx
+    drawingContext.transform(1, 0, k, 1, -k * baseY, 0);
+    return k;
+  },
+  leanEnd(baseY, k) {
+    if (k) drawingContext.transform(1, 0, -k, 1, k * baseY, 0);
+  },
+
   // Whether plants draw their ground shadow: one extra sprite per plant, of hundreds on
   // screen, so performance mode leaves it out.
   shadows() {
@@ -731,11 +746,18 @@ class Plant {
 
     // Sway as a cheap sub-pixel x-offset rather than a per-plant push/rotate/pop, which
     // was the dominant render cost with thousands of plants on screen.
-    let drawX = px - halfSize;
+    // A side-on tree (lancewood) leans from its trunk's foot instead (PlantStatics.leanBegin),
+    // its crown moving twice as far as a clump's whole sprite does, so its middle matches.
+    const leans = TREE_SHADOW.square.has(this.type);
+    let sway = 0;
     if (!dormant && this.seasonalModifier > 0.1) {
-      drawX += PlantStatics.getSway(frameCount, this.swayPhase, this.seasonalModifier) * halfSize;
+      sway = PlantStatics.getSway(frameCount, this.swayPhase, this.seasonalModifier) * halfSize;
     }
-    if (this._shakeStart != null) drawX += this._shakeX(halfSize);
+    if (this._shakeStart != null) sway += this._shakeX(halfSize);
+    let drawX = px - halfSize, lean = 0;
+    const baseY = py + halfSize;
+    if (leans) lean = PlantStatics.leanBegin(baseY, spriteSize, sway * 2);
+    else drawX += sway;
     const dy = py - halfSize;
     // (Where it was drawn this frame, for its outline over the trees: renderOverOutline.)
     if (PLANT_OVER_OUTLINE[this.type]) {
@@ -752,6 +774,7 @@ class Plant {
     } else {
       image(sprite, drawX, dy, spriteSize, spriteSize);
     }
+    PlantStatics.leanEnd(baseY, lean);
     if (this._dropAt != null) this._drawBerryDrop(px, py, spriteSize);
 
     // Dormant indicator (the frost of a winter's dormancy, not an unsprouted plant's)
@@ -818,14 +841,17 @@ class Plant {
     if (PlantStatics.shadows()) EntitySprites.drawTreeShadow(sprite, px, py, spriteW, spriteH,
       dormant ? 0.05 : 0.10, TREE_SHADOW.squash, TREE_SHADOW.lean, spriteW * 0.9);
 
-    // Cheap sub-pixel sway offset (see _renderSprite); no per-plant matrix ops.
-    let drawX = px - halfW;
+    // Sways from its foot (py), not its middle: a lean (PlantStatics.leanBegin) whose crown
+    // moves twice as far as a clump's whole sprite does, so its middle matches.
+    let sway = 0;
     if (!dormant && this.seasonalModifier > 0.1) {
-      drawX += PlantStatics.getSway(frameCount, this.swayPhase, this.seasonalModifier) * halfW;
+      sway = PlantStatics.getSway(frameCount, this.swayPhase, this.seasonalModifier) * halfW;
     }
-    if (this._shakeStart != null) drawX += this._shakeX(halfW);
+    if (this._shakeStart != null) sway += this._shakeX(halfW);
+    const lean = PlantStatics.leanBegin(py, spriteH, sway * 2);
     // Bottom of the sprite sits on the ground point (py).
-    image(sprite, drawX, py - spriteH, spriteW, spriteH);
+    image(sprite, px - halfW, py - spriteH, spriteW, spriteH);
+    PlantStatics.leanEnd(py, lean);
 
     // Dormant indicator
     if (dormant) {

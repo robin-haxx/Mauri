@@ -15,6 +15,9 @@ const LEVEL_FREEPLAY_KAHURANGI = {
   // Endless: no phases, no timed end, no win. checkGoals() short-circuits to the
   // yearly-goal engine.
   endless: true,
+  // On the menu it sits with the classic levels (its endless flag alone would file it under
+  // the hidden "Endless" section, which is for the newer chapters_endless).
+  section: 'classic',
 
   // (The view zoom comes from worldGrid.zoomByLoop below.)
   // Endless years run summer → autumn → winter → spring; the camera pans to the next

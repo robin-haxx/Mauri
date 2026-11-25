@@ -6,8 +6,9 @@
 // generator, the play) comes back the same when the seed is played again. Where the seed
 // comes from, first that applies:
 //   a research batch's  (BENCHMARK.nextSeed: tools/batch.js, ?bench=)
-//   a replayed one      (Game._replaySeed: "Replay seed" on an end card, a high score's ▶,
-//                        "Play a seed…" on a level's splash, "Replay best seed" on the journey)
+//   a replayed one      (Game._replaySeed: Restart with "Random seed on restart" off, a high
+//                        score's ▶ REPLAY or "Play a seed…" on a level's splash, "Best seed"
+//                        on the journey)
 //   the URL's           (?seed=<n>, every level started from that page)
 //   a fresh one         (SAVEGAME.newSeed)
 //
@@ -24,7 +25,7 @@
 //
 // EXPORT / IMPORT (the level select's Settings): the whole save as one JSON file, which is
 // PROGRESS (levels won and unlocked, best scores, the above), the journey's record
-// (CAMPAIGN.record: who is alive, the herds, the bounty) and the two display preferences. An
+// (CAMPAIGN.record: who is alive, the herds, the bounty) and the preferences (PREF_KEYS). An
 // import replaces all of it; the save it replaced is kept (under _backupKey) so "Undo import"
 // can put it back.
 // ============================================================================
@@ -35,8 +36,9 @@ const SAVEGAME = {
   MAX_SCORES: 10,
   MAX_LOG: 200,
   _backupKey: 'avianage_save_backup',
-  // The display preferences carried in a save (mauri_sketch.js: PERF_PREF_KEY, GL_PREF_KEY).
-  PREF_KEYS: ['mauri_perfMode', 'mauri_useGL'],
+  // The preferences carried in a save (mauri_sketch.js: PERF_PREF_KEY, GL_PREF_KEY,
+  // RESTART_SEED_PREF_KEY).
+  PREF_KEYS: ['mauri_perfMode', 'mauri_useGL', 'mauri_randomSeedOnRestart'],
 
   // A fresh seed: a positive 31-bit whole number (Math.random, as p5's generator is about to be
   // seeded with it).
@@ -177,6 +179,7 @@ const SAVEGAME = {
       if (typeof prefs[k] !== 'string') continue;
       try { localStorage.setItem(k, prefs[k]); } catch (e) { /* no storage */ }
       if (k === 'mauri_perfMode' && typeof setPerfMode === 'function') setPerfMode(prefs[k] === '1', false);
+      if (k === 'mauri_randomSeedOnRestart' && typeof setRandomSeedOnRestart === 'function') setRandomSeedOnRestart(prefs[k] !== '0', false);
     }
     return this.describe(snap);
   },

@@ -360,7 +360,7 @@ const JOURNEY_PATOTARA = (() => {
       ...K.huntInVoice({ species: 'upland_moa', teach: false, chapters: TAUGHT }),
       ...K.stormInVoice({ teach: false, lit: FAMILY, chapters: TAUGHT }),
       { id: 'gave_up', on: 'eagle_gave_up', once: false, cooldown: 5,
-        notify: ['Pouākai: "SKRAHH! Off to the flats, then..."', 'success'] },
+        notify: ['Pouākai: "SKRAHH!"', 'success'] },
       { id: 'herd_taken', on: 'moa_killed', if: { species: 'stout_legged_moa' }, once: false, cooldown: 30,
         notify: "The Pouākai has fed on the herd." },
 

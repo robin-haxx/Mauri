@@ -150,17 +150,17 @@ const CAMPAIGN = {
   ],
   // One line per tile for the menu's panel. PLACEHOLDERS: the words are the author's.
   BLURBS: {
-    t1:  "A storm hides a moa from the Pouākai.",
-    t2:  "Pātōtara feeds the family, and the kea come for the egg.",
-    t2f: "Four years on the tops. Pipi's egg is laid, and taken.",
-    t3:  "Koukou and her family meet the little bush moa.",
-    t4:  "The kākāpō set a riddle about the rimu.",
-    t4f: "Eight years. Keep the forest bountiful as the cold comes down.",
-    t5:  "Pukepuke's family winters beside a flock of kākā.",
-    t6:  "An old crested moa of the high country.",
-    t6f: "Eight years. Grow the clan beside the slow-breeding giant moa.",
-    t7:  "Both families meet, and a chick hatches.",
-    t7f: "The whole land, year after year."
+    t1:  "Learn how to help your moa migrate safely.",
+    t2:  "Meet the other alpine birds that eat Pātōtara!",
+    t2f: "Watch over Pukepuke and Koukou as they grow up!",
+    t3:  "Koukou and her tribe meet the little bush moa.",
+    t4:  "Can you solve the kākāpō's riddle?",
+    t4f: "Help Koukou's tribe make the dense forest their home.",
+    t5:  "Pukepuke gets help from kākā.",
+    t6:  "A plan to get Kiki back?",
+    t6f: "Help Pukepuke get the kea on his side.",
+    t7:  "The counter-raid.",
+    t7f: "Endless Mode, "
   },
   // The upper South Island graphic behind the tiles (sprites/journey_map.svg, traced from
   // sprites/journey_map.png by tools/trace_map.js; its viewBox is the raster's w × h px) and

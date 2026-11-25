@@ -142,6 +142,21 @@ function setPerfMode(on, persist = true) {
   return on;
 }
 
+// "Random seed on restart" (the level splash's switch, under Start Level; saved). On (the
+// default), Restart deals a new seed. Off, Restart plays the run's seed again, and the pause and
+// end cards add "Restart with new seed" under it. Leaving to the menu always drops the seed.
+const RESTART_SEED_PREF_KEY = 'mauri_randomSeedOnRestart';
+
+function resolveRestartSeedPreference() {
+  try { return localStorage.getItem(RESTART_SEED_PREF_KEY) !== '0'; } catch (_) { return true; }
+}
+
+function setRandomSeedOnRestart(on, persist = true) {
+  CONFIG.randomSeedOnRestart = !!on;
+  if (persist) { try { localStorage.setItem(RESTART_SEED_PREF_KEY, on ? '1' : '0'); } catch (_) {} }
+  return CONFIG.randomSeedOnRestart;
+}
+
 function preload(){
   OpenDyslexic = loadFont('typefaces/OpenDyslexic.ttf');
   GroceryRounded = loadFont('typefaces/GroceryRounded.ttf');
@@ -261,6 +276,9 @@ const CONFIG = {
   // Performance mode: a lighter render for integrated GPUs and tablets (see setPerfMode).
   // Set at startup from the saved choice (resolvePerfModePreference); toggled on level select.
   perfMode: false,
+
+  // Random seed on restart (see setRandomSeedOnRestart): set at startup from the saved choice.
+  randomSeedOnRestart: true,
 
   // Terrain-resolution scale. The GPU height-field renders into an offscreen buffer at this
   // fraction of 1080 and blits up; 1 (native) is the default, floated down toward 0.5 under
@@ -1235,7 +1253,7 @@ const USER_ZOOMS = [1, 1.5, 2.25, 3.2];
 
 const MENU_SECTIONS = [
   { key: 'journey',  label: "The journey", style: 'journey' },   // the map of tiles (mauri_campaign.js)
-  { key: 'stories',  label: "Stories",  style: 'modules' },
+  { key: 'stories',  label: "Stories",  style: 'modules', hidden: true },
   { key: 'chapters', label: "Chapters", style: 'sketches', hidden: true },
   { key: 'endless',  label: "Endless",  style: 'cards', hidden: true },
   { key: 'classic',  label: "Classic",  style: 'cards' },
@@ -1492,7 +1510,7 @@ class Game {
     if (this.terrain && this.terrain.dispose) this.terrain.dispose();
     // Every attempt is seeded: the land, and with every roll on p5's generator, the play, come
     // back the same from the same seed. A research batch's seed first, then one being replayed
-    // (_replaySeed: an end card's "Replay seed", a high score's play button), then ?seed=, else
+    // (_replaySeed: Restart with "Random seed on restart" off, a high score's REPLAY), then ?seed=, else
     // a fresh one. The seed is logged with the attempt's result (mauri_save.js).
     const benchSeed = (typeof BENCHMARK !== 'undefined' && BENCHMARK.nextSeed) ? BENCHMARK.nextSeed() : null;
     let seedFrom = 'bench', seed = benchSeed;
@@ -2757,7 +2775,7 @@ class Game {
 
   // ---- Attempts: each run's seed and result, into the save (mauri_save.js) -----------------
   // Begun as the level's land is seeded; closed by _watchAttempt at a win or loss, or by
-  // _closeAttempt('quit') when the player leaves (Restart, Exit to Menu, Replay seed). A
+  // _closeAttempt('quit') when the player leaves (Restart, Exit to Menu). A
   // research run is not recorded.
   _beginAttempt(seedFrom) {
     const L = this.currentLevel;
@@ -2796,16 +2814,6 @@ class Game {
     if (!a || this.runSeed == null) return null;
     const place = !a.recorded ? '' : a.best ? ' · New best score!' : a.rank ? ` · #${a.rank} on this level's high scores` : '';
     return `Seed ${this.runSeed}${place}`;
-  }
-
-  // Play the current level again on this run's seed.
-  _replayThisSeed() {
-    if (this.runSeed == null || !this.currentLevel) return;
-    const seed = this.runSeed;
-    this._closeAttempt('quit');
-    this.loadLevel(this.currentLevel.id);
-    this._replaySeed = seed;
-    this._startLoading();
   }
 
   checkGoals() {
@@ -4511,6 +4519,7 @@ class Game {
     // Unlike a natural win/loss (playWin/playLoss stop the audio for us), this manual
     // exit has no sound call, so silence the gameplay track and voices ourselves.
     if (audioManager) { audioManager.stopBackground(); audioManager.stopAllVoices(); }
+    this._replaySeed = null;   // (the menu always starts the next run on a new seed)
     this.state = GAME_STATE.LEVEL_SELECT;
   }
 
@@ -4547,12 +4556,24 @@ class Game {
               (this.tutorial && this.tutorial.active && this.tutorial.currentTip));
   }
 
-  // Restart the current level from the top (pause screen's "Restart" button, and the R key).
-  _restartLevel() {
+  // Restart the current level from the top (the pause and end cards' Restart, the R key). A new
+  // seed when `newSeed` (by default the "Random seed on restart" setting), else this run's seed
+  // again (see setRandomSeedOnRestart).
+  _restartLevel(newSeed = CONFIG.randomSeedOnRestart) {
     if (!this.currentLevel) return;
+    const seed = this.runSeed;
     this._closeAttempt('quit');
     this.loadLevel(this.currentLevel.id);
+    this._replaySeed = (!newSeed && seed != null) ? seed : null;
     this._startLoading();
+  }
+
+  // The pause and end cards' restart buttons: Restart (as the setting says), and with "Random
+  // seed on restart" off, "Restart with new seed" under it. `label` renames the first.
+  _restartButtons(label = "Restart") {
+    const btns = [{ label, action: () => this._restartLevel() }];
+    if (!CONFIG.randomSeedOnRestart) btns.push({ label: "Restart with new seed", action: () => this._restartLevel(true) });
+    return btns;
   }
 
   // Straight into a level, no splash (the win card's "Next module", the URL's ?level=).
@@ -4593,6 +4614,7 @@ class Game {
   // Win / loss screen's "Back to Menu" button (and the R key there). playWin/playLoss already
   // stopped the gameplay audio, so unlike _exitToMenu this doesn't cut the end fanfare.
   _returnToMenuFromEnd() {
+    this._replaySeed = null;   // (the menu always starts the next run on a new seed)
     this.state = GAME_STATE.LEVEL_SELECT;
   }
 
@@ -5681,7 +5703,7 @@ class Game {
         boxColor: [60, 35, 35, 250],
         strokeColor: [150, 100, 100],
         buttons: [
-          { label: "Try Again", action: () => this._restartLevel() },
+          ...this._restartButtons("Try Again"),
           { label: "Back to Menu", action: () => this._returnToMenuFromEnd() }
         ]
       });
@@ -5702,7 +5724,7 @@ class Game {
       // (_journeyOnward).
       const _journey = (typeof CAMPAIGN !== 'undefined' && L.journey) ? CAMPAIGN : null;
       if (_journey) for (const w of _journey.waysOn(L)) buttons.push({ label: w.label, caption: w.sub, action: () => this._journeyOnward(w.id) });
-      if (!_journey && this.runSeed != null && buttons.length < 3) buttons.push({ label: "Replay seed", action: () => this._replayThisSeed() });
+      if (!_journey && buttons.length < 3) buttons.push(...this._restartButtons());
       const unlocked = _journey ? _journey.unlocks(L).map(id => ({ placeable: id })) : [];
       const art = unlocked.length ? { h: 190, w: unlocked.length * 170 + 40, draw: (cx, top) => this._renderItemsBlock("YOU'VE UNLOCKED:", unlocked, cx, top) }
         : nextItem ? { h: 190, draw: (cx, top) => this._renderNextUp(nextItem, cx, top) } : null;
@@ -5748,7 +5770,7 @@ class Game {
         // Free Play also gets a one-click export of the whole run's season-by-season stats.
         buttons: [
           ...(_endless ? [{ label: "Export run stats", action: () => this.exportFreeplayStats() }] : []),
-          ...(this.runSeed != null ? [{ label: "Replay seed", action: () => this._replayThisSeed() }] : []),
+          ...this._restartButtons(),
           { label: "Back to Menu", action: () => this._returnToMenuFromEnd() }
         ]
       });
@@ -5762,10 +5784,10 @@ class Game {
     // Every action is a button (touch has no keyboard); the keys stay as a small hint.
     const _pauseButtons = [
       { label: "Resume", action: () => this.togglePause() },
-      { label: "Restart", action: () => this._restartLevel() },
+      ...this._restartButtons(),
       { label: "Exit to Menu", action: () => this._exitToMenu() }
     ];
-    if (_endless) _pauseButtons.splice(2, 0, { label: "End Run", action: () => this._endFreeplayRun() });
+    if (_endless) _pauseButtons.splice(_pauseButtons.length - 1, 0, { label: "End Run", action: () => this._endFreeplayRun() });
     this._renderOverlay(...CONFIG.col_UI.slice(0,3), 100, {
       title: "PAUSED",
       titleColor: [255, 255, 255],
@@ -6192,85 +6214,187 @@ class Game {
     pop();
   }
 
-  // The level splash's high-score table: the best runs with their seeds, each with a button that
-  // plays its seed again, the level's tally, and "Play a seed…" for a seed from somewhere else
-  // (a friend's save, a bug report). The panel's right edge is at `right`. Sets _splashScoreBtns.
-  _renderSplashScores(right, top) {
+  // The level splash's launch panel, centred under the flavour text: the level's high scores on
+  // the left (the best runs with their seeds; a row plays its seed again) over its tally, and on
+  // the right the Start button, the "Random seed on restart" switch, "Play a seed…" (for a seed from
+  // somewhere else: a friend's save, a bug report) and Back. `top` is where the panel would like
+  // to start; it moves up if it would run into the footer. Sets _menuBtnBounds, _backBtnBounds
+  // and _splashScoreBtns (handled in handleClick's MENU branch).
+  _renderSplashLaunch(centerX, top, cw, ch) {
     const L = this.currentLevel;
     this._splashScoreBtns = [];
-    if (!L) return;
-    const list = SAVEGAME.scores(L.id).slice(0, 5), st = PROGRESS.stats[L.id];
+    const list = L ? SAVEGAME.scores(L.id).slice(0, 5) : [];
+    const st = L ? PROGRESS.stats[L.id] : null;
     const endless = SAVEGAME.isEndless(L);
-    const w = 360, rowH = 26, x = right - w;
-    const h = 40 + Math.max(1, list.length) * rowH + 22 + 44;
     const over = (bx, by, bw, bh) => mouseX > bx && mouseX < bx + bw && mouseY > by && mouseY < by + bh;
+    const gold = [255, 236, 160], muted = [130, 152, 136];
+
+    // Size: the scores column is as tall as its rows (at least three, so an empty table still
+    // reads as a table); the launch column is fixed.
+    const pad = 22, rowH = 30, headH = 34, tallyH = 26;
+    const rows = Math.max(3, list.length);
+    const leftH = pad + headH + 8 + rows * rowH + tallyH + pad - 6;
+    const startW = 220, startH = 60, toggleH = 32, backW = 120, backH = 38, seedH = 30;
+    const rightH = pad + startH + 12 + toggleH + 10 + seedH + 14 + backH + pad;
+    const W = Math.min(820, cw - 80), H = Math.max(leftH, rightH);
+    const x = Math.round(centerX - W / 2);
+    const y = Math.round(Math.min(top, ch - 64 - H));
+    const rightW = 260, divX = x + W - rightW;
+    const lx = x + pad, lw = divX - pad - lx;
+
     push();
+    // The panel: a faint well with a hairline in the buttons' green, and a rule between columns.
     noStroke();
-    fill(14, 22, 18, 170);
-    rect(x, top, w, h, 12);
+    fill(0, 0, 0, 70);
+    rect(x, y, W, H, 14);
+    noFill();
+    stroke(CACHED_COLORS.btnStroke[0], CACHED_COLORS.btnStroke[1], CACHED_COLORS.btnStroke[2], 70);
+    strokeWeight(1.5);
+    rect(x, y, W, H, 14);
+    stroke(CACHED_COLORS.btnStroke[0], CACHED_COLORS.btnStroke[1], CACHED_COLORS.btnStroke[2], 45);
+    strokeWeight(1);
+    line(divX, y + 18, divX, y + H - 18);
+
+    // ---- High scores -------------------------------------------------------------------
+    let yy = y + pad;
+    noStroke();
     textAlign(LEFT, CENTER);
-    fill(CACHED_COLORS.menuSubtitle);
-    smallTextSize(12);
-    text(endless ? "HIGH SCORES (every run)" : "HIGH SCORES (wins)", x + 14, top + 18);
-    let y = top + 40;
+    push(); textFont(FreckleFace); textSize(24);
+    fill(CACHED_COLORS.menuTitle);
+    text("High scores", lx, yy + headH / 2);
+    pop();
+    textAlign(RIGHT, CENTER);
+    fill(muted); smallTextSize(11);
+    text(endless ? "every run counts" : "wins only", lx + lw, yy + headH / 2 + 2);
+    yy += headH;
+    stroke(CACHED_COLORS.btnStroke[0], CACHED_COLORS.btnStroke[1], CACHED_COLORS.btnStroke[2], 60);
+    strokeWeight(1);
+    line(lx, yy + 2, lx + lw, yy + 2);
+    noStroke();
+    yy += 8;
+
+    // Columns: rank, score, years (endless), seed, and the replay chip at the right.
+    const cRank = lx + 4, cScore = lx + 34, cYears = lx + 150, cSeed = lx + (endless ? 210 : 160);
     if (!list.length) {
-      fill(CACHED_COLORS.menuText); smallTextSize(11);
-      text("None yet. Every run's seed is kept with its score.", x + 14, y + rowH / 2);
-      y += rowH;
+      textAlign(CENTER, CENTER);
+      fill(CACHED_COLORS.menuText); smallTextSize(13);
+      text("No runs yet.", lx + lw / 2, yy + rows * rowH / 2 - 12);
+      fill(muted); smallTextSize(11);
+     
     }
     list.forEach((e, i) => {
-      const cy = y + rowH / 2;
-      fill(i === 0 ? [255, 236, 160] : [200, 220, 205]);
-      smallTextSize(12);
-      text(`${i + 1}.`, x + 14, cy);
-      text(`${e.score} pts${endless ? ` · ${e.years || 0} yr` : ''}`, x + 40, cy);
-      fill(150, 175, 158); smallTextSize(11);
-      text(`seed ${e.seed}`, x + 170, cy);
-      // ▶: play this seed again.
-      const bw = 52, bh = 20, bx = x + w - bw - 12, by = cy - bh / 2, hv = over(bx, by, bw, bh);
-      fill(hv ? [76, 150, 96] : [44, 84, 58]); rect(bx, by, bw, bh, 10);
-      fill(235, 245, 238); textAlign(CENTER, CENTER); smallTextSize(10);
-      text("REPLAY", bx + bw / 2, cy);
+      const ry = yy + i * rowH, cy = ry + rowH / 2;
+      // The whole row plays its seed again; it lights under the pointer.
+      const hv = over(lx - 8, ry, lw + 16, rowH);
+      if (hv) { fill(255, 255, 255, 16); rect(lx - 8, ry + 1, lw + 16, rowH - 2, 8); }
+      else if (i % 2 === 0) { fill(255, 255, 255, 5); rect(lx - 8, ry + 1, lw + 16, rowH - 2, 8); }
       textAlign(LEFT, CENTER);
-      this._splashScoreBtns.push({ x: bx, y: by, w: bw, h: bh, action: () => { this._replaySeed = e.seed; this._startLoading(); } });
-      y += rowH;
+      push(); textFont(FreckleFace); textSize(18);
+      fill(i === 0 ? gold : CACHED_COLORS.menuSubtitle);
+      text(`${i + 1}`, cRank, cy - 2);
+      pop();
+      fill(i === 0 ? gold : [214, 230, 216]); textSize(16);
+      text(`${e.score} pts`, cScore, cy);
+      if (endless) { fill(CACHED_COLORS.menuText); smallTextSize(12); text(`${e.years || 0} yr`, cYears, cy); }
+      fill(muted); smallTextSize(11);
+      text(`seed ${e.seed}`, cSeed, cy);
+      const pw = 70, ph = 20, px = lx + lw - pw, py = cy - ph / 2;
+      fill(hv ? [76, 150, 96] : [40, 70, 50]);
+      rect(px, py, pw, ph, ph / 2);
+      fill(hv ? 255 : [190, 220, 198]); textAlign(CENTER, CENTER); smallTextSize(10);
+      text("▶ REPLAY", px + pw / 2, cy);
+      this._splashScoreBtns.push({ x: lx - 8, y: ry, w: lw + 16, h: rowH,
+        action: () => { touchSound('confirm'); this._replaySeed = e.seed; this._startLoading(); } });
     });
+    yy += rows * rowH;
     // The level's tally.
-    fill(140, 164, 146); smallTextSize(10);
+    textAlign(LEFT, CENTER);
+    fill(muted); smallTextSize(10);
     const mins = Math.round(((st && st.seconds) || 0) / 60);
     text(st ? `${st.attempts} attempt${st.attempts === 1 ? '' : 's'} · ${st.won || 0} won · ${st.lost || 0} lost${st.ended ? ` · ${st.ended} ended` : ''} · ${mins} min played`
-            : "Not played yet.", x + 14, y + 10);
-    y += 22;
-    // Play a seed…, and the seed the next run will use when one is chosen.
-    const pw = 130, ph = 30, px = x + 14, py = y + 4, phv = over(px, py, pw, ph);
-    fill(phv ? [46, 80, 58] : [30, 44, 36]); stroke(phv ? [200, 240, 210] : CACHED_COLORS.btnStroke); strokeWeight(1.5);
-    rect(px, py, pw, ph, ph / 2); noStroke();
-    fill(phv ? [200, 240, 210] : CACHED_COLORS.menuText); textAlign(CENTER, CENTER); smallTextSize(11);
-    text("PLAY A SEED…", px + pw / 2, py + ph / 2);
-    this._splashScoreBtns.push({ x: px, y: py, w: pw, h: ph, action: () => this._askForSeed() });
-    textAlign(LEFT, CENTER); smallTextSize(11);
-    if (this._replaySeed != null) {
-      fill(255, 236, 160);
-      text(`Start plays seed ${this._replaySeed}`, px + pw + 12, py + ph / 2);
-      const cxw = 22, cxx = x + w - cxw - 12, cxy = py + (ph - cxw) / 2, chv = over(cxx, cxy, cxw, cxw);
-      fill(chv ? [120, 70, 60] : [70, 50, 46]); rect(cxx, cxy, cxw, cxw, 6);
-      fill(240, 220, 210); textAlign(CENTER, CENTER); text("✕", cxx + cxw / 2, cxy + cxw / 2);
-      this._splashScoreBtns.push({ x: cxx, y: cxy, w: cxw, h: cxw, action: () => { this._replaySeed = null; } });
-    } else {
-      fill(140, 164, 146);
-      text("Start uses a new seed", px + pw + 12, py + ph / 2);
-    }
+            : "Not played yet.", lx, yy + tallyH / 2 + 2);
+
+    // ---- Launch ------------------------------------------------------------------------
+    const rcx = divX + rightW / 2;
+    let ry = y + (H - rightH) / 2 + pad;
+    // Start
+    const btnX = rcx - startW / 2, btnY = ry;
+    const hover = over(btnX, btnY, startW, startH);
+    fill(0, 0, 0, 30);
+    rect(btnX + 3, btnY + 3, startW, startH, 12);
+    fill(hover ? CACHED_COLORS.btnHover : CACHED_COLORS.btnNormal);
+    stroke(CACHED_COLORS.btnStroke);
+    strokeWeight(2);
+    rect(btnX, btnY, startW, startH, 12);
+    noStroke();
+    fill(255);
+    textAlign(CENTER, CENTER);
+    push(); textFont(FreckleFace); textSize(28);
+    text("Start Level", rcx, btnY + startH * 0.5);
     pop();
+    ry += startH + 12;
+    // Random seed on restart: a pill with an on/off switch, as Settings' Performance mode.
+    const on = !!CONFIG.randomSeedOnRestart;
+    const tgW = rightW - 24, tgX = rcx - tgW / 2, tgY = ry, tgHv = over(tgX, tgY, tgW, toggleH);
+    fill(on ? [38, 68, 48] : [30, 44, 36]);
+    stroke(tgHv ? [200, 240, 210] : CACHED_COLORS.btnStroke);
+    strokeWeight(tgHv ? 2 : 1.5);
+    rect(tgX, tgY, tgW, toggleH, toggleH / 2);
+    noStroke();
+    const swW = 36, swH = 20, swX = tgX + tgW - swW - 7, swY = tgY + (toggleH - swH) / 2;
+    // (The label shrinks to fit beside the switch, as the text-size bump can widen it.)
+    const tgLabel = "NEW SEED ON RESTART", tgRoom = swX - 8 - (tgX + 12);
+    smallTextSize(11);
+    if (textWidth(tgLabel) > tgRoom) textSize(textSize() * tgRoom / textWidth(tgLabel));
+    fill(on ? [200, 240, 210] : CACHED_COLORS.menuText);
+    textAlign(LEFT, CENTER);
+    text(tgLabel, tgX + 12, tgY + toggleH / 2);
+    fill(on ? [90, 170, 110] : [58, 70, 63]);
+    rect(swX, swY, swW, swH, swH / 2);
+    fill(235, 245, 238);
+    ellipse(on ? swX + swW - swH / 2 : swX + swH / 2, swY + swH / 2, swH - 6, swH - 6);
+    this._splashScoreBtns.push({ x: tgX, y: tgY, w: tgW, h: toggleH,
+      action: () => { touchSound('tick'); setRandomSeedOnRestart(!CONFIG.randomSeedOnRestart); } });
+    ry += toggleH + 10;
+    // Play a seed…
+    const sw = 150, sx = rcx - sw / 2, sy = ry, shv = over(sx, sy, sw, seedH);
+    fill(shv ? [46, 80, 58] : [30, 44, 36]);
+    stroke(shv ? [200, 240, 210] : CACHED_COLORS.btnStroke); strokeWeight(1.5);
+    rect(sx, sy, sw, seedH, seedH / 2);
+    noStroke();
+    fill(shv ? [200, 240, 210] : CACHED_COLORS.menuText); textAlign(CENTER, CENTER); smallTextSize(11);
+    text("PLAY A SEED…", rcx, sy + seedH / 2);
+    this._splashScoreBtns.push({ x: sx, y: sy, w: sw, h: seedH, action: () => this._askForSeed() });
+    ry += seedH + 14;
+    // Back
+    const backX = rcx - backW / 2, backY = ry;
+    const backHover = over(backX, backY, backW, backH);
+    fill(backHover ? [60, 60, 70] : [40, 40, 50]);
+    stroke(80, 80, 90);
+    strokeWeight(1);
+    rect(backX, backY, backW, backH, 8);
+    noStroke();
+    fill(160, 170, 160);
+    textSize(14);
+    text("← Back", rcx, backY + backH * 0.5);
+    pop();
+
+    this._menuBtnBounds = { x: btnX, y: btnY, w: startW, h: startH };
+    this._backBtnBounds = { x: backX, y: backY, w: backW, h: backH };
   }
 
-  // "Play a seed…": the browser's prompt for a whole number, kept for the next Start.
+  // "Play a seed…": the browser's prompt for a whole number, then straight into the level on it
+  // (so the splash never holds a seed back for a later Start).
   _askForSeed() {
     let ans = null;
-    try { ans = window.prompt("Play which seed? (a whole number)", this._replaySeed != null ? String(this._replaySeed) : ''); }
+    try { ans = window.prompt("Enter seed to play", ''); }
     catch (e) { ans = null; }
     if (ans == null) return;
     const n = Number(String(ans).trim());
-    if (String(ans).trim() !== '' && Number.isFinite(n)) this._replaySeed = Math.floor(Math.abs(n));
+    if (String(ans).trim() === '' || !Number.isFinite(n)) return;
+    touchSound('confirm');
+    this._replaySeed = Math.floor(Math.abs(n));
+    this._startLoading();
   }
 
   // Render settings on the gamemode-select screen: the terrain-resolution slider. Sets
@@ -6854,14 +6978,14 @@ class Game {
       rect(cx, cy, cs - 3, cs - 3, 4);
     }
     // The marker: it glides to the chosen tile's place (a click moves it, not a hover), and a
-    // ring spreads from it.
+    // rounded square the same shape as it (its corners grow with it) spreads from it.
     const want = C.place(sel), mk = this._journeyMarker || (this._journeyMarker = Object.assign({}, want));
     for (const k of ['u', 'v', 's']) mk[k] += (want[k] - mk[k]) * 0.2;
     const px = x + mk.u * w, py = y + mk.v * mh, ps = mk.s * w + 4;
-    const beat = (millis() % 1600) / 1600;
+    const beat = (millis() % 1600) / 1600, grow = 1.3 + beat * 2.2;
     noFill();
     stroke(255, 246, 200, 190 * (1 - beat)); strokeWeight(3);
-    ellipse(px, py, ps * (1.3 + beat * 2.2), ps * (1.3 + beat * 2.2));
+    rect(px, py, ps * grow, ps * grow, 6 * grow);
     stroke(18, 24, 18, 230); strokeWeight(6); rect(px, py, ps, ps, 6);
     stroke(255, 246, 200); strokeWeight(3); rect(px, py, ps, ps, 6);
     // Its label, on a pill above it.
@@ -7251,56 +7375,17 @@ class Game {
       text(flavorLines[i], centerX, instructionsY + i * 22);
     }
 
-    // Start button
-    const btnW = 200, btnH = 60;
-    const btnX = centerX - btnW / 2;
-    const btnY = centerY + 230;
-    const hover = mouseX > btnX && mouseX < btnX + btnW
-               && mouseY > btnY && mouseY < btnY + btnH;
+    // The launch panel under the flavour text: high scores, Start, seeds and Back.
+    const flavourEnd = instructionsY + (flavorLines.length - 1) * 22 + 11;
+    this._renderSplashLaunch(centerX, Math.max(flavourEnd + 26, centerY + 210), cw, ch);
 
-    fill(0, 0, 0, 30);
-    noStroke();
-    rect(btnX + 3, btnY + 3, btnW, btnH, 12);
-
-    fill(hover ? CACHED_COLORS.btnHover : CACHED_COLORS.btnNormal);
-    stroke(CACHED_COLORS.btnStroke);
-    strokeWeight(2);
-    rect(btnX, btnY, btnW, btnH, 12);
-
-    fill(255);
-    noStroke();
-    textSize(28);
-    push(); textFont(FreckleFace);
-    text("Start Level", centerX, btnY + btnH * 0.5);
-    pop();
-
-    // Back button (terrain-resolution + graphics settings moved to the gamemode-select screen)
-    const backW = 120, backH = 40;
-    const backX = centerX - backW / 2;
-    const backY = btnY + btnH + 24;
-    const backHover = mouseX > backX && mouseX < backX + backW
-                   && mouseY > backY && mouseY < backY + backH;
-
-    fill(backHover ? [60, 60, 70] : [40, 40, 50]);
-    stroke(80, 80, 90);
-    strokeWeight(1);
-    rect(backX, backY, backW, backH, 8);
-
-    fill(160, 170, 160);
-    noStroke();
-    textSize(14);
-    text("← Back", centerX, backY + backH * 0.5);
-
-    // This level's high scores and their seeds, left of the Start button (mauri_save.js).
-    this._renderSplashScores(centerX - btnW / 2 - 30, btnY - 20);
-
-    // Debug-only: benchmark run (starts the level tutorial-free and logs
-    // populations + placements to a CSV every 10s and on win/loss)
-    this._benchBtnBounds = null;
+    // Debug-only: benchmark runs (start the level tutorial-free and log populations +
+    // placements to a CSV every 10s and on win/loss), in the top-right corner.
+    this._benchBtnBounds = this._bench5BtnBounds = null;
     if (CONFIG.debugMode) {
       const bw = 210, bh = 44;
-      const bx = centerX + btnW / 2 + 30;
-      const by = btnY + (btnH - bh) / 2;
+      const bx = cw - bw - 30;
+      const by = 30;
       const bHover = mouseX > bx && mouseX < bx + bw && mouseY > by && mouseY < by + bh;
 
       fill(bHover ? 70 : 50, bHover ? 60 : 45, bHover ? 95 : 70);
@@ -7336,9 +7421,6 @@ class Game {
     fill(CACHED_COLORS.menuFooter);
     smallTextSize(11);
     text(`Version: ${CONFIG.version}`, centerX, ch - 40);
-
-    this._menuBtnBounds = { x: btnX, y: btnY, w: btnW, h: btnH };
-    this._backBtnBounds = { x: backX, y: backY, w: backW, h: backH };
   }
   
   _getMenuSprite(spriteKey) {
@@ -8327,6 +8409,7 @@ function setup() {
   // Performance mode from the saved choice / URL / device (no write: an untouched choice keeps
   // following the device default).
   setPerfMode(resolvePerfModePreference(), false);
+  setRandomSeedOnRestart(resolveRestartSeedPreference(), false);
 
   // WebGL port (GL_PORT.md), Phase 1: consolidate every loaded sprite PNG into
   // shared GPU atlas pages now that preload() has resolved them all and the plant
